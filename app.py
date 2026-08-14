@@ -78,7 +78,46 @@ STATION_MAP = {
     'NTSK': 'New Tinsukia', 'GHY': 'Guwahati', 'NDLS': 'New Delhi',
     'HWH': 'Howrah', 'PNBE': 'Patna', 'BSB': 'Varanasi', 'CNB': 'Kanpur Central',
     'LKO': 'Lucknow', 'DDU': 'Pt. Deen Dayal Upadhyaya', 'GAYA': 'Gaya',
-    # ... (full map from previous code, but we'll keep it concise)
+    'MGS': 'Mughalsarai', 'ASN': 'Asansol', 'DHN': 'Dhanbad', 'SC': 'Secunderabad',
+    'MAS': 'Chennai Central', 'SBC': 'Bengaluru City', 'CSTM': 'Mumbai CSMT',
+    'BCT': 'Mumbai Central', 'PUNE': 'Pune', 'ADI': 'Ahmedabad', 'BRC': 'Vadodara',
+    'JP': 'Jaipur', 'AII': 'Ajmer', 'BPL': 'Bhopal', 'INDB': 'Indore',
+    'JBP': 'Jabalpur', 'NGP': 'Nagpur', 'HYB': 'Hyderabad', 'BZA': 'Vijayawada',
+    'GNT': 'Guntur', 'VSKP': 'Visakhapatnam', 'BBS': 'Bhubaneswar',
+    'KGP': 'Kharagpur', 'KOAA': 'Kolkata', 'NJP': 'New Jalpaiguri',
+    'NBQ': 'New Bongaigaon', 'KYQ': 'Kamakhya', 'DBRG': 'Dibrugarh',
+    'MXN': 'Mariani Junction', 'FKG': 'Furkating', 'JTI': 'Jatinga',
+    'MFP': 'Muzaffarpur', 'KIR': 'Katihar Junction', 'DEL': 'Delhi',
+    'SDAH': 'Sealdah', 'TBM': 'Tambaram', 'YPR': 'Yesvantpur',
+    'SMVB': 'SMVT Bengaluru', 'PRYJ': 'Prayagraj', 'DNR': 'Danapur',
+    'RE': 'Rewari', 'AY': 'Ayodhya', 'MLDT': 'Malda Town', 'NNA': 'Naugachia',
+    'CLG': 'Kahalgaon', 'ROK': 'Rohtak', 'BGP': 'Bhagalpur', 'JMP': 'Jamalpur',
+    'JYG': 'Jaynagar', 'BJU': 'Barauni', 'SPJ': 'Samastipur', 'HJP': 'Hajipur',
+    'PPTA': 'Patliputra', 'ARA': 'Ara', 'BXR': 'Buxar', 'TDL': 'Tundla',
+    'ALJN': 'Aligarh', 'GZB': 'Ghaziabad', 'BKN': 'Bikaner', 'BME': 'Barmer',
+    'JU': 'Jodhpur', 'UDZ': 'Udaipur', 'RTM': 'Ratlam', 'UJN': 'Ujjain',
+    'ST': 'Surat', 'BL': 'Valsad', 'PUNE': 'Pune', 'TVC': 'Thiruvananthapuram',
+    'ERS': 'Ernakulam', 'MAQ': 'Mangalore', 'MS': 'Chennai Egmore',
+    'AF': 'Agra Fort', 'MTJ': 'Mathura', 'GWL': 'Gwalior', 'JHS': 'Jhansi',
+    'BHUJ': 'Bhuj', 'GIMB': 'Gandhidham', 'ANND': 'Anand', 'ND': 'Nadiad',
+    'BH': 'Bharuch', 'NVS': 'Navsari', 'BSR': 'Vasai Road', 'BVI': 'Borivali',
+    'DDR': 'Dadar', 'KYN': 'Kalyan', 'NK': 'Nashik Road', 'MMR': 'Manmad',
+    'BSL': 'Bhusaval', 'AK': 'Akola', 'BPQ': 'Balharshah', 'SKZR': 'Sirpur Kagaznagar',
+    'MCI': 'Manchiryal', 'KZJ': 'Kazipet', 'KCG': 'Kacheguda', 'MBNR': 'Mahbubnagar',
+    'TEL': 'Tenali', 'OGL': 'Ongole', 'NLR': 'Nellore', 'GDR': 'Gudur',
+    'CGL': 'Chengalpattu', 'VM': 'Villupuram', 'TJ': 'Thanjavur', 'TPJ': 'Tiruchirappalli',
+    'MDU': 'Madurai', 'NCJ': 'Nagercoil', 'QLN': 'Kollam', 'ALLP': 'Alappuzha',
+    'TCR': 'Thrissur', 'PGT': 'Palakkad', 'CBE': 'Coimbatore', 'SA': 'Salem',
+    'JTJ': 'Jolarpettai', 'KPD': 'Katpadi', 'AJJ': 'Arakkonam', 'PER': 'Perambur',
+    'KMU': 'Kumbakonam', 'MV': 'Mayiladuthurai', 'CDM': 'Chidambaram',
+    'TDPR': 'Tirupadripulyur', 'CTC': 'Cuttack', 'BHC': 'Bhadrak', 'SRC': 'Santragachi',
+    'GMO': 'Gomoh', 'KQR': 'Koderma', 'MGS': 'Mughalsarai', 'BBK': 'Barabanki',
+    'GD': 'Gonda', 'BST': 'Basti', 'GKP': 'Gorakhpur', 'DEOS': 'Deoria Sadar',
+    'DGR': 'Durgapur', 'BWN': 'Bardhaman', 'VZM': 'Vizianagaram', 'SLO': 'Samalkot',
+    'RJY': 'Rajahmundry', 'WADI': 'Wadi', 'YG': 'Yadgir', 'RC': 'Raichur',
+    'GTL': 'Guntakal', 'DHNE': 'Dhone', 'KRNT': 'Kurnool City', 'GWD': 'Gadwal',
+    'PNU': 'Palanpur', 'ABR': 'Abu Road', 'FA': 'Falna', 'MJ': 'Marwar Junction',
+    'AWR': 'Alwar', 'SUR': 'Solapur', 'GR': 'Gulbarga'
 }
 def get_station(code):
     if not code:
@@ -94,13 +133,12 @@ def load_sheet_data(sheet_name, start_row):
         all_data = sheet.get_all_values()
         if len(all_data) < start_row:
             return pd.DataFrame()
-        # Headers from start_row-1 (if start_row>1) else row 0
         if start_row > 1:
             headers_raw = all_data[start_row-2]
         else:
             headers_raw = all_data[0] if all_data else []
         data_rows = all_data[start_row-1:] if start_row <= len(all_data) else []
-        # Make unique column names
+        # Unique column names
         seen = {}
         unique_headers = []
         for h in headers_raw:
@@ -119,12 +157,14 @@ def load_sheet_data(sheet_name, start_row):
         st.error(f"Error loading {sheet_name}: {e}")
         return pd.DataFrame()
 
-# ==================== SHEET CONFIG ====================
+# ==================== SHEET CONFIG (6 sheets) ====================
 SHEET_CONFIG = {
     "EQ": {"start_row": 5, "pnr_col": 2, "train_col": 6, "doj_col": 8},
     "DATA": {"start_row": 3, "pnr_col": 2, "train_col": 6, "doj_col": 8},
     "FINAL": {"start_row": 4, "pnr_col": 8, "train_col": 2, "doj_col": 13},
-    "DATA2": {"start_row": 4, "pnr_col": 8, "train_col": 2, "doj_col": 13}
+    "DATA2": {"start_row": 4, "pnr_col": 8, "train_col": 2, "doj_col": 13},
+    "EMAIL_DATA": {"start_row": 2, "pnr_col": 8, "train_col": 9, "doj_col": 12},
+    "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 1, "doj_col": None}  # no PNR/DOJ in NOTE
 }
 
 # ==================== UPLOAD & EXTRACTION ====================
@@ -234,6 +274,52 @@ def apply_theme(dark_mode):
     </style>
     """, unsafe_allow_html=True)
 
+# ==================== SHARE FUNCTION ====================
+def share_data(df, sheet_name, selected_rows=None):
+    """
+    Generate a shareable message and provide PDF download.
+    """
+    if selected_rows is not None and len(selected_rows) > 0:
+        data = df.iloc[selected_rows]
+        msg = f"📊 {sheet_name} – Selected {len(data)} rows\n"
+        # Add PNRs if available
+        pnr_col = next((c for c in data.columns if 'PNR' in c.upper()), None)
+        if pnr_col:
+            pnrs = data[pnr_col].tolist()
+            msg += f"PNRs: {', '.join(pnrs[:10])}{'...' if len(pnrs)>10 else ''}\n"
+    else:
+        data = df
+        msg = f"📊 {sheet_name} – Total {len(data)} rows\n"
+        # Add summary
+        train_col = next((c for c in data.columns if 'T/N' in c.upper() or 'TRAIN' in c.upper()), None)
+        if train_col:
+            train_counts = data[train_col].value_counts().head(5)
+            msg += "Top trains:\n" + "\n".join([f"{k}: {v}" for k,v in train_counts.items()])
+
+    # Generate PDF
+    pdf = FPDF('L', 'mm', 'A4')
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, f"{sheet_name} Report", ln=True, align='C')
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 8)
+    cols = data.columns.tolist()
+    col_width = 260 / len(cols) if len(cols) > 0 else 20
+    for col in cols:
+        pdf.cell(col_width, 7, str(col)[:12], border=1, align='C')
+    pdf.ln()
+    pdf.set_font("Arial", '', 7)
+    for _, row in data.head(100).iterrows():
+        for col in cols:
+            val = str(row[col])[:15] if pd.notna(row[col]) else ''
+            pdf.cell(col_width, 6, val, border=1, align='L')
+        pdf.ln()
+    if len(data) > 100:
+        pdf.cell(0, 6, f"... and {len(data)-100} more rows", ln=True, align='C')
+    pdf_bytes = pdf.output(dest='S').encode('latin1')
+
+    return msg, pdf_bytes
+
 # ==================== MAIN APP ====================
 # ---- Sidebar ----
 dark_mode = st.sidebar.toggle("🌙 Dark Mode", value=False)
@@ -282,7 +368,7 @@ st.markdown("<div class='pro-subtitle'>Enterprise Quality Management – Pro Edi
 st.markdown("---")
 
 # Sheet selector
-sheet_choice = st.selectbox("Select Sheet", ["EQ", "DATA", "FINAL", "DATA2"])
+sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()))
 config = SHEET_CONFIG[sheet_choice]
 start_row = config["start_row"]
 
@@ -292,40 +378,41 @@ if df.empty:
     st.warning(f"No data found in {sheet_choice} from row {start_row}.")
     st.stop()
 
-# ---- Total Records (Top) ----
-total_records = len(df)
-st.metric("📊 Total Records", total_records)
+# ---- Total Records ----
+st.metric("📊 Total Records", len(df))
 
-# ---- Filters (Collapsible on Right) ----
+# ---- Filters (Collapsible) ----
 with st.expander("🔍 Filters", expanded=False):
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        pnr_filter = st.text_input("PNR (partial)", key=f"pnr_{sheet_choice}")
-    with col2:
-        train_filter = st.text_input("Train (partial)", key=f"train_{sheet_choice}")
-    with col3:
-        from_date = st.date_input("From DOJ", value=None, key=f"from_{sheet_choice}")
-        to_date = st.date_input("To DOJ", value=None, key=f"to_{sheet_choice}")
-    if st.button("Clear Filters"):
-        # Reset session state for this sheet
-        for key in [f"pnr_{sheet_choice}", f"train_{sheet_choice}", f"from_{sheet_choice}", f"to_{sheet_choice}"]:
-            if key in st.session_state:
-                del st.session_state[key]
-        st.rerun()
+    with st.form(key="filter_form"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            pnr_filter = st.text_input("PNR (partial)", key=f"pnr_{sheet_choice}")
+        with col2:
+            train_filter = st.text_input("Train (partial)", key=f"train_{sheet_choice}")
+        with col3:
+            from_date = st.date_input("From DOJ", value=None, key=f"from_{sheet_choice}")
+            to_date = st.date_input("To DOJ", value=None, key=f"to_{sheet_choice}")
+        submitted = st.form_submit_button("Apply Filters")
+        if st.form_submit_button("Clear Filters"):
+            # Clear session state for this sheet
+            for key in [f"pnr_{sheet_choice}", f"train_{sheet_choice}", f"from_{sheet_choice}", f"to_{sheet_choice}"]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
 
 # ---- Apply Filters ----
 filtered_df = df.copy()
-pnr_col_idx = config["pnr_col"] - 1
-train_col_idx = config["train_col"] - 1
-doj_col_idx = config["doj_col"] - 1
+pnr_col_idx = config.get("pnr_col")
+train_col_idx = config.get("train_col")
+doj_col_idx = config.get("doj_col")
 
-if pnr_filter and pnr_col_idx < len(filtered_df.columns):
+if pnr_filter and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
     col_name = filtered_df.columns[pnr_col_idx]
     filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(pnr_filter, case=False, na=False)]
-if train_filter and train_col_idx < len(filtered_df.columns):
+if train_filter and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
     col_name = filtered_df.columns[train_col_idx]
     filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(train_filter, case=False, na=False)]
-if (from_date or to_date) and doj_col_idx < len(filtered_df.columns):
+if (from_date or to_date) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
     col_name = filtered_df.columns[doj_col_idx]
     try:
         filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
@@ -337,7 +424,7 @@ if (from_date or to_date) and doj_col_idx < len(filtered_df.columns):
     except:
         pass
 
-# ---- Display Data (full width) ----
+# ---- Display Data ----
 st.subheader(f"📋 {sheet_choice} – {len(filtered_df)} rows")
 
 # Pagination
@@ -358,20 +445,21 @@ if not page_df.empty:
         column_config={"Select": st.column_config.CheckboxColumn("Select", width="small")},
         key=f"editor_{sheet_choice}_{page}"
     )
+    # Get selected indices
+    selected_indices = edited_page[edited_page["Select"]].index.tolist()
     # Bulk actions
-    selected = edited_page[edited_page["Select"]].index.tolist()
-    if selected:
-        st.warning(f"{len(selected)} rows selected.")
-        col1, col2 = st.columns(2)
+    if selected_indices:
+        st.warning(f"{len(selected_indices)} rows selected.")
+        col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("🗑️ Delete Selected", use_container_width=True):
-                actual_rows = [start_row + idx for idx in selected]
+                actual_rows = [start_row + idx for idx in selected_indices]
                 try:
                     gc = init_sheets()
                     sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
                     for row_num in sorted(actual_rows, reverse=True):
                         sheet.delete_rows(row_num)
-                    st.toast(f"✅ {len(selected)} rows deleted!", icon="🗑️")
+                    st.toast(f"✅ {len(selected_indices)} rows deleted!", icon="🗑️")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Delete error: {e}")
@@ -388,15 +476,26 @@ if not page_df.empty:
                     st.toast("✅ Changes saved!", icon="💾")
                 except Exception as e:
                     st.error(f"Save error: {e}")
+        with col3:
+            # Share button
+            if st.button("📤 Share Selected", use_container_width=True):
+                msg, pdf_bytes = share_data(edited_page, sheet_choice, selected_indices)
+                # Provide download and WhatsApp share
+                st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}_selected.pdf", mime="application/pdf")
+                # WhatsApp share link
+                wa_link = f"https://api.whatsapp.com/send?text={msg.replace(' ', '%20')}"
+                st.markdown(f'<a href="{wa_link}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
+    else:
+        st.info("Select rows to enable share/delete.")
 
-# ---- Export Options ----
-st.subheader("📄 Export")
-col1, col2, col3, col4, col5 = st.columns(5)
+# ---- Export Options (including Share for full sheet) ----
+st.subheader("📄 Export & Share")
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     if st.button("🖨️ Print", use_container_width=True):
         st.markdown('<script>window.print()</script>', unsafe_allow_html=True)
 with col2:
-    # PDF generation using fpdf
+    # PDF full
     try:
         pdf = FPDF('L', 'mm', 'A4')
         pdf.add_page()
@@ -425,15 +524,12 @@ with col3:
     csv = filtered_df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 CSV", data=csv, file_name=f"{sheet_choice}.csv", mime="text/csv", use_container_width=True)
 with col4:
-    try:
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-            filtered_df.to_excel(writer, sheet_name=sheet_choice, index=False)
-        st.download_button("📥 Excel", data=excel_buffer.getvalue(), file_name=f"{sheet_choice}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-    except:
-        st.warning("Excel requires xlsxwriter")
-with col5:
-    st.download_button("📥 JSON", data=filtered_df.to_json(orient='records'), file_name=f"{sheet_choice}.json", mime="application/json", use_container_width=True)
+    # Share full sheet via WhatsApp
+    msg_full, pdf_bytes_full = share_data(filtered_df, sheet_choice, None)
+    if st.button("📤 Share Full Sheet", use_container_width=True):
+        st.download_button("📥 Download PDF", data=pdf_bytes_full, file_name=f"{sheet_choice}_full.pdf", mime="application/pdf")
+        wa_link_full = f"https://api.whatsapp.com/send?text={msg_full.replace(' ', '%20')}"
+        st.markdown(f'<a href="{wa_link_full}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
 
 # ---- Print Individual File ----
 # Check for column X (hyperlink) – usually 24th column (index 23)
