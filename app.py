@@ -138,7 +138,6 @@ def load_sheet_data(sheet_name, start_row):
         else:
             headers_raw = all_data[0] if all_data else []
         data_rows = all_data[start_row-1:] if start_row <= len(all_data) else []
-        # Unique column names
         seen = {}
         unique_headers = []
         for h in headers_raw:
@@ -164,7 +163,7 @@ SHEET_CONFIG = {
     "FINAL": {"start_row": 4, "pnr_col": 8, "train_col": 2, "doj_col": 13},
     "DATA2": {"start_row": 4, "pnr_col": 8, "train_col": 2, "doj_col": 13},
     "EMAIL_DATA": {"start_row": 2, "pnr_col": 8, "train_col": 9, "doj_col": 12},
-    "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 1, "doj_col": None}  # no PNR/DOJ in NOTE
+    "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 1, "doj_col": None}
 }
 
 # ==================== UPLOAD & EXTRACTION ====================
@@ -274,29 +273,24 @@ def apply_theme(dark_mode):
     </style>
     """, unsafe_allow_html=True)
 
-# ==================== SHARE FUNCTION ====================
+# ==================== SHARE FUNCTION (Unicode‑safe) ====================
 def share_data(df, sheet_name, selected_rows=None):
-    """
-    Generate a shareable message and provide PDF download.
-    """
     if selected_rows is not None and len(selected_rows) > 0:
         data = df.iloc[selected_rows]
         msg = f"📊 {sheet_name} – Selected {len(data)} rows\n"
-        # Add PNRs if available
         pnr_col = next((c for c in data.columns if 'PNR' in c.upper()), None)
         if pnr_col:
             pnrs = data[pnr_col].tolist()
-            msg += f"PNRs: {', '.join(pnrs[:10])}{'...' if len(pnrs)>10 else ''}\n"
+            msg += f"PNRs: {', '.join(str(p) for p in pnrs[:10])}{'...' if len(pnrs)>10 else ''}\n"
     else:
         data = df
         msg = f"📊 {sheet_name} – Total {len(data)} rows\n"
-        # Add summary
         train_col = next((c for c in data.columns if 'T/N' in c.upper() or 'TRAIN' in c.upper()), None)
         if train_col:
             train_counts = data[train_col].value_counts().head(5)
             msg += "Top trains:\n" + "\n".join([f"{k}: {v}" for k,v in train_counts.items()])
 
-    # Generate PDF
+    # Generate PDF with Latin-1 encoding (strip problematic chars)
     pdf = FPDF('L', 'mm', 'A4')
     pdf.add_page()
     pdf.set_font("Arial", 'B', 14)
@@ -306,18 +300,19 @@ def share_data(df, sheet_name, selected_rows=None):
     cols = data.columns.tolist()
     col_width = 260 / len(cols) if len(cols) > 0 else 20
     for col in cols:
-        pdf.cell(col_width, 7, str(col)[:12], border=1, align='C')
+        pdf.cell(col_width, 7, str(col)[:12].encode('latin-1', 'ignore').decode('latin-1'), border=1, align='C')
     pdf.ln()
     pdf.set_font("Arial", '', 7)
     for _, row in data.head(100).iterrows():
         for col in cols:
             val = str(row[col])[:15] if pd.notna(row[col]) else ''
-            pdf.cell(col_width, 6, val, border=1, align='L')
+            # Remove non-Latin-1 characters to avoid UnicodeEncodeError
+            val_safe = val.encode('latin-1', 'ignore').decode('latin-1')
+            pdf.cell(col_width, 6, val_safe, border=1, align='L')
         pdf.ln()
     if len(data) > 100:
         pdf.cell(0, 6, f"... and {len(data)-100} more rows", ln=True, align='C')
-    pdf_bytes = pdf.output(dest='S').encode('latin1')
-
+    pdf_bytes = pdf.output(dest='S').encode('latin-1')
     return msg, pdf_bytes
 
 # ==================== MAIN APP ====================
@@ -394,7 +389,6 @@ with st.expander("🔍 Filters", expanded=False):
             to_date = st.date_input("To DOJ", value=None, key=f"to_{sheet_choice}")
         submitted = st.form_submit_button("Apply Filters")
         if st.form_submit_button("Clear Filters"):
-            # Clear session state for this sheet
             for key in [f"pnr_{sheet_choice}", f"train_{sheet_choice}", f"from_{sheet_choice}", f"to_{sheet_choice}"]:
                 if key in st.session_state:
                     del st.session_state[key]
@@ -436,7 +430,6 @@ end_idx = min(start_idx + page_size, len(filtered_df))
 page_df = filtered_df.iloc[start_idx:end_idx]
 
 if not page_df.empty:
-    # Add select column as first column
     page_df.insert(0, "Select", False)
     edited_page = st.data_editor(
         page_df,
@@ -445,9 +438,7 @@ if not page_df.empty:
         column_config={"Select": st.column_config.CheckboxColumn("Select", width="small")},
         key=f"editor_{sheet_choice}_{page}"
     )
-    # Get selected indices
     selected_indices = edited_page[edited_page["Select"]].index.tolist()
-    # Bulk actions
     if selected_indices:
         st.warning(f"{len(selected_indices)} rows selected.")
         col1, col2, col3 = st.columns(3)
@@ -470,32 +461,31 @@ if not page_df.empty:
                     sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
                     for i, (orig_idx, row) in enumerate(edited_page.iterrows()):
                         actual_row = start_row + start_idx + i
+                        # Drop the "Select" column before saving
                         row_data = row.drop("Select").tolist()
                         for col_idx, val in enumerate(row_data, start=1):
                             sheet.update_cell(actual_row, col_idx, val)
                     st.toast("✅ Changes saved!", icon="💾")
+                    st.rerun()
                 except Exception as e:
                     st.error(f"Save error: {e}")
         with col3:
-            # Share button
             if st.button("📤 Share Selected", use_container_width=True):
                 msg, pdf_bytes = share_data(edited_page, sheet_choice, selected_indices)
-                # Provide download and WhatsApp share
                 st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}_selected.pdf", mime="application/pdf")
-                # WhatsApp share link
                 wa_link = f"https://api.whatsapp.com/send?text={msg.replace(' ', '%20')}"
                 st.markdown(f'<a href="{wa_link}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
     else:
         st.info("Select rows to enable share/delete.")
 
-# ---- Export Options (including Share for full sheet) ----
+# ---- Export Options ----
 st.subheader("📄 Export & Share")
 col1, col2, col3, col4 = st.columns(4)
 with col1:
     if st.button("🖨️ Print", use_container_width=True):
         st.markdown('<script>window.print()</script>', unsafe_allow_html=True)
 with col2:
-    # PDF full
+    # PDF generation with Unicode fix
     try:
         pdf = FPDF('L', 'mm', 'A4')
         pdf.add_page()
@@ -506,17 +496,18 @@ with col2:
         cols = filtered_df.columns.tolist()
         col_width = 260 / len(cols) if len(cols) > 0 else 20
         for col in cols:
-            pdf.cell(col_width, 7, str(col)[:12], border=1, align='C')
+            pdf.cell(col_width, 7, str(col)[:12].encode('latin-1', 'ignore').decode('latin-1'), border=1, align='C')
         pdf.ln()
         pdf.set_font("Arial", '', 7)
         for _, row in filtered_df.head(50).iterrows():
             for col in cols:
                 val = str(row[col])[:15] if pd.notna(row[col]) else ''
-                pdf.cell(col_width, 6, val, border=1, align='L')
+                val_safe = val.encode('latin-1', 'ignore').decode('latin-1')
+                pdf.cell(col_width, 6, val_safe, border=1, align='L')
             pdf.ln()
         if len(filtered_df) > 50:
             pdf.cell(0, 6, f"... and {len(filtered_df)-50} more rows", ln=True, align='C')
-        pdf_bytes = pdf.output(dest='S').encode('latin1')
+        pdf_bytes = pdf.output(dest='S').encode('latin-1')
         st.download_button("📥 PDF", data=pdf_bytes, file_name=f"{sheet_choice}.pdf", mime="application/pdf", use_container_width=True)
     except Exception as e:
         st.warning(f"PDF error: {e}")
@@ -524,7 +515,6 @@ with col3:
     csv = filtered_df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 CSV", data=csv, file_name=f"{sheet_choice}.csv", mime="text/csv", use_container_width=True)
 with col4:
-    # Share full sheet via WhatsApp
     msg_full, pdf_bytes_full = share_data(filtered_df, sheet_choice, None)
     if st.button("📤 Share Full Sheet", use_container_width=True):
         st.download_button("📥 Download PDF", data=pdf_bytes_full, file_name=f"{sheet_choice}_full.pdf", mime="application/pdf")
@@ -532,9 +522,8 @@ with col4:
         st.markdown(f'<a href="{wa_link_full}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
 
 # ---- Print Individual File ----
-# Check for column X (hyperlink) – usually 24th column (index 23)
 if len(filtered_df.columns) >= 24:
-    link_col = filtered_df.columns[23]  # X column
+    link_col = filtered_df.columns[23]
     if link_col in filtered_df.columns:
         st.subheader("🖨️ Print File from Row")
         for idx, row in filtered_df.iterrows():
