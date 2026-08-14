@@ -327,64 +327,69 @@ def share_data(df, sheet_name, selected_rows=None):
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
     return msg, pdf_bytes
 
-# ========== DASHBOARD CHARTS ==========
+# ========== DASHBOARD CHARTS (Fixed) ==========
 def show_dashboard(df, sheet_name):
     if df.empty:
         st.info("No data to display charts.")
         return
 
-    # Metrics
-    total_records = len(df)
-    train_col = next((c for c in df.columns if 'T/N' in c.upper() or 'TRAIN' in c.upper()), None)
-    unique_trains = df[train_col].nunique() if train_col else 0
-    berth_col = next((c for c in df.columns if 'BERTH' in c.upper() or 'T/BERTHS' in c.upper()), None)
-    total_berths = pd.to_numeric(df[berth_col], errors='coerce').sum() if berth_col else 0
+    try:
+        # Metrics
+        total_records = len(df)
+        train_col = next((c for c in df.columns if 'T/N' in c.upper() or 'TRAIN' in c.upper()), None)
+        unique_trains = df[train_col].nunique() if train_col and train_col in df else 0
+        berth_col = next((c for c in df.columns if 'BERTH' in c.upper() or 'T/BERTHS' in c.upper()), None)
+        if berth_col and berth_col in df:
+            total_berths = pd.to_numeric(df[berth_col], errors='coerce').sum()
+        else:
+            total_berths = 0
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("📊 Total Records", total_records)
-    col2.metric("🚂 Unique Trains", unique_trains)
-    col3.metric("💺 Total Berths", int(total_berths) if total_berths else 0)
+        col1, col2, col3 = st.columns(3)
+        col1.metric("📊 Total Records", total_records)
+        col2.metric("🚂 Unique Trains", unique_trains)
+        col3.metric("💺 Total Berths", int(total_berths) if total_berths else 0)
 
-    # Pie chart: Train distribution
-    if train_col:
-        fig_pie = px.pie(df, names=train_col, title=f"Train Distribution ({sheet_name})",
-                         hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3)
-        fig_pie.update_layout(height=350)
-        st.plotly_chart(fig_pie, use_container_width=True)
+        # Pie chart: Train distribution
+        if train_col and train_col in df and df[train_col].notna().any():
+            fig_pie = px.pie(df, names=train_col, title=f"Train Distribution ({sheet_name})",
+                             hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3)
+            fig_pie.update_layout(height=350)
+            st.plotly_chart(fig_pie, use_container_width=True)
 
-    # Histogram: Berths distribution (if numeric)
-    if berth_col:
-        # Convert to numeric, drop NaN
-        berth_vals = pd.to_numeric(df[berth_col], errors='coerce').dropna()
-        if not berth_vals.empty:
-            fig_hist = px.histogram(berth_vals, nbins=10, title="Berths Distribution",
-                                    labels={'value': 'Berths', 'count': 'Frequency'},
-                                    color_discrete_sequence=['#2d7d46'])
-            fig_hist.update_layout(height=350, bargap=0.2)
-            st.plotly_chart(fig_hist, use_container_width=True)
+        # Histogram: Berths
+        if berth_col and berth_col in df:
+            berth_vals = pd.to_numeric(df[berth_col], errors='coerce').dropna()
+            if not berth_vals.empty:
+                fig_hist = px.histogram(berth_vals, nbins=10, title="Berths Distribution",
+                                        labels={'value': 'Berths', 'count': 'Frequency'},
+                                        color_discrete_sequence=['#2d7d46'])
+                fig_hist.update_layout(height=350, bargap=0.2)
+                st.plotly_chart(fig_hist, use_container_width=True)
 
-    # Line chart: Trend over DOJ (if DOJ column exists)
-    doj_col = next((c for c in df.columns if 'DOJ' in c.upper()), None)
-    if doj_col:
-        # Parse dates, group by date
-        df_temp = df.copy()
-        df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
-        daily_counts = df_temp.groupby('_date').size().reset_index(name='count')
-        if not daily_counts.empty:
-            fig_line = px.line(daily_counts, x='_date', y='count', title="Daily Records Trend",
-                               labels={'_date': 'Date', 'count': 'Number of Records'},
-                               markers=True, color_discrete_sequence=['#ff6b6b'])
-            fig_line.update_layout(height=350)
-            st.plotly_chart(fig_line, use_container_width=True)
+        # Line chart: Daily trend
+        doj_col = next((c for c in df.columns if 'DOJ' in c.upper()), None)
+        if doj_col and doj_col in df:
+            df_temp = df.copy()
+            df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
+            daily_counts = df_temp.groupby('_date').size().reset_index(name='count')
+            if not daily_counts.empty:
+                fig_line = px.line(daily_counts, x='_date', y='count', title="Daily Records Trend",
+                                   labels={'_date': 'Date', 'count': 'Number of Records'},
+                                   markers=True, color_discrete_sequence=['#ff6b6b'])
+                fig_line.update_layout(height=350)
+                st.plotly_chart(fig_line, use_container_width=True)
 
-    # Optional: Bar chart for top trains
-    if train_col:
-        top_trains = df[train_col].value_counts().head(10).reset_index()
-        top_trains.columns = ['Train', 'Count']
-        fig_bar = px.bar(top_trains, x='Train', y='Count', title="Top 10 Trains",
-                         color='Count', color_continuous_scale='Viridis')
-        fig_bar.update_layout(height=350)
-        st.plotly_chart(fig_bar, use_container_width=True)
+        # Bar chart: Top 10 trains
+        if train_col and train_col in df:
+            top_trains = df[train_col].value_counts().head(10).reset_index()
+            top_trains.columns = ['Train', 'Count']
+            if not top_trains.empty:
+                fig_bar = px.bar(top_trains, x='Train', y='Count', title="Top 10 Trains",
+                                 color='Count', color_continuous_scale='Viridis')
+                fig_bar.update_layout(height=350)
+                st.plotly_chart(fig_bar, use_container_width=True)
+    except Exception as e:
+        st.warning(f"Could not render dashboard: {str(e)}")
 
 # ========== MAIN APP ==========
 dark_mode = st.sidebar.toggle("🌙 Dark Mode", value=False)
@@ -519,8 +524,8 @@ st.markdown("<div class='pro-subtitle'>Enterprise Quality Management – Pro Edi
 st.markdown("---")
 
 # ---- Dashboard Toggle ----
-show_dashboard = st.sidebar.checkbox("📊 Show Dashboard", value=True)
-if show_dashboard and not filtered_df.empty:
+show_dashboard_flag = st.sidebar.checkbox("📊 Show Dashboard", value=True)
+if show_dashboard_flag and not filtered_df.empty:
     st.subheader("📊 Dashboard")
     show_dashboard(filtered_df, sheet_choice)
 else:
