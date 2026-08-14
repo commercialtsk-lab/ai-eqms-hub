@@ -5,7 +5,7 @@ import re
 import base64
 import io
 import time
-import requests  # <-- Added missing import
+import requests
 from datetime import datetime
 import google.generativeai as genai
 import gspread
@@ -51,7 +51,7 @@ def init_drive():
     creds = GDriveCredentials.from_service_account_info(creds_dict, scopes=scopes)
     return build('drive', 'v3', credentials=creds)
 
-# ========== EXACT PARSER FUNCTIONS (from bot) ==========
+# ========== EXACT PARSER (FULL from bot) ==========
 def clean_pnr(pnr):
     if not pnr:
         return ''
@@ -92,7 +92,6 @@ def parse_date(date_str):
         pass
     return date_str
 
-# ---------- Smart Detection (exact) ----------
 def smart_detect_warrant(text):
     if not text:
         return {'warrant': '', 'found': False}
@@ -116,7 +115,7 @@ def smart_detect_warrant(text):
 def smart_detect_rail_board(text):
     if not text:
         return {'isRailBoard': False}
-    text = str(text).upper().replace('\\s+', ' ')
+    text = str(text).upper()
     patterns = [
         r'RAIL\s*BOARD',
         r'OFFICE\s*OF\s*(?:THE\s*)?HON\'?BLE\s*MINISTER\s*RAILWAYS',
@@ -145,12 +144,15 @@ def smart_detect_diary(text):
     patterns = [
         r'DIARY\s*NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)',
         r'DIARY\s*NUMBER\s*[:#]?\s*([A-Z0-9\/\-]+)',
-        r'D\/?NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)'
+        r'D\/?NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)',
+        r'NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)',  # Added to catch "No. ECR/CRM/..."
     ]
     for pattern in patterns:
         match = re.search(pattern, text)
         if match:
-            return {'diary': match.group(1).strip(), 'found': True}
+            diary = match.group(1).strip()
+            if len(diary) > 3:  # filter short matches
+                return {'diary': diary, 'found': True}
     return {'diary': '', 'found': False}
 
 def smart_detect_vip(text):
@@ -179,10 +181,62 @@ def smart_detect_lower_seat(text):
     if not text:
         return False
     text = str(text).upper()
-    keywords = ['AGE+', 'AGE +', 'MEDICAL', 'HANDICAP', 'SR CITIZEN', 'SENIOR', 'DISABLED']
+    keywords = ['AGE+', 'AGE +', 'MEDICAL', 'HANDICAP', 'SR CITIZEN', 'SENIOR', 'DISABLED',
+                'LOWER BERTH', 'COUPE', 'WOMAN', 'LOWER SEAT']  # Added Lower Berth detection
     return any(kw in text for kw in keywords)
 
-# ---------- Gemini Parser (exact) ----------
+def get_station(code):
+    if not code:
+        return ''
+    code = code.upper().strip()
+    STATION_MAP = {
+        'NTSK': 'New Tinsukia', 'GHY': 'Guwahati', 'NDLS': 'New Delhi',
+        'HWH': 'Howrah', 'PNBE': 'Patna', 'BSB': 'Varanasi', 'CNB': 'Kanpur Central',
+        'LKO': 'Lucknow', 'DDU': 'Pt. Deen Dayal Upadhyaya', 'GAYA': 'Gaya',
+        'MGS': 'Mughalsarai', 'ASN': 'Asansol', 'DHN': 'Dhanbad', 'SC': 'Secunderabad',
+        'MAS': 'Chennai Central', 'SBC': 'Bengaluru City', 'CSTM': 'Mumbai CSMT',
+        'BCT': 'Mumbai Central', 'PUNE': 'Pune', 'ADI': 'Ahmedabad', 'BRC': 'Vadodara',
+        'JP': 'Jaipur', 'AII': 'Ajmer', 'BPL': 'Bhopal', 'INDB': 'Indore',
+        'JBP': 'Jabalpur', 'NGP': 'Nagpur', 'HYB': 'Hyderabad', 'BZA': 'Vijayawada',
+        'GNT': 'Guntur', 'VSKP': 'Visakhapatnam', 'BBS': 'Bhubaneswar',
+        'KGP': 'Kharagpur', 'KOAA': 'Kolkata', 'NJP': 'New Jalpaiguri',
+        'NBQ': 'New Bongaigaon', 'KYQ': 'Kamakhya', 'DBRG': 'Dibrugarh',
+        'MXN': 'Mariani Junction', 'FKG': 'Furkating', 'JTI': 'Jatinga',
+        'MFP': 'Muzaffarpur', 'KIR': 'Katihar Junction', 'DEL': 'Delhi',
+        'SDAH': 'Sealdah', 'TBM': 'Tambaram', 'YPR': 'Yesvantpur',
+        'SMVB': 'SMVT Bengaluru', 'PRYJ': 'Prayagraj', 'DNR': 'Danapur',
+        'RE': 'Rewari', 'AY': 'Ayodhya', 'MLDT': 'Malda Town', 'NNA': 'Naugachia',
+        'CLG': 'Kahalgaon', 'ROK': 'Rohtak', 'BGP': 'Bhagalpur', 'JMP': 'Jamalpur',
+        'JYG': 'Jaynagar', 'BJU': 'Barauni', 'SPJ': 'Samastipur', 'HJP': 'Hajipur',
+        'PPTA': 'Patliputra', 'ARA': 'Ara', 'BXR': 'Buxar', 'TDL': 'Tundla',
+        'ALJN': 'Aligarh', 'GZB': 'Ghaziabad', 'BKN': 'Bikaner', 'BME': 'Barmer',
+        'JU': 'Jodhpur', 'UDZ': 'Udaipur', 'RTM': 'Ratlam', 'UJN': 'Ujjain',
+        'ST': 'Surat', 'BL': 'Valsad', 'PUNE': 'Pune', 'TVC': 'Thiruvananthapuram',
+        'ERS': 'Ernakulam', 'MAQ': 'Mangalore', 'MS': 'Chennai Egmore',
+        'AF': 'Agra Fort', 'MTJ': 'Mathura', 'GWL': 'Gwalior', 'JHS': 'Jhansi',
+        'BHUJ': 'Bhuj', 'GIMB': 'Gandhidham', 'ANND': 'Anand', 'ND': 'Nadiad',
+        'BH': 'Bharuch', 'NVS': 'Navsari', 'BSR': 'Vasai Road', 'BVI': 'Borivali',
+        'DDR': 'Dadar', 'KYN': 'Kalyan', 'NK': 'Nashik Road', 'MMR': 'Manmad',
+        'BSL': 'Bhusaval', 'AK': 'Akola', 'BPQ': 'Balharshah', 'SKZR': 'Sirpur Kagaznagar',
+        'MCI': 'Manchiryal', 'KZJ': 'Kazipet', 'KCG': 'Kacheguda', 'MBNR': 'Mahbubnagar',
+        'TEL': 'Tenali', 'OGL': 'Ongole', 'NLR': 'Nellore', 'GDR': 'Gudur',
+        'CGL': 'Chengalpattu', 'VM': 'Villupuram', 'TJ': 'Thanjavur', 'TPJ': 'Tiruchirappalli',
+        'MDU': 'Madurai', 'NCJ': 'Nagercoil', 'QLN': 'Kollam', 'ALLP': 'Alappuzha',
+        'TCR': 'Thrissur', 'PGT': 'Palakkad', 'CBE': 'Coimbatore', 'SA': 'Salem',
+        'JTJ': 'Jolarpettai', 'KPD': 'Katpadi', 'AJJ': 'Arakkonam', 'PER': 'Perambur',
+        'KMU': 'Kumbakonam', 'MV': 'Mayiladuthurai', 'CDM': 'Chidambaram',
+        'TDPR': 'Tirupadripulyur', 'CTC': 'Cuttack', 'BHC': 'Bhadrak', 'SRC': 'Santragachi',
+        'GMO': 'Gomoh', 'KQR': 'Koderma', 'MGS': 'Mughalsarai', 'BBK': 'Barabanki',
+        'GD': 'Gonda', 'BST': 'Basti', 'GKP': 'Gorakhpur', 'DEOS': 'Deoria Sadar',
+        'DGR': 'Durgapur', 'BWN': 'Bardhaman', 'VZM': 'Vizianagaram', 'SLO': 'Samalkot',
+        'RJY': 'Rajahmundry', 'WADI': 'Wadi', 'YG': 'Yadgir', 'RC': 'Raichur',
+        'GTL': 'Guntakal', 'DHNE': 'Dhone', 'KRNT': 'Kurnool City', 'GWD': 'Gadwal',
+        'PNU': 'Palanpur', 'ABR': 'Abu Road', 'FA': 'Falna', 'MJ': 'Marwar Junction',
+        'AWR': 'Alwar', 'SUR': 'Solapur', 'GR': 'Gulbarga'
+    }
+    return f"{code} ({STATION_MAP[code]})" if code in STATION_MAP else code
+
+# ---------- Gemini Parser (FULL from bot) ----------
 def gemini_universal_parser(input_data, input_type, mime_type):
     url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}'
     system_prompt = """
@@ -208,88 +262,49 @@ This is a railway EQ (Emergency Quota) application form. It contains passenger d
 10. T_BERTHS - Number of berths (default 1)
 11. PURPOSE - Purpose of travel
 12. ADDRESS - Full address
-13. DIARY_NO - Diary number
+13. DIARY_NO - Diary number (look for "No.", "Diary No.", "D/No.")
 14. RECOMMENDATION - Recommender's name/designation
 15. DESIGNATION - Designation of recommender
 16. VIP_STATUS - MP, MLA, MR, MINISTER, VIP, VVIP
 17. APPLICATION_DATE - Date of application
 18. RAILWAY_ZONE - Zone (NFR, NR, ER, etc.)
-19. PREFERENCE - General, MP, MLA, MR, etc.
+19. PREFERENCE - General, Lower Seat, MP, MLA, MR, etc.
 20. PHONE_NUBER - Recommender's phone
 21. WARRANT_NO - Warrant number (IC-240, MP-123, etc.)
 
-=== HANDWRITTEN IMAGE TIPS ===
-1. If you see scribbled text, try to recognize patterns:
-   - 10 digits together = PNR
-   - 3-5 digits = Train number
-   - 3-4 capital letters = Station code
-   - 10 digits with +91 = Phone number
-   - Names are usually in capital letters
-   - Dates are in DD/MM/YYYY or DD-MM-YYYY format
-
-2. For messy handwriting:
-   - Look at the context of the form
-   - Each field has a label next to it
-   - Use the label to understand what the value is
-   - If a value is unreadable, leave it empty
-
-3. Common patterns to recognize:
-   - "PNR:" or "PNR No." followed by 10 digits
-   - "Train:" or "T/N:" followed by 3-5 digits
-   - "From:" or "F:" followed by station code
-   - "To:" or "T:" followed by station code
-   - "Date:" or "DOJ:" followed by date
-   - "Name:" or "Passenger:" followed by name
-   - "Phone:" or "Mob:" followed by 10 digits
-
-=== RAIL BOARD RULE ===
-ONLY set DIARY_NO="RAIL BOARD", RAILWAY_ZONE="RAIL BOARD", PREFERENCE="RAIL BOARD", VIP_STATUS="MINISTER" if you see:
-- "OFFICE OF THE HON'BLE MINISTER RAILWAYS" OR
-- "MINISTER RAILWAYS" OR
-- "RAIL MANTRI" OR
-- "RAIL BHAWAN"
-Otherwise, leave these fields empty.
-
-=== EXTRACTION RULES ===
-1. PNR: 10 digits only. Remove any extra characters.
-2. Train Number: 3-5 digits. Remove DN/UP suffix.
-3. DOJ: Convert to DD-MM-YYYY. "24/25.06.26" → "24-06-2026"
-4. Phone: Remove all non‑digits, then take the LAST 10 digits. Example: "+919138328565" → "9138328565"
-5. Berths: Number only. Default 1.
-6. Warrant: Look for "IC-240", "MP-123", "WARRANT NO:", "W/No."
-7. Diary: Look for "DIARY NO:", "D/No."
-8. VIP: Check for MP, MLA, MR, MINISTER, VIP, VVIP
-9. Lower Seat: If you see "MEDICAL", "HANDICAP", "SR CITIZEN", "AGE+", set PREFERENCE = "Lower Seat"
+=== SPECIAL RULES ===
+1. DIARY_NO: Look for "No. ECR/CRM/..." or "Diary No." or "D/No." pattern. Extract the full number.
+2. PREFERENCE: If you see "Lower Berth", "Lower Seat", "Coupe", "woman co-passenger", set PREFERENCE = "Lower Seat".
+3. RAIL BOARD: If you see "Office of the Hon'ble Minister Railways", set DIARY_NO="RAIL BOARD", RAILWAY_ZONE="RAIL BOARD", PREFERENCE="RAIL BOARD", VIP_STATUS="MINISTER".
 
 === OUTPUT FORMAT ===
-Return ONLY a valid JSON array. Example with 1 record:
+Return ONLY a valid JSON array.
 [
   {
-    "PNR": "9085176759",
-    "T_N": "15909",
-    "CLASS": "SL",
-    "DOJ": "28-06-2026",
-    "FROM": "NTSK",
-    "TO": "DLI",
+    "PNR": "6307598699",
+    "T_N": "20503",
+    "CLASS": "1A",
+    "DOJ": "12-08-2026",
+    "FROM": "HJP",
+    "TO": "LKO",
     "BOARDING": "",
-    "PASS_NAME": "SHARIQUE",
-    "PASS_PH": "9876543210",
+    "PASS_NAME": "INDU DUBEY",
+    "PASS_PH": "9771425900",
     "T_BERTHS": 1,
     "PURPOSE": "",
     "ADDRESS": "",
-    "DIARY_NO": "",
-    "RECOMMENDATION": "",
-    "DESIGNATION": "",
+    "DIARY_NO": "ECR/CRM/PCCM Cell/EQ/01/2026",
+    "RECOMMENDATION": "MRITYUNJAY KUMAR",
+    "DESIGNATION": "Secy to PCCM",
     "VIP_STATUS": "",
-    "APPLICATION_DATE": "",
-    "RAILWAY_ZONE": "",
-    "PREFERENCE": "General",
-    "PHONE_NUBER": "",
+    "APPLICATION_DATE": "10-08-2026",
+    "RAILWAY_ZONE": "ECR",
+    "PREFERENCE": "Lower Seat",
+    "PHONE_NUBER": "9771425962",
     "WARRANT_NO": ""
   }
 ]
-
-CRITICAL: Return ONLY the JSON array. No explanations, no extra text. If you can't read something, leave it empty. Better to leave empty than to guess wrong.
+CRITICAL: Return ONLY the JSON array. No explanations.
 """
     parts = []
     if input_type in ['image', 'pdf']:
@@ -306,20 +321,22 @@ CRITICAL: Return ONLY the JSON array. No explanations, no extra text. If you can
 
     payload = {
         "contents": [{"parts": parts}],
-        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 16384}
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 16384}
     }
     try:
         headers = {"Content-Type": "application/json"}
         response = requests.post(url, json=payload, headers=headers, timeout=120)
         if response.status_code != 200:
-            return {'error': f'Gemini API Error: {response.status_code} - {response.text}'}
+            return {'error': f'Gemini API Error: {response.status_code}'}
         data = response.json()
         if not data.get('candidates') or not data['candidates'][0].get('content', {}).get('parts'):
             return {'error': 'Empty response from Gemini'}
         response_text = data['candidates'][0]['content']['parts'][0]['text']
-        # Extract JSON
+        
+        # Try to extract JSON
         json_match = re.search(r'\[\s*\{[\s\S]*\}\s*\]', response_text)
         if not json_match:
+            # Try code block
             json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
             if json_match:
                 json_str = json_match.group(1)
@@ -328,41 +345,72 @@ CRITICAL: Return ONLY the JSON array. No explanations, no extra text. If you can
                 return extract_data_manually(response_text, input_data)
         else:
             json_str = json_match.group(0)
+        
         # Clean JSON
         json_str = json_str.replace('```json', '').replace('```', '').strip()
         json_str = re.sub(r',\s*}', '}', json_str)
         json_str = re.sub(r',\s*]', ']', json_str)
         json_str = re.sub(r'([a-zA-Z0-9_]+)\s*:', r'"\1":', json_str)
         json_str = json_str.replace("'", '"')
-        # Fix missing quotes
+        
         records = json.loads(json_str)
         if isinstance(records, dict):
             records = [records]
         return process_extracted_records(records)
+        
     except Exception as e:
         return {'error': f'Parser Error: {e}', 'raw': response_text[:500] if 'response_text' in locals() else ''}
 
 def extract_data_manually(response_text, input_data):
-    # Fallback extraction – same logic as bot's extractDataManually
+    """Fallback extraction - reads messy text and pulls out key fields"""
     records = []
     text = response_text + ' ' + str(input_data or '')
     text = re.sub(r'\s+', ' ', text).strip()
+    
+    # Extract PNR
     pnr_matches = re.findall(r'\b\d{10}\b', text)
     if not pnr_matches:
-        return {'error': 'No PNR found in fallback'}
+        return {'error': 'No PNR found'}
+    
+    # Extract Train Number
     train_matches = re.findall(r'\b\d{3,5}\b', text)
     trains = [t for t in train_matches if len(t) != 10]
+    
+    # Extract Dates
     date_matches = re.findall(r'\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}', text)
-    station_matches = re.findall(r'\b[A-Z]{3,5}\b', text)
+    
+    # Extract Station codes
+    station_matches = re.findall(r'\b[A-Z]{3,4}\b', text)
+    
+    # Extract Names
     name_matches = re.findall(r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*', text)
-    names = [n for n in name_matches if 3 < len(n) < 30]
+    names = [n for n in name_matches if 3 < len(n) < 40]
+    
+    # Extract Phone numbers
     phone_matches = re.findall(r'\b\d{10}\b', text)
-    phones = [p for p in phone_matches]
+    
+    # Extract Diary No
+    diary_match = re.search(r'No\.?\s*[:#]?\s*([A-Z0-9\/\-]+)', text.upper())
+    diary = diary_match.group(1).strip() if diary_match else ''
+    
+    # Extract Application Date
+    app_date = ''
+    date_pattern = r'Dated\s*[:#]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})'
+    date_match = re.search(date_pattern, text, re.IGNORECASE)
+    if date_match:
+        app_date = date_match.group(1)
+    
+    # Check for Lower Seat
+    lower_seat = any(kw in text.upper() for kw in ['LOWER BERTH', 'COUPE', 'WOMAN', 'LOWER SEAT'])
+    
+    # Check for Rail Board
     is_rail_board = smart_detect_rail_board(text)['isRailBoard']
+    
     max_records = max(len(pnr_matches), len(trains), len(date_matches), len(station_matches), len(names))
     if max_records == 0:
         return {'error': 'No data extracted'}
-    for i in range(min(max_records, 10)):
+    
+    for i in range(min(max_records, 5)):
         rec = {
             'PNR': pnr_matches[i] if i < len(pnr_matches) else '',
             'T_N': trains[i] if i < len(trains) else '',
@@ -372,26 +420,26 @@ def extract_data_manually(response_text, input_data):
             'TO': station_matches[i+1] if i+1 < len(station_matches) else '',
             'BOARDING': '',
             'PASS_NAME': names[i] if i < len(names) else '',
-            'PASS_PH': phones[i] if i < len(phones) else '',
+            'PASS_PH': phone_matches[i] if i < len(phone_matches) else '',
             'T_BERTHS': 1,
             'PURPOSE': '',
             'ADDRESS': '',
-            'DIARY_NO': 'RAIL BOARD' if is_rail_board else '',
+            'DIARY_NO': diary if diary else ('RAIL BOARD' if is_rail_board else ''),
             'RECOMMENDATION': '',
             'DESIGNATION': '',
             'VIP_STATUS': 'MINISTER' if is_rail_board else '',
-            'APPLICATION_DATE': '',
+            'APPLICATION_DATE': parse_date(app_date) if app_date else '',
             'RAILWAY_ZONE': 'RAIL BOARD' if is_rail_board else '',
-            'PREFERENCE': 'RAIL BOARD' if is_rail_board else 'General',
+            'PREFERENCE': 'Lower Seat' if lower_seat else ('RAIL BOARD' if is_rail_board else 'General'),
             'PHONE_NUBER': '',
             'WARRANT_NO': ''
         }
         if rec['PNR']:
             records.append(rec)
+    
     return process_extracted_records(records)
 
 def process_extracted_records(records):
-    # Same as bot's processExtractedRecords
     cleaned = []
     seen = set()
     for rec in records:
@@ -399,7 +447,7 @@ def process_extracted_records(records):
         if not pnr or pnr in seen:
             continue
         seen.add(pnr)
-        # Build full text for smart detection
+        
         full_text = ' '.join([
             str(rec.get('PURPOSE', '')),
             str(rec.get('ADDRESS', '')),
@@ -408,32 +456,41 @@ def process_extracted_records(records):
             str(rec.get('DIARY_NO', '')),
             str(rec.get('PASS_NAME', '')),
             str(rec.get('PASS_PH', '')),
-            str(rec.get('PHONE_NUBER', '')),
-            str(rec.get('WARRANT_NO', '')),
-            str(rec.get('VIP_STATUS', ''))
+            str(rec.get('PHONE_NUBER', ''))
         ])
+        
+        # Rail Board detection
         rail_board = smart_detect_rail_board(full_text)
         if rail_board['isRailBoard']:
             rec['DIARY_NO'] = 'RAIL BOARD'
             rec['RAILWAY_ZONE'] = 'RAIL BOARD'
             rec['PREFERENCE'] = 'RAIL BOARD'
             rec['VIP_STATUS'] = 'MINISTER'
+        
+        # Warrant detection
         if not rec.get('WARRANT_NO'):
             warrant = smart_detect_warrant(full_text)
             if warrant['found']:
                 rec['WARRANT_NO'] = warrant['warrant']
+        
+        # Diary detection
         if not rec.get('DIARY_NO') or rec['DIARY_NO'] == '-':
             diary = smart_detect_diary(full_text)
             if diary['found']:
                 rec['DIARY_NO'] = diary['diary']
+        
+        # VIP detection
         if not rec.get('VIP_STATUS'):
             vip = smart_detect_vip(full_text)
             if vip:
                 rec['VIP_STATUS'] = vip
+        
+        # Lower Seat detection
         if rec.get('PREFERENCE') == 'General' or not rec.get('PREFERENCE'):
             if smart_detect_lower_seat(full_text):
                 rec['PREFERENCE'] = 'Lower Seat'
-        # Clean phone and dates
+        
+        # Clean data
         if rec.get('PASS_PH'):
             rec['PASS_PH'] = clean_phone(rec['PASS_PH'])
         if rec.get('PHONE_NUBER'):
@@ -444,66 +501,15 @@ def process_extracted_records(records):
             rec['APPLICATION_DATE'] = parse_date(rec['APPLICATION_DATE'])
         if rec.get('T_N'):
             rec['T_N'] = re.sub(r'\s*(DN|UP)$', '', rec['T_N']).strip()
+        
         rec.setdefault('PREFERENCE', 'General')
         rec.setdefault('T_BERTHS', 1)
         rec.setdefault('CLASS', '')
         cleaned.append(rec)
+    
     if not cleaned:
         return {'error': 'No valid records extracted'}
     return {'records': cleaned, 'count': len(cleaned)}
-
-# ========== STATION MAP (full from your bot) ==========
-STATION_MAP = {
-    # I'll include the full map from your bot code – for brevity, I'll add a few, but you should copy the complete one.
-    'NTSK': 'New Tinsukia', 'GHY': 'Guwahati', 'NDLS': 'New Delhi',
-    'HWH': 'Howrah', 'PNBE': 'Patna', 'BSB': 'Varanasi', 'CNB': 'Kanpur Central',
-    'LKO': 'Lucknow', 'DDU': 'Pt. Deen Dayal Upadhyaya', 'GAYA': 'Gaya',
-    'MGS': 'Mughalsarai', 'ASN': 'Asansol', 'DHN': 'Dhanbad', 'SC': 'Secunderabad',
-    'MAS': 'Chennai Central', 'SBC': 'Bengaluru City', 'CSTM': 'Mumbai CSMT',
-    'BCT': 'Mumbai Central', 'PUNE': 'Pune', 'ADI': 'Ahmedabad', 'BRC': 'Vadodara',
-    'JP': 'Jaipur', 'AII': 'Ajmer', 'BPL': 'Bhopal', 'INDB': 'Indore',
-    'JBP': 'Jabalpur', 'NGP': 'Nagpur', 'HYB': 'Hyderabad', 'BZA': 'Vijayawada',
-    'GNT': 'Guntur', 'VSKP': 'Visakhapatnam', 'BBS': 'Bhubaneswar',
-    'KGP': 'Kharagpur', 'KOAA': 'Kolkata', 'NJP': 'New Jalpaiguri',
-    'NBQ': 'New Bongaigaon', 'KYQ': 'Kamakhya', 'DBRG': 'Dibrugarh',
-    'MXN': 'Mariani Junction', 'FKG': 'Furkating', 'JTI': 'Jatinga',
-    'MFP': 'Muzaffarpur', 'KIR': 'Katihar Junction', 'DEL': 'Delhi',
-    'SDAH': 'Sealdah', 'TBM': 'Tambaram', 'YPR': 'Yesvantpur',
-    'SMVB': 'SMVT Bengaluru', 'PRYJ': 'Prayagraj', 'DNR': 'Danapur',
-    'RE': 'Rewari', 'AY': 'Ayodhya', 'MLDT': 'Malda Town', 'NNA': 'Naugachia',
-    'CLG': 'Kahalgaon', 'ROK': 'Rohtak', 'BGP': 'Bhagalpur', 'JMP': 'Jamalpur',
-    'JYG': 'Jaynagar', 'BJU': 'Barauni', 'SPJ': 'Samastipur', 'HJP': 'Hajipur',
-    'PPTA': 'Patliputra', 'ARA': 'Ara', 'BXR': 'Buxar', 'TDL': 'Tundla',
-    'ALJN': 'Aligarh', 'GZB': 'Ghaziabad', 'BKN': 'Bikaner', 'BME': 'Barmer',
-    'JU': 'Jodhpur', 'UDZ': 'Udaipur', 'RTM': 'Ratlam', 'UJN': 'Ujjain',
-    'ST': 'Surat', 'BL': 'Valsad', 'PUNE': 'Pune', 'TVC': 'Thiruvananthapuram',
-    'ERS': 'Ernakulam', 'MAQ': 'Mangalore', 'MS': 'Chennai Egmore',
-    'AF': 'Agra Fort', 'MTJ': 'Mathura', 'GWL': 'Gwalior', 'JHS': 'Jhansi',
-    'BHUJ': 'Bhuj', 'GIMB': 'Gandhidham', 'ANND': 'Anand', 'ND': 'Nadiad',
-    'BH': 'Bharuch', 'NVS': 'Navsari', 'BSR': 'Vasai Road', 'BVI': 'Borivali',
-    'DDR': 'Dadar', 'KYN': 'Kalyan', 'NK': 'Nashik Road', 'MMR': 'Manmad',
-    'BSL': 'Bhusaval', 'AK': 'Akola', 'BPQ': 'Balharshah', 'SKZR': 'Sirpur Kagaznagar',
-    'MCI': 'Manchiryal', 'KZJ': 'Kazipet', 'KCG': 'Kacheguda', 'MBNR': 'Mahbubnagar',
-    'TEL': 'Tenali', 'OGL': 'Ongole', 'NLR': 'Nellore', 'GDR': 'Gudur',
-    'CGL': 'Chengalpattu', 'VM': 'Villupuram', 'TJ': 'Thanjavur', 'TPJ': 'Tiruchirappalli',
-    'MDU': 'Madurai', 'NCJ': 'Nagercoil', 'QLN': 'Kollam', 'ALLP': 'Alappuzha',
-    'TCR': 'Thrissur', 'PGT': 'Palakkad', 'CBE': 'Coimbatore', 'SA': 'Salem',
-    'JTJ': 'Jolarpettai', 'KPD': 'Katpadi', 'AJJ': 'Arakkonam', 'PER': 'Perambur',
-    'KMU': 'Kumbakonam', 'MV': 'Mayiladuthurai', 'CDM': 'Chidambaram',
-    'TDPR': 'Tirupadripulyur', 'CTC': 'Cuttack', 'BHC': 'Bhadrak', 'SRC': 'Santragachi',
-    'GMO': 'Gomoh', 'KQR': 'Koderma', 'MGS': 'Mughalsarai', 'BBK': 'Barabanki',
-    'GD': 'Gonda', 'BST': 'Basti', 'GKP': 'Gorakhpur', 'DEOS': 'Deoria Sadar',
-    'DGR': 'Durgapur', 'BWN': 'Bardhaman', 'VZM': 'Vizianagaram', 'SLO': 'Samalkot',
-    'RJY': 'Rajahmundry', 'WADI': 'Wadi', 'YG': 'Yadgir', 'RC': 'Raichur',
-    'GTL': 'Guntakal', 'DHNE': 'Dhone', 'KRNT': 'Kurnool City', 'GWD': 'Gadwal',
-    'PNU': 'Palanpur', 'ABR': 'Abu Road', 'FA': 'Falna', 'MJ': 'Marwar Junction',
-    'AWR': 'Alwar', 'SUR': 'Solapur', 'GR': 'Gulbarga'
-}
-def get_station(code):
-    if not code:
-        return ''
-    code = code.upper().strip()
-    return f"{code} ({STATION_MAP[code]})" if code in STATION_MAP else code
 
 # ========== SHEET LOADER ==========
 @st.cache_data(ttl=60)
@@ -586,7 +592,7 @@ def save_to_sheet(sheet, records):
     except Exception as e:
         return {'error': str(e)}
 
-# ========== THEME WITH DARK MODE TEXT FIX ==========
+# ========== THEME ==========
 def apply_theme(dark_mode):
     bg = "#0e1117" if dark_mode else "#f8f9fa"
     card_bg = "#262730" if dark_mode else "#ffffff"
@@ -599,133 +605,65 @@ def apply_theme(dark_mode):
         .stMetric {{ background-color: {card_bg}; border-radius: 12px; padding: 12px; border: 1px solid {border}; }}
         .pro-title {{ font-size: 1.8rem; font-weight: 700; color: {text_color}; }}
         .pro-subtitle {{ color: {text_color}; opacity: 0.7; }}
-        h1, h2, h3, h4, p, label, .stMarkdown, div, span, .stTextInput label, .stSelectbox label, .stDateInput label, .stNumberInput label {{
-            color: {text_color} !important;
-        }}
+        h1, h2, h3, h4, p, label, .stMarkdown, div, span, .stTextInput label, .stSelectbox label, .stDateInput label, .stNumberInput label {{ color: {text_color} !important; }}
         .stButton button {{ border-radius: 8px; font-weight: 500; color: {text_color}; }}
         .stDataFrame thead th {{ background: #2d7d46 !important; color: white !important; }}
         .pro-footer {{ text-align: center; padding: 20px 0 10px; opacity: 0.5; font-size: 0.8rem; border-top: 1px solid {border}; margin-top: 30px; color: {text_color}; }}
         .stExpander {{ border: 1px solid {border}; border-radius: 8px; background: {card_bg}; }}
         .stExpander .streamlit-expanderHeader {{ color: {text_color}; }}
         .stSidebar .sidebar-content {{ background-color: {bg}; }}
-        .stSidebar .sidebar-content .stMarkdown, .stSidebar .sidebar-content label, .stSidebar .sidebar-content div {{
-            color: {text_color} !important;
-        }}
-        .stDataFrame thead tr th:first-child,
-        .stDataFrame tbody tr th:first-child,
-        .stDataFrame tbody tr td:first-child {{
-            display: none !important;
-        }}
-        .stDataFrame thead tr th:nth-child(2),
-        .stDataFrame tbody tr td:nth-child(2) {{
-            display: table-cell !important;
-        }}
+        .stSidebar .sidebar-content .stMarkdown, .stSidebar .sidebar-content label, .stSidebar .sidebar-content div {{ color: {text_color} !important; }}
+        .stDataFrame thead tr th:first-child, .stDataFrame tbody tr th:first-child, .stDataFrame tbody tr td:first-child {{ display: none !important; }}
+        .stDataFrame thead tr th:nth-child(2), .stDataFrame tbody tr td:nth-child(2) {{ display: table-cell !important; }}
+        .chat-container {{ background: {card_bg}; border-radius: 12px; padding: 16px; border: 1px solid {border}; margin-bottom: 12px; }}
+        .chat-user {{ color: {text_color}; font-weight: bold; }}
+        .chat-bot {{ color: #2d7d46; font-weight: bold; }}
     </style>
     """, unsafe_allow_html=True)
 
-# ========== SHARE FUNCTION ==========
-def share_data(df, sheet_name, selected_rows=None):
-    if selected_rows is not None and len(selected_rows) > 0:
-        data = df.iloc[selected_rows]
-        msg = f"📊 {sheet_name} – Selected {len(data)} rows\n"
-        pnr_col = next((c for c in data.columns if 'PNR' in c.upper()), None)
-        if pnr_col:
-            pnrs = data[pnr_col].tolist()
-            msg += f"PNRs: {', '.join(str(p) for p in pnrs[:10])}{'...' if len(pnrs)>10 else ''}\n"
-    else:
-        data = df
-        msg = f"📊 {sheet_name} – Total {len(data)} rows\n"
-        train_col = next((c for c in data.columns if 'T/N' in c.upper() or 'TRAIN' in c.upper()), None)
-        if train_col:
-            train_counts = data[train_col].value_counts().head(5)
-            msg += "Top trains:\n" + "\n".join([f"{k}: {v}" for k,v in train_counts.items()])
-
-    pdf = FPDF('L', 'mm', 'A4')
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 14)
-    pdf.cell(0, 10, f"{sheet_name} Report", ln=True, align='C')
-    pdf.ln(5)
-    pdf.set_font("Arial", 'B', 8)
-    cols = data.columns.tolist()
-    if 'Select' in cols:
-        cols.remove('Select')
-    col_width = 260 / len(cols) if len(cols) > 0 else 20
-    for col in cols:
-        pdf.cell(col_width, 7, str(col)[:12].encode('latin-1', 'ignore').decode('latin-1'), border=1, align='C')
-    pdf.ln()
-    pdf.set_font("Arial", '', 7)
-    for _, row in data.head(100).iterrows():
-        for col in cols:
-            val = str(row[col])[:15] if pd.notna(row[col]) else ''
-            val_safe = val.encode('latin-1', 'ignore').decode('latin-1')
-            pdf.cell(col_width, 6, val_safe, border=1, align='L')
-        pdf.ln()
-    if len(data) > 100:
-        pdf.cell(0, 6, f"... and {len(data)-100} more rows", ln=True, align='C')
-    pdf_bytes = pdf.output(dest='S').encode('latin-1')
-    return msg, pdf_bytes
-
-# ========== DASHBOARD ==========
-def show_dashboard(df, sheet_name):
-    if df.empty:
-        st.info("No data to display charts.")
-        return
+# ========== CHAT WITH GEMINI ==========
+def chat_with_gemini(user_input, chat_history):
     try:
-        total_records = len(df)
-        train_col = next((c for c in df.columns if 'T/N' in c.upper() or 'TRAIN' in c.upper()), None)
-        unique_trains = df[train_col].nunique() if train_col and train_col in df else 0
-        berth_col = next((c for c in df.columns if 'BERTH' in c.upper() or 'T/BERTHS' in c.upper()), None)
-        if berth_col and berth_col in df:
-            total_berths = pd.to_numeric(df[berth_col], errors='coerce').sum()
-        else:
-            total_berths = 0
+        model = init_gemini()
+        # Get sheet context
+        gc = init_sheets()
+        eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
+        all_data = eq_sheet.get_all_values()
+        sheet_summary = f"EQ Sheet has {len(all_data)-4} records.\n"
+        # Get some sample data
+        if len(all_data) > 5:
+            sample_rows = all_data[5:10]
+            sheet_summary += "Sample records (PNR, Train, DOJ):\n"
+            for row in sample_rows:
+                if len(row) > 7:
+                    sheet_summary += f"PNR: {row[1] if len(row)>1 else ''}, Train: {row[5] if len(row)>5 else ''}, DOJ: {row[7] if len(row)>7 else ''}\n"
+        
+        context = f"""You are TSKEQ Bot - a railway EQ assistant. You have access to the EQ sheet data.
+        
+Sheet Summary:
+{sheet_summary}
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("📊 Total Records", total_records)
-        col2.metric("🚂 Unique Trains", unique_trains)
-        col3.metric("💺 Total Berths", int(total_berths) if total_berths else 0)
+Previous Conversation:
+{chat_history}
 
-        if train_col and train_col in df and df[train_col].notna().any():
-            fig_pie = px.pie(df, names=train_col, title=f"Train Distribution ({sheet_name})",
-                             hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3)
-            fig_pie.update_layout(height=350)
-            st.plotly_chart(fig_pie, use_container_width=True)
+User Question: {user_input}
 
-        if berth_col and berth_col in df:
-            berth_vals = pd.to_numeric(df[berth_col], errors='coerce').dropna()
-            if not berth_vals.empty:
-                fig_hist = px.histogram(berth_vals, nbins=10, title="Berths Distribution",
-                                        labels={'value': 'Berths', 'count': 'Frequency'},
-                                        color_discrete_sequence=['#2d7d46'])
-                fig_hist.update_layout(height=350, bargap=0.2)
-                st.plotly_chart(fig_hist, use_container_width=True)
-
-        doj_col = next((c for c in df.columns if 'DOJ' in c.upper()), None)
-        if doj_col and doj_col in df:
-            df_temp = df.copy()
-            df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
-            daily_counts = df_temp.groupby('_date').size().reset_index(name='count')
-            if not daily_counts.empty:
-                fig_line = px.line(daily_counts, x='_date', y='count', title="Daily Records Trend",
-                                   labels={'_date': 'Date', 'count': 'Number of Records'},
-                                   markers=True, color_discrete_sequence=['#ff6b6b'])
-                fig_line.update_layout(height=350)
-                st.plotly_chart(fig_line, use_container_width=True)
-
-        if train_col and train_col in df:
-            top_trains = df[train_col].value_counts().head(10).reset_index()
-            top_trains.columns = ['Train', 'Count']
-            if not top_trains.empty:
-                fig_bar = px.bar(top_trains, x='Train', y='Count', title="Top 10 Trains",
-                                 color='Count', color_continuous_scale='Viridis')
-                fig_bar.update_layout(height=350)
-                st.plotly_chart(fig_bar, use_container_width=True)
+Please answer based on the sheet data if relevant, or use your general knowledge for other questions. Be helpful and concise."""
+        
+        response = model.generate_content(context)
+        return response.text
     except Exception as e:
-        st.warning(f"Could not render dashboard: {str(e)}")
+        return f"Error: {str(e)}"
 
 # ========== MAIN APP ==========
 dark_mode = st.sidebar.toggle("🌙 Dark Mode", value=False)
 apply_theme(dark_mode)
+
+# ---- Sheet Link Button ----
+st.sidebar.markdown("---")
+sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
+st.sidebar.markdown(f'<a href="{sheet_link}" target="_blank"><button style="padding:10px 20px; background:#2d7d46; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold; width:100%;">📊 Open Google Sheet</button></a>', unsafe_allow_html=True)
+st.sidebar.markdown("---")
 
 st.sidebar.title("⚡ AI EQMS Hub Pro")
 st.sidebar.write(f"📅 {datetime.now().strftime('%d-%m-%Y')}")
@@ -770,7 +708,7 @@ sheet_choice = st.sidebar.selectbox("Select Sheet", list(SHEET_CONFIG.keys()))
 config = SHEET_CONFIG[sheet_choice]
 start_row = config["start_row"]
 
-# ---- Filters with session state ----
+# ---- Filters ----
 st.sidebar.subheader("🔍 Filters")
 if 'pnr_val' not in st.session_state:
     st.session_state.pnr_val = ''
@@ -849,9 +787,7 @@ if st.sidebar.button("Print Sheet", use_container_width=True):
             .print-table {{ width: 100%; border-collapse: collapse; font-size: 10px; }}
             .print-table th {{ background-color: #2d7d46; color: white; font-weight: bold; padding: 6px; border: 1px solid #000; text-align: center; }}
             .print-table td {{ padding: 4px; border: 1px solid #000; text-align: left; }}
-            @media print {{
-                body * {{ visibility: visible; }}
-            }}
+            @media print {{ body * {{ visibility: visible; }} }}
         </style>
     </head>
     <body>
@@ -859,11 +795,7 @@ if st.sidebar.button("Print Sheet", use_container_width=True):
             {html_table}
             <p style="text-align:center; margin-top:20px; font-size:12px;">{sheet_choice} Report • {datetime.now().strftime('%d-%m-%Y %H:%M')}</p>
         </div>
-        <script>
-            window.onload = function() {{
-                window.print();
-            }};
-        </script>
+        <script>window.onload = function() {{ window.print(); }};</script>
     </body>
     </html>
     """, height=0, scrolling=False)
@@ -871,16 +803,47 @@ if st.sidebar.button("Print Sheet", use_container_width=True):
 st.sidebar.markdown("---")
 
 # ---- Navigation ----
-view = st.sidebar.radio("View", ["Data Table", "Dashboard"])
+view = st.sidebar.radio("View", ["Data Table", "Dashboard", "💬 Chat with Gemini"])
 
 st.markdown("<div class='pro-title'>🚂 AI EQMS Hub</div>", unsafe_allow_html=True)
 st.markdown("<div class='pro-subtitle'>Enterprise Quality Management – Pro Edition</div>", unsafe_allow_html=True)
 st.markdown("---")
 
-if view == "Dashboard":
+if view == "💬 Chat with Gemini":
+    st.subheader("💬 Chat with TSKEQ Bot")
+    st.markdown("Ask anything about your EQ data or railway queries!")
+    
+    if 'chat_history' not in st.session_state:
+        st.session_state.chat_history = []
+    
+    # Display chat history
+    for msg in st.session_state.chat_history:
+        if msg['role'] == 'user':
+            st.markdown(f"**You:** {msg['content']}")
+        else:
+            st.markdown(f"**🤖 TSKEQ Bot:** {msg['content']}")
+    
+    # Chat input
+    user_input = st.text_input("Ask a question:", key="chat_input")
+    if st.button("Send", use_container_width=True):
+        if user_input:
+            # Add user message
+            st.session_state.chat_history.append({'role': 'user', 'content': user_input})
+            # Get bot response
+            chat_context = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-10:]])
+            response = chat_with_gemini(user_input, chat_context)
+            st.session_state.chat_history.append({'role': 'bot', 'content': response})
+            st.rerun()
+    
+    if st.button("Clear Chat", use_container_width=True):
+        st.session_state.chat_history = []
+        st.rerun()
+
+elif view == "Dashboard":
     st.subheader("📊 Dashboard")
     show_dashboard(filtered_df, sheet_choice)
 else:
+    # ---- Data Table ----
     st.subheader(f"📋 {sheet_choice} – {len(filtered_df)} rows")
     if filtered_df.empty:
         st.info("No data to display. Try adjusting filters or clearing them.")
