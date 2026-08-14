@@ -271,25 +271,13 @@ def apply_theme(dark_mode):
         .pro-footer {{ text-align: center; padding: 20px 0 10px; opacity: 0.5; font-size: 0.8rem; border-top: 1px solid {border}; margin-top: 30px; }}
         .stExpander {{ border: 1px solid {border}; border-radius: 8px; background: {card_bg}; }}
         .stExpander .streamlit-expanderHeader {{ color: {text}; }}
-        /* Print styles */
         @media print {{
             .stApp {{ background-color: white !important; }}
             .main .block-container {{ max-width: 100% !important; padding: 0 !important; }}
-            .stMetric, .stDataFrame, .stButton, .stExpander, .stSelectbox, .stTextInput, .stDateInput, .stSidebar, .pro-footer, .stMarkdown {{
-                display: none !important;
-            }}
-            .print-table {{
-                display: block !important;
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 10px;
-            }}
-            .print-table th, .print-table td {{
-                border: 1px solid #000;
-                padding: 4px;
-                text-align: left;
-                white-space: nowrap;
-            }}
+            .stMetric, .stDataFrame, .stButton, .stExpander, .stSelectbox, .stTextInput, .stDateInput, .stSidebar, .pro-footer, .stMarkdown {{ display: none !important; }}
+            .print-table {{ display: block !important; width: 100%; border-collapse: collapse; font-size: 10px; }}
+            .print-table th, .print-table td {{ border: 1px solid #000; padding: 4px; text-align: left; white-space: nowrap; }}
+            .print-area {{ display: block !important; }}
         }}
     </style>
     """, unsafe_allow_html=True)
@@ -446,26 +434,22 @@ end_idx = min(start_idx + page_size, len(filtered_df))
 page_df = filtered_df.iloc[start_idx:end_idx]
 
 if not page_df.empty:
-    # Add "Select" as FIRST column (index 0)
-    page_df.insert(0, "Select", False)
-    
+    # NO SELECT COLUMN – Directly show data
     edited_page = st.data_editor(
         page_df,
         use_container_width=True,
         height=400,
-        column_config={"Select": st.column_config.CheckboxColumn("Select", width="small")},
         key=f"editor_{sheet_choice}_{page}"
     )
-    selected_indices = edited_page[edited_page["Select"]].index.tolist()
-
+    
     # ---- Action Buttons ----
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         if st.button("💾 Save Edits", use_container_width=True):
             try:
                 gc = init_sheets()
                 sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                data_to_update = edited_page.drop("Select", axis=1).values.tolist()
+                data_to_update = edited_page.values.tolist()
                 if data_to_update:
                     num_cols = len(data_to_update[0])
                     start_row_update = start_row + start_idx
@@ -506,64 +490,30 @@ if not page_df.empty:
                 else:
                     st.error(f"Add row error: {e}")
     with col3:
-        if selected_indices:
-            if st.button("🗑️ Delete Selected", use_container_width=True):
-                actual_rows = [start_row + idx for idx in selected_indices]
-                try:
-                    gc = init_sheets()
-                    sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                    for row_num in sorted(actual_rows, reverse=True):
-                        sheet.delete_rows(row_num)
-                    st.toast(f"✅ {len(selected_indices)} rows deleted!", icon="🗑️")
+        if st.button("🗑️ Delete Last Row", use_container_width=True):
+            try:
+                gc = init_sheets()
+                sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                last_row = sheet.get_last_row()
+                if last_row >= start_row:
+                    sheet.delete_rows(last_row)
+                    st.toast("✅ Last row deleted!", icon="🗑️")
                     st.cache_data.clear()
                     time.sleep(0.5)
                     st.rerun()
-                except Exception as e:
-                    if "429" in str(e):
-                        st.error("❌ Write quota exceeded. Wait a minute and try again.")
-                    else:
-                        st.error(f"Delete error: {e}")
-        else:
-            st.button("🗑️ Delete Selected", disabled=True, use_container_width=True)
+                else:
+                    st.warning("No rows to delete.")
+            except Exception as e:
+                if "429" in str(e):
+                    st.error("❌ Write quota exceeded. Wait a minute and try again.")
+                else:
+                    st.error(f"Delete error: {e}")
     with col4:
-        if selected_indices:
-            if st.button("📤 Share Selected", use_container_width=True):
-                msg, pdf_bytes = share_data(edited_page, sheet_choice, selected_indices)
-                st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}_selected.pdf", mime="application/pdf")
-                wa_link = f"https://api.whatsapp.com/send?text={msg.replace(' ', '%20')}"
-                st.markdown(f'<a href="{wa_link}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
-        else:
-            st.button("📤 Share Selected", disabled=True, use_container_width=True)
-    with col5:
-        if selected_indices:
-            # Print selected file (from Y or X column)
-            row_idx = selected_indices[0]
-            y_col = None
-            x_col = None
-            if len(edited_page.columns) > 24:
-                y_col = edited_page.columns[24]
-            if len(edited_page.columns) > 23:
-                x_col = edited_page.columns[23]
-            file_url = None
-            if y_col and y_col in edited_page.columns:
-                link_val = edited_page.loc[row_idx, y_col]
-                if isinstance(link_val, str) and 'HYPERLINK' in link_val:
-                    url_match = re.search(r'HYPERLINK\("([^"]+)"', link_val)
-                    if url_match:
-                        file_url = url_match.group(1)
-            if not file_url and x_col and x_col in edited_page.columns:
-                link_val = edited_page.loc[row_idx, x_col]
-                if isinstance(link_val, str) and 'HYPERLINK' in link_val:
-                    url_match = re.search(r'HYPERLINK\("([^"]+)"', link_val)
-                    if url_match:
-                        file_url = url_match.group(1)
-            if file_url:
-                if st.button("🖨️ Print Selected File", use_container_width=True):
-                    st.markdown(f'<script>window.open("{file_url}&print=true", "_blank");</script>', unsafe_allow_html=True)
-            else:
-                st.button("🖨️ Print Selected File", disabled=True, use_container_width=True)
-        else:
-            st.button("🖨️ Print Selected File", disabled=True, use_container_width=True)
+        if st.button("📤 Share Sheet", use_container_width=True):
+            msg, pdf_bytes = share_data(filtered_df, sheet_choice, None)
+            st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}.pdf", mime="application/pdf")
+            wa_link = f"https://api.whatsapp.com/send?text={msg.replace(' ', '%20')}"
+            st.markdown(f'<a href="{wa_link}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
 
     # ---- Quick Links ----
     st.subheader("🔗 Quick Links")
@@ -597,57 +547,27 @@ else:
 
 # ---- Export & Print ----
 st.subheader("📄 Export & Print")
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3 = st.columns(3)
 with col1:
     if st.button("🖨️ Print", use_container_width=True):
-        # Generate clean HTML table and auto-print
         html_table = filtered_df.to_html(index=False, classes='print-table')
         st.markdown(f"""
         <style>
-            .print-table {{
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 10px;
-                font-family: Arial, sans-serif;
-            }}
-            .print-table th {{
-                background-color: #2d7d46;
-                color: white;
-                font-weight: bold;
-                padding: 6px;
-                border: 1px solid #000;
-                text-align: center;
-            }}
-            .print-table td {{
-                padding: 4px;
-                border: 1px solid #000;
-                text-align: left;
-            }}
+            .print-table {{ width: 100%; border-collapse: collapse; font-size: 10px; font-family: Arial, sans-serif; }}
+            .print-table th {{ background-color: #2d7d46; color: white; font-weight: bold; padding: 6px; border: 1px solid #000; text-align: center; }}
+            .print-table td {{ padding: 4px; border: 1px solid #000; text-align: left; }}
             @media print {{
-                body * {{
-                    visibility: hidden;
-                }}
-                .print-area, .print-area * {{
-                    visibility: visible;
-                }}
-                .print-area {{
-                    position: absolute;
-                    left: 0;
-                    top: 0;
-                    width: 100%;
-                }}
-                .print-area .no-print {{
-                    display: none !important;
-                }}
+                body * {{ visibility: hidden; }}
+                .print-area, .print-area * {{ visibility: visible; }}
+                .print-area {{ position: absolute; left: 0; top: 0; width: 100%; }}
+                .print-area .no-print {{ display: none !important; }}
             }}
         </style>
         <div class="print-area">
             {html_table}
-            <p style="text-align:center; margin-top:20px; font-size:12px;">{sheet_choice} Report • Generated: {datetime.now().strftime('%d-%m-%Y %H:%M')}</p>
+            <p style="text-align:center; margin-top:20px; font-size:12px;">{sheet_choice} Report • {datetime.now().strftime('%d-%m-%Y %H:%M')}</p>
         </div>
-        <script>
-            window.print();
-        </script>
+        <script>window.print();</script>
         """, unsafe_allow_html=True)
 with col2:
     try:
@@ -678,12 +598,6 @@ with col2:
 with col3:
     csv = filtered_df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 CSV", data=csv, file_name=f"{sheet_choice}.csv", mime="text/csv", use_container_width=True)
-with col4:
-    msg_full, pdf_bytes_full = share_data(filtered_df, sheet_choice, None)
-    if st.button("📤 Share", use_container_width=True):
-        st.download_button("📥 Download PDF", data=pdf_bytes_full, file_name=f"{sheet_choice}_full.pdf", mime="application/pdf")
-        wa_link_full = f"https://api.whatsapp.com/send?text={msg_full.replace(' ', '%20')}"
-        st.markdown(f'<a href="{wa_link_full}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 WhatsApp</button></a>', unsafe_allow_html=True)
 
 # ==================== FOOTER ====================
 st.markdown("<div class='pro-footer'>© 2026 AI EQMS Hub Pro – All rights reserved.</div>", unsafe_allow_html=True)
