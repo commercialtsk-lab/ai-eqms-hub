@@ -14,11 +14,10 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2.service_account import Credentials as GDriveCredentials
 from fpdf import FPDF
-import plotly.express as px
 
 # ==================== PAGE CONFIG ====================
 st.set_page_config(
-    page_title="AI EQMS Hub – Pro",
+    page_title="AI EQMS Hub",
     page_icon="🚂",
     layout="wide"
 )
@@ -75,7 +74,6 @@ def parse_date(date_str):
         return f"{day}-{month}-{year}"
     return date_str
 
-# (STATION_MAP defined as before – include full map)
 STATION_MAP = {
     'NTSK': 'New Tinsukia', 'GHY': 'Guwahati', 'NDLS': 'New Delhi',
     'HWH': 'Howrah', 'PNBE': 'Patna', 'BSB': 'Varanasi', 'CNB': 'Kanpur Central',
@@ -127,7 +125,7 @@ def get_station(code):
     code = code.upper().strip()
     return f"{code} ({STATION_MAP[code]})" if code in STATION_MAP else code
 
-# ==================== SHEET LOADER WITH CACHE ====================
+# ==================== SHEET LOADER ====================
 @st.cache_data(ttl=60)
 def load_sheet_data_cached(sheet_name, start_row, sheet_id):
     try:
@@ -265,7 +263,6 @@ def apply_theme(dark_mode):
         .stApp {{ background-color: {bg}; }}
         .main .block-container {{ padding-top: 1rem; padding-bottom: 1rem; }}
         .stMetric {{ background-color: {card_bg}; border-radius: 12px; padding: 12px; border: 1px solid {border}; }}
-        .pro-card {{ background: {card_bg}; padding: 16px; border-radius: 12px; border: 1px solid {border}; margin-bottom: 12px; }}
         .pro-title {{ font-size: 1.8rem; font-weight: 700; color: {text}; }}
         .pro-subtitle {{ color: {text}; opacity: 0.7; }}
         h1, h2, h3, h4, p, label, .stMarkdown {{ color: {text}; }}
@@ -449,8 +446,9 @@ end_idx = min(start_idx + page_size, len(filtered_df))
 page_df = filtered_df.iloc[start_idx:end_idx]
 
 if not page_df.empty:
-    # Prepare data for editing
+    # Add "Select" as FIRST column (index 0)
     page_df.insert(0, "Select", False)
+    
     edited_page = st.data_editor(
         page_df,
         use_container_width=True,
@@ -467,14 +465,12 @@ if not page_df.empty:
             try:
                 gc = init_sheets()
                 sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                # Get data without Select column
                 data_to_update = edited_page.drop("Select", axis=1).values.tolist()
                 if data_to_update:
                     num_cols = len(data_to_update[0])
                     start_row_update = start_row + start_idx
                     end_row_update = start_row_update + len(data_to_update) - 1
-                    # Build range: A{start_row}:{col_letter}{end_row}
-                    col_letter = chr(64 + num_cols)  # A=65, B=66, ...
+                    col_letter = chr(64 + num_cols)
                     range_name = f"A{start_row_update}:{col_letter}{end_row_update}"
                     sheet.update(range_name, data_to_update)
                     st.toast("✅ Changes saved!", icon="💾")
@@ -540,14 +536,14 @@ if not page_df.empty:
             st.button("📤 Share Selected", disabled=True, use_container_width=True)
     with col5:
         if selected_indices:
-            # Print selected file
+            # Print selected file (from Y or X column)
             row_idx = selected_indices[0]
             y_col = None
             x_col = None
             if len(edited_page.columns) > 24:
-                y_col = edited_page.columns[24]  # Y
+                y_col = edited_page.columns[24]
             if len(edited_page.columns) > 23:
-                x_col = edited_page.columns[23]  # X
+                x_col = edited_page.columns[23]
             file_url = None
             if y_col and y_col in edited_page.columns:
                 link_val = edited_page.loc[row_idx, y_col]
@@ -569,7 +565,7 @@ if not page_df.empty:
         else:
             st.button("🖨️ Print Selected File", disabled=True, use_container_width=True)
 
-    # ---- Quick Links for X, Y, Z, AA ----
+    # ---- Quick Links ----
     st.subheader("🔗 Quick Links")
     col_indices = {'X': 23, 'Y': 24, 'Z': 25, 'AA': 26}
     for idx, row in filtered_df.iterrows():
@@ -603,35 +599,57 @@ else:
 st.subheader("📄 Export & Print")
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    # Print filtered sheet as PDF download
-    if st.button("🖨️ Print Filtered Sheet (PDF)", use_container_width=True):
-        try:
-            pdf = FPDF('L', 'mm', 'A4')
-            pdf.add_page()
-            pdf.set_font("Arial", 'B', 14)
-            pdf.cell(0, 10, f"{sheet_choice} Report (Filtered)", ln=True, align='C')
-            pdf.ln(5)
-            pdf.set_font("Arial", 'B', 8)
-            cols = filtered_df.columns.tolist()
-            col_width = 260 / len(cols) if len(cols) > 0 else 20
-            for col in cols:
-                pdf.cell(col_width, 7, str(col)[:12].encode('latin-1', 'ignore').decode('latin-1'), border=1, align='C')
-            pdf.ln()
-            pdf.set_font("Arial", '', 7)
-            for _, row in filtered_df.head(200).iterrows():
-                for col in cols:
-                    val = str(row[col])[:15] if pd.notna(row[col]) else ''
-                    val_safe = val.encode('latin-1', 'ignore').decode('latin-1')
-                    pdf.cell(col_width, 6, val_safe, border=1, align='L')
-                pdf.ln()
-            if len(filtered_df) > 200:
-                pdf.cell(0, 6, f"... and {len(filtered_df)-200} more rows", ln=True, align='C')
-            pdf_bytes = pdf.output(dest='S').encode('latin-1')
-            st.download_button("📥 Download PDF (Filtered)", data=pdf_bytes, file_name=f"{sheet_choice}_filtered.pdf", mime="application/pdf")
-        except Exception as e:
-            st.warning(f"PDF error: {e}")
+    if st.button("🖨️ Print", use_container_width=True):
+        # Generate clean HTML table and auto-print
+        html_table = filtered_df.to_html(index=False, classes='print-table')
+        st.markdown(f"""
+        <style>
+            .print-table {{
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 10px;
+                font-family: Arial, sans-serif;
+            }}
+            .print-table th {{
+                background-color: #2d7d46;
+                color: white;
+                font-weight: bold;
+                padding: 6px;
+                border: 1px solid #000;
+                text-align: center;
+            }}
+            .print-table td {{
+                padding: 4px;
+                border: 1px solid #000;
+                text-align: left;
+            }}
+            @media print {{
+                body * {{
+                    visibility: hidden;
+                }}
+                .print-area, .print-area * {{
+                    visibility: visible;
+                }}
+                .print-area {{
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    width: 100%;
+                }}
+                .print-area .no-print {{
+                    display: none !important;
+                }}
+            }}
+        </style>
+        <div class="print-area">
+            {html_table}
+            <p style="text-align:center; margin-top:20px; font-size:12px;">{sheet_choice} Report • Generated: {datetime.now().strftime('%d-%m-%Y %H:%M')}</p>
+        </div>
+        <script>
+            window.print();
+        </script>
+        """, unsafe_allow_html=True)
 with col2:
-    # Full PDF
     try:
         pdf = FPDF('L', 'mm', 'A4')
         pdf.add_page()
@@ -662,64 +680,10 @@ with col3:
     st.download_button("📥 CSV", data=csv, file_name=f"{sheet_choice}.csv", mime="text/csv", use_container_width=True)
 with col4:
     msg_full, pdf_bytes_full = share_data(filtered_df, sheet_choice, None)
-    if st.button("📤 Share Full Sheet", use_container_width=True):
+    if st.button("📤 Share", use_container_width=True):
         st.download_button("📥 Download PDF", data=pdf_bytes_full, file_name=f"{sheet_choice}_full.pdf", mime="application/pdf")
         wa_link_full = f"https://api.whatsapp.com/send?text={msg_full.replace(' ', '%20')}"
-        st.markdown(f'<a href="{wa_link_full}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
-
-# ---- Print Preview using HTML (browser print) ----
-st.subheader("🖨️ Print Preview (Browser)")
-if st.button("Open Print Preview", use_container_width=True):
-    # Generate clean HTML table for printing
-    html_table = filtered_df.to_html(index=False, classes='print-table')
-    st.markdown(f"""
-    <style>
-        .print-table {{
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 10px;
-            font-family: Arial, sans-serif;
-        }}
-        .print-table th {{
-            background-color: #2d7d46;
-            color: white;
-            font-weight: bold;
-            padding: 6px;
-            border: 1px solid #000;
-            text-align: center;
-        }}
-        .print-table td {{
-            padding: 4px;
-            border: 1px solid #000;
-            text-align: left;
-        }}
-        @media print {{
-            body * {{
-                visibility: hidden;
-            }}
-            .print-area, .print-area * {{
-                visibility: visible;
-            }}
-            .print-area {{
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
-            }}
-        }}
-    </style>
-    <div class="print-area">
-        {html_table}
-        <p style="text-align:center; margin-top:20px; font-size:12px;">Generated on {datetime.now().strftime('%d-%m-%Y %H:%M')}</p>
-    </div>
-    <script>
-        // Auto-print after a short delay
-        setTimeout(function() {{
-            window.print();
-        }}, 1000);
-    </script>
-    """, unsafe_allow_html=True)
-    st.info("A print dialog should appear automatically. If not, use your browser's print function (Ctrl+P).")
+        st.markdown(f'<a href="{wa_link_full}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 WhatsApp</button></a>', unsafe_allow_html=True)
 
 # ==================== FOOTER ====================
 st.markdown("<div class='pro-footer'>© 2026 AI EQMS Hub Pro – All rights reserved.</div>", unsafe_allow_html=True)
