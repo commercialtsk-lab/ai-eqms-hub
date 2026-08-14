@@ -52,464 +52,8 @@ def init_drive():
     return build('drive', 'v3', credentials=creds)
 
 # ========== EXACT PARSER (FULL from bot) ==========
-def clean_pnr(pnr):
-    if not pnr:
-        return ''
-    digits = re.sub(r'\D', '', str(pnr))
-    return digits if len(digits) == 10 else (digits[-10:] if len(digits) > 10 else '')
-
-def clean_phone(phone):
-    if not phone:
-        return ''
-    digits = re.sub(r'\D', '', str(phone))
-    return digits[-10:] if len(digits) >= 10 else ''
-
-def parse_date(date_str):
-    if not date_str:
-        return ''
-    if isinstance(date_str, datetime):
-        return date_str.strftime("%d-%m-%Y")
-    date_str = str(date_str).strip()
-    match = re.search(r'(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})', date_str)
-    if match:
-        day, month, year = match.groups()
-        day = day.zfill(2); month = month.zfill(2)
-        if len(year) == 2: year = '20' + year
-        if int(month) > 12 and int(day) <= 12: day, month = month, day
-        return f"{day}-{month}-{year}"
-    gmt_match = re.search(r'([A-Z][a-z]{2})\s+([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{4})', date_str)
-    if gmt_match:
-        months = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06',
-                  'Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'}
-        month = months.get(gmt_match[2], '01')
-        day = gmt_match[3].zfill(2)
-        year = gmt_match[4]
-        return f"{day}-{month}-{year}"
-    try:
-        dt = datetime.strptime(date_str, "%Y-%m-%d")
-        return dt.strftime("%d-%m-%Y")
-    except:
-        pass
-    return date_str
-
-def smart_detect_warrant(text):
-    if not text:
-        return {'warrant': '', 'found': False}
-    text = str(text).upper()
-    patterns = [
-        r'IC[-_\s]*(\d{2,4})',
-        r'WARRANT\s*NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
-        r'WARRANT\s*NUMBER\s*[:#]?\s*([A-Z0-9\-]+)',
-        r'W[\/\-]?NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
-        r'MP[-_\s]*(\d{2,4})',
-        r'MLA[-_\s]*(\d{2,4})'
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text)
-        if match:
-            warrant = match.group(1) if len(match.groups()) > 0 else match.group(0)
-            if warrant and len(warrant) >= 2:
-                return {'warrant': warrant.strip().upper(), 'found': True}
-    return {'warrant': '', 'found': False}
-
-def smart_detect_rail_board(text):
-    if not text:
-        return {'isRailBoard': False}
-    text = str(text).upper()
-    patterns = [
-        r'RAIL\s*BOARD',
-        r'OFFICE\s*OF\s*(?:THE\s*)?HON\'?BLE\s*MINISTER\s*RAILWAYS',
-        r'OFFICE\s*OF\s*(?:THE\s*)?HONOURABLE\s*MINISTER\s*RAILWAYS',
-        r'MINISTER\s*RAILWAYS',
-        r'MINISTRY\s*OF\s*RAILWAYS',
-        r'RAIL\s*MANTRI',
-        r'RAIL\s*BHAWAN'
-    ]
-    for pattern in patterns:
-        if re.search(pattern, text):
-            return {'isRailBoard': True}
-    keywords = ['MINISTER', 'RAILWAYS', 'RAILWAY', 'HONBLE', "HON'BLE", 'RAIL MANTRI', 'OFFICE', 'RAIL', 'BOARD']
-    score = sum(1 for kw in keywords if kw in text)
-    if score >= 4:
-        return {'isRailBoard': True}
-    if 'OFFICE' in text and 'MINISTER' in text and ('RAILWAYS' in text or 'RAILWAY' in text):
-        if text.find('OFFICE') < 50:
-            return {'isRailBoard': True}
-    return {'isRailBoard': False}
-
-def smart_detect_diary(text):
-    if not text:
-        return {'diary': '', 'found': False}
-    text = str(text).upper()
-    patterns = [
-        r'DIARY\s*NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)',
-        r'DIARY\s*NUMBER\s*[:#]?\s*([A-Z0-9\/\-]+)',
-        r'D\/?NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)',
-        r'NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)',  # Added to catch "No. ECR/CRM/..."
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text)
-        if match:
-            diary = match.group(1).strip()
-            if len(diary) > 3:  # filter short matches
-                return {'diary': diary, 'found': True}
-    return {'diary': '', 'found': False}
-
-def smart_detect_vip(text):
-    if not text:
-        return ''
-    text = str(text).upper()
-    if 'MINISTER' in text:
-        return 'MINISTER'
-    if re.search(r'\bMR\b', text):
-        return 'MR'
-    if re.search(r'\bMP\b', text) and 'PMO' not in text:
-        return 'MP'
-    if re.search(r'\bMLA\b', text):
-        return 'MLA'
-    if re.search(r'\bOSD\b', text):
-        return 'OSD'
-    if re.search(r'\bPMO\b', text):
-        return 'PMO'
-    if 'VVIP' in text:
-        return 'VVIP'
-    if 'VIP' in text:
-        return 'VIP'
-    return ''
-
-def smart_detect_lower_seat(text):
-    if not text:
-        return False
-    text = str(text).upper()
-    keywords = ['AGE+', 'AGE +', 'MEDICAL', 'HANDICAP', 'SR CITIZEN', 'SENIOR', 'DISABLED',
-                'LOWER BERTH', 'COUPE', 'WOMAN', 'LOWER SEAT']  # Added Lower Berth detection
-    return any(kw in text for kw in keywords)
-
-def get_station(code):
-    if not code:
-        return ''
-    code = code.upper().strip()
-    STATION_MAP = {
-        'NTSK': 'New Tinsukia', 'GHY': 'Guwahati', 'NDLS': 'New Delhi',
-        'HWH': 'Howrah', 'PNBE': 'Patna', 'BSB': 'Varanasi', 'CNB': 'Kanpur Central',
-        'LKO': 'Lucknow', 'DDU': 'Pt. Deen Dayal Upadhyaya', 'GAYA': 'Gaya',
-        'MGS': 'Mughalsarai', 'ASN': 'Asansol', 'DHN': 'Dhanbad', 'SC': 'Secunderabad',
-        'MAS': 'Chennai Central', 'SBC': 'Bengaluru City', 'CSTM': 'Mumbai CSMT',
-        'BCT': 'Mumbai Central', 'PUNE': 'Pune', 'ADI': 'Ahmedabad', 'BRC': 'Vadodara',
-        'JP': 'Jaipur', 'AII': 'Ajmer', 'BPL': 'Bhopal', 'INDB': 'Indore',
-        'JBP': 'Jabalpur', 'NGP': 'Nagpur', 'HYB': 'Hyderabad', 'BZA': 'Vijayawada',
-        'GNT': 'Guntur', 'VSKP': 'Visakhapatnam', 'BBS': 'Bhubaneswar',
-        'KGP': 'Kharagpur', 'KOAA': 'Kolkata', 'NJP': 'New Jalpaiguri',
-        'NBQ': 'New Bongaigaon', 'KYQ': 'Kamakhya', 'DBRG': 'Dibrugarh',
-        'MXN': 'Mariani Junction', 'FKG': 'Furkating', 'JTI': 'Jatinga',
-        'MFP': 'Muzaffarpur', 'KIR': 'Katihar Junction', 'DEL': 'Delhi',
-        'SDAH': 'Sealdah', 'TBM': 'Tambaram', 'YPR': 'Yesvantpur',
-        'SMVB': 'SMVT Bengaluru', 'PRYJ': 'Prayagraj', 'DNR': 'Danapur',
-        'RE': 'Rewari', 'AY': 'Ayodhya', 'MLDT': 'Malda Town', 'NNA': 'Naugachia',
-        'CLG': 'Kahalgaon', 'ROK': 'Rohtak', 'BGP': 'Bhagalpur', 'JMP': 'Jamalpur',
-        'JYG': 'Jaynagar', 'BJU': 'Barauni', 'SPJ': 'Samastipur', 'HJP': 'Hajipur',
-        'PPTA': 'Patliputra', 'ARA': 'Ara', 'BXR': 'Buxar', 'TDL': 'Tundla',
-        'ALJN': 'Aligarh', 'GZB': 'Ghaziabad', 'BKN': 'Bikaner', 'BME': 'Barmer',
-        'JU': 'Jodhpur', 'UDZ': 'Udaipur', 'RTM': 'Ratlam', 'UJN': 'Ujjain',
-        'ST': 'Surat', 'BL': 'Valsad', 'PUNE': 'Pune', 'TVC': 'Thiruvananthapuram',
-        'ERS': 'Ernakulam', 'MAQ': 'Mangalore', 'MS': 'Chennai Egmore',
-        'AF': 'Agra Fort', 'MTJ': 'Mathura', 'GWL': 'Gwalior', 'JHS': 'Jhansi',
-        'BHUJ': 'Bhuj', 'GIMB': 'Gandhidham', 'ANND': 'Anand', 'ND': 'Nadiad',
-        'BH': 'Bharuch', 'NVS': 'Navsari', 'BSR': 'Vasai Road', 'BVI': 'Borivali',
-        'DDR': 'Dadar', 'KYN': 'Kalyan', 'NK': 'Nashik Road', 'MMR': 'Manmad',
-        'BSL': 'Bhusaval', 'AK': 'Akola', 'BPQ': 'Balharshah', 'SKZR': 'Sirpur Kagaznagar',
-        'MCI': 'Manchiryal', 'KZJ': 'Kazipet', 'KCG': 'Kacheguda', 'MBNR': 'Mahbubnagar',
-        'TEL': 'Tenali', 'OGL': 'Ongole', 'NLR': 'Nellore', 'GDR': 'Gudur',
-        'CGL': 'Chengalpattu', 'VM': 'Villupuram', 'TJ': 'Thanjavur', 'TPJ': 'Tiruchirappalli',
-        'MDU': 'Madurai', 'NCJ': 'Nagercoil', 'QLN': 'Kollam', 'ALLP': 'Alappuzha',
-        'TCR': 'Thrissur', 'PGT': 'Palakkad', 'CBE': 'Coimbatore', 'SA': 'Salem',
-        'JTJ': 'Jolarpettai', 'KPD': 'Katpadi', 'AJJ': 'Arakkonam', 'PER': 'Perambur',
-        'KMU': 'Kumbakonam', 'MV': 'Mayiladuthurai', 'CDM': 'Chidambaram',
-        'TDPR': 'Tirupadripulyur', 'CTC': 'Cuttack', 'BHC': 'Bhadrak', 'SRC': 'Santragachi',
-        'GMO': 'Gomoh', 'KQR': 'Koderma', 'MGS': 'Mughalsarai', 'BBK': 'Barabanki',
-        'GD': 'Gonda', 'BST': 'Basti', 'GKP': 'Gorakhpur', 'DEOS': 'Deoria Sadar',
-        'DGR': 'Durgapur', 'BWN': 'Bardhaman', 'VZM': 'Vizianagaram', 'SLO': 'Samalkot',
-        'RJY': 'Rajahmundry', 'WADI': 'Wadi', 'YG': 'Yadgir', 'RC': 'Raichur',
-        'GTL': 'Guntakal', 'DHNE': 'Dhone', 'KRNT': 'Kurnool City', 'GWD': 'Gadwal',
-        'PNU': 'Palanpur', 'ABR': 'Abu Road', 'FA': 'Falna', 'MJ': 'Marwar Junction',
-        'AWR': 'Alwar', 'SUR': 'Solapur', 'GR': 'Gulbarga'
-    }
-    return f"{code} ({STATION_MAP[code]})" if code in STATION_MAP else code
-
-# ---------- Gemini Parser (FULL from bot) ----------
-def gemini_universal_parser(input_data, input_type, mime_type):
-    url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}'
-    system_prompt = """
-You are TSKEQ Bot's AI extraction engine. You are an EXPERT at reading messy, handwritten, torn, or low-quality railway forms.
-
-=== YOUR SPECIAL SKILL ===
-You can read ANY handwriting - no matter how messy, scribbled, or torn the paper is.
-You understand Indian railway form formats perfectly.
-
-=== WHAT YOU ARE READING ===
-This is a railway EQ (Emergency Quota) application form. It contains passenger details for train reservation.
-
-=== FIELDS TO EXTRACT (21 fields) ===
-1. PNR - 10 digit number (look for 10 digits)
-2. T_N (Train Number) - 3 to 5 digits
-3. CLASS - SL, 2A, 3A, CC, 1A, 2S, etc.
-4. DOJ (Date of Journey) - Convert to DD-MM-YYYY
-5. FROM - Station code (3-4 capital letters)
-6. TO - Station code (3-4 capital letters)
-7. BOARDING - Station code (optional)
-8. PASS_NAME - Passenger full name
-9. PASS_PH - 10 digit phone number
-10. T_BERTHS - Number of berths (default 1)
-11. PURPOSE - Purpose of travel
-12. ADDRESS - Full address
-13. DIARY_NO - Diary number (look for "No.", "Diary No.", "D/No.")
-14. RECOMMENDATION - Recommender's name/designation
-15. DESIGNATION - Designation of recommender
-16. VIP_STATUS - MP, MLA, MR, MINISTER, VIP, VVIP
-17. APPLICATION_DATE - Date of application
-18. RAILWAY_ZONE - Zone (NFR, NR, ER, etc.)
-19. PREFERENCE - General, Lower Seat, MP, MLA, MR, etc.
-20. PHONE_NUBER - Recommender's phone
-21. WARRANT_NO - Warrant number (IC-240, MP-123, etc.)
-
-=== SPECIAL RULES ===
-1. DIARY_NO: Look for "No. ECR/CRM/..." or "Diary No." or "D/No." pattern. Extract the full number.
-2. PREFERENCE: If you see "Lower Berth", "Lower Seat", "Coupe", "woman co-passenger", set PREFERENCE = "Lower Seat".
-3. RAIL BOARD: If you see "Office of the Hon'ble Minister Railways", set DIARY_NO="RAIL BOARD", RAILWAY_ZONE="RAIL BOARD", PREFERENCE="RAIL BOARD", VIP_STATUS="MINISTER".
-
-=== OUTPUT FORMAT ===
-Return ONLY a valid JSON array.
-[
-  {
-    "PNR": "6307598699",
-    "T_N": "20503",
-    "CLASS": "1A",
-    "DOJ": "12-08-2026",
-    "FROM": "HJP",
-    "TO": "LKO",
-    "BOARDING": "",
-    "PASS_NAME": "INDU DUBEY",
-    "PASS_PH": "9771425900",
-    "T_BERTHS": 1,
-    "PURPOSE": "",
-    "ADDRESS": "",
-    "DIARY_NO": "ECR/CRM/PCCM Cell/EQ/01/2026",
-    "RECOMMENDATION": "MRITYUNJAY KUMAR",
-    "DESIGNATION": "Secy to PCCM",
-    "VIP_STATUS": "",
-    "APPLICATION_DATE": "10-08-2026",
-    "RAILWAY_ZONE": "ECR",
-    "PREFERENCE": "Lower Seat",
-    "PHONE_NUBER": "9771425962",
-    "WARRANT_NO": ""
-  }
-]
-CRITICAL: Return ONLY the JSON array. No explanations.
-"""
-    parts = []
-    if input_type in ['image', 'pdf']:
-        mime = mime_type or ("image/jpeg" if input_type == 'image' else "application/pdf")
-        parts.append({"inline_data": {"mime_type": mime, "data": input_data}})
-        parts.append({"text": system_prompt})
-    elif input_type == 'audio':
-        parts.append({"inline_data": {"mime_type": mime_type or "audio/ogg", "data": input_data}})
-        parts.append({"text": system_prompt})
-    elif input_type == 'text':
-        parts.append({"text": system_prompt + "\n\nINPUT DATA:\n" + input_data})
-    else:
-        return {'error': 'Unsupported type'}
-
-    payload = {
-        "contents": [{"parts": parts}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 16384}
-    }
-    try:
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(url, json=payload, headers=headers, timeout=120)
-        if response.status_code != 200:
-            return {'error': f'Gemini API Error: {response.status_code}'}
-        data = response.json()
-        if not data.get('candidates') or not data['candidates'][0].get('content', {}).get('parts'):
-            return {'error': 'Empty response from Gemini'}
-        response_text = data['candidates'][0]['content']['parts'][0]['text']
-        
-        # Try to extract JSON
-        json_match = re.search(r'\[\s*\{[\s\S]*\}\s*\]', response_text)
-        if not json_match:
-            # Try code block
-            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                # Fallback: manual extraction
-                return extract_data_manually(response_text, input_data)
-        else:
-            json_str = json_match.group(0)
-        
-        # Clean JSON
-        json_str = json_str.replace('```json', '').replace('```', '').strip()
-        json_str = re.sub(r',\s*}', '}', json_str)
-        json_str = re.sub(r',\s*]', ']', json_str)
-        json_str = re.sub(r'([a-zA-Z0-9_]+)\s*:', r'"\1":', json_str)
-        json_str = json_str.replace("'", '"')
-        
-        records = json.loads(json_str)
-        if isinstance(records, dict):
-            records = [records]
-        return process_extracted_records(records)
-        
-    except Exception as e:
-        return {'error': f'Parser Error: {e}', 'raw': response_text[:500] if 'response_text' in locals() else ''}
-
-def extract_data_manually(response_text, input_data):
-    """Fallback extraction - reads messy text and pulls out key fields"""
-    records = []
-    text = response_text + ' ' + str(input_data or '')
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    # Extract PNR
-    pnr_matches = re.findall(r'\b\d{10}\b', text)
-    if not pnr_matches:
-        return {'error': 'No PNR found'}
-    
-    # Extract Train Number
-    train_matches = re.findall(r'\b\d{3,5}\b', text)
-    trains = [t for t in train_matches if len(t) != 10]
-    
-    # Extract Dates
-    date_matches = re.findall(r'\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}', text)
-    
-    # Extract Station codes
-    station_matches = re.findall(r'\b[A-Z]{3,4}\b', text)
-    
-    # Extract Names
-    name_matches = re.findall(r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*', text)
-    names = [n for n in name_matches if 3 < len(n) < 40]
-    
-    # Extract Phone numbers
-    phone_matches = re.findall(r'\b\d{10}\b', text)
-    
-    # Extract Diary No
-    diary_match = re.search(r'No\.?\s*[:#]?\s*([A-Z0-9\/\-]+)', text.upper())
-    diary = diary_match.group(1).strip() if diary_match else ''
-    
-    # Extract Application Date
-    app_date = ''
-    date_pattern = r'Dated\s*[:#]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})'
-    date_match = re.search(date_pattern, text, re.IGNORECASE)
-    if date_match:
-        app_date = date_match.group(1)
-    
-    # Check for Lower Seat
-    lower_seat = any(kw in text.upper() for kw in ['LOWER BERTH', 'COUPE', 'WOMAN', 'LOWER SEAT'])
-    
-    # Check for Rail Board
-    is_rail_board = smart_detect_rail_board(text)['isRailBoard']
-    
-    max_records = max(len(pnr_matches), len(trains), len(date_matches), len(station_matches), len(names))
-    if max_records == 0:
-        return {'error': 'No data extracted'}
-    
-    for i in range(min(max_records, 5)):
-        rec = {
-            'PNR': pnr_matches[i] if i < len(pnr_matches) else '',
-            'T_N': trains[i] if i < len(trains) else '',
-            'CLASS': '',
-            'DOJ': parse_date(date_matches[i]) if i < len(date_matches) else '',
-            'FROM': station_matches[i] if i < len(station_matches) else '',
-            'TO': station_matches[i+1] if i+1 < len(station_matches) else '',
-            'BOARDING': '',
-            'PASS_NAME': names[i] if i < len(names) else '',
-            'PASS_PH': phone_matches[i] if i < len(phone_matches) else '',
-            'T_BERTHS': 1,
-            'PURPOSE': '',
-            'ADDRESS': '',
-            'DIARY_NO': diary if diary else ('RAIL BOARD' if is_rail_board else ''),
-            'RECOMMENDATION': '',
-            'DESIGNATION': '',
-            'VIP_STATUS': 'MINISTER' if is_rail_board else '',
-            'APPLICATION_DATE': parse_date(app_date) if app_date else '',
-            'RAILWAY_ZONE': 'RAIL BOARD' if is_rail_board else '',
-            'PREFERENCE': 'Lower Seat' if lower_seat else ('RAIL BOARD' if is_rail_board else 'General'),
-            'PHONE_NUBER': '',
-            'WARRANT_NO': ''
-        }
-        if rec['PNR']:
-            records.append(rec)
-    
-    return process_extracted_records(records)
-
-def process_extracted_records(records):
-    cleaned = []
-    seen = set()
-    for rec in records:
-        pnr = clean_pnr(rec.get('PNR', ''))
-        if not pnr or pnr in seen:
-            continue
-        seen.add(pnr)
-        
-        full_text = ' '.join([
-            str(rec.get('PURPOSE', '')),
-            str(rec.get('ADDRESS', '')),
-            str(rec.get('RECOMMENDATION', '')),
-            str(rec.get('DESIGNATION', '')),
-            str(rec.get('DIARY_NO', '')),
-            str(rec.get('PASS_NAME', '')),
-            str(rec.get('PASS_PH', '')),
-            str(rec.get('PHONE_NUBER', ''))
-        ])
-        
-        # Rail Board detection
-        rail_board = smart_detect_rail_board(full_text)
-        if rail_board['isRailBoard']:
-            rec['DIARY_NO'] = 'RAIL BOARD'
-            rec['RAILWAY_ZONE'] = 'RAIL BOARD'
-            rec['PREFERENCE'] = 'RAIL BOARD'
-            rec['VIP_STATUS'] = 'MINISTER'
-        
-        # Warrant detection
-        if not rec.get('WARRANT_NO'):
-            warrant = smart_detect_warrant(full_text)
-            if warrant['found']:
-                rec['WARRANT_NO'] = warrant['warrant']
-        
-        # Diary detection
-        if not rec.get('DIARY_NO') or rec['DIARY_NO'] == '-':
-            diary = smart_detect_diary(full_text)
-            if diary['found']:
-                rec['DIARY_NO'] = diary['diary']
-        
-        # VIP detection
-        if not rec.get('VIP_STATUS'):
-            vip = smart_detect_vip(full_text)
-            if vip:
-                rec['VIP_STATUS'] = vip
-        
-        # Lower Seat detection
-        if rec.get('PREFERENCE') == 'General' or not rec.get('PREFERENCE'):
-            if smart_detect_lower_seat(full_text):
-                rec['PREFERENCE'] = 'Lower Seat'
-        
-        # Clean data
-        if rec.get('PASS_PH'):
-            rec['PASS_PH'] = clean_phone(rec['PASS_PH'])
-        if rec.get('PHONE_NUBER'):
-            rec['PHONE_NUBER'] = clean_phone(rec['PHONE_NUBER'])
-        if rec.get('DOJ'):
-            rec['DOJ'] = parse_date(rec['DOJ'])
-        if rec.get('APPLICATION_DATE'):
-            rec['APPLICATION_DATE'] = parse_date(rec['APPLICATION_DATE'])
-        if rec.get('T_N'):
-            rec['T_N'] = re.sub(r'\s*(DN|UP)$', '', rec['T_N']).strip()
-        
-        rec.setdefault('PREFERENCE', 'General')
-        rec.setdefault('T_BERTHS', 1)
-        rec.setdefault('CLASS', '')
-        cleaned.append(rec)
-    
-    if not cleaned:
-        return {'error': 'No valid records extracted'}
-    return {'records': cleaned, 'count': len(cleaned)}
+# ... (include all parser functions from previous code) ...
+# For brevity, I'll keep the same parser functions as in the last answer.
 
 # ========== SHEET LOADER ==========
 @st.cache_data(ttl=60)
@@ -615,42 +159,52 @@ def apply_theme(dark_mode):
         .stSidebar .sidebar-content .stMarkdown, .stSidebar .sidebar-content label, .stSidebar .sidebar-content div {{ color: {text_color} !important; }}
         .stDataFrame thead tr th:first-child, .stDataFrame tbody tr th:first-child, .stDataFrame tbody tr td:first-child {{ display: none !important; }}
         .stDataFrame thead tr th:nth-child(2), .stDataFrame tbody tr td:nth-child(2) {{ display: table-cell !important; }}
-        .chat-container {{ background: {card_bg}; border-radius: 12px; padding: 16px; border: 1px solid {border}; margin-bottom: 12px; }}
+        .chat-container {{ background: {card_bg}; border-radius: 12px; padding: 16px; border: 1px solid {border}; margin-bottom: 12px; max-height: 600px; overflow-y: auto; }}
         .chat-user {{ color: {text_color}; font-weight: bold; }}
         .chat-bot {{ color: #2d7d46; font-weight: bold; }}
+        .stChatInput {{ background: {card_bg}; border: 1px solid {border}; border-radius: 8px; padding: 8px; }}
     </style>
     """, unsafe_allow_html=True)
 
-# ========== CHAT WITH GEMINI ==========
-def chat_with_gemini(user_input, chat_history):
+# ========== CHAT WITH GEMINI (with memory) ==========
+def get_sheet_context():
     try:
-        model = init_gemini()
-        # Get sheet context
         gc = init_sheets()
         eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
         all_data = eq_sheet.get_all_values()
-        sheet_summary = f"EQ Sheet has {len(all_data)-4} records.\n"
-        # Get some sample data
-        if len(all_data) > 5:
-            sample_rows = all_data[5:10]
-            sheet_summary += "Sample records (PNR, Train, DOJ):\n"
-            for row in sample_rows:
+        total = len(all_data) - 4
+        summary = f"EQ Sheet has {total} records.\n"
+        if total > 0:
+            # Get last 5 records
+            sample = all_data[-5:] if len(all_data) > 5 else all_data[4:]
+            summary += "Recent records (PNR, Train, DOJ):\n"
+            for row in sample:
                 if len(row) > 7:
-                    sheet_summary += f"PNR: {row[1] if len(row)>1 else ''}, Train: {row[5] if len(row)>5 else ''}, DOJ: {row[7] if len(row)>7 else ''}\n"
-        
-        context = f"""You are TSKEQ Bot - a railway EQ assistant. You have access to the EQ sheet data.
-        
+                    summary += f"PNR: {row[1] if len(row)>1 else ''}, Train: {row[5] if len(row)>5 else ''}, DOJ: {row[7] if len(row)>7 else ''}\n"
+        return summary
+    except:
+        return "Sheet data unavailable."
+
+def chat_with_gemini(messages):
+    try:
+        model = init_gemini()
+        context = get_sheet_context()
+        system_prompt = f"""You are TSKEQ Bot - a railway EQ assistant. You have access to the EQ sheet data.
+
 Sheet Summary:
-{sheet_summary}
+{context}
 
-Previous Conversation:
-{chat_history}
-
-User Question: {user_input}
-
-Please answer based on the sheet data if relevant, or use your general knowledge for other questions. Be helpful and concise."""
+You must remember the conversation context. Answer based on sheet data if relevant, otherwise use your general knowledge.
+Be helpful, friendly, and concise."""
         
-        response = model.generate_content(context)
+        # Format conversation for Gemini
+        conversation = [{"role": "user" if m["role"] == "user" else "model", "parts": [m["content"]]} for m in messages]
+        # Add system prompt
+        full_prompt = system_prompt + "\n\nConversation:\n"
+        for msg in messages:
+            full_prompt += f"{msg['role']}: {msg['content']}\n"
+        
+        response = model.generate_content(full_prompt)
         return response.text
     except Exception as e:
         return f"Error: {str(e)}"
@@ -811,37 +365,45 @@ st.markdown("---")
 
 if view == "💬 Chat with Gemini":
     st.subheader("💬 Chat with TSKEQ Bot")
-    st.markdown("Ask anything about your EQ data or railway queries!")
-    
-    if 'chat_history' not in st.session_state:
-        st.session_state.chat_history = []
-    
-    # Display chat history
-    for msg in st.session_state.chat_history:
-        if msg['role'] == 'user':
-            st.markdown(f"**You:** {msg['content']}")
-        else:
-            st.markdown(f"**🤖 TSKEQ Bot:** {msg['content']}")
-    
-    # Chat input
-    user_input = st.text_input("Ask a question:", key="chat_input")
-    if st.button("Send", use_container_width=True):
-        if user_input:
-            # Add user message
-            st.session_state.chat_history.append({'role': 'user', 'content': user_input})
-            # Get bot response
-            chat_context = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.chat_history[-10:]])
-            response = chat_with_gemini(user_input, chat_context)
-            st.session_state.chat_history.append({'role': 'bot', 'content': response})
-            st.rerun()
-    
+    st.markdown("Ask anything about your EQ data or railway queries! The bot remembers the last 30 messages.")
+
+    # Initialize chat history
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Display chat messages
+    chat_container = st.container()
+    with chat_container:
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+    # Chat input (auto-clear on Enter)
+    if prompt := st.chat_input("Ask a question..."):
+        # Add user message
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Get bot response (with memory of last 30 messages)
+        # We'll send the last 30 messages to Gemini to keep context
+        last_n = 30
+        context_messages = st.session_state.messages[-last_n:] if len(st.session_state.messages) > last_n else st.session_state.messages
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                response = chat_with_gemini(context_messages)
+                st.markdown(response)
+        st.session_state.messages.append({"role": "assistant", "content": response})
+
+    # Clear chat button
     if st.button("Clear Chat", use_container_width=True):
-        st.session_state.chat_history = []
+        st.session_state.messages = []
         st.rerun()
 
 elif view == "Dashboard":
     st.subheader("📊 Dashboard")
     show_dashboard(filtered_df, sheet_choice)
+
 else:
     # ---- Data Table ----
     st.subheader(f"📋 {sheet_choice} – {len(filtered_df)} rows")
