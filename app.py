@@ -17,8 +17,6 @@ from google.oauth2.service_account import Credentials as GDriveCredentials
 from fpdf import FPDF
 import plotly.express as px
 import plotly.graph_objects as go
-from streamlit.runtime.scriptrunner import add_script_run_ctx
-import threading
 
 # ========== PAGE CONFIG ==========
 st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="expanded")
@@ -497,17 +495,14 @@ def process_extracted_records(records):
 # ========== DATA VALIDATION ==========
 def validate_record(record):
     errors = []
-    # PNR validation
     if record.get('PNR'):
         pnr = clean_pnr(record['PNR'])
         if not pnr or len(pnr) != 10:
             errors.append(f"Invalid PNR: {record['PNR']}")
-    # Phone validation
     if record.get('PASS_PH'):
         phone = clean_phone(record['PASS_PH'])
         if not phone or len(phone) != 10:
             errors.append(f"Invalid phone: {record['PASS_PH']}")
-    # Date validation
     if record.get('DOJ'):
         parsed = parse_date(record['DOJ'])
         if not parsed or parsed == record['DOJ']:
@@ -580,7 +575,6 @@ def save_to_sheet(sheet, records):
         skipped = 0
         validation_errors = []
         for rec in records:
-            # Validate record
             errors = validate_record(rec)
             if errors:
                 validation_errors.extend(errors)
@@ -588,7 +582,8 @@ def save_to_sheet(sheet, records):
                 continue
             pnr = clean_pnr(rec.get('PNR', ''))
             if not pnr or pnr in existing_pnrs:
-                skipped += 1                continue
+                skipped += 1
+                continue
             now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
             row = [len(all_data)+1, pnr, rec.get('FROM',''), rec.get('TO',''), rec.get('BOARDING',''),
                    rec.get('T_N',''), rec.get('CLASS',''), rec.get('DOJ',''), rec.get('PASS_NAME',''),
@@ -612,7 +607,6 @@ def bulk_import(sheet, file_bytes, file_type):
         else:
             df = pd.read_excel(io.BytesIO(file_bytes))
         
-        # Convert DataFrame to records
         records = []
         for _, row in df.iterrows():
             rec = {
@@ -643,7 +637,7 @@ def bulk_import(sheet, file_bytes, file_type):
     except Exception as e:
         return {'error': str(e)}
 
-# ========== THEME (PERFECT DARK/LIGHT) ==========
+# ========== THEME ==========
 def apply_theme(dark_mode):
     bg = "#0e1117" if dark_mode else "#f8f9fa"
     card_bg = "#1e1e2e" if dark_mode else "#ffffff"
@@ -652,11 +646,9 @@ def apply_theme(dark_mode):
     input_bg = "#2a2a3a" if dark_mode else "#f1f3f4"
     st.markdown(f"""
     <style>
-        /* Global */
         .stApp, .main .block-container, .css-1d391kg, .css-18e3th9 {{
             background-color: {bg} !important;
         }}
-        /* All text */
         body, .stMarkdown, p, div, span, h1, h2, h3, h4, h5, h6,
         label, .stTextInput label, .stSelectbox label, .stDateInput label,
         .stNumberInput label, .stTextArea label, .stCheckbox label,
@@ -678,7 +670,6 @@ def apply_theme(dark_mode):
         .stChatInput input, .stChatInput textarea {{
             color: {text_color} !important;
         }}
-        /* Buttons */
         .stButton button {{
             color: {text_color} !important;
             background-color: #2d7d46 !important;
@@ -689,14 +680,12 @@ def apply_theme(dark_mode):
             transform: scale(1.02);
             transition: all 0.2s;
         }}
-        /* Sidebar */
         .css-1d391kg .sidebar-content .stMarkdown,
         .css-1d391kg .sidebar-content p,
         .css-1d391kg .sidebar-content div,
         .css-1d391kg .sidebar-content label {{
             color: {text_color} !important;
         }}
-        /* Cards & Containers */
         .stMetric, .stExpander, .stDataFrame, .stTable,
         .stChatMessage, .stChatInput, .stSelectbox, .stTextInput,
         .stDateInput, .stNumberInput, .stTextArea {{
@@ -707,13 +696,11 @@ def apply_theme(dark_mode):
             background: #2d7d46 !important;
             color: white !important;
         }}
-        /* Borders */
         .stExpander, .stDataFrame, .stTable, .stMetric,
         .stChatMessage, .stChatInput {{
             border: 1px solid {border} !important;
             border-radius: 8px !important;
         }}
-        /* Input fields */
         .stTextInput input, .stSelectbox select, .stDateInput input,
         .stNumberInput input, .stTextArea textarea {{
             background-color: {input_bg} !important;
@@ -721,12 +708,10 @@ def apply_theme(dark_mode):
             border: 1px solid {border} !important;
             border-radius: 6px !important;
         }}
-        /* Footer */
         .pro-footer {{
             color: {text_color} !important;
             border-top: 1px solid {border} !important;
         }}
-        /* Hide row index */
         .stDataFrame thead tr th:first-child,
         .stDataFrame tbody tr th:first-child,
         .stDataFrame tbody tr td:first-child {{
@@ -736,17 +721,14 @@ def apply_theme(dark_mode):
         .stDataFrame tbody tr td:nth-child(2) {{
             display: table-cell !important;
         }}
-        /* Toast notifications */
         .stToast {{
             background: {card_bg} !important;
             border-left: 4px solid #2d7d46 !important;
             color: {text_color} !important;
         }}
-        /* Progress bar */
         .stProgress .st-bo {{
             background-color: #2d7d46 !important;
         }}
-        /* Tooltip */
         .tooltip {{
             position: relative;
             display: inline-block;
@@ -773,7 +755,6 @@ def apply_theme(dark_mode):
             visibility: visible;
             opacity: 1;
         }}
-        /* Suggested questions */
         .suggestion-chip {{
             display: inline-block;
             background: {card_bg};
@@ -892,7 +873,7 @@ def show_dashboard(df, sheet_name):
     except Exception as e:
         st.warning(f"Could not render dashboard: {str(e)}")
 
-# ========== CHAT WITH GEMINI (STREAMING) ==========
+# ========== CHAT WITH GEMINI ==========
 def get_sheet_context():
     try:
         gc = init_sheets()
@@ -937,7 +918,6 @@ def log_activity(action, details):
         'action': action,
         'details': details
     })
-    # Keep only last 100 entries
     if len(st.session_state.activity_log) > 100:
         st.session_state.activity_log = st.session_state.activity_log[-100:]
 
@@ -990,7 +970,6 @@ if st.sidebar.button("🚀 Process & Save", use_container_width=True):
         file_bytes = uploaded_file.read()
         file_type = 'pdf' if uploaded_file.type == 'application/pdf' else ('audio' if uploaded_file.type.startswith('audio/') else 'image')
         
-        # Progress placeholder
         progress_text = st.sidebar.empty()
         progress_bar = st.sidebar.progress(0)
         
@@ -1002,7 +981,6 @@ if st.sidebar.button("🚀 Process & Save", use_container_width=True):
             with st.spinner("Processing..."):
                 b64 = base64.b64encode(file_bytes).decode('utf-8')
                 
-                # Only one Gemini call with progress
                 parse_result = gemini_universal_parser(b64, file_type, uploaded_file.type, update_progress)
                 
                 if 'error' in parse_result:
@@ -1010,12 +988,10 @@ if st.sidebar.button("🚀 Process & Save", use_container_width=True):
                 else:
                     st.sidebar.success(f"✅ Extracted {parse_result['count']} records!")
                     
-                    # Show extracted data preview
                     if parse_result['records']:
                         with st.sidebar.expander("📋 Extracted Data Preview"):
                             st.dataframe(pd.DataFrame(parse_result['records']))
                     
-                    # Save to sheet
                     try:
                         gc = init_sheets()
                         eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
@@ -1030,7 +1006,6 @@ if st.sidebar.button("🚀 Process & Save", use_container_width=True):
                                     for err in save_res['validation_errors']:
                                         st.write(f"- {err}")
                             
-                            # Upload to Drive
                             drive_res = upload_to_drive(file_bytes, uploaded_file.name, uploaded_file.type)
                             if drive_res['success']:
                                 st.sidebar.success(f"📁 File uploaded to Drive: {drive_res['url'][:50]}...")
@@ -1175,7 +1150,6 @@ if view == "💬 Chat with Gemini":
     st.subheader("💬 Chat with TSKEQ Bot")
     st.markdown("Ask anything about your EQ data or railway queries! The bot remembers the last 30 messages.")
 
-    # Suggested questions
     st.markdown("**💡 Suggested Questions:**")
     cols = st.columns(4)
     for i, suggestion in enumerate(st.session_state.chat_suggestions):
