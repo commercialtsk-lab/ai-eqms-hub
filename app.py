@@ -562,9 +562,14 @@ def apply_theme(dark_mode):
     
     st.markdown(f"""
     <style>
-        /* DeepSeek Style */
+        /* Full App Background - DeepSeek Style */
         .stApp, .main .block-container, .css-1d391kg, .css-18e3th9,
         .stSidebar, .sidebar-content, .css-1d391kg .sidebar-content {{
+            background-color: {bg} !important;
+        }}
+        
+        /* Top header background */
+        header, .st-emotion-cache-1avcm0n, .st-emotion-cache-6qob1r {{
             background-color: {bg} !important;
         }}
         
@@ -586,13 +591,15 @@ def apply_theme(dark_mode):
         .stNumberInput, .stNumberInput div, .stNumberInput span,
         .stTextArea, .stTextArea div, .stTextArea span,
         .stChatInput, .stChatInput div, .stChatInput span,
-        .stChatInput input, .stChatInput textarea {{
+        .stChatInput input, .stChatInput textarea,
+        .stSelectbox select {{
             color: {text_color} !important;
         }}
         
         /* File Uploader - FIXED Dark Mode visibility */
         .stFileUploader label, .stFileUploader div, .stFileUploader span,
-        .stFileUploader .st-ae, .stFileUploader .st-bb {{
+        .stFileUploader .st-ae, .stFileUploader .st-bb,
+        .stFileUploader .st-b6 {{
             color: {text_color} !important;
         }}
         .stFileUploader {{
@@ -603,6 +610,9 @@ def apply_theme(dark_mode):
         }}
         .stFileUploader .st-ae {{
             color: {text_color} !important;
+        }}
+        .stFileUploader .st-b6 {{
+            color: {text_secondary} !important;
         }}
         
         /* Open Google Sheet Button - FIXED visibility */
@@ -688,6 +698,16 @@ def apply_theme(dark_mode):
             border-radius: 6px !important;
         }}
         
+        /* Selectbox */
+        .stSelectbox select {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        .stSelectbox div {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        
         /* Borders */
         .stExpander, .stDataFrame, .stTable, .stMetric,
         .stChatMessage, .stChatInput {{
@@ -699,6 +719,9 @@ def apply_theme(dark_mode):
         .pro-footer {{
             color: {text_secondary} !important;
             border-top: 1px solid {border} !important;
+            text-align: center !important;
+            padding: 20px 0 10px !important;
+            margin-top: 30px !important;
         }}
         
         /* Hide row index */
@@ -868,7 +891,7 @@ def show_dashboard(df, sheet_name):
     except Exception as e:
         st.warning(f"Could not render dashboard: {str(e)}")
 
-# ========== CHAT WITH GEMINI (FIXED - Now Working) ==========
+# ========== CHAT WITH GEMINI ==========
 def get_sheet_context():
     try:
         gc = init_sheets()
@@ -939,7 +962,7 @@ if st.sidebar.button("☰ Toggle Sidebar", use_container_width=True):
     st.session_state.sidebar_collapsed = not st.session_state.sidebar_collapsed
 
 if not st.session_state.sidebar_collapsed:
-    # ---- Open Google Sheet Button (FIXED - Visible in both modes) ----
+    # ---- Open Google Sheet Button ----
     sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
     st.sidebar.markdown("---")
     st.sidebar.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
@@ -1162,7 +1185,7 @@ if view == "💬 Chat with Gemini":
                 st.rerun()
     st.divider()
 
-    # Chat box on top, Clear Chat below
+    # ---- Chat Messages ----
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -1170,6 +1193,7 @@ if view == "💬 Chat with Gemini":
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
+    # ---- Chat Input (Top) ----
     if prompt := st.chat_input("Ask a question..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -1180,6 +1204,7 @@ if view == "💬 Chat with Gemini":
                 st.markdown(response)
         st.session_state.messages.append({"role": "assistant", "content": response})
 
+    # ---- Clear Chat (Below Chat Input) ----
     if st.button("🗑️ Clear Chat", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
@@ -1193,7 +1218,7 @@ else:
     if filtered_df.empty:
         st.info("No data to display. Try adjusting filters or clearing them.")
     else:
-        # ---- Page navigation (Fixed + / - buttons) ----
+        # ---- Page navigation ----
         page_size = st.selectbox("Rows per page", [15, 25, 50, 100], index=1, key="page_size")
         total_pages = max(1, (len(filtered_df) + page_size - 1) // page_size)
         
@@ -1378,4 +1403,10 @@ else:
                 csv = filtered_df.drop('Select', axis=1).to_csv(index=False).encode('utf-8') if 'Select' in filtered_df.columns else filtered_df.to_csv(index=False).encode('utf-8')
                 st.download_button("📥 Download CSV", data=csv, file_name=f"{sheet_choice}.csv", mime="text/csv", use_container_width=True)
 
-st.markdown("<div class='pro-footer'>© 2026 AI EQMS Hub Pro – All rights reserved.</div>", unsafe_allow_html=True)
+# ===== FOOTER =====
+st.markdown("""
+<div class='pro-footer'>
+    🚂 AI EQMS Hub Pro – Created by Sharique<br>
+    © 2026 All Rights Reserved
+</div>
+""", unsafe_allow_html=True)
