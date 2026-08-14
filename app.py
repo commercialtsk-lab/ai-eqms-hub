@@ -156,11 +156,11 @@ def load_sheet_data(sheet_name, start_row):
         st.error(f"Error loading {sheet_name}: {e}")
         return pd.DataFrame()
 
-# ==================== SHEET CONFIG (6 sheets) ====================
+# ==================== SHEET CONFIG (FINAL row = 5) ====================
 SHEET_CONFIG = {
     "EQ": {"start_row": 5, "pnr_col": 2, "train_col": 6, "doj_col": 8},
     "DATA": {"start_row": 3, "pnr_col": 2, "train_col": 6, "doj_col": 8},
-    "FINAL": {"start_row": 4, "pnr_col": 8, "train_col": 2, "doj_col": 13},
+    "FINAL": {"start_row": 5, "pnr_col": 8, "train_col": 2, "doj_col": 13},   # corrected to 5
     "DATA2": {"start_row": 4, "pnr_col": 8, "train_col": 2, "doj_col": 13},
     "EMAIL_DATA": {"start_row": 2, "pnr_col": 8, "train_col": 9, "doj_col": 12},
     "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 1, "doj_col": None}
@@ -290,7 +290,6 @@ def share_data(df, sheet_name, selected_rows=None):
             train_counts = data[train_col].value_counts().head(5)
             msg += "Top trains:\n" + "\n".join([f"{k}: {v}" for k,v in train_counts.items()])
 
-    # Generate PDF with Latin-1 encoding (strip problematic chars)
     pdf = FPDF('L', 'mm', 'A4')
     pdf.add_page()
     pdf.set_font("Arial", 'B', 14)
@@ -306,7 +305,6 @@ def share_data(df, sheet_name, selected_rows=None):
     for _, row in data.head(100).iterrows():
         for col in cols:
             val = str(row[col])[:15] if pd.notna(row[col]) else ''
-            # Remove non-Latin-1 characters to avoid UnicodeEncodeError
             val_safe = val.encode('latin-1', 'ignore').decode('latin-1')
             pdf.cell(col_width, 6, val_safe, border=1, align='L')
         pdf.ln()
@@ -441,7 +439,7 @@ if not page_df.empty:
     selected_indices = edited_page[edited_page["Select"]].index.tolist()
     if selected_indices:
         st.warning(f"{len(selected_indices)} rows selected.")
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             if st.button("🗑️ Delete Selected", use_container_width=True):
                 actual_rows = [start_row + idx for idx in selected_indices]
@@ -461,7 +459,6 @@ if not page_df.empty:
                     sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
                     for i, (orig_idx, row) in enumerate(edited_page.iterrows()):
                         actual_row = start_row + start_idx + i
-                        # Drop the "Select" column before saving
                         row_data = row.drop("Select").tolist()
                         for col_idx, val in enumerate(row_data, start=1):
                             sheet.update_cell(actual_row, col_idx, val)
@@ -475,17 +472,67 @@ if not page_df.empty:
                 st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}_selected.pdf", mime="application/pdf")
                 wa_link = f"https://api.whatsapp.com/send?text={msg.replace(' ', '%20')}"
                 st.markdown(f'<a href="{wa_link}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
+        with col4:
+            if selected_indices:
+                row_idx = selected_indices[0]
+                y_col = None
+                x_col = None
+                if len(edited_page.columns) > 24:
+                    y_col = edited_page.columns[24] if 'Y' in edited_page.columns[24] or 'PRINT' in edited_page.columns[24].upper() else None
+                if len(edited_page.columns) > 23:
+                    x_col = edited_page.columns[23]
+                file_url = None
+                if y_col and y_col in edited_page.columns:
+                    link_val = edited_page.loc[row_idx, y_col]
+                    if isinstance(link_val, str) and 'HYPERLINK' in link_val:
+                        url_match = re.search(r'HYPERLINK\("([^"]+)"', link_val)
+                        if url_match:
+                            file_url = url_match.group(1)
+                if not file_url and x_col and x_col in edited_page.columns:
+                    link_val = edited_page.loc[row_idx, x_col]
+                    if isinstance(link_val, str) and 'HYPERLINK' in link_val:
+                        url_match = re.search(r'HYPERLINK\("([^"]+)"', link_val)
+                        if url_match:
+                            file_url = url_match.group(1)
+                if file_url:
+                    if st.button("🖨️ Print Selected File", use_container_width=True):
+                        st.markdown(f'<script>window.open("{file_url}&print=true", "_blank");</script>', unsafe_allow_html=True)
+                else:
+                    st.info("No file link found in selected row.")
     else:
-        st.info("Select rows to enable share/delete.")
+        st.info("Select rows to enable share/delete/print.")
 
 # ---- Export Options ----
 st.subheader("📄 Export & Share")
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    if st.button("🖨️ Print", use_container_width=True):
-        st.markdown('<script>window.print()</script>', unsafe_allow_html=True)
+    if st.button("🖨️ Print Filtered Sheet", use_container_width=True):
+        try:
+            pdf = FPDF('L', 'mm', 'A4')
+            pdf.add_page()
+            pdf.set_font("Arial", 'B', 14)
+            pdf.cell(0, 10, f"{sheet_choice} Report (Filtered)", ln=True, align='C')
+            pdf.ln(5)
+            pdf.set_font("Arial", 'B', 8)
+            cols = filtered_df.columns.tolist()
+            col_width = 260 / len(cols) if len(cols) > 0 else 20
+            for col in cols:
+                pdf.cell(col_width, 7, str(col)[:12].encode('latin-1', 'ignore').decode('latin-1'), border=1, align='C')
+            pdf.ln()
+            pdf.set_font("Arial", '', 7)
+            for _, row in filtered_df.head(200).iterrows():
+                for col in cols:
+                    val = str(row[col])[:15] if pd.notna(row[col]) else ''
+                    val_safe = val.encode('latin-1', 'ignore').decode('latin-1')
+                    pdf.cell(col_width, 6, val_safe, border=1, align='L')
+                pdf.ln()
+            if len(filtered_df) > 200:
+                pdf.cell(0, 6, f"... and {len(filtered_df)-200} more rows", ln=True, align='C')
+            pdf_bytes = pdf.output(dest='S').encode('latin-1')
+            st.download_button("📥 Download PDF (Filtered)", data=pdf_bytes, file_name=f"{sheet_choice}_filtered.pdf", mime="application/pdf")
+        except Exception as e:
+            st.warning(f"PDF error: {e}")
 with col2:
-    # PDF generation with Unicode fix
     try:
         pdf = FPDF('L', 'mm', 'A4')
         pdf.add_page()
@@ -499,14 +546,14 @@ with col2:
             pdf.cell(col_width, 7, str(col)[:12].encode('latin-1', 'ignore').decode('latin-1'), border=1, align='C')
         pdf.ln()
         pdf.set_font("Arial", '', 7)
-        for _, row in filtered_df.head(50).iterrows():
+        for _, row in filtered_df.head(200).iterrows():
             for col in cols:
                 val = str(row[col])[:15] if pd.notna(row[col]) else ''
                 val_safe = val.encode('latin-1', 'ignore').decode('latin-1')
                 pdf.cell(col_width, 6, val_safe, border=1, align='L')
             pdf.ln()
-        if len(filtered_df) > 50:
-            pdf.cell(0, 6, f"... and {len(filtered_df)-50} more rows", ln=True, align='C')
+        if len(filtered_df) > 200:
+            pdf.cell(0, 6, f"... and {len(filtered_df)-200} more rows", ln=True, align='C')
         pdf_bytes = pdf.output(dest='S').encode('latin-1')
         st.download_button("📥 PDF", data=pdf_bytes, file_name=f"{sheet_choice}.pdf", mime="application/pdf", use_container_width=True)
     except Exception as e:
@@ -521,19 +568,41 @@ with col4:
         wa_link_full = f"https://api.whatsapp.com/send?text={msg_full.replace(' ', '%20')}"
         st.markdown(f'<a href="{wa_link_full}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
 
-# ---- Print Individual File ----
+# ---- Print Individual File (per row) ----
 if len(filtered_df.columns) >= 24:
-    link_col = filtered_df.columns[23]
-    if link_col in filtered_df.columns:
-        st.subheader("🖨️ Print File from Row")
-        for idx, row in filtered_df.iterrows():
-            link = row[link_col]
+    y_col = filtered_df.columns[24] if len(filtered_df.columns) > 24 else None
+    x_col = filtered_df.columns[23] if len(filtered_df.columns) > 23 else None
+    st.subheader("🖨️ Print File from Row")
+    for idx, row in filtered_df.iterrows():
+        file_url = None
+        if y_col and y_col in filtered_df.columns:
+            link = row[y_col]
             if isinstance(link, str) and 'HYPERLINK' in link:
                 url_match = re.search(r'HYPERLINK\("([^"]+)"', link)
                 if url_match:
                     file_url = url_match.group(1)
-                    if st.button(f"🖨️ Print File (Row {idx+1})", key=f"print_{idx}_{sheet_choice}"):
-                        st.markdown(f'<script>window.open("{file_url}&print=true", "_blank");</script>', unsafe_allow_html=True)
+        if not file_url and x_col and x_col in filtered_df.columns:
+            link = row[x_col]
+            if isinstance(link, str) and 'HYPERLINK' in link:
+                url_match = re.search(r'HYPERLINK\("([^"]+)"', link)
+                if url_match:
+                    file_url = url_match.group(1)
+        if file_url:
+            if st.button(f"🖨️ Print File (Row {idx+1})", key=f"print_{idx}_{sheet_choice}"):
+                st.markdown(f'<script>window.open("{file_url}&print=true", "_blank");</script>', unsafe_allow_html=True)
+
+# ---- Display PNR URL column (AA) ----
+pnr_url_col = None
+for col in filtered_df.columns:
+    if 'PNR' in col.upper() and ('URL' in col.upper() or 'LINK' in col.upper()):
+        pnr_url_col = col
+        break
+if pnr_url_col:
+    st.subheader("🔗 PNR URLs")
+    for idx, row in filtered_df.iterrows():
+        url = row[pnr_url_col]
+        if url and isinstance(url, str) and url.startswith('http'):
+            st.markdown(f"Row {idx+1}: [PNR Link]({url})")
 
 # ==================== FOOTER ====================
 st.markdown("<div class='pro-footer'>© 2026 AI EQMS Hub Pro – All rights reserved.</div>", unsafe_allow_html=True)
