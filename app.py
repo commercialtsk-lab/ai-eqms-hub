@@ -527,32 +527,34 @@ def save_to_sheet(sheet, records):
     except Exception as e:
         return {'error': str(e)}
 
-# ========== THEME (FULL DARK MODE) ==========
+# ========== THEME (DeepSeek Style Dark Mode) ==========
 def apply_theme(dark_mode):
     if dark_mode:
-        bg = "#0a0a0a"
-        card_bg = "#1a1a2e"
-        text_color = "#ffffff"
-        text_secondary = "#cccccc"
-        border = "#333344"
-        input_bg = "#2a2a3a"
-        primary_bg = "#1a5a32"
-        primary_hover = "#2d7d46"
+        bg = "#0d1117"
+        card_bg = "#161b22"
+        text_color = "#f0f6fc"
+        text_secondary = "#8b949e"
+        border = "#30363d"
+        input_bg = "#0d1117"
+        primary_bg = "#238636"
+        primary_hover = "#2ea043"
         primary_text = "#ffffff"
-        secondary_bg = "#2a2a3a"
-        secondary_text = "#e0e0e0"
+        secondary_bg = "#21262d"
+        secondary_text = "#c9d1d9"
+        header_bg = "#161b22"
     else:
-        bg = "#f8f9fa"
+        bg = "#f6f8fa"
         card_bg = "#ffffff"
-        text_color = "#1e1e2e"
-        text_secondary = "#555555"
-        border = "#d1d5db"
-        input_bg = "#f1f3f4"
-        primary_bg = "#1a5a32"
-        primary_hover = "#2d7d46"
+        text_color = "#24292f"
+        text_secondary = "#57606a"
+        border = "#d0d7de"
+        input_bg = "#f6f8fa"
+        primary_bg = "#2da44e"
+        primary_hover = "#2c974b"
         primary_text = "#ffffff"
-        secondary_bg = "#e8f5e9"
-        secondary_text = "#1a5a32"
+        secondary_bg = "#f6f8fa"
+        secondary_text = "#24292f"
+        header_bg = "#f6f8fa"
     
     st.markdown(f"""
     <style>
@@ -584,25 +586,49 @@ def apply_theme(dark_mode):
             color: {text_color} !important;
         }}
         
-        /* Buttons */
-        .stButton button, .stButton button p {{
-            background-color: {primary_bg} !important;
-            color: {primary_text} !important;
-            border: none !important;
+        /* File Uploader Text */
+        .stFileUploader label, .stFileUploader div, .stFileUploader span,
+        .stFileUploader .st-ae, .stFileUploader .st-bb {{
+            color: {text_color} !important;
+        }}
+        .stFileUploader {{
+            background-color: {input_bg} !important;
+            border: 1px dashed {border} !important;
             border-radius: 8px !important;
-            font-weight: 600 !important;
+            padding: 8px !important;
+        }}
+        
+        /* Buttons - Transparent Background */
+        .stButton button, .stButton button p {{
+            background-color: transparent !important;
+            color: {text_color} !important;
+            border: 1px solid {border} !important;
+            border-radius: 8px !important;
+            font-weight: 500 !important;
             padding: 8px 20px !important;
             transition: all 0.3s ease !important;
         }}
         .stButton button:hover {{
-            background-color: {primary_hover} !important;
-            transform: translateY(-2px) !important;
-            box-shadow: 0 4px 12px rgba(45, 125, 70, 0.4) !important;
+            background-color: {primary_bg} !important;
+            color: {primary_text} !important;
+            border-color: {primary_bg} !important;
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 12px rgba(35, 134, 54, 0.3) !important;
         }}
         .stButton button:disabled {{
-            background-color: #555555 !important;
-            color: #999999 !important;
+            background-color: transparent !important;
+            color: {text_secondary} !important;
+            border-color: {border} !important;
             cursor: not-allowed !important;
+        }}
+        
+        /* Action Box */
+        .action-box {{
+            background: {card_bg};
+            border: 1px solid {border};
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
         }}
         
         /* Cards & Containers */
@@ -615,12 +641,14 @@ def apply_theme(dark_mode):
         
         /* Data Editor */
         .stDataFrame thead th {{
-            background: {primary_bg} !important;
-            color: white !important;
+            background: {header_bg} !important;
+            color: {text_color} !important;
+            border-bottom: 2px solid {border} !important;
         }}
         .stDataFrame tbody td {{
             background-color: {card_bg} !important;
             color: {text_color} !important;
+            border-color: {border} !important;
         }}
         .stDataFrame tbody tr:hover {{
             background-color: {secondary_bg} !important;
@@ -662,22 +690,13 @@ def apply_theme(dark_mode):
         /* Toast */
         .stToast {{
             background: {card_bg} !important;
-            border-left: 4px solid #2d7d46 !important;
+            border-left: 4px solid {primary_bg} !important;
             color: {text_color} !important;
         }}
         
         /* Progress Bar */
         .stProgress .st-bo {{
-            background-color: #2d7d46 !important;
-        }}
-        
-        /* Action Box */
-        .action-box {{
-            background: {card_bg};
-            border: 1px solid {border};
-            border-radius: 12px;
-            padding: 16px;
-            margin-bottom: 16px;
+            background-color: {primary_bg} !important;
         }}
         
         /* Suggestion Chips */
@@ -697,19 +716,21 @@ def apply_theme(dark_mode):
             color: white;
         }}
         
-        /* Sidebar Toggle Button */
+        /* Sidebar Toggle */
         .sidebar-toggle {{
-            background: {primary_bg};
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 8px 16px;
-            font-weight: 600;
-            width: 100%;
-            cursor: pointer;
+            background: transparent !important;
+            color: {text_color} !important;
+            border: 1px solid {border} !important;
+            border-radius: 8px !important;
+            padding: 8px 16px !important;
+            font-weight: 500 !important;
+            width: 100% !important;
+            cursor: pointer !important;
         }}
         .sidebar-toggle:hover {{
-            background: {primary_hover};
+            background: {primary_bg} !important;
+            color: {primary_text} !important;
+            border-color: {primary_bg} !important;
         }}
         
         /* Scrollbar */
@@ -851,7 +872,9 @@ def chat_with_gemini_stream(messages):
 Sheet Summary:
 {context}
 
-Remember the conversation. Answer based on sheet data if relevant, otherwise use general knowledge. Be helpful, concise, and friendly. Use emojis where appropriate. Provide meaningful responses to questions."""
+Answer the user's question based on the sheet data if relevant. If the question is about sheet statistics, use the data provided. Be helpful, concise, and friendly.
+
+Remember the conversation context. Provide meaningful responses."""
         full_prompt = system_prompt + "\n\nConversation:\n"
         for msg in messages:
             full_prompt += f"{msg['role']}: {msg['content']}\n"
@@ -883,7 +906,7 @@ if st.sidebar.button("☰ Toggle Sidebar", use_container_width=True):
 if not st.session_state.sidebar_collapsed:
     sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
     st.sidebar.markdown("---")
-    st.sidebar.markdown(f'<a href="{sheet_link}" target="_blank"><button style="padding:10px 20px; background:#1a5a32; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold; width:100%;">📊 Open Google Sheet</button></a>', unsafe_allow_html=True)
+    st.sidebar.markdown(f'<a href="{sheet_link}" target="_blank"><button style="padding:10px 20px; background:transparent; color:white; border:1px solid #30363d; border-radius:8px; cursor:pointer; font-weight:500; width:100%;">📊 Open Google Sheet</button></a>', unsafe_allow_html=True)
     st.sidebar.markdown("---")
 
     st.sidebar.title("⚡ AI EQMS Hub Pro")
@@ -899,29 +922,6 @@ if not st.session_state.sidebar_collapsed:
     # ---- File Upload ----
     st.sidebar.subheader("📤 Upload File")
     uploaded_file = st.sidebar.file_uploader("Choose file (Image/PDF/Text)", type=['png','jpg','jpeg','pdf','txt'])
-    caption = st.sidebar.text_input("Caption (optional)")
-
-    # ---- Bulk Import ----
-    st.sidebar.subheader("📦 Bulk Import")
-    bulk_file = st.sidebar.file_uploader("Import CSV/Excel", type=['csv','xlsx'], key="bulk_import")
-
-    if bulk_file:
-        if st.sidebar.button("📥 Import Bulk Data", use_container_width=True):
-            try:
-                gc = init_sheets()
-                eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
-                file_bytes = bulk_file.read()
-                file_type = 'csv' if bulk_file.name.endswith('.csv') else 'excel'
-                result = bulk_import(eq_sheet, file_bytes, file_type)
-                if 'error' in result:
-                    st.sidebar.error(f"Import error: {result['error']}")
-                else:
-                    st.sidebar.success(f"Imported {result['saved']} records! Skipped: {result['skipped']}")
-                    log_activity("Bulk Import", f"Imported {result['saved']} records")
-                    st.cache_data.clear()
-                    st.rerun()
-            except Exception as e:
-                st.sidebar.error(f"Import error: {e}")
 
     if st.sidebar.button("🚀 Process & Save", use_container_width=True):
         if uploaded_file:
