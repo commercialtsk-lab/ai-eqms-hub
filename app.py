@@ -6,7 +6,7 @@ import base64
 import io
 import time
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 import google.generativeai as genai
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -562,13 +562,13 @@ def apply_theme(dark_mode):
     
     st.markdown(f"""
     <style>
-        /* Full App Background - DeepSeek Style */
+        /* Full App Background */
         .stApp, .main .block-container, .css-1d391kg, .css-18e3th9,
         .stSidebar, .sidebar-content, .css-1d391kg .sidebar-content {{
             background-color: {bg} !important;
         }}
         
-        /* Top header background */
+        /* Top header */
         header, .st-emotion-cache-1avcm0n, .st-emotion-cache-6qob1r {{
             background-color: {bg} !important;
         }}
@@ -596,10 +596,11 @@ def apply_theme(dark_mode):
             color: {text_color} !important;
         }}
         
-        /* File Uploader - FIXED Dark Mode visibility */
+        /* File Uploader - FIXED Dark Mode */
         .stFileUploader label, .stFileUploader div, .stFileUploader span,
         .stFileUploader .st-ae, .stFileUploader .st-bb,
-        .stFileUploader .st-b6 {{
+        .stFileUploader .st-b6, .stFileUploader .st-b7,
+        .stFileUploader .st-b8, .stFileUploader .st-b9 {{
             color: {text_color} !important;
         }}
         .stFileUploader {{
@@ -612,10 +613,13 @@ def apply_theme(dark_mode):
             color: {text_color} !important;
         }}
         .stFileUploader .st-b6 {{
-            color: {text_secondary} !important;
+            color: {text_color} !important;
+        }}
+        .stFileUploader .st-b7 {{
+            color: {text_color} !important;
         }}
         
-        /* Open Google Sheet Button - FIXED visibility */
+        /* Open Google Sheet Button */
         .sheet-link-btn {{
             display: inline-block !important;
             padding: 10px 20px !important;
@@ -914,7 +918,6 @@ def chat_with_gemini(user_message, chat_history):
         model = init_gemini()
         context = get_sheet_context()
         
-        # Build conversation with context
         system_prompt = f"""You are TSKEQ Bot - a railway EQ assistant. You have access to the EQ sheet data.
 
 Sheet Context:
@@ -924,8 +927,7 @@ Instructions:
 1. Answer questions based on the sheet data if relevant.
 2. For general railway questions, use your knowledge.
 3. Be helpful, concise, and friendly.
-4. If you don't know something, say so.
-5. Use emojis occasionally.
+4. Use emojis occasionally.
 
 Previous conversation:
 """
@@ -1019,7 +1021,6 @@ if not st.session_state.sidebar_collapsed:
                             else:
                                 st.sidebar.success(f"✅ Saved {save_res['saved']} new records!")
                                 
-                                # Upload to Drive
                                 drive_res = upload_to_drive(file_bytes, uploaded_file.name, uploaded_file.type)
                                 if drive_res['success']:
                                     st.sidebar.success(f"📁 File uploaded to Drive")
@@ -1193,7 +1194,7 @@ if view == "💬 Chat with Gemini":
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # ---- Chat Input (Top) ----
+    # ---- Chat Input (Below Suggested Questions) ----
     if prompt := st.chat_input("Ask a question..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
