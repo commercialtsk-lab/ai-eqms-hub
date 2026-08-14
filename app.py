@@ -527,7 +527,7 @@ def save_to_sheet(sheet, records):
     except Exception as e:
         return {'error': str(e)}
 
-# ========== THEME (DeepSeek Style Dark Mode) ==========
+# ========== THEME (DeepSeek Style + Text-Only Buttons) ==========
 def apply_theme(dark_mode):
     if dark_mode:
         bg = "#0d1117"
@@ -598,27 +598,25 @@ def apply_theme(dark_mode):
             padding: 8px !important;
         }}
         
-        /* Buttons - Transparent Background */
+        /* ===== BUTTONS - TEXT ONLY ===== */
         .stButton button, .stButton button p {{
-            background-color: transparent !important;
+            background: transparent !important;
             color: {text_color} !important;
-            border: 1px solid {border} !important;
-            border-radius: 8px !important;
-            font-weight: 500 !important;
-            padding: 8px 20px !important;
-            transition: all 0.3s ease !important;
+            border: none !important;
+            border-radius: 0 !important;
+            font-weight: 400 !important;
+            padding: 4px 12px !important;
+            transition: all 0.2s ease !important;
+            box-shadow: none !important;
+            font-size: 0.9rem !important;
         }}
         .stButton button:hover {{
-            background-color: {primary_bg} !important;
-            color: {primary_text} !important;
-            border-color: {primary_bg} !important;
-            transform: translateY(-1px) !important;
-            box-shadow: 0 4px 12px rgba(35, 134, 54, 0.3) !important;
+            background: transparent !important;
+            color: {primary_bg} !important;
+            text-decoration: underline !important;
         }}
         .stButton button:disabled {{
-            background-color: transparent !important;
             color: {text_secondary} !important;
-            border-color: {border} !important;
             cursor: not-allowed !important;
         }}
         
@@ -720,7 +718,7 @@ def apply_theme(dark_mode):
         .sidebar-toggle {{
             background: transparent !important;
             color: {text_color} !important;
-            border: 1px solid {border} !important;
+            border: none !important;
             border-radius: 8px !important;
             padding: 8px 16px !important;
             font-weight: 500 !important;
@@ -728,9 +726,8 @@ def apply_theme(dark_mode):
             cursor: pointer !important;
         }}
         .sidebar-toggle:hover {{
-            background: {primary_bg} !important;
-            color: {primary_text} !important;
-            border-color: {primary_bg} !important;
+            color: {primary_bg} !important;
+            text-decoration: underline !important;
         }}
         
         /* Scrollbar */
@@ -845,7 +842,7 @@ def show_dashboard(df, sheet_name):
     except Exception as e:
         st.warning(f"Could not render dashboard: {str(e)}")
 
-# ========== CHAT WITH GEMINI ==========
+# ========== CHAT WITH GEMINI (FIXED - Now Working) ==========
 def get_sheet_context():
     try:
         gc = init_sheets()
@@ -860,29 +857,41 @@ def get_sheet_context():
                 if len(row) > 7:
                     summary += f"PNR: {row[1] if len(row)>1 else ''}, Train: {row[5] if len(row)>5 else ''}, DOJ: {row[7] if len(row)>7 else ''}\n"
         return summary
-    except:
-        return "Sheet data unavailable."
+    except Exception as e:
+        return "Sheet data temporarily unavailable."
 
-def chat_with_gemini_stream(messages):
+def chat_with_gemini(user_message, chat_history):
     try:
         model = init_gemini()
         context = get_sheet_context()
+        
+        # Build conversation with context
         system_prompt = f"""You are TSKEQ Bot - a railway EQ assistant. You have access to the EQ sheet data.
 
-Sheet Summary:
+Sheet Context:
 {context}
 
-Answer the user's question based on the sheet data if relevant. If the question is about sheet statistics, use the data provided. Be helpful, concise, and friendly.
+Instructions:
+1. Answer questions based on the sheet data if relevant.
+2. For general railway questions, use your knowledge.
+3. Be helpful, concise, and friendly.
+4. If you don't know something, say so.
+5. Use emojis occasionally.
 
-Remember the conversation context. Provide meaningful responses."""
-        full_prompt = system_prompt + "\n\nConversation:\n"
-        for msg in messages:
-            full_prompt += f"{msg['role']}: {msg['content']}\n"
+Previous conversation:
+"""
+        for msg in chat_history[-10:]:
+            if msg['role'] == 'user':
+                system_prompt += f"User: {msg['content']}\n"
+            else:
+                system_prompt += f"Assistant: {msg['content']}\n"
         
-        response = model.generate_content(full_prompt, stream=True)
-        return response
+        system_prompt += f"\nUser: {user_message}\nAssistant:"
+        
+        response = model.generate_content(system_prompt)
+        return response.text
     except Exception as e:
-        return str(e)
+        return f"Error: Could not process your request. Please try again later."
 
 # ========== ACTIVITY LOG ==========
 def log_activity(action, details):
@@ -906,7 +915,7 @@ if st.sidebar.button("☰ Toggle Sidebar", use_container_width=True):
 if not st.session_state.sidebar_collapsed:
     sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
     st.sidebar.markdown("---")
-    st.sidebar.markdown(f'<a href="{sheet_link}" target="_blank"><button style="padding:10px 20px; background:transparent; color:white; border:1px solid #30363d; border-radius:8px; cursor:pointer; font-weight:500; width:100%;">📊 Open Google Sheet</button></a>', unsafe_allow_html=True)
+    st.sidebar.markdown(f'<a href="{sheet_link}" target="_blank"><button style="padding:10px 20px; background:transparent; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:500; width:100%;">📊 Open Google Sheet</button></a>', unsafe_allow_html=True)
     st.sidebar.markdown("---")
 
     st.sidebar.title("⚡ AI EQMS Hub Pro")
@@ -1139,21 +1148,9 @@ if view == "💬 Chat with Gemini":
             st.markdown(prompt)
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-                response = chat_with_gemini_stream(st.session_state.messages[-30:])
-                if isinstance(response, str):
-                    st.markdown(response)
-                else:
-                    full_response = ""
-                    placeholder = st.empty()
-                    for chunk in response:
-                        if hasattr(chunk, 'text'):
-                            full_response += chunk.text
-                            placeholder.markdown(full_response + "▌")
-                        else:
-                            full_response += str(chunk)
-                            placeholder.markdown(full_response + "▌")
-                    placeholder.markdown(full_response)
-        st.session_state.messages.append({"role": "assistant", "content": full_response if isinstance(response, str) else full_response})
+                response = chat_with_gemini(prompt, st.session_state.messages[-30:])
+                st.markdown(response)
+        st.session_state.messages.append({"role": "assistant", "content": response})
 
     if st.button("🗑️ Clear Chat", use_container_width=True):
         st.session_state.messages = []
