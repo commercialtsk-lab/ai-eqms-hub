@@ -49,6 +49,14 @@ if selected_tab == "Dashboard":
   )
   st.write("Welcome! Real-time EQ Master Bot dashboard is active.")
 
+elif selected_tab == "Upload & Process":
+  st.markdown(
+      "<p style='font-size: 2.8rem; font-weight: 800; color: #ffffff;'>Upload"
+      " & Process</p>",
+      unsafe_allow_html=True,
+  )
+  st.write("Upload section is ready.")
+
 elif selected_tab == "Live Google Sheets":
   st.markdown(
       "<p style='font-size: 2.8rem; font-weight: 800; color: #ffffff;'>Live"
@@ -56,11 +64,17 @@ elif selected_tab == "Live Google Sheets":
       unsafe_allow_html=True,
   )
   try:
-    # Yahan sheet ka exact naam 'EQ Master Bot' kar diya gaya hai
-    sheet = client.open("EQ Master Bot").sheet1
-    data = sheet.get_all_records()
-    df = pd.DataFrame(data)
-    st.dataframe(df)
+    sh = client.open("EQ Master Bot")
+    worksheet = sh.get_worksheet(0)
+    data = worksheet.get_all_values()
+    if data and len(data) > 1:
+      df = pd.DataFrame(data[1:], columns=data[0])
+      st.dataframe(df, use_container_width=True)
+    elif data:
+      df = pd.DataFrame(data)
+      st.dataframe(df, use_container_width=True)
+    else:
+      st.warning("Google Sheet is empty.")
   except Exception as e:
     st.info(f"Google Sheet load error: {e}")
 
