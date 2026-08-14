@@ -590,7 +590,7 @@ def apply_theme(dark_mode):
             color: {text_color} !important;
         }}
         
-        /* File Uploader */
+        /* File Uploader - FIXED Dark Mode visibility */
         .stFileUploader label, .stFileUploader div, .stFileUploader span,
         .stFileUploader .st-ae, .stFileUploader .st-bb {{
             color: {text_color} !important;
@@ -600,6 +600,28 @@ def apply_theme(dark_mode):
             border: 1px dashed {border} !important;
             border-radius: 8px !important;
             padding: 8px !important;
+        }}
+        .stFileUploader .st-ae {{
+            color: {text_color} !important;
+        }}
+        
+        /* Open Google Sheet Button - FIXED visibility */
+        .sheet-link-btn {{
+            display: inline-block !important;
+            padding: 10px 20px !important;
+            background: transparent !important;
+            color: {button_text} !important;
+            border: 1px solid {border} !important;
+            border-radius: 8px !important;
+            cursor: pointer !important;
+            font-weight: 500 !important;
+            text-decoration: none !important;
+            text-align: center !important;
+            width: 100% !important;
+        }}
+        .sheet-link-btn:hover {{
+            color: {button_hover} !important;
+            border-color: {button_hover} !important;
         }}
         
         /* Buttons - DeepSeek Style */
@@ -917,9 +939,10 @@ if st.sidebar.button("☰ Toggle Sidebar", use_container_width=True):
     st.session_state.sidebar_collapsed = not st.session_state.sidebar_collapsed
 
 if not st.session_state.sidebar_collapsed:
+    # ---- Open Google Sheet Button (FIXED - Visible in both modes) ----
     sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
     st.sidebar.markdown("---")
-    st.sidebar.markdown(f'<a href="{sheet_link}" target="_blank"><button style="padding:10px 20px; background:transparent; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:500; width:100%;">📊 Open Google Sheet</button></a>', unsafe_allow_html=True)
+    st.sidebar.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
     st.sidebar.markdown("---")
 
     st.sidebar.title("⚡ AI EQMS Hub Pro")
@@ -1139,6 +1162,7 @@ if view == "💬 Chat with Gemini":
                 st.rerun()
     st.divider()
 
+    # Chat box on top, Clear Chat below
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -1169,9 +1193,28 @@ else:
     if filtered_df.empty:
         st.info("No data to display. Try adjusting filters or clearing them.")
     else:
+        # ---- Page navigation (Fixed + / - buttons) ----
         page_size = st.selectbox("Rows per page", [15, 25, 50, 100], index=1, key="page_size")
         total_pages = max(1, (len(filtered_df) + page_size - 1) // page_size)
-        page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1, key="page") - 1
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col1:
+            if st.button("◀ Previous", use_container_width=True):
+                current_page = st.session_state.get('current_page', 1)
+                if current_page > 1:
+                    st.session_state.current_page = current_page - 1
+                    st.rerun()
+        with col2:
+            current_page = st.session_state.get('current_page', 1)
+            st.write(f"Page {current_page} of {total_pages}")
+        with col3:
+            if st.button("Next ▶", use_container_width=True):
+                current_page = st.session_state.get('current_page', 1)
+                if current_page < total_pages:
+                    st.session_state.current_page = current_page + 1
+                    st.rerun()
+        
+        page = st.session_state.get('current_page', 1) - 1
         start_idx = page * page_size
         end_idx = min(start_idx + page_size, len(filtered_df))
         page_df = filtered_df.iloc[start_idx:end_idx]
