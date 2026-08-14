@@ -5,14 +5,13 @@ from google.oauth2.service_account import Credentials
 import streamlit as st
 
 st.set_page_config(
-    page_title="Pro Intelligence Hub", page_icon="⚡", layout="wide"
+    page_title="EQ Master Bot Hub", page_icon="⚡", layout="wide"
 )
 
-# Secrets Setup (Direct from TOML / GitHub Secrets)
+# Secrets Setup
 try:
   creds_dict = dict(st.secrets["GSPREAD_CREDENTIALS"])
 
-  # Fix for private key newline characters if needed
   if "private_key" in creds_dict:
     creds_dict["private_key"] = creds_dict["private_key"].replace(
         "\\n", "\n"
@@ -48,7 +47,7 @@ if selected_tab == "Dashboard":
       " Center</p>",
       unsafe_allow_html=True,
   )
-  st.write("Welcome! Real-time automation dashboard is active.")
+  st.write("Welcome! Real-time EQ Master Bot dashboard is active.")
 
 elif selected_tab == "Live Google Sheets":
   st.markdown(
@@ -57,7 +56,8 @@ elif selected_tab == "Live Google Sheets":
       unsafe_allow_html=True,
   )
   try:
-    sheet = client.open("Railway_Emergency_Data").sheet1
+    # Yahan sheet ka exact naam 'EQ Master Bot' kar diya gaya hai
+    sheet = client.open("EQ Master Bot").sheet1
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
     st.dataframe(df)
@@ -70,4 +70,4 @@ elif selected_tab == "System Settings":
       " Configurations</p>",
       unsafe_allow_html=True,
   )
-  st.success("Secrets successfully linked!")
+  st.success("Secrets and Google Sheet successfully linked!")
