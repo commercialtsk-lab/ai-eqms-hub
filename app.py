@@ -75,6 +75,7 @@ def parse_date(date_str):
         return f"{day}-{month}-{year}"
     return date_str
 
+# (STATION_MAP defined as before – include full map)
 STATION_MAP = {
     'NTSK': 'New Tinsukia', 'GHY': 'Guwahati', 'NDLS': 'New Delhi',
     'HWH': 'Howrah', 'PNBE': 'Patna', 'BSB': 'Varanasi', 'CNB': 'Kanpur Central',
@@ -127,7 +128,7 @@ def get_station(code):
     return f"{code} ({STATION_MAP[code]})" if code in STATION_MAP else code
 
 # ==================== SHEET LOADER WITH CACHE ====================
-@st.cache_data(ttl=60)  # Cache data for 60 seconds to reduce read quota
+@st.cache_data(ttl=60)
 def load_sheet_data_cached(sheet_name, start_row, sheet_id):
     try:
         gc = init_sheets()
@@ -168,7 +169,7 @@ SHEET_CONFIG = {
     "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 1, "doj_col": None}
 }
 
-# ==================== UPLOAD & EXTRACTION (unchanged) ====================
+# ==================== UPLOAD & EXTRACTION ====================
 def upload_to_drive(file_bytes, filename, mime_type):
     try:
         drive_service = init_drive()
@@ -248,7 +249,7 @@ def save_to_sheet(sheet, records):
                    now, rec.get('APPLICATION_DATE',''), rec.get('RAILWAY_ZONE',''), rec.get('PREFERENCE','General')]
             sheet.append_row(row)
             saved += 1
-            time.sleep(0.2)  # small delay to avoid hitting write quota
+            time.sleep(0.2)
         return {'saved': saved}
     except Exception as e:
         return {'error': str(e)}
@@ -273,8 +274,26 @@ def apply_theme(dark_mode):
         .pro-footer {{ text-align: center; padding: 20px 0 10px; opacity: 0.5; font-size: 0.8rem; border-top: 1px solid {border}; margin-top: 30px; }}
         .stExpander {{ border: 1px solid {border}; border-radius: 8px; background: {card_bg}; }}
         .stExpander .streamlit-expanderHeader {{ color: {text}; }}
-        .stLinkButton {{ color: #2d7d46; text-decoration: underline; }}
-        .stLinkButton:hover {{ color: #1a5a32; }}
+        /* Print styles */
+        @media print {{
+            .stApp {{ background-color: white !important; }}
+            .main .block-container {{ max-width: 100% !important; padding: 0 !important; }}
+            .stMetric, .stDataFrame, .stButton, .stExpander, .stSelectbox, .stTextInput, .stDateInput, .stSidebar, .pro-footer, .stMarkdown {{
+                display: none !important;
+            }}
+            .print-table {{
+                display: block !important;
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 10px;
+            }}
+            .print-table th, .print-table td {{
+                border: 1px solid #000;
+                padding: 4px;
+                text-align: left;
+                white-space: nowrap;
+            }}
+        }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -319,14 +338,13 @@ def share_data(df, sheet_name, selected_rows=None):
     return msg, pdf_bytes
 
 # ==================== MAIN APP ====================
-# ---- Sidebar ----
 dark_mode = st.sidebar.toggle("🌙 Dark Mode", value=False)
 apply_theme(dark_mode)
 
 st.sidebar.title("⚡ AI EQMS Hub Pro")
 st.sidebar.write(f"📅 {datetime.now().strftime('%d-%m-%Y')}")
 
-# File Upload (sidebar)
+# ---- File Upload Sidebar ----
 st.sidebar.subheader("📤 Upload File")
 uploaded_file = st.sidebar.file_uploader("Choose file", type=['png','jpg','jpeg','pdf','mp3','wav','ogg','txt'])
 caption = st.sidebar.text_input("Caption (optional)")
@@ -365,21 +383,20 @@ st.markdown("<div class='pro-title'>🚂 AI EQMS Hub</div>", unsafe_allow_html=T
 st.markdown("<div class='pro-subtitle'>Enterprise Quality Management – Pro Edition</div>", unsafe_allow_html=True)
 st.markdown("---")
 
-# Sheet selector
+# ---- Sheet Selector ----
 sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()))
 config = SHEET_CONFIG[sheet_choice]
 start_row = config["start_row"]
 
-# Load data with cache
+# ---- Load Data ----
 df = load_sheet_data_cached(sheet_choice, start_row, SHEET_ID)
 if df.empty:
     st.warning(f"No data found in {sheet_choice} from row {start_row}. You can add new rows.")
-    # Still allow adding rows
 
 # ---- Total Records ----
 st.metric("📊 Total Records", len(df))
 
-# ---- Filters (Collapsible) ----
+# ---- Filters ----
 with st.expander("🔍 Filters", expanded=False):
     with st.form(key="filter_form"):
         col1, col2, col3 = st.columns(3)
@@ -421,10 +438,9 @@ if (from_date or to_date) and doj_col_idx is not None and doj_col_idx < len(filt
     except:
         pass
 
-# ---- Display Data ----
+# ---- Display Data with Pagination ----
 st.subheader(f"📋 {sheet_choice} – {len(filtered_df)} rows")
 
-# Pagination
 page_size = st.selectbox("Rows per page", [15, 25, 50, 100], index=1, key=f"page_size_{sheet_choice}")
 total_pages = max(1, (len(filtered_df) + page_size - 1) // page_size)
 page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1, key=f"page_{sheet_choice}") - 1
@@ -433,7 +449,7 @@ end_idx = min(start_idx + page_size, len(filtered_df))
 page_df = filtered_df.iloc[start_idx:end_idx]
 
 if not page_df.empty:
-    # Add "Select" column
+    # Prepare data for editing
     page_df.insert(0, "Select", False)
     edited_page = st.data_editor(
         page_df,
@@ -444,29 +460,24 @@ if not page_df.empty:
     )
     selected_indices = edited_page[edited_page["Select"]].index.tolist()
 
-    # ---- Buttons ----
+    # ---- Action Buttons ----
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         if st.button("💾 Save Edits", use_container_width=True):
             try:
                 gc = init_sheets()
                 sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                # Prepare data for batch update (all rows in current page)
-                # We need to convert edited_page (without Select column) to list of lists
+                # Get data without Select column
                 data_to_update = edited_page.drop("Select", axis=1).values.tolist()
-                # Determine range: rows from start_row+start_idx to start_row+start_idx+len(data_to_update)-1
-                # and columns from 1 to len(data_to_update[0])
-                num_cols = len(data_to_update[0]) if data_to_update else 0
                 if data_to_update:
+                    num_cols = len(data_to_update[0])
                     start_row_update = start_row + start_idx
                     end_row_update = start_row_update + len(data_to_update) - 1
-                    # Use update with range
-                    sheet.update(
-                        f'A{start_row_update}:{chr(65 + num_cols - 1)}{end_row_update}',
-                        data_to_update
-                    )
+                    # Build range: A{start_row}:{col_letter}{end_row}
+                    col_letter = chr(64 + num_cols)  # A=65, B=66, ...
+                    range_name = f"A{start_row_update}:{col_letter}{end_row_update}"
+                    sheet.update(range_name, data_to_update)
                     st.toast("✅ Changes saved!", icon="💾")
-                    # Invalidate cache to reload fresh data
                     st.cache_data.clear()
                     time.sleep(0.5)
                     st.rerun()
@@ -474,7 +485,7 @@ if not page_df.empty:
                     st.warning("No data to save.")
             except Exception as e:
                 if "429" in str(e):
-                    st.error("❌ Google Sheets write quota exceeded. Please wait a minute and try again.")
+                    st.error("❌ Write quota exceeded. Wait a minute and try again.")
                 else:
                     st.error(f"Save error: {e}")
     with col2:
@@ -482,23 +493,20 @@ if not page_df.empty:
             try:
                 gc = init_sheets()
                 sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                # Get current sheet data to determine number of columns
                 all_data = sheet.get_all_values()
                 num_cols = len(all_data[0]) if all_data else 1
                 blank_row = [''] * num_cols
-                # Set S/N
                 if len(all_data) >= start_row:
                     next_sn = len(all_data) - start_row + 2
                     blank_row[0] = next_sn
                 sheet.append_row(blank_row)
                 st.toast("✅ Blank row added!", icon="➕")
-                # Invalidate cache
                 st.cache_data.clear()
                 time.sleep(0.5)
                 st.rerun()
             except Exception as e:
                 if "429" in str(e):
-                    st.error("❌ Google Sheets write quota exceeded. Please wait a minute and try again.")
+                    st.error("❌ Write quota exceeded. Wait a minute and try again.")
                 else:
                     st.error(f"Add row error: {e}")
     with col3:
@@ -516,7 +524,7 @@ if not page_df.empty:
                     st.rerun()
                 except Exception as e:
                     if "429" in str(e):
-                        st.error("❌ Google Sheets write quota exceeded. Please wait a minute and try again.")
+                        st.error("❌ Write quota exceeded. Wait a minute and try again.")
                     else:
                         st.error(f"Delete error: {e}")
         else:
@@ -561,7 +569,7 @@ if not page_df.empty:
         else:
             st.button("🖨️ Print Selected File", disabled=True, use_container_width=True)
 
-    # ---- Show clickable links for X, Y, Z, AA ----
+    # ---- Quick Links for X, Y, Z, AA ----
     st.subheader("🔗 Quick Links")
     col_indices = {'X': 23, 'Y': 24, 'Z': 25, 'AA': 26}
     for idx, row in filtered_df.iterrows():
@@ -591,11 +599,12 @@ if not page_df.empty:
 else:
     st.info("No rows on this page. Use 'Add Row' to create new entries.")
 
-# ---- Export Options ----
-st.subheader("📄 Export & Share")
+# ---- Export & Print ----
+st.subheader("📄 Export & Print")
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    if st.button("🖨️ Print Filtered Sheet", use_container_width=True):
+    # Print filtered sheet as PDF download
+    if st.button("🖨️ Print Filtered Sheet (PDF)", use_container_width=True):
         try:
             pdf = FPDF('L', 'mm', 'A4')
             pdf.add_page()
@@ -622,6 +631,7 @@ with col1:
         except Exception as e:
             st.warning(f"PDF error: {e}")
 with col2:
+    # Full PDF
     try:
         pdf = FPDF('L', 'mm', 'A4')
         pdf.add_page()
@@ -656,6 +666,60 @@ with col4:
         st.download_button("📥 Download PDF", data=pdf_bytes_full, file_name=f"{sheet_choice}_full.pdf", mime="application/pdf")
         wa_link_full = f"https://api.whatsapp.com/send?text={msg_full.replace(' ', '%20')}"
         st.markdown(f'<a href="{wa_link_full}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
+
+# ---- Print Preview using HTML (browser print) ----
+st.subheader("🖨️ Print Preview (Browser)")
+if st.button("Open Print Preview", use_container_width=True):
+    # Generate clean HTML table for printing
+    html_table = filtered_df.to_html(index=False, classes='print-table')
+    st.markdown(f"""
+    <style>
+        .print-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            font-family: Arial, sans-serif;
+        }}
+        .print-table th {{
+            background-color: #2d7d46;
+            color: white;
+            font-weight: bold;
+            padding: 6px;
+            border: 1px solid #000;
+            text-align: center;
+        }}
+        .print-table td {{
+            padding: 4px;
+            border: 1px solid #000;
+            text-align: left;
+        }}
+        @media print {{
+            body * {{
+                visibility: hidden;
+            }}
+            .print-area, .print-area * {{
+                visibility: visible;
+            }}
+            .print-area {{
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }}
+        }}
+    </style>
+    <div class="print-area">
+        {html_table}
+        <p style="text-align:center; margin-top:20px; font-size:12px;">Generated on {datetime.now().strftime('%d-%m-%Y %H:%M')}</p>
+    </div>
+    <script>
+        // Auto-print after a short delay
+        setTimeout(function() {{
+            window.print();
+        }}, 1000);
+    </script>
+    """, unsafe_allow_html=True)
+    st.info("A print dialog should appear automatically. If not, use your browser's print function (Ctrl+P).")
 
 # ==================== FOOTER ====================
 st.markdown("<div class='pro-footer'>© 2026 AI EQMS Hub Pro – All rights reserved.</div>", unsafe_allow_html=True)
