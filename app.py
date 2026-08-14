@@ -37,17 +37,17 @@ if not GEMINI_API_KEY or not GSPREAD_CREDENTIALS:
 SHEET_ID = "1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI"
 DRIVE_FOLDER_ID = "1H1gf8WqfoTYFT_pU9WfIDLrHg-NpuUSI"
 
-# ========== SESSION STATE INIT ==========
+# ========== SESSION STATE ==========
 if 'messages' not in st.session_state:
     st.session_state.messages = []
 if 'activity_log' not in st.session_state:
     st.session_state.activity_log = []
-if 'last_action' not in st.session_state:
-    st.session_state.last_action = None
-if 'last_action_data' not in st.session_state:
-    st.session_state.last_action_data = None
-if 'auto_refresh' not in st.session_state:
-    st.session_state.auto_refresh = False
+if 'sidebar_collapsed' not in st.session_state:
+    st.session_state.sidebar_collapsed = False
+if 'last_uploaded_file' not in st.session_state:
+    st.session_state.last_uploaded_file = None
+if 'last_uploaded_drive_url' not in st.session_state:
+    st.session_state.last_uploaded_drive_url = None
 if 'chat_suggestions' not in st.session_state:
     st.session_state.chat_suggestions = [
         "Show me EQ summary", 
@@ -55,10 +55,8 @@ if 'chat_suggestions' not in st.session_state:
         "Train wise breakup", 
         "Pending EQ requests", 
         "Quota status",
-        "PNR status for 1234567890"
+        "PNR status"
     ]
-if 'undo_stack' not in st.session_state:
-    st.session_state.undo_stack = []
 
 # ========== SERVICES ==========
 @st.cache_resource
@@ -80,7 +78,7 @@ def init_drive():
     creds = GDriveCredentials.from_service_account_info(creds_dict, scopes=scopes)
     return build('drive', 'v3', credentials=creds)
 
-# ========== EXACT PARSER FUNCTIONS (from bot) ==========
+# ========== EXACT PARSER FUNCTIONS ==========
 def clean_pnr(pnr):
     if not pnr:
         return ''
@@ -106,19 +104,6 @@ def parse_date(date_str):
         if len(year) == 2: year = '20' + year
         if int(month) > 12 and int(day) <= 12: day, month = month, day
         return f"{day}-{month}-{year}"
-    gmt_match = re.search(r'([A-Z][a-z]{2})\s+([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{4})', date_str)
-    if gmt_match:
-        months = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06',
-                  'Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'}
-        month = months.get(gmt_match[2], '01')
-        day = gmt_match[3].zfill(2)
-        year = gmt_match[4]
-        return f"{day}-{month}-{year}"
-    try:
-        dt = datetime.strptime(date_str, "%Y-%m-%d")
-        return dt.strftime("%d-%m-%Y")
-    except:
-        pass
     return date_str
 
 def smart_detect_warrant(text):
@@ -161,9 +146,6 @@ def smart_detect_rail_board(text):
     score = sum(1 for kw in keywords if kw in text)
     if score >= 4:
         return {'isRailBoard': True}
-    if 'OFFICE' in text and 'MINISTER' in text and ('RAILWAYS' in text or 'RAILWAY' in text):
-        if text.find('OFFICE') < 50:
-            return {'isRailBoard': True}
     return {'isRailBoard': False}
 
 def smart_detect_diary(text):
@@ -196,22 +178,13 @@ def smart_detect_vip(text):
         return 'MP'
     if re.search(r'\bMLA\b', text):
         return 'MLA'
-    if re.search(r'\bOSD\b', text):
-        return 'OSD'
-    if re.search(r'\bPMO\b', text):
-        return 'PMO'
-    if 'VVIP' in text:
-        return 'VVIP'
-    if 'VIP' in text:
-        return 'VIP'
     return ''
 
 def smart_detect_lower_seat(text):
     if not text:
         return False
     text = str(text).upper()
-    keywords = ['AGE+', 'AGE +', 'MEDICAL', 'HANDICAP', 'SR CITIZEN', 'SENIOR', 'DISABLED',
-                'LOWER BERTH', 'COUPE', 'WOMAN', 'LOWER SEAT']
+    keywords = ['LOWER BERTH', 'COUPE', 'WOMAN', 'LOWER SEAT', 'AGE+', 'MEDICAL', 'HANDICAP', 'SR CITIZEN']
     return any(kw in text for kw in keywords)
 
 STATION_MAP = {
@@ -236,7 +209,7 @@ STATION_MAP = {
     'PPTA': 'Patliputra', 'ARA': 'Ara', 'BXR': 'Buxar', 'TDL': 'Tundla',
     'ALJN': 'Aligarh', 'GZB': 'Ghaziabad', 'BKN': 'Bikaner', 'BME': 'Barmer',
     'JU': 'Jodhpur', 'UDZ': 'Udaipur', 'RTM': 'Ratlam', 'UJN': 'Ujjain',
-    'ST': 'Surat', 'BL': 'Valsad', 'PUNE': 'Pune', 'TVC': 'Thiruvananthapuram',
+    'ST': 'Surat', 'BL': 'Valsad', 'TVC': 'Thiruvananthapuram',
     'ERS': 'Ernakulam', 'MAQ': 'Mangalore', 'MS': 'Chennai Egmore',
     'AF': 'Agra Fort', 'MTJ': 'Mathura', 'GWL': 'Gwalior', 'JHS': 'Jhansi',
     'BHUJ': 'Bhuj', 'GIMB': 'Gandhidham', 'ANND': 'Anand', 'ND': 'Nadiad',
@@ -266,49 +239,21 @@ def get_station(code):
     return f"{code} ({STATION_MAP[code]})" if code in STATION_MAP else code
 
 def gemini_universal_parser(input_data, input_type, mime_type, progress_callback=None):
-    """Exact parser from original Telegram bot"""
     url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}'
     
     system_prompt = """
 You are TSKEQ Bot's AI extraction engine. You are an EXPERT at reading messy, handwritten, torn, or low-quality railway forms.
 
-=== YOUR SPECIAL SKILL ===
-You can read ANY handwriting - no matter how messy, scribbled, or torn the paper is.
-You understand Indian railway form formats perfectly.
-
-=== WHAT YOU ARE READING ===
-This is a railway EQ (Emergency Quota) application form. It contains passenger details for train reservation.
-
 === FIELDS TO EXTRACT (21 fields) ===
-1. PNR - 10 digit number (look for 10 digits)
-2. T_N (Train Number) - 3 to 5 digits
-3. CLASS - SL, 2A, 3A, CC, 1A, 2S, etc.
-4. DOJ (Date of Journey) - Convert to DD-MM-YYYY
-5. FROM - Station code (3-4 capital letters)
-6. TO - Station code (3-4 capital letters)
-7. BOARDING - Station code (optional)
-8. PASS_NAME - Passenger full name
-9. PASS_PH - 10 digit phone number
-10. T_BERTHS - Number of berths (default 1)
-11. PURPOSE - Purpose of travel
-12. ADDRESS - Full address
-13. DIARY_NO - Diary number (look for "No.", "Diary No.", "D/No.")
-14. RECOMMENDATION - Recommender's name/designation
-15. DESIGNATION - Designation of recommender
-16. VIP_STATUS - MP, MLA, MR, MINISTER, VIP, VVIP
-17. APPLICATION_DATE - Date of application
-18. RAILWAY_ZONE - Zone (NFR, NR, ER, etc.)
-19. PREFERENCE - General, Lower Seat, MP, MLA, MR, etc.
-20. PHONE_NUBER - Recommender's phone
-21. WARRANT_NO - Warrant number (IC-240, MP-123, etc.)
+PNR, T_N (Train Number), CLASS, DOJ (DD-MM-YYYY), FROM, TO, BOARDING, PASS_NAME, PASS_PH (10 digits), T_BERTHS, PURPOSE, ADDRESS, DIARY_NO, RECOMMENDATION, DESIGNATION, VIP_STATUS, APPLICATION_DATE, RAILWAY_ZONE, PREFERENCE, PHONE_NUBER, WARRANT_NO
 
 === SPECIAL RULES ===
-1. DIARY_NO: Look for "No. ECR/CRM/..." or "Diary No." or "D/No." pattern. Extract the full number.
-2. PREFERENCE: If you see "Lower Berth", "Lower Seat", "Coupe", "woman co-passenger", set PREFERENCE = "Lower Seat".
-3. RAIL BOARD: If you see "Office of the Hon'ble Minister Railways", set DIARY_NO="RAIL BOARD", RAILWAY_ZONE="RAIL BOARD", PREFERENCE="RAIL BOARD", VIP_STATUS="MINISTER".
+1. DIARY_NO: Look for "No." or "Diary No." pattern.
+2. PREFERENCE: If you see "Lower Berth", "Lower Seat", "Coupe", set PREFERENCE = "Lower Seat".
+3. RAIL BOARD: If you see "Office of the Hon'ble Minister Railways", set DIARY_NO="RAIL BOARD", RAILWAY_ZONE="RAIL BOARD".
 
 === OUTPUT FORMAT ===
-Return ONLY a valid JSON array.
+Return ONLY a valid JSON array. No explanations.
 [
   {
     "PNR": "6307598699",
@@ -334,7 +279,7 @@ Return ONLY a valid JSON array.
     "WARRANT_NO": ""
   }
 ]
-CRITICAL: Return ONLY the JSON array. No explanations.
+CRITICAL: Return ONLY the JSON array.
 """
     parts = []
     if input_type in ['image', 'pdf']:
@@ -511,23 +456,6 @@ def process_extracted_records(records):
         return {'error': 'No valid records extracted'}
     return {'records': cleaned, 'count': len(cleaned)}
 
-# ========== DATA VALIDATION ==========
-def validate_record(record):
-    errors = []
-    if record.get('PNR'):
-        pnr = clean_pnr(record['PNR'])
-        if not pnr or len(pnr) != 10:
-            errors.append(f"Invalid PNR: {record['PNR']}")
-    if record.get('PASS_PH'):
-        phone = clean_phone(record['PASS_PH'])
-        if not phone or len(phone) != 10:
-            errors.append(f"Invalid phone: {record['PASS_PH']}")
-    if record.get('DOJ'):
-        parsed = parse_date(record['DOJ'])
-        if not parsed or parsed == record['DOJ']:
-            errors.append(f"Invalid DOJ format: {record['DOJ']}")
-    return errors
-
 # ========== SHEET LOADER ==========
 @st.cache_data(ttl=30)
 def load_sheet_data_cached(sheet_name, start_row, sheet_id):
@@ -577,7 +505,14 @@ def upload_to_drive(file_bytes, filename, mime_type):
         file_metadata = {'name': filename, 'parents': [DRIVE_FOLDER_ID]}
         media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type, resumable=True)
         file = drive_service.files().create(body=file_metadata, media_body=media, fields='id,name,webViewLink,size').execute()
-        return {'success': True, 'id': file.get('id'), 'name': file.get('name'), 'url': file.get('webViewLink'), 'size': file.get('size')}
+        return {
+            'success': True, 
+            'id': file.get('id'), 
+            'name': file.get('name'), 
+            'url': file.get('webViewLink'), 
+            'size': file.get('size'),
+            'print_url': f"https://drive.google.com/file/d/{file.get('id')}/preview"
+        }
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
@@ -594,11 +529,6 @@ def save_to_sheet(sheet, records):
         skipped = 0
         validation_errors = []
         for rec in records:
-            errors = validate_record(rec)
-            if errors:
-                validation_errors.extend(errors)
-                skipped += 1
-                continue
             pnr = clean_pnr(rec.get('PNR', ''))
             if not pnr or pnr in existing_pnrs:
                 skipped += 1
@@ -618,75 +548,36 @@ def save_to_sheet(sheet, records):
     except Exception as e:
         return {'error': str(e)}
 
-# ========== BULK IMPORT ==========
-def bulk_import(sheet, file_bytes, file_type):
-    try:
-        if file_type == 'csv':
-            df = pd.read_csv(io.BytesIO(file_bytes))
-        else:
-            df = pd.read_excel(io.BytesIO(file_bytes))
-        
-        records = []
-        for _, row in df.iterrows():
-            rec = {
-                'PNR': str(row.get('PNR', '')),
-                'T_N': str(row.get('T_N', row.get('Train', row.get('T/N', '')))),
-                'CLASS': str(row.get('CLASS', row.get('Class', ''))),
-                'DOJ': str(row.get('DOJ', '')),
-                'FROM': str(row.get('FROM', row.get('From', ''))),
-                'TO': str(row.get('TO', row.get('To', ''))),
-                'BOARDING': str(row.get('BOARDING', '')),
-                'PASS_NAME': str(row.get('PASS_NAME', row.get('Passenger', ''))),
-                'PASS_PH': str(row.get('PASS_PH', '')),
-                'T_BERTHS': int(row.get('T_BERTHS', row.get('Berths', 1))),
-                'PURPOSE': str(row.get('PURPOSE', '')),
-                'ADDRESS': str(row.get('ADDRESS', '')),
-                'DIARY_NO': str(row.get('DIARY_NO', '')),
-                'RECOMMENDATION': str(row.get('RECOMMENDATION', '')),
-                'DESIGNATION': str(row.get('DESIGNATION', '')),
-                'VIP_STATUS': str(row.get('VIP_STATUS', '')),
-                'APPLICATION_DATE': str(row.get('APPLICATION_DATE', '')),
-                'RAILWAY_ZONE': str(row.get('RAILWAY_ZONE', '')),
-                'PREFERENCE': str(row.get('PREFERENCE', 'General')),
-                'PHONE_NUBER': str(row.get('PHONE_NUBER', '')),
-                'WARRANT_NO': str(row.get('WARRANT_NO', ''))
-            }
-            records.append(rec)
-        return save_to_sheet(sheet, records)
-    except Exception as e:
-        return {'error': str(e)}
-
-# ========== THEME WITH PERFECT BUTTON COLORS ==========
+# ========== THEME ==========
 def apply_theme(dark_mode):
-    bg = "#0e1117" if dark_mode else "#f8f9fa"
-    card_bg = "#1e1e2e" if dark_mode else "#ffffff"
-    text_color = "#fafafa" if dark_mode else "#1e1e2e"
-    border = "#4a4a5a" if dark_mode else "#d1d5db"
-    input_bg = "#2a2a3a" if dark_mode else "#f1f3f4"
-    
-    # Button colors
-    primary_bg = "#1a5a32"  # Dark green
-    primary_hover = "#2d7d46"  # Lighter green
-    primary_text = "#ffffff"  # White text
-    
-    secondary_bg = "#e8f5e9"  # Light green
-    secondary_hover = "#c8e6c9"
-    secondary_text = "#1a5a32"  # Dark green text
-    
-    danger_bg = "#c62828"  # Dark red
-    danger_hover = "#d32f2f"
-    danger_text = "#ffffff"
-    
-    disabled_bg = "#6c757d"  # Grey
-    disabled_text = "#adb5bd"
+    if dark_mode:
+        bg = "#0e1117"
+        card_bg = "#1e1e2e"
+        text_color = "#fafafa"
+        border = "#4a4a5a"
+        input_bg = "#2a2a3a"
+        primary_bg = "#1a5a32"
+        primary_hover = "#2d7d46"
+        primary_text = "#ffffff"
+        secondary_bg = "#2d2d3a"
+        secondary_text = "#e0e0e0"
+    else:
+        bg = "#f8f9fa"
+        card_bg = "#ffffff"
+        text_color = "#1e1e2e"
+        border = "#d1d5db"
+        input_bg = "#f1f3f4"
+        primary_bg = "#1a5a32"
+        primary_hover = "#2d7d46"
+        primary_text = "#ffffff"
+        secondary_bg = "#e8f5e9"
+        secondary_text = "#1a5a32"
     
     st.markdown(f"""
     <style>
-        /* Global */
         .stApp, .main .block-container, .css-1d391kg, .css-18e3th9 {{
             background-color: {bg} !important;
         }}
-        /* All text */
         body, .stMarkdown, p, div, span, h1, h2, h3, h4, h5, h6,
         label, .stTextInput label, .stSelectbox label, .stDateInput label,
         .stNumberInput label, .stTextArea label, .stCheckbox label,
@@ -707,8 +598,6 @@ def apply_theme(dark_mode):
         .stChatInput input, .stChatInput textarea {{
             color: {text_color} !important;
         }}
-        
-        /* ===== PRIMARY BUTTONS (Green with White Text) ===== */
         .stButton button, .stButton button p {{
             background-color: {primary_bg} !important;
             color: {primary_text} !important;
@@ -723,58 +612,14 @@ def apply_theme(dark_mode):
             background-color: {primary_hover} !important;
             transform: translateY(-2px) !important;
             box-shadow: 0 4px 12px rgba(45, 125, 70, 0.4) !important;
-            color: {primary_text} !important;
-        }}
-        .stButton button:active {{
-            transform: translateY(0px) !important;
         }}
         .stButton button:disabled {{
-            background-color: {disabled_bg} !important;
-            color: {disabled_text} !important;
+            background-color: #6c757d !important;
+            color: #adb5bd !important;
             cursor: not-allowed !important;
             transform: none !important;
             box-shadow: none !important;
         }}
-        
-        /* ===== SECONDARY BUTTONS (Light Green with Dark Text) ===== */
-        .stButton button[kind="secondary"], 
-        .stButton button.secondary {{
-            background-color: {secondary_bg} !important;
-            color: {secondary_text} !important;
-            border: 1px solid {primary_bg} !important;
-        }}
-        .stButton button[kind="secondary"]:hover,
-        .stButton button.secondary:hover {{
-            background-color: {secondary_hover} !important;
-            color: {secondary_text} !important;
-        }}
-        
-        /* ===== DANGER BUTTONS (Red with White Text) ===== */
-        .stButton button[kind="danger"],
-        .stButton button.danger {{
-            background-color: {danger_bg} !important;
-            color: {danger_text} !important;
-        }}
-        .stButton button[kind="danger"]:hover,
-        .stButton button.danger:hover {{
-            background-color: {danger_hover} !important;
-        }}
-        
-        /* ===== DISABLED BUTTONS ===== */
-        .stButton button:disabled {{
-            background-color: {disabled_bg} !important;
-            color: {disabled_text} !important;
-        }}
-        
-        /* Sidebar */
-        .css-1d391kg .sidebar-content .stMarkdown,
-        .css-1d391kg .sidebar-content p,
-        .css-1d391kg .sidebar-content div,
-        .css-1d391kg .sidebar-content label {{
-            color: {text_color} !important;
-        }}
-        
-        /* Cards & Containers */
         .stMetric, .stExpander, .stDataFrame, .stTable,
         .stChatMessage, .stChatInput, .stSelectbox, .stTextInput,
         .stDateInput, .stNumberInput, .stTextArea {{
@@ -782,16 +627,14 @@ def apply_theme(dark_mode):
             border-color: {border} !important;
         }}
         .stDataFrame thead th {{
-            background: #2d7d46 !important;
+            background: {primary_bg} !important;
             color: white !important;
         }}
-        /* Borders */
         .stExpander, .stDataFrame, .stTable, .stMetric,
         .stChatMessage, .stChatInput {{
             border: 1px solid {border} !important;
             border-radius: 8px !important;
         }}
-        /* Input fields */
         .stTextInput input, .stSelectbox select, .stDateInput input,
         .stNumberInput input, .stTextArea textarea {{
             background-color: {input_bg} !important;
@@ -820,9 +663,16 @@ def apply_theme(dark_mode):
         .stProgress .st-bo {{
             background-color: #2d7d46 !important;
         }}
+        .action-box {{
+            background: {card_bg};
+            border: 1px solid {border};
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }}
         .suggestion-chip {{
             display: inline-block;
-            background: {card_bg};
+            background: {secondary_bg};
             border: 1px solid {border};
             border-radius: 20px;
             padding: 6px 14px;
@@ -832,8 +682,32 @@ def apply_theme(dark_mode):
             font-size: 0.85rem;
         }}
         .suggestion-chip:hover {{
-            background: #2d7d46;
+            background: {primary_bg};
             color: white;
+        }}
+        .sidebar-toggle {{
+            cursor: pointer;
+            padding: 8px 12px;
+            background: {primary_bg};
+            color: white;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            width: 100%;
+        }}
+        .sidebar-toggle:hover {{
+            background: {primary_hover};
+        }}
+        @media print {{
+            .stApp, .main .block-container {{
+                background-color: white !important;
+            }}
+            .stMetric, .stButton, .stExpander, .stSidebar, .action-box {{
+                display: none !important;
+            }}
+            .stDataFrame {{
+                display: block !important;
+            }}
         }}
     </style>
     """, unsafe_allow_html=True)
@@ -948,7 +822,7 @@ def get_sheet_context():
         summary = f"EQ Sheet has {total} records.\n"
         if total > 0:
             sample = all_data[-5:] if len(all_data) > 5 else all_data[4:]
-            summary += "Recent records (PNR, Train, DOJ):\n"
+            summary += "Recent records:\n"
             for row in sample:
                 if len(row) > 7:
                     summary += f"PNR: {row[1] if len(row)>1 else ''}, Train: {row[5] if len(row)>5 else ''}, DOJ: {row[7] if len(row)>7 else ''}\n"
@@ -965,7 +839,7 @@ def chat_with_gemini_stream(messages):
 Sheet Summary:
 {context}
 
-Remember the conversation. Answer based on sheet data if relevant, otherwise use general knowledge. Be helpful, concise, and friendly. Use emojis where appropriate. Keep responses conversational."""
+Remember the conversation. Answer based on sheet data if relevant, otherwise use general knowledge. Be helpful, concise, and friendly. Use emojis where appropriate."""
         full_prompt = system_prompt + "\n\nConversation:\n"
         for msg in messages:
             full_prompt += f"{msg['role']}: {msg['content']}\n"
@@ -990,6 +864,10 @@ def log_activity(action, details):
 dark_mode = st.sidebar.toggle("🌙 Dark Mode", value=False)
 apply_theme(dark_mode)
 
+# ---- Sidebar Toggle ----
+if st.sidebar.button("☰ Toggle Sidebar", use_container_width=True):
+    st.session_state.sidebar_collapsed = not st.session_state.sidebar_collapsed
+
 sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
 st.sidebar.markdown("---")
 st.sidebar.markdown(f'<a href="{sheet_link}" target="_blank"><button style="padding:10px 20px; background:#1a5a32; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold; width:100%;">📊 Open Google Sheet</button></a>', unsafe_allow_html=True)
@@ -998,7 +876,6 @@ st.sidebar.markdown("---")
 st.sidebar.title("⚡ AI EQMS Hub Pro")
 st.sidebar.write(f"📅 {datetime.now().strftime('%d-%m-%Y')}")
 
-# ---- Total Records ----
 try:
     eq_df = load_sheet_data_cached('EQ', 5, SHEET_ID)
     total_records = len(eq_df) if not eq_df.empty else 0
@@ -1008,7 +885,7 @@ except:
 
 # ---- File Upload ----
 st.sidebar.subheader("📤 Upload File")
-uploaded_file = st.sidebar.file_uploader("Choose file (Image/PDF/Audio/Text)", type=['png','jpg','jpeg','pdf','mp3','wav','ogg','txt'])
+uploaded_file = st.sidebar.file_uploader("Choose file (Image/PDF/Text)", type=['png','jpg','jpeg','pdf','txt'])
 caption = st.sidebar.text_input("Caption (optional)")
 
 # ---- Bulk Import ----
@@ -1027,10 +904,6 @@ if bulk_file:
                 st.sidebar.error(f"Import error: {result['error']}")
             else:
                 st.sidebar.success(f"Imported {result['saved']} records! Skipped: {result['skipped']}")
-                if result.get('validation_errors'):
-                    with st.sidebar.expander("⚠️ Validation Errors"):
-                        for err in result['validation_errors']:
-                            st.write(f"- {err}")
                 log_activity("Bulk Import", f"Imported {result['saved']} records")
                 st.cache_data.clear()
                 st.rerun()
@@ -1040,7 +913,7 @@ if bulk_file:
 if st.sidebar.button("🚀 Process & Save", use_container_width=True):
     if uploaded_file:
         file_bytes = uploaded_file.read()
-        file_type = 'pdf' if uploaded_file.type == 'application/pdf' else ('audio' if uploaded_file.type.startswith('audio/') else 'image')
+        file_type = 'pdf' if uploaded_file.type == 'application/pdf' else 'image'
         
         progress_text = st.sidebar.empty()
         progress_bar = st.sidebar.progress(0)
@@ -1073,19 +946,19 @@ if st.sidebar.button("🚀 Process & Save", use_container_width=True):
                             st.sidebar.error(f"Save error: {save_res['error']}")
                         else:
                             st.sidebar.success(f"✅ Saved {save_res['saved']} new records!")
-                            if save_res.get('validation_errors'):
-                                with st.sidebar.expander("⚠️ Validation Errors"):
-                                    for err in save_res['validation_errors']:
-                                        st.write(f"- {err}")
                             
+                            # Upload to Drive
                             drive_res = upload_to_drive(file_bytes, uploaded_file.name, uploaded_file.type)
                             if drive_res['success']:
                                 st.sidebar.success(f"📁 File uploaded to Drive")
+                                st.session_state.last_uploaded_file = uploaded_file.name
+                                st.session_state.last_uploaded_drive_url = drive_res['print_url']
                             else:
                                 st.sidebar.error(f"Drive upload error: {drive_res['error']}")
                             
                             log_activity("File Upload", f"Uploaded {uploaded_file.name}, extracted {parse_result['count']} records")
                             st.cache_data.clear()
+                            st.rerun()
                     except Exception as e:
                         st.sidebar.error(f"Sheet error: {e}")
         except Exception as e:
@@ -1126,8 +999,8 @@ if 'from_val' not in st.session_state:
 if 'to_val' not in st.session_state:
     st.session_state.to_val = None
 
-pnr_input = st.sidebar.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_input_widget", help="Enter PNR or partial PNR")
-train_input = st.sidebar.text_input("Train (partial)", value=st.session_state.train_val, key="train_input_widget", help="Enter train number")
+pnr_input = st.sidebar.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_input_widget")
+train_input = st.sidebar.text_input("Train (partial)", value=st.session_state.train_val, key="train_input_widget")
 from_input = st.sidebar.date_input("From DOJ", value=st.session_state.from_val, key="from_input_widget")
 to_input = st.sidebar.date_input("To DOJ", value=st.session_state.to_val, key="to_input_widget")
 
@@ -1138,7 +1011,7 @@ with col1:
         st.session_state.train_val = train_input
         st.session_state.from_val = from_input
         st.session_state.to_val = to_input
-        log_activity("Filter Applied", f"Sheet: {sheet_choice}, PNR: {pnr_input}, Train: {train_input}")
+        log_activity("Filter Applied", f"Sheet: {sheet_choice}")
         st.rerun()
 with col2:
     if st.button("Clear Filters", use_container_width=True):
@@ -1181,7 +1054,7 @@ if not filtered_df.empty:
 
 # ---- Print ----
 st.sidebar.subheader("🖨️ Print")
-if st.sidebar.button("🖨️ Print Sheet", use_container_width=True, help="Print current filtered data"):
+if st.sidebar.button("🖨️ Print Sheet", use_container_width=True):
     print_df = filtered_df.copy()
     if 'Select' in print_df.columns:
         print_df = print_df.drop('Select', axis=1)
@@ -1207,7 +1080,6 @@ if st.sidebar.button("🖨️ Print Sheet", use_container_width=True, help="Prin
     </body>
     </html>
     """, height=0, scrolling=False)
-    log_activity("Print", f"Printed {sheet_choice} with {len(filtered_df)} rows")
 
 st.sidebar.markdown("---")
 
@@ -1220,12 +1092,11 @@ st.markdown("---")
 
 if view == "💬 Chat with Gemini":
     st.subheader("💬 Chat with TSKEQ Bot")
-    st.markdown("Ask anything about your EQ data or railway queries! The bot remembers the last 30 messages.")
-
+    
     st.markdown("**💡 Suggested Questions:**")
-    cols = st.columns(4)
+    cols = st.columns(3)
     for i, suggestion in enumerate(st.session_state.chat_suggestions):
-        with cols[i % 4]:
+        with cols[i % 3]:
             if st.button(suggestion, key=f"suggestion_{i}", use_container_width=True):
                 st.session_state.messages.append({"role": "user", "content": suggestion})
                 st.rerun()
@@ -1234,11 +1105,9 @@ if view == "💬 Chat with Gemini":
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    chat_container = st.container()
-    with chat_container:
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
 
     if prompt := st.chat_input("Ask a question..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -1261,7 +1130,6 @@ if view == "💬 Chat with Gemini":
                             placeholder.markdown(full_response + "▌")
                     placeholder.markdown(full_response)
         st.session_state.messages.append({"role": "assistant", "content": full_response if isinstance(response, str) else full_response})
-        log_activity("Chat", f"Asked: {prompt[:50]}...")
 
     if st.button("🗑️ Clear Chat", use_container_width=True):
         st.session_state.messages = []
@@ -1283,9 +1151,7 @@ else:
         end_idx = min(start_idx + page_size, len(filtered_df))
         page_df = filtered_df.iloc[start_idx:end_idx]
 
-        if page_df.empty:
-            st.info("No rows on this page.")
-        else:
+        if not page_df.empty:
             page_df.insert(0, "Select", False)
             edited_page = st.data_editor(
                 page_df,
@@ -1296,7 +1162,12 @@ else:
             )
             selected_indices = edited_page[edited_page["Select"]].index.tolist()
 
-            col1, col2, col3, col4 = st.columns(4)
+            # ===== ACTION BUTTONS IN ONE BOX =====
+            st.markdown('<div class="action-box">', unsafe_allow_html=True)
+            st.subheader("⚡ Actions")
+            
+            col1, col2, col3, col4, col5 = st.columns(5)
+            
             with col1:
                 if st.button("💾 Save Edits", use_container_width=True, help="Save all changes to Google Sheets"):
                     try:
@@ -1311,7 +1182,7 @@ else:
                             range_name = f"A{start_row_update}:{col_letter}{end_row_update}"
                             sheet.update(range_name, data_to_update)
                             st.toast("✅ Changes saved!", icon="💾")
-                            log_activity("Edit", f"Saved edits in {sheet_choice} rows {start_idx+1}-{end_idx}")
+                            log_activity("Edit", f"Saved edits in {sheet_choice}")
                             st.cache_data.clear()
                             time.sleep(0.5)
                             st.rerun()
@@ -1322,6 +1193,7 @@ else:
                             st.error("❌ Write quota exceeded. Wait a minute and try again.")
                         else:
                             st.error(f"Save error: {e}")
+            
             with col2:
                 if st.button("➕ Add Row", use_container_width=True, help="Add a new blank row"):
                     try:
@@ -1340,10 +1212,8 @@ else:
                         time.sleep(0.5)
                         st.rerun()
                     except Exception as e:
-                        if "429" in str(e):
-                            st.error("❌ Write quota exceeded. Wait a minute and try again.")
-                        else:
-                            st.error(f"Add row error: {e}")
+                        st.error(f"Add row error: {e}")
+            
             with col3:
                 if selected_indices:
                     if st.button("🗑️ Delete Selected", use_container_width=True, help="Delete selected rows"):
@@ -1359,12 +1229,10 @@ else:
                             time.sleep(0.5)
                             st.rerun()
                         except Exception as e:
-                            if "429" in str(e):
-                                st.error("❌ Write quota exceeded. Wait a minute and try again.")
-                            else:
-                                st.error(f"Delete error: {e}")
+                            st.error(f"Delete error: {e}")
                 else:
                     st.button("🗑️ Delete Selected", disabled=True, use_container_width=True)
+            
             with col4:
                 if selected_indices:
                     if st.button("📤 Share Selected", use_container_width=True, help="Share selected rows as PDF"):
@@ -1372,11 +1240,21 @@ else:
                         st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}_selected.pdf", mime="application/pdf")
                         wa_link = f"https://api.whatsapp.com/send?text={msg.replace(' ', '%20')}"
                         st.markdown(f'<a href="{wa_link}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
-                        log_activity("Share", f"Shared {len(selected_indices)} rows from {sheet_choice}")
+                        log_activity("Share", f"Shared {len(selected_indices)} rows")
                 else:
                     st.button("📤 Share Selected", disabled=True, use_container_width=True)
+            
+            with col5:
+                # Print Selected File (if uploaded)
+                if st.session_state.last_uploaded_drive_url:
+                    if st.button("🖨️ Print File", use_container_width=True, help="Print the uploaded file"):
+                        st.markdown(f'<script>window.open("{st.session_state.last_uploaded_drive_url}&print=true", "_blank");</script>', unsafe_allow_html=True)
+                else:
+                    st.button("🖨️ Print File", disabled=True, use_container_width=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
 
-            # Quick Links
+            # ===== QUICK LINKS =====
             st.subheader("🔗 Quick Links")
             col_indices = {'X': 23, 'Y': 24, 'Z': 25, 'AA': 26}
             for idx, row in filtered_df.iterrows():
@@ -1403,7 +1281,7 @@ else:
                     row_num = idx + 1
                     st.markdown(f"**Row {row_num}:** " + " | ".join(links), unsafe_allow_html=True)
 
-            # Export
+            # ===== EXPORT =====
             st.subheader("📄 Export")
             col1, col2 = st.columns(2)
             with col1:
@@ -1437,6 +1315,5 @@ else:
             with col2:
                 csv = filtered_df.drop('Select', axis=1).to_csv(index=False).encode('utf-8') if 'Select' in filtered_df.columns else filtered_df.to_csv(index=False).encode('utf-8')
                 st.download_button("📥 Download CSV", data=csv, file_name=f"{sheet_choice}.csv", mime="text/csv", use_container_width=True)
-                log_activity("Export", f"Exported {sheet_choice} with {len(filtered_df)} rows")
 
 st.markdown("<div class='pro-footer'>© 2026 AI EQMS Hub Pro – All rights reserved.</div>", unsafe_allow_html=True)
