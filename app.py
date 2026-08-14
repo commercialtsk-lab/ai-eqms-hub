@@ -527,7 +527,7 @@ def save_to_sheet(sheet, records):
     except Exception as e:
         return {'error': str(e)}
 
-# ========== THEME (DeepSeek Perfect Dark/Light) ==========
+# ========== THEME (DeepSeek Style) ==========
 def apply_theme(dark_mode):
     if dark_mode:
         bg = "#0d1117"
@@ -538,10 +538,6 @@ def apply_theme(dark_mode):
         input_bg = "#0d1117"
         primary_bg = "#58a6ff"
         primary_hover = "#79c0ff"
-        primary_text = "#ffffff"
-        secondary_bg = "#21262d"
-        secondary_text = "#c9d1d9"
-        header_bg = "#161b22"
         button_text = "#58a6ff"
         button_hover = "#79c0ff"
     else:
@@ -553,10 +549,6 @@ def apply_theme(dark_mode):
         input_bg = "#f6f8fa"
         primary_bg = "#0969da"
         primary_hover = "#0550ae"
-        primary_text = "#ffffff"
-        secondary_bg = "#f6f8fa"
-        secondary_text = "#24292f"
-        header_bg = "#f6f8fa"
         button_text = "#0969da"
         button_hover = "#0550ae"
     
@@ -568,7 +560,6 @@ def apply_theme(dark_mode):
             background-color: {bg} !important;
         }}
         
-        /* Top header */
         header, .st-emotion-cache-1avcm0n, .st-emotion-cache-6qob1r {{
             background-color: {bg} !important;
         }}
@@ -596,11 +587,11 @@ def apply_theme(dark_mode):
             color: {text_color} !important;
         }}
         
-        /* File Uploader - FIXED Dark Mode */
+        /* File Uploader */
         .stFileUploader label, .stFileUploader div, .stFileUploader span,
         .stFileUploader .st-ae, .stFileUploader .st-bb,
         .stFileUploader .st-b6, .stFileUploader .st-b7,
-        .stFileUploader .st-b8, .stFileUploader .st-b9 {{
+        .stFileUploader .st-b8 {{
             color: {text_color} !important;
         }}
         .stFileUploader {{
@@ -608,15 +599,6 @@ def apply_theme(dark_mode):
             border: 1px dashed {border} !important;
             border-radius: 8px !important;
             padding: 8px !important;
-        }}
-        .stFileUploader .st-ae {{
-            color: {text_color} !important;
-        }}
-        .stFileUploader .st-b6 {{
-            color: {text_color} !important;
-        }}
-        .stFileUploader .st-b7 {{
-            color: {text_color} !important;
         }}
         
         /* Open Google Sheet Button */
@@ -638,7 +620,7 @@ def apply_theme(dark_mode):
             border-color: {button_hover} !important;
         }}
         
-        /* Buttons - DeepSeek Style */
+        /* Buttons */
         .stButton button, .stButton button p {{
             background: transparent !important;
             color: {button_text} !important;
@@ -646,8 +628,6 @@ def apply_theme(dark_mode):
             border-radius: 0 !important;
             font-weight: 500 !important;
             padding: 4px 12px !important;
-            transition: all 0.2s ease !important;
-            box-shadow: none !important;
             font-size: 0.9rem !important;
             cursor: pointer !important;
         }}
@@ -655,10 +635,6 @@ def apply_theme(dark_mode):
             background: transparent !important;
             color: {button_hover} !important;
             text-decoration: underline !important;
-        }}
-        .stButton button:disabled {{
-            color: {text_secondary} !important;
-            cursor: not-allowed !important;
         }}
         
         /* Action Box */
@@ -670,7 +646,6 @@ def apply_theme(dark_mode):
             margin-bottom: 16px;
         }}
         
-        /* Cards & Containers */
         .stMetric, .stExpander, .stDataFrame, .stTable,
         .stChatMessage, .stChatInput, .stSelectbox, .stTextInput,
         .stDateInput, .stNumberInput, .stTextArea {{
@@ -678,9 +653,8 @@ def apply_theme(dark_mode):
             border-color: {border} !important;
         }}
         
-        /* Data Editor */
         .stDataFrame thead th {{
-            background: {header_bg} !important;
+            background: {card_bg} !important;
             color: {text_color} !important;
             border-bottom: 2px solid {border} !important;
         }}
@@ -689,11 +663,7 @@ def apply_theme(dark_mode):
             color: {text_color} !important;
             border-color: {border} !important;
         }}
-        .stDataFrame tbody tr:hover {{
-            background-color: {secondary_bg} !important;
-        }}
         
-        /* Input Fields */
         .stTextInput input, .stSelectbox select, .stDateInput input,
         .stNumberInput input, .stTextArea textarea {{
             background-color: {input_bg} !important;
@@ -702,24 +672,12 @@ def apply_theme(dark_mode):
             border-radius: 6px !important;
         }}
         
-        /* Selectbox */
-        .stSelectbox select {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        .stSelectbox div {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        
-        /* Borders */
         .stExpander, .stDataFrame, .stTable, .stMetric,
         .stChatMessage, .stChatInput {{
             border: 1px solid {border} !important;
             border-radius: 8px !important;
         }}
         
-        /* Footer */
         .pro-footer {{
             color: {text_secondary} !important;
             border-top: 1px solid {border} !important;
@@ -728,7 +686,6 @@ def apply_theme(dark_mode):
             margin-top: 30px !important;
         }}
         
-        /* Hide row index */
         .stDataFrame thead tr th:first-child,
         .stDataFrame tbody tr th:first-child,
         .stDataFrame tbody tr td:first-child {{
@@ -739,51 +696,12 @@ def apply_theme(dark_mode):
             display: table-cell !important;
         }}
         
-        /* Toast */
         .stToast {{
             background: {card_bg} !important;
             border-left: 4px solid {primary_bg} !important;
             color: {text_color} !important;
         }}
         
-        /* Progress Bar */
-        .stProgress .st-bo {{
-            background-color: {primary_bg} !important;
-        }}
-        
-        /* Suggestion Chips */
-        .suggestion-chip {{
-            display: inline-block;
-            background: {secondary_bg};
-            border: 1px solid {border};
-            border-radius: 20px;
-            padding: 6px 14px;
-            margin: 4px;
-            cursor: pointer;
-            color: {text_color};
-            font-size: 0.85rem;
-        }}
-        .suggestion-chip:hover {{
-            background: {primary_bg};
-            color: white;
-        }}
-        
-        /* Sidebar Toggle */
-        .sidebar-toggle {{
-            background: transparent !important;
-            color: {text_color} !important;
-            border: none !important;
-            border-radius: 8px !important;
-            padding: 8px 16px !important;
-            font-weight: 500 !important;
-            width: 100% !important;
-            cursor: pointer !important;
-        }}
-        .sidebar-toggle:hover {{
-            color: {button_hover} !important;
-        }}
-        
-        /* Scrollbar */
         ::-webkit-scrollbar {{
             width: 6px;
             height: 6px;
@@ -794,18 +712,6 @@ def apply_theme(dark_mode):
         ::-webkit-scrollbar-thumb {{
             background: {primary_bg};
             border-radius: 10px;
-        }}
-        ::-webkit-scrollbar-thumb:hover {{
-            background: {primary_hover};
-        }}
-        
-        @media print {{
-            .stApp, .main .block-container {{
-                background-color: white !important;
-            }}
-            .stMetric, .stButton, .stExpander, .stSidebar, .action-box {{
-                display: none !important;
-            }}
         }}
     </style>
     """, unsafe_allow_html=True)
@@ -959,12 +865,11 @@ def log_activity(action, details):
 dark_mode = st.sidebar.toggle("🌙 Dark Mode", value=False)
 apply_theme(dark_mode)
 
-# ---- Sidebar Toggle ----
+# ---- Sidebar ----
 if st.sidebar.button("☰ Toggle Sidebar", use_container_width=True):
     st.session_state.sidebar_collapsed = not st.session_state.sidebar_collapsed
 
 if not st.session_state.sidebar_collapsed:
-    # ---- Open Google Sheet Button ----
     sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
     st.sidebar.markdown("---")
     st.sidebar.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
@@ -1194,7 +1099,7 @@ if view == "💬 Chat with Gemini":
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # ---- Chat Input (Below Suggested Questions) ----
+    # ---- Chat Input ----
     if prompt := st.chat_input("Ask a question..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -1205,7 +1110,7 @@ if view == "💬 Chat with Gemini":
                 st.markdown(response)
         st.session_state.messages.append({"role": "assistant", "content": response})
 
-    # ---- Clear Chat (Below Chat Input) ----
+    # ---- Clear Chat ----
     if st.button("🗑️ Clear Chat", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
@@ -1219,7 +1124,6 @@ else:
     if filtered_df.empty:
         st.info("No data to display. Try adjusting filters or clearing them.")
     else:
-        # ---- Page navigation ----
         page_size = st.selectbox("Rows per page", [15, 25, 50, 100], index=1, key="page_size")
         total_pages = max(1, (len(filtered_df) + page_size - 1) // page_size)
         
@@ -1256,7 +1160,6 @@ else:
             )
             selected_indices = edited_page[edited_page["Select"]].index.tolist()
 
-            # ===== ACTION BUTTONS IN ONE BOX =====
             st.markdown('<div class="action-box">', unsafe_allow_html=True)
             st.subheader("⚡ Actions")
             
