@@ -1,4 +1,3 @@
-import json
 import google.generativeai as genai
 import gspread
 import pandas as pd
@@ -10,22 +9,9 @@ st.set_page_config(
     page_title="Pro Intelligence Hub", page_icon="⚡", layout="wide"
 )
 
-# 2. Secrets & Credentials Setup (PEM / Newline Fix)
+# 2. Secrets & Credentials Setup (Direct from TOML)
 try:
-  creds_json = st.secrets["GOOGLE_CREDENTIALS_JSON"]
-  
-  # Ensure it's handled properly whether it's a string or already parsed
-  if isinstance(creds_json, str):
-    creds_dict = json.loads(creds_json)
-  else:
-    creds_dict = dict(creds_json)
-
-  # Robust fix for private key newlines (handles both \\n and \n)
-  if "private_key" in creds_dict:
-    pk = creds_dict["private_key"]
-    # Replace literal '\\n' with actual '\n'
-    pk = pk.replace("\\\\n", "\n").replace("\\n", "\n")
-    creds_dict["private_key"] = pk
+  creds_dict = dict(st.secrets["GSPREAD_CREDENTIALS"])
 
   scopes = [
       "https://spreadsheets.google.com/feeds",
@@ -43,7 +29,7 @@ try:
 except Exception as e:
   st.warning("Gemini API Key not found in Streamlit Secrets.")
 
-# 3. Custom CSS for Pro UI (Tiranga / Dark Theme vibe)
+# 3. Custom CSS for Pro UI
 st.markdown(
     """
     <style>
