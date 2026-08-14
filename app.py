@@ -18,7 +18,7 @@ try:
     )
 
   scopes = [
-      "https://spreadsheets.google.com/feeds",
+      "https://www.googleapis.com/auth/spreadsheets",
       "https://www.googleapis.com/auth/drive",
   ]
   creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
@@ -64,11 +64,25 @@ elif selected_tab == "Live Google Sheets":
       unsafe_allow_html=True,
   )
   try:
-    sh = client.open("EQ Master Bot")
-    worksheet = sh.get_worksheet(0)
-    data = worksheet.get_all_values()
+    spreadsheet_id = client.open("EQ Master Bot").id
+    sheet = client.open_by_key(spreadsheet_id).get_worksheet(0)
+    data = sheet.get_all_values()
+
     if data and len(data) > 1:
-      df = pd.DataFrame(data[1:], columns=data[0])
+      # Duplicate column names fix karne ke liye unique headers bana rahe hain
+      headers = data[0]
+      seen = {}
+      unique_headers = []
+      for h in headers:
+        h_str = str(h).strip()
+        if h_str in seen:
+          seen[h_str] += 1
+          unique_headers.append(f"{h_str}_{seen[h_str]}")
+        else:
+          seen[h_str] = 0
+          unique_headers.append(h_str)
+
+      df = pd.DataFrame(data[1:], columns=unique_headers)
       st.dataframe(df, use_container_width=True)
     elif data:
       df = pd.DataFrame(data)
@@ -76,7 +90,7 @@ elif selected_tab == "Live Google Sheets":
     else:
       st.warning("Google Sheet is empty.")
   except Exception as e:
-    st.info(f"Google Sheet load error: {e}")
+    st.error(f"Google Sheet load error: {e}")
 
 elif selected_tab == "System Settings":
   st.markdown(
