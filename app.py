@@ -14,8 +14,11 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2.service_account import Credentials as GDriveCredentials
 from fpdf import FPDF
+import plotly.express as px
+import plotly.graph_objects as go
 
-st.set_page_config(page_title="AI EQMS Hub", page_icon="🚂", layout="wide")
+# ========== PAGE CONFIG ==========
+st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide")
 
 # ========== CREDENTIALS ==========
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
@@ -69,7 +72,51 @@ def parse_date(date_str):
         return f"{day}-{month}-{year}"
     return date_str
 
-STATION_MAP = {'NTSK':'New Tinsukia', 'GHY':'Guwahati', 'NDLS':'New Delhi', 'HWH':'Howrah', 'PNBE':'Patna', 'BSB':'Varanasi', 'CNB':'Kanpur Central', 'LKO':'Lucknow', 'DDU':'Pt. Deen Dayal Upadhyaya', 'GAYA':'Gaya', 'MGS':'Mughalsarai', 'ASN':'Asansol', 'DHN':'Dhanbad', 'SC':'Secunderabad', 'MAS':'Chennai Central', 'SBC':'Bengaluru City', 'CSTM':'Mumbai CSMT', 'BCT':'Mumbai Central', 'PUNE':'Pune', 'ADI':'Ahmedabad', 'BRC':'Vadodara', 'JP':'Jaipur', 'AII':'Ajmer', 'BPL':'Bhopal', 'INDB':'Indore', 'JBP':'Jabalpur', 'NGP':'Nagpur', 'HYB':'Hyderabad', 'BZA':'Vijayawada', 'GNT':'Guntur', 'VSKP':'Visakhapatnam', 'BBS':'Bhubaneswar', 'KGP':'Kharagpur', 'KOAA':'Kolkata', 'NJP':'New Jalpaiguri', 'NBQ':'New Bongaigaon', 'KYQ':'Kamakhya', 'DBRG':'Dibrugarh', 'MXN':'Mariani Junction', 'FKG':'Furkating', 'JTI':'Jatinga', 'MFP':'Muzaffarpur', 'KIR':'Katihar Junction', 'DEL':'Delhi', 'SDAH':'Sealdah', 'TBM':'Tambaram', 'YPR':'Yesvantpur', 'SMVB':'SMVT Bengaluru', 'PRYJ':'Prayagraj', 'DNR':'Danapur', 'RE':'Rewari', 'AY':'Ayodhya', 'MLDT':'Malda Town', 'NNA':'Naugachia', 'CLG':'Kahalgaon', 'ROK':'Rohtak', 'BGP':'Bhagalpur', 'JMP':'Jamalpur', 'JYG':'Jaynagar', 'BJU':'Barauni', 'SPJ':'Samastipur', 'HJP':'Hajipur', 'PPTA':'Patliputra', 'ARA':'Ara', 'BXR':'Buxar', 'TDL':'Tundla', 'ALJN':'Aligarh', 'GZB':'Ghaziabad', 'BKN':'Bikaner', 'BME':'Barmer', 'JU':'Jodhpur', 'UDZ':'Udaipur', 'RTM':'Ratlam', 'UJN':'Ujjain', 'ST':'Surat', 'BL':'Valsad', 'PUNE':'Pune', 'TVC':'Thiruvananthapuram', 'ERS':'Ernakulam', 'MAQ':'Mangalore', 'MS':'Chennai Egmore', 'AF':'Agra Fort', 'MTJ':'Mathura', 'GWL':'Gwalior', 'JHS':'Jhansi', 'BHUJ':'Bhuj', 'GIMB':'Gandhidham', 'ANND':'Anand', 'ND':'Nadiad', 'BH':'Bharuch', 'NVS':'Navsari', 'BSR':'Vasai Road', 'BVI':'Borivali', 'DDR':'Dadar', 'KYN':'Kalyan', 'NK':'Nashik Road', 'MMR':'Manmad', 'BSL':'Bhusaval', 'AK':'Akola', 'BPQ':'Balharshah', 'SKZR':'Sirpur Kagaznagar', 'MCI':'Manchiryal', 'KZJ':'Kazipet', 'KCG':'Kacheguda', 'MBNR':'Mahbubnagar', 'TEL':'Tenali', 'OGL':'Ongole', 'NLR':'Nellore', 'GDR':'Gudur', 'CGL':'Chengalpattu', 'VM':'Villupuram', 'TJ':'Thanjavur', 'TPJ':'Tiruchirappalli', 'MDU':'Madurai', 'NCJ':'Nagercoil', 'QLN':'Kollam', 'ALLP':'Alappuzha', 'TCR':'Thrissur', 'PGT':'Palakkad', 'CBE':'Coimbatore', 'SA':'Salem', 'JTJ':'Jolarpettai', 'KPD':'Katpadi', 'AJJ':'Arakkonam', 'PER':'Perambur', 'KMU':'Kumbakonam', 'MV':'Mayiladuthurai', 'CDM':'Chidambaram', 'TDPR':'Tirupadripulyur', 'CTC':'Cuttack', 'BHC':'Bhadrak', 'SRC':'Santragachi', 'GMO':'Gomoh', 'KQR':'Koderma', 'MGS':'Mughalsarai', 'BBK':'Barabanki', 'GD':'Gonda', 'BST':'Basti', 'GKP':'Gorakhpur', 'DEOS':'Deoria Sadar', 'DGR':'Durgapur', 'BWN':'Bardhaman', 'VZM':'Vizianagaram', 'SLO':'Samalkot', 'RJY':'Rajahmundry', 'WADI':'Wadi', 'YG':'Yadgir', 'RC':'Raichur', 'GTL':'Guntakal', 'DHNE':'Dhone', 'KRNT':'Kurnool City', 'GWD':'Gadwal', 'PNU':'Palanpur', 'ABR':'Abu Road', 'FA':'Falna', 'MJ':'Marwar Junction', 'AWR':'Alwar', 'SUR':'Solapur', 'GR':'Gulbarga'}
+STATION_MAP = {
+    'NTSK': 'New Tinsukia', 'GHY': 'Guwahati', 'NDLS': 'New Delhi',
+    'HWH': 'Howrah', 'PNBE': 'Patna', 'BSB': 'Varanasi', 'CNB': 'Kanpur Central',
+    'LKO': 'Lucknow', 'DDU': 'Pt. Deen Dayal Upadhyaya', 'GAYA': 'Gaya',
+    'MGS': 'Mughalsarai', 'ASN': 'Asansol', 'DHN': 'Dhanbad', 'SC': 'Secunderabad',
+    'MAS': 'Chennai Central', 'SBC': 'Bengaluru City', 'CSTM': 'Mumbai CSMT',
+    'BCT': 'Mumbai Central', 'PUNE': 'Pune', 'ADI': 'Ahmedabad', 'BRC': 'Vadodara',
+    'JP': 'Jaipur', 'AII': 'Ajmer', 'BPL': 'Bhopal', 'INDB': 'Indore',
+    'JBP': 'Jabalpur', 'NGP': 'Nagpur', 'HYB': 'Hyderabad', 'BZA': 'Vijayawada',
+    'GNT': 'Guntur', 'VSKP': 'Visakhapatnam', 'BBS': 'Bhubaneswar',
+    'KGP': 'Kharagpur', 'KOAA': 'Kolkata', 'NJP': 'New Jalpaiguri',
+    'NBQ': 'New Bongaigaon', 'KYQ': 'Kamakhya', 'DBRG': 'Dibrugarh',
+    'MXN': 'Mariani Junction', 'FKG': 'Furkating', 'JTI': 'Jatinga',
+    'MFP': 'Muzaffarpur', 'KIR': 'Katihar Junction', 'DEL': 'Delhi',
+    'SDAH': 'Sealdah', 'TBM': 'Tambaram', 'YPR': 'Yesvantpur',
+    'SMVB': 'SMVT Bengaluru', 'PRYJ': 'Prayagraj', 'DNR': 'Danapur',
+    'RE': 'Rewari', 'AY': 'Ayodhya', 'MLDT': 'Malda Town', 'NNA': 'Naugachia',
+    'CLG': 'Kahalgaon', 'ROK': 'Rohtak', 'BGP': 'Bhagalpur', 'JMP': 'Jamalpur',
+    'JYG': 'Jaynagar', 'BJU': 'Barauni', 'SPJ': 'Samastipur', 'HJP': 'Hajipur',
+    'PPTA': 'Patliputra', 'ARA': 'Ara', 'BXR': 'Buxar', 'TDL': 'Tundla',
+    'ALJN': 'Aligarh', 'GZB': 'Ghaziabad', 'BKN': 'Bikaner', 'BME': 'Barmer',
+    'JU': 'Jodhpur', 'UDZ': 'Udaipur', 'RTM': 'Ratlam', 'UJN': 'Ujjain',
+    'ST': 'Surat', 'BL': 'Valsad', 'PUNE': 'Pune', 'TVC': 'Thiruvananthapuram',
+    'ERS': 'Ernakulam', 'MAQ': 'Mangalore', 'MS': 'Chennai Egmore',
+    'AF': 'Agra Fort', 'MTJ': 'Mathura', 'GWL': 'Gwalior', 'JHS': 'Jhansi',
+    'BHUJ': 'Bhuj', 'GIMB': 'Gandhidham', 'ANND': 'Anand', 'ND': 'Nadiad',
+    'BH': 'Bharuch', 'NVS': 'Navsari', 'BSR': 'Vasai Road', 'BVI': 'Borivali',
+    'DDR': 'Dadar', 'KYN': 'Kalyan', 'NK': 'Nashik Road', 'MMR': 'Manmad',
+    'BSL': 'Bhusaval', 'AK': 'Akola', 'BPQ': 'Balharshah', 'SKZR': 'Sirpur Kagaznagar',
+    'MCI': 'Manchiryal', 'KZJ': 'Kazipet', 'KCG': 'Kacheguda', 'MBNR': 'Mahbubnagar',
+    'TEL': 'Tenali', 'OGL': 'Ongole', 'NLR': 'Nellore', 'GDR': 'Gudur',
+    'CGL': 'Chengalpattu', 'VM': 'Villupuram', 'TJ': 'Thanjavur', 'TPJ': 'Tiruchirappalli',
+    'MDU': 'Madurai', 'NCJ': 'Nagercoil', 'QLN': 'Kollam', 'ALLP': 'Alappuzha',
+    'TCR': 'Thrissur', 'PGT': 'Palakkad', 'CBE': 'Coimbatore', 'SA': 'Salem',
+    'JTJ': 'Jolarpettai', 'KPD': 'Katpadi', 'AJJ': 'Arakkonam', 'PER': 'Perambur',
+    'KMU': 'Kumbakonam', 'MV': 'Mayiladuthurai', 'CDM': 'Chidambaram',
+    'TDPR': 'Tirupadripulyur', 'CTC': 'Cuttack', 'BHC': 'Bhadrak', 'SRC': 'Santragachi',
+    'GMO': 'Gomoh', 'KQR': 'Koderma', 'MGS': 'Mughalsarai', 'BBK': 'Barabanki',
+    'GD': 'Gonda', 'BST': 'Basti', 'GKP': 'Gorakhpur', 'DEOS': 'Deoria Sadar',
+    'DGR': 'Durgapur', 'BWN': 'Bardhaman', 'VZM': 'Vizianagaram', 'SLO': 'Samalkot',
+    'RJY': 'Rajahmundry', 'WADI': 'Wadi', 'YG': 'Yadgir', 'RC': 'Raichur',
+    'GTL': 'Guntakal', 'DHNE': 'Dhone', 'KRNT': 'Kurnool City', 'GWD': 'Gadwal',
+    'PNU': 'Palanpur', 'ABR': 'Abu Road', 'FA': 'Falna', 'MJ': 'Marwar Junction',
+    'AWR': 'Alwar', 'SUR': 'Solapur', 'GR': 'Gulbarga'
+}
 def get_station(code):
     if not code:
         return ''
@@ -118,7 +165,7 @@ SHEET_CONFIG = {
     "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 1, "doj_col": None}
 }
 
-# ========== UPLOAD & EXTRACTION (simplified for brevity) ==========
+# ========== UPLOAD & EXTRACTION (simplified) ==========
 def upload_to_drive(file_bytes, filename, mime_type):
     try:
         drive_service = init_drive()
@@ -222,24 +269,18 @@ def apply_theme(dark_mode):
         .pro-footer {{ text-align: center; padding: 20px 0 10px; opacity: 0.5; font-size: 0.8rem; border-top: 1px solid {border}; margin-top: 30px; }}
         .stExpander {{ border: 1px solid {border}; border-radius: 8px; background: {card_bg}; }}
         .stExpander .streamlit-expanderHeader {{ color: {text}; }}
+        .stSidebar .sidebar-content {{ background-color: {bg}; }}
+        .stSidebar .sidebar-content .stMarkdown {{ color: {text}; }}
         /* Hide row index column */
         .stDataFrame thead tr th:first-child,
         .stDataFrame tbody tr th:first-child,
         .stDataFrame tbody tr td:first-child {{
             display: none !important;
         }}
-        /* Ensure Select column is visible (it's the second column) */
+        /* Ensure Select column is visible (second column) */
         .stDataFrame thead tr th:nth-child(2),
         .stDataFrame tbody tr td:nth-child(2) {{
             display: table-cell !important;
-        }}
-        @media print {{
-            .stApp {{ background-color: white !important; }}
-            .main .block-container {{ max-width: 100% !important; padding: 0 !important; }}
-            .stMetric, .stDataFrame, .stButton, .stExpander, .stSelectbox, .stTextInput, .stDateInput, .stSidebar, .pro-footer, .stMarkdown {{ display: none !important; }}
-            .print-table {{ display: block !important; width: 100%; border-collapse: collapse; font-size: 10px; }}
-            .print-table th, .print-table td {{ border: 1px solid #000; padding: 4px; text-align: left; white-space: nowrap; }}
-            .print-area {{ display: block !important; }}
         }}
     </style>
     """, unsafe_allow_html=True)
@@ -286,6 +327,65 @@ def share_data(df, sheet_name, selected_rows=None):
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
     return msg, pdf_bytes
 
+# ========== DASHBOARD CHARTS ==========
+def show_dashboard(df, sheet_name):
+    if df.empty:
+        st.info("No data to display charts.")
+        return
+
+    # Metrics
+    total_records = len(df)
+    train_col = next((c for c in df.columns if 'T/N' in c.upper() or 'TRAIN' in c.upper()), None)
+    unique_trains = df[train_col].nunique() if train_col else 0
+    berth_col = next((c for c in df.columns if 'BERTH' in c.upper() or 'T/BERTHS' in c.upper()), None)
+    total_berths = pd.to_numeric(df[berth_col], errors='coerce').sum() if berth_col else 0
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("📊 Total Records", total_records)
+    col2.metric("🚂 Unique Trains", unique_trains)
+    col3.metric("💺 Total Berths", int(total_berths) if total_berths else 0)
+
+    # Pie chart: Train distribution
+    if train_col:
+        fig_pie = px.pie(df, names=train_col, title=f"Train Distribution ({sheet_name})",
+                         hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3)
+        fig_pie.update_layout(height=350)
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    # Histogram: Berths distribution (if numeric)
+    if berth_col:
+        # Convert to numeric, drop NaN
+        berth_vals = pd.to_numeric(df[berth_col], errors='coerce').dropna()
+        if not berth_vals.empty:
+            fig_hist = px.histogram(berth_vals, nbins=10, title="Berths Distribution",
+                                    labels={'value': 'Berths', 'count': 'Frequency'},
+                                    color_discrete_sequence=['#2d7d46'])
+            fig_hist.update_layout(height=350, bargap=0.2)
+            st.plotly_chart(fig_hist, use_container_width=True)
+
+    # Line chart: Trend over DOJ (if DOJ column exists)
+    doj_col = next((c for c in df.columns if 'DOJ' in c.upper()), None)
+    if doj_col:
+        # Parse dates, group by date
+        df_temp = df.copy()
+        df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
+        daily_counts = df_temp.groupby('_date').size().reset_index(name='count')
+        if not daily_counts.empty:
+            fig_line = px.line(daily_counts, x='_date', y='count', title="Daily Records Trend",
+                               labels={'_date': 'Date', 'count': 'Number of Records'},
+                               markers=True, color_discrete_sequence=['#ff6b6b'])
+            fig_line.update_layout(height=350)
+            st.plotly_chart(fig_line, use_container_width=True)
+
+    # Optional: Bar chart for top trains
+    if train_col:
+        top_trains = df[train_col].value_counts().head(10).reset_index()
+        top_trains.columns = ['Train', 'Count']
+        fig_bar = px.bar(top_trains, x='Train', y='Count', title="Top 10 Trains",
+                         color='Count', color_continuous_scale='Viridis')
+        fig_bar.update_layout(height=350)
+        st.plotly_chart(fig_bar, use_container_width=True)
+
 # ========== MAIN APP ==========
 dark_mode = st.sidebar.toggle("🌙 Dark Mode", value=False)
 apply_theme(dark_mode)
@@ -293,7 +393,7 @@ apply_theme(dark_mode)
 st.sidebar.title("⚡ AI EQMS Hub Pro")
 st.sidebar.write(f"📅 {datetime.now().strftime('%d-%m-%Y')}")
 
-# ---- File Upload Sidebar ----
+# ---- File Upload (sidebar) ----
 st.sidebar.subheader("📤 Upload File")
 uploaded_file = st.sidebar.file_uploader("Choose file", type=['png','jpg','jpeg','pdf','mp3','wav','ogg','txt'])
 caption = st.sidebar.text_input("Caption (optional)")
@@ -327,69 +427,110 @@ if st.sidebar.button("🚀 Process & Save", use_container_width=True):
 
 st.sidebar.markdown("---")
 
+# ---- Sheet Selector & Filters ----
+sheet_choice = st.sidebar.selectbox("Select Sheet", list(SHEET_CONFIG.keys()))
+config = SHEET_CONFIG[sheet_choice]
+start_row = config["start_row"]
+
+# Load data
+df = load_sheet_data_cached(sheet_choice, start_row, SHEET_ID)
+if df.empty:
+    st.sidebar.warning(f"No data in {sheet_choice} from row {start_row}.")
+    df = pd.DataFrame()  # empty
+
+# ---- Filters (sidebar) ----
+st.sidebar.subheader("🔍 Filters")
+with st.sidebar.form(key="filter_form"):
+    pnr_filter = st.text_input("PNR (partial)", key=f"pnr_{sheet_choice}")
+    train_filter = st.text_input("Train (partial)", key=f"train_{sheet_choice}")
+    from_date = st.date_input("From DOJ", value=None, key=f"from_{sheet_choice}")
+    to_date = st.date_input("To DOJ", value=None, key=f"to_{sheet_choice}")
+    submitted = st.form_submit_button("Apply Filters")
+    if st.form_submit_button("Clear Filters"):
+        for key in [f"pnr_{sheet_choice}", f"train_{sheet_choice}", f"from_{sheet_choice}", f"to_{sheet_choice}"]:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.rerun()
+
+# ---- Apply Filters ----
+filtered_df = df.copy()
+if not filtered_df.empty:
+    pnr_col_idx = config.get("pnr_col")
+    train_col_idx = config.get("train_col")
+    doj_col_idx = config.get("doj_col")
+
+    if pnr_filter and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
+        col_name = filtered_df.columns[pnr_col_idx]
+        filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(pnr_filter, case=False, na=False)]
+    if train_filter and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
+        col_name = filtered_df.columns[train_col_idx]
+        filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(train_filter, case=False, na=False)]
+    if (from_date or to_date) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
+        col_name = filtered_df.columns[doj_col_idx]
+        try:
+            filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
+            if from_date:
+                filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(from_date)]
+            if to_date:
+                filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(to_date)]
+            filtered_df = filtered_df.drop('_temp', axis=1)
+        except:
+            pass
+
+# ---- Print Button (sidebar) ----
+st.sidebar.subheader("🖨️ Print")
+if st.sidebar.button("Print Sheet", use_container_width=True):
+    # Generate printable table without Select column
+    print_df = filtered_df.copy()
+    if 'Select' in print_df.columns:
+        print_df = print_df.drop('Select', axis=1)
+    html_table = print_df.to_html(index=False, classes='print-table')
+    st.components.v1.html(f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; padding: 20px; }}
+            .print-table {{ width: 100%; border-collapse: collapse; font-size: 10px; }}
+            .print-table th {{ background-color: #2d7d46; color: white; font-weight: bold; padding: 6px; border: 1px solid #000; text-align: center; }}
+            .print-table td {{ padding: 4px; border: 1px solid #000; text-align: left; }}
+            @media print {{
+                body * {{ visibility: visible; }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div id="print-area">
+            {html_table}
+            <p style="text-align:center; margin-top:20px; font-size:12px;">{sheet_choice} Report • {datetime.now().strftime('%d-%m-%Y %H:%M')}</p>
+        </div>
+        <script>
+            window.onload = function() {{
+                window.print();
+            }};
+        </script>
+    </body>
+    </html>
+    """, height=0, scrolling=False)
+
 # ---- Main Area ----
 st.markdown("<div class='pro-title'>🚂 AI EQMS Hub</div>", unsafe_allow_html=True)
 st.markdown("<div class='pro-subtitle'>Enterprise Quality Management – Pro Edition</div>", unsafe_allow_html=True)
 st.markdown("---")
 
-# ---- Sheet Selector ----
-sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()))
-config = SHEET_CONFIG[sheet_choice]
-start_row = config["start_row"]
+# ---- Dashboard Toggle ----
+show_dashboard = st.sidebar.checkbox("📊 Show Dashboard", value=True)
+if show_dashboard and not filtered_df.empty:
+    st.subheader("📊 Dashboard")
+    show_dashboard(filtered_df, sheet_choice)
+else:
+    if filtered_df.empty:
+        st.info("No data available for dashboard.")
 
-# ---- Load Data ----
-df = load_sheet_data_cached(sheet_choice, start_row, SHEET_ID)
-if df.empty:
-    st.warning(f"No data found in {sheet_choice} from row {start_row}. You can add new rows.")
-
-# ---- Total Records ----
-st.metric("📊 Total Records", len(df))
-
-# ---- Filters ----
-with st.expander("🔍 Filters", expanded=False):
-    with st.form(key="filter_form"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            pnr_filter = st.text_input("PNR (partial)", key=f"pnr_{sheet_choice}")
-        with col2:
-            train_filter = st.text_input("Train (partial)", key=f"train_{sheet_choice}")
-        with col3:
-            from_date = st.date_input("From DOJ", value=None, key=f"from_{sheet_choice}")
-            to_date = st.date_input("To DOJ", value=None, key=f"to_{sheet_choice}")
-        submitted = st.form_submit_button("Apply Filters")
-        if st.form_submit_button("Clear Filters"):
-            for key in [f"pnr_{sheet_choice}", f"train_{sheet_choice}", f"from_{sheet_choice}", f"to_{sheet_choice}"]:
-                if key in st.session_state:
-                    del st.session_state[key]
-            st.rerun()
-
-# ---- Apply Filters ----
-filtered_df = df.copy()
-pnr_col_idx = config.get("pnr_col")
-train_col_idx = config.get("train_col")
-doj_col_idx = config.get("doj_col")
-
-if pnr_filter and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
-    col_name = filtered_df.columns[pnr_col_idx]
-    filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(pnr_filter, case=False, na=False)]
-if train_filter and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
-    col_name = filtered_df.columns[train_col_idx]
-    filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(train_filter, case=False, na=False)]
-if (from_date or to_date) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
-    col_name = filtered_df.columns[doj_col_idx]
-    try:
-        filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
-        if from_date:
-            filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(from_date)]
-        if to_date:
-            filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(to_date)]
-        filtered_df = filtered_df.drop('_temp', axis=1)
-    except:
-        pass
-
-# ---- Display Data with Pagination ----
+# ---- Data Table ----
 st.subheader(f"📋 {sheet_choice} – {len(filtered_df)} rows")
 
+# Pagination
 page_size = st.selectbox("Rows per page", [15, 25, 50, 100], index=1, key=f"page_size_{sheet_choice}")
 total_pages = max(1, (len(filtered_df) + page_size - 1) // page_size)
 page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1, key=f"page_{sheet_choice}") - 1
@@ -514,47 +655,12 @@ if not page_df.empty:
             st.markdown(f"**Row {row_num}:** " + " | ".join(links), unsafe_allow_html=True)
 
 else:
-    st.info("No rows on this page. Use 'Add Row' to create new entries.")
+    st.info("No rows on this page.")
 
-# ---- Export & Print ----
-st.subheader("📄 Export & Print")
-col1, col2, col3 = st.columns(3)
+# ---- Export PDF/CSV ----
+st.subheader("📄 Export")
+col1, col2 = st.columns(2)
 with col1:
-    if st.button("🖨️ Print", use_container_width=True):
-        # Generate printable table without Select column
-        print_df = filtered_df.copy()
-        if 'Select' in print_df.columns:
-            print_df = print_df.drop('Select', axis=1)
-        html_table = print_df.to_html(index=False, classes='print-table')
-        # Use components.html to trigger print with proper content
-        st.components.v1.html(f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; padding: 20px; }}
-                .print-table {{ width: 100%; border-collapse: collapse; font-size: 10px; }}
-                .print-table th {{ background-color: #2d7d46; color: white; font-weight: bold; padding: 6px; border: 1px solid #000; text-align: center; }}
-                .print-table td {{ padding: 4px; border: 1px solid #000; text-align: left; }}
-                @media print {{
-                    body * {{ visibility: visible; }}
-                }}
-            </style>
-        </head>
-        <body>
-            <div id="print-area">
-                {html_table}
-                <p style="text-align:center; margin-top:20px; font-size:12px;">{sheet_choice} Report • {datetime.now().strftime('%d-%m-%Y %H:%M')}</p>
-            </div>
-            <script>
-                window.onload = function() {{
-                    window.print();
-                }};
-            </script>
-        </body>
-        </html>
-        """, height=0, scrolling=False)
-with col2:
     try:
         pdf = FPDF('L', 'mm', 'A4')
         pdf.add_page()
@@ -579,11 +685,12 @@ with col2:
         if len(filtered_df) > 200:
             pdf.cell(0, 6, f"... and {len(filtered_df)-200} more rows", ln=True, align='C')
         pdf_bytes = pdf.output(dest='S').encode('latin-1')
-        st.download_button("📥 PDF", data=pdf_bytes, file_name=f"{sheet_choice}.pdf", mime="application/pdf", use_container_width=True)
+        st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}.pdf", mime="application/pdf", use_container_width=True)
     except Exception as e:
         st.warning(f"PDF error: {e}")
-with col3:
+with col2:
     csv = filtered_df.drop('Select', axis=1).to_csv(index=False).encode('utf-8') if 'Select' in filtered_df.columns else filtered_df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 CSV", data=csv, file_name=f"{sheet_choice}.csv", mime="text/csv", use_container_width=True)
+    st.download_button("📥 Download CSV", data=csv, file_name=f"{sheet_choice}.csv", mime="text/csv", use_container_width=True)
 
+# ========== FOOTER ==========
 st.markdown("<div class='pro-footer'>© 2026 AI EQMS Hub Pro – All rights reserved.</div>", unsafe_allow_html=True)
