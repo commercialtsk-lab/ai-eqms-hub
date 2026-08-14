@@ -6,7 +6,7 @@ import base64
 import io
 import time
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import google.generativeai as genai
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -17,9 +17,15 @@ from google.oauth2.service_account import Credentials as GDriveCredentials
 from fpdf import FPDF
 import plotly.express as px
 import plotly.graph_objects as go
+import xlsxwriter
 
 # ========== PAGE CONFIG ==========
-st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title="AI EQMS Hub Pro", 
+    page_icon="🚂", 
+    layout="wide", 
+    initial_sidebar_state="expanded"
+)
 
 # ========== CREDENTIALS ==========
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
@@ -36,10 +42,23 @@ if 'messages' not in st.session_state:
     st.session_state.messages = []
 if 'activity_log' not in st.session_state:
     st.session_state.activity_log = []
-if 'last_upload' not in st.session_state:
-    st.session_state.last_upload = None
+if 'last_action' not in st.session_state:
+    st.session_state.last_action = None
+if 'last_action_data' not in st.session_state:
+    st.session_state.last_action_data = None
+if 'auto_refresh' not in st.session_state:
+    st.session_state.auto_refresh = False
 if 'chat_suggestions' not in st.session_state:
-    st.session_state.chat_suggestions = ["Show me EQ summary", "How many records today?", "Train wise breakup", "Pending EQ requests", "Quota status"]
+    st.session_state.chat_suggestions = [
+        "Show me EQ summary", 
+        "How many records today?", 
+        "Train wise breakup", 
+        "Pending EQ requests", 
+        "Quota status",
+        "PNR status for 1234567890"
+    ]
+if 'undo_stack' not in st.session_state:
+    st.session_state.undo_stack = []
 
 # ========== SERVICES ==========
 @st.cache_resource
@@ -247,7 +266,7 @@ def get_station(code):
     return f"{code} ({STATION_MAP[code]})" if code in STATION_MAP else code
 
 def gemini_universal_parser(input_data, input_type, mime_type, progress_callback=None):
-    """Exact parser from original Telegram bot with progress tracking"""
+    """Exact parser from original Telegram bot"""
     url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}'
     
     system_prompt = """
@@ -510,7 +529,7 @@ def validate_record(record):
     return errors
 
 # ========== SHEET LOADER ==========
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def load_sheet_data_cached(sheet_name, start_row, sheet_id):
     try:
         gc = init_sheets()
@@ -637,18 +656,37 @@ def bulk_import(sheet, file_bytes, file_type):
     except Exception as e:
         return {'error': str(e)}
 
-# ========== THEME ==========
+# ========== THEME WITH PERFECT BUTTON COLORS ==========
 def apply_theme(dark_mode):
     bg = "#0e1117" if dark_mode else "#f8f9fa"
     card_bg = "#1e1e2e" if dark_mode else "#ffffff"
     text_color = "#fafafa" if dark_mode else "#1e1e2e"
     border = "#4a4a5a" if dark_mode else "#d1d5db"
     input_bg = "#2a2a3a" if dark_mode else "#f1f3f4"
+    
+    # Button colors
+    primary_bg = "#1a5a32"  # Dark green
+    primary_hover = "#2d7d46"  # Lighter green
+    primary_text = "#ffffff"  # White text
+    
+    secondary_bg = "#e8f5e9"  # Light green
+    secondary_hover = "#c8e6c9"
+    secondary_text = "#1a5a32"  # Dark green text
+    
+    danger_bg = "#c62828"  # Dark red
+    danger_hover = "#d32f2f"
+    danger_text = "#ffffff"
+    
+    disabled_bg = "#6c757d"  # Grey
+    disabled_text = "#adb5bd"
+    
     st.markdown(f"""
     <style>
+        /* Global */
         .stApp, .main .block-container, .css-1d391kg, .css-18e3th9 {{
             background-color: {bg} !important;
         }}
+        /* All text */
         body, .stMarkdown, p, div, span, h1, h2, h3, h4, h5, h6,
         label, .stTextInput label, .stSelectbox label, .stDateInput label,
         .stNumberInput label, .stTextArea label, .stCheckbox label,
@@ -660,7 +698,6 @@ def apply_theme(dark_mode):
         .stSidebar .sidebar-content, .stSidebar .sidebar-content p,
         .stSidebar .sidebar-content div, .stSidebar .sidebar-content label,
         .stExpander, .stExpander .streamlit-expanderHeader,
-        .stButton button, .stButton button p,
         .stSelectbox, .stSelectbox div, .stSelectbox span,
         .stTextInput, .stTextInput div, .stTextInput span,
         .stDateInput, .stDateInput div, .stDateInput span,
@@ -670,22 +707,74 @@ def apply_theme(dark_mode):
         .stChatInput input, .stChatInput textarea {{
             color: {text_color} !important;
         }}
-        .stButton button {{
-            color: {text_color} !important;
-            background-color: #2d7d46 !important;
+        
+        /* ===== PRIMARY BUTTONS (Green with White Text) ===== */
+        .stButton button, .stButton button p {{
+            background-color: {primary_bg} !important;
+            color: {primary_text} !important;
             border: none !important;
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+            padding: 8px 20px !important;
+            transition: all 0.3s ease !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
         }}
         .stButton button:hover {{
-            background-color: #3a9a5a !important;
-            transform: scale(1.02);
-            transition: all 0.2s;
+            background-color: {primary_hover} !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 12px rgba(45, 125, 70, 0.4) !important;
+            color: {primary_text} !important;
         }}
+        .stButton button:active {{
+            transform: translateY(0px) !important;
+        }}
+        .stButton button:disabled {{
+            background-color: {disabled_bg} !important;
+            color: {disabled_text} !important;
+            cursor: not-allowed !important;
+            transform: none !important;
+            box-shadow: none !important;
+        }}
+        
+        /* ===== SECONDARY BUTTONS (Light Green with Dark Text) ===== */
+        .stButton button[kind="secondary"], 
+        .stButton button.secondary {{
+            background-color: {secondary_bg} !important;
+            color: {secondary_text} !important;
+            border: 1px solid {primary_bg} !important;
+        }}
+        .stButton button[kind="secondary"]:hover,
+        .stButton button.secondary:hover {{
+            background-color: {secondary_hover} !important;
+            color: {secondary_text} !important;
+        }}
+        
+        /* ===== DANGER BUTTONS (Red with White Text) ===== */
+        .stButton button[kind="danger"],
+        .stButton button.danger {{
+            background-color: {danger_bg} !important;
+            color: {danger_text} !important;
+        }}
+        .stButton button[kind="danger"]:hover,
+        .stButton button.danger:hover {{
+            background-color: {danger_hover} !important;
+        }}
+        
+        /* ===== DISABLED BUTTONS ===== */
+        .stButton button:disabled {{
+            background-color: {disabled_bg} !important;
+            color: {disabled_text} !important;
+        }}
+        
+        /* Sidebar */
         .css-1d391kg .sidebar-content .stMarkdown,
         .css-1d391kg .sidebar-content p,
         .css-1d391kg .sidebar-content div,
         .css-1d391kg .sidebar-content label {{
             color: {text_color} !important;
         }}
+        
+        /* Cards & Containers */
         .stMetric, .stExpander, .stDataFrame, .stTable,
         .stChatMessage, .stChatInput, .stSelectbox, .stTextInput,
         .stDateInput, .stNumberInput, .stTextArea {{
@@ -696,11 +785,13 @@ def apply_theme(dark_mode):
             background: #2d7d46 !important;
             color: white !important;
         }}
+        /* Borders */
         .stExpander, .stDataFrame, .stTable, .stMetric,
         .stChatMessage, .stChatInput {{
             border: 1px solid {border} !important;
             border-radius: 8px !important;
         }}
+        /* Input fields */
         .stTextInput input, .stSelectbox select, .stDateInput input,
         .stNumberInput input, .stTextArea textarea {{
             background-color: {input_bg} !important;
@@ -728,32 +819,6 @@ def apply_theme(dark_mode):
         }}
         .stProgress .st-bo {{
             background-color: #2d7d46 !important;
-        }}
-        .tooltip {{
-            position: relative;
-            display: inline-block;
-            cursor: help;
-        }}
-        .tooltip .tooltiptext {{
-            visibility: hidden;
-            width: 200px;
-            background-color: {card_bg};
-            color: {text_color};
-            text-align: center;
-            border-radius: 6px;
-            padding: 5px;
-            border: 1px solid {border};
-            position: absolute;
-            z-index: 1;
-            bottom: 125%;
-            left: 50%;
-            margin-left: -100px;
-            opacity: 0;
-            transition: opacity 0.3s;
-        }}
-        .tooltip:hover .tooltiptext {{
-            visibility: visible;
-            opacity: 1;
         }}
         .suggestion-chip {{
             display: inline-block;
@@ -900,7 +965,7 @@ def chat_with_gemini_stream(messages):
 Sheet Summary:
 {context}
 
-Remember the conversation. Answer based on sheet data if relevant, otherwise use general knowledge. Be helpful, concise, and friendly."""
+Remember the conversation. Answer based on sheet data if relevant, otherwise use general knowledge. Be helpful, concise, and friendly. Use emojis where appropriate. Keep responses conversational."""
         full_prompt = system_prompt + "\n\nConversation:\n"
         for msg in messages:
             full_prompt += f"{msg['role']}: {msg['content']}\n"
@@ -927,12 +992,19 @@ apply_theme(dark_mode)
 
 sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
 st.sidebar.markdown("---")
-st.sidebar.markdown(f'<a href="{sheet_link}" target="_blank"><button style="padding:10px 20px; background:#2d7d46; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold; width:100%;">📊 Open Google Sheet</button></a>', unsafe_allow_html=True)
+st.sidebar.markdown(f'<a href="{sheet_link}" target="_blank"><button style="padding:10px 20px; background:#1a5a32; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold; width:100%;">📊 Open Google Sheet</button></a>', unsafe_allow_html=True)
 st.sidebar.markdown("---")
 
 st.sidebar.title("⚡ AI EQMS Hub Pro")
 st.sidebar.write(f"📅 {datetime.now().strftime('%d-%m-%Y')}")
-st.sidebar.write(f"📊 Total Records: {len(load_sheet_data_cached('EQ', 5, SHEET_ID)) if not load_sheet_data_cached('EQ', 5, SHEET_ID).empty else 0}")
+
+# ---- Total Records ----
+try:
+    eq_df = load_sheet_data_cached('EQ', 5, SHEET_ID)
+    total_records = len(eq_df) if not eq_df.empty else 0
+    st.sidebar.write(f"📊 Total Records: {total_records}")
+except:
+    st.sidebar.write("📊 Total Records: ?")
 
 # ---- File Upload ----
 st.sidebar.subheader("📤 Upload File")
@@ -1008,7 +1080,7 @@ if st.sidebar.button("🚀 Process & Save", use_container_width=True):
                             
                             drive_res = upload_to_drive(file_bytes, uploaded_file.name, uploaded_file.type)
                             if drive_res['success']:
-                                st.sidebar.success(f"📁 File uploaded to Drive: {drive_res['url'][:50]}...")
+                                st.sidebar.success(f"📁 File uploaded to Drive")
                             else:
                                 st.sidebar.error(f"Drive upload error: {drive_res['error']}")
                             
@@ -1109,7 +1181,7 @@ if not filtered_df.empty:
 
 # ---- Print ----
 st.sidebar.subheader("🖨️ Print")
-if st.sidebar.button("Print Sheet", use_container_width=True, help="Print current filtered data"):
+if st.sidebar.button("🖨️ Print Sheet", use_container_width=True, help="Print current filtered data"):
     print_df = filtered_df.copy()
     if 'Select' in print_df.columns:
         print_df = print_df.drop('Select', axis=1)
@@ -1191,7 +1263,7 @@ if view == "💬 Chat with Gemini":
         st.session_state.messages.append({"role": "assistant", "content": full_response if isinstance(response, str) else full_response})
         log_activity("Chat", f"Asked: {prompt[:50]}...")
 
-    if st.button("Clear Chat", use_container_width=True):
+    if st.button("🗑️ Clear Chat", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
