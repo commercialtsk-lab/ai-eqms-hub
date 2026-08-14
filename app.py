@@ -15,24 +15,19 @@ from googleapiclient.http import MediaIoBaseUpload
 from google.oauth2.service_account import Credentials as GDriveCredentials
 from fpdf import FPDF
 
-# ==================== PAGE CONFIG ====================
-st.set_page_config(
-    page_title="AI EQMS Hub",
-    page_icon="🚂",
-    layout="wide"
-)
+st.set_page_config(page_title="AI EQMS Hub", page_icon="🚂", layout="wide")
 
-# ==================== CREDENTIALS ====================
+# ========== CREDENTIALS ==========
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
 GSPREAD_CREDENTIALS = st.secrets.get("GSPREAD_CREDENTIALS")
 if not GEMINI_API_KEY or not GSPREAD_CREDENTIALS:
-    st.error("❌ Missing credentials in secrets!")
+    st.error("❌ Missing credentials!")
     st.stop()
 
 SHEET_ID = "1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI"
 DRIVE_FOLDER_ID = "1H1gf8WqfoTYFT_pU9WfIDLrHg-NpuUSI"
 
-# ==================== INIT SERVICES ====================
+# ========== SERVICES ==========
 @st.cache_resource
 def init_gemini():
     genai.configure(api_key=GEMINI_API_KEY)
@@ -52,7 +47,7 @@ def init_drive():
     creds = GDriveCredentials.from_service_account_info(creds_dict, scopes=scopes)
     return build('drive', 'v3', credentials=creds)
 
-# ==================== HELPER FUNCTIONS ====================
+# ========== HELPERS ==========
 def clean_pnr(pnr):
     if not pnr:
         return ''
@@ -74,58 +69,14 @@ def parse_date(date_str):
         return f"{day}-{month}-{year}"
     return date_str
 
-STATION_MAP = {
-    'NTSK': 'New Tinsukia', 'GHY': 'Guwahati', 'NDLS': 'New Delhi',
-    'HWH': 'Howrah', 'PNBE': 'Patna', 'BSB': 'Varanasi', 'CNB': 'Kanpur Central',
-    'LKO': 'Lucknow', 'DDU': 'Pt. Deen Dayal Upadhyaya', 'GAYA': 'Gaya',
-    'MGS': 'Mughalsarai', 'ASN': 'Asansol', 'DHN': 'Dhanbad', 'SC': 'Secunderabad',
-    'MAS': 'Chennai Central', 'SBC': 'Bengaluru City', 'CSTM': 'Mumbai CSMT',
-    'BCT': 'Mumbai Central', 'PUNE': 'Pune', 'ADI': 'Ahmedabad', 'BRC': 'Vadodara',
-    'JP': 'Jaipur', 'AII': 'Ajmer', 'BPL': 'Bhopal', 'INDB': 'Indore',
-    'JBP': 'Jabalpur', 'NGP': 'Nagpur', 'HYB': 'Hyderabad', 'BZA': 'Vijayawada',
-    'GNT': 'Guntur', 'VSKP': 'Visakhapatnam', 'BBS': 'Bhubaneswar',
-    'KGP': 'Kharagpur', 'KOAA': 'Kolkata', 'NJP': 'New Jalpaiguri',
-    'NBQ': 'New Bongaigaon', 'KYQ': 'Kamakhya', 'DBRG': 'Dibrugarh',
-    'MXN': 'Mariani Junction', 'FKG': 'Furkating', 'JTI': 'Jatinga',
-    'MFP': 'Muzaffarpur', 'KIR': 'Katihar Junction', 'DEL': 'Delhi',
-    'SDAH': 'Sealdah', 'TBM': 'Tambaram', 'YPR': 'Yesvantpur',
-    'SMVB': 'SMVT Bengaluru', 'PRYJ': 'Prayagraj', 'DNR': 'Danapur',
-    'RE': 'Rewari', 'AY': 'Ayodhya', 'MLDT': 'Malda Town', 'NNA': 'Naugachia',
-    'CLG': 'Kahalgaon', 'ROK': 'Rohtak', 'BGP': 'Bhagalpur', 'JMP': 'Jamalpur',
-    'JYG': 'Jaynagar', 'BJU': 'Barauni', 'SPJ': 'Samastipur', 'HJP': 'Hajipur',
-    'PPTA': 'Patliputra', 'ARA': 'Ara', 'BXR': 'Buxar', 'TDL': 'Tundla',
-    'ALJN': 'Aligarh', 'GZB': 'Ghaziabad', 'BKN': 'Bikaner', 'BME': 'Barmer',
-    'JU': 'Jodhpur', 'UDZ': 'Udaipur', 'RTM': 'Ratlam', 'UJN': 'Ujjain',
-    'ST': 'Surat', 'BL': 'Valsad', 'PUNE': 'Pune', 'TVC': 'Thiruvananthapuram',
-    'ERS': 'Ernakulam', 'MAQ': 'Mangalore', 'MS': 'Chennai Egmore',
-    'AF': 'Agra Fort', 'MTJ': 'Mathura', 'GWL': 'Gwalior', 'JHS': 'Jhansi',
-    'BHUJ': 'Bhuj', 'GIMB': 'Gandhidham', 'ANND': 'Anand', 'ND': 'Nadiad',
-    'BH': 'Bharuch', 'NVS': 'Navsari', 'BSR': 'Vasai Road', 'BVI': 'Borivali',
-    'DDR': 'Dadar', 'KYN': 'Kalyan', 'NK': 'Nashik Road', 'MMR': 'Manmad',
-    'BSL': 'Bhusaval', 'AK': 'Akola', 'BPQ': 'Balharshah', 'SKZR': 'Sirpur Kagaznagar',
-    'MCI': 'Manchiryal', 'KZJ': 'Kazipet', 'KCG': 'Kacheguda', 'MBNR': 'Mahbubnagar',
-    'TEL': 'Tenali', 'OGL': 'Ongole', 'NLR': 'Nellore', 'GDR': 'Gudur',
-    'CGL': 'Chengalpattu', 'VM': 'Villupuram', 'TJ': 'Thanjavur', 'TPJ': 'Tiruchirappalli',
-    'MDU': 'Madurai', 'NCJ': 'Nagercoil', 'QLN': 'Kollam', 'ALLP': 'Alappuzha',
-    'TCR': 'Thrissur', 'PGT': 'Palakkad', 'CBE': 'Coimbatore', 'SA': 'Salem',
-    'JTJ': 'Jolarpettai', 'KPD': 'Katpadi', 'AJJ': 'Arakkonam', 'PER': 'Perambur',
-    'KMU': 'Kumbakonam', 'MV': 'Mayiladuthurai', 'CDM': 'Chidambaram',
-    'TDPR': 'Tirupadripulyur', 'CTC': 'Cuttack', 'BHC': 'Bhadrak', 'SRC': 'Santragachi',
-    'GMO': 'Gomoh', 'KQR': 'Koderma', 'MGS': 'Mughalsarai', 'BBK': 'Barabanki',
-    'GD': 'Gonda', 'BST': 'Basti', 'GKP': 'Gorakhpur', 'DEOS': 'Deoria Sadar',
-    'DGR': 'Durgapur', 'BWN': 'Bardhaman', 'VZM': 'Vizianagaram', 'SLO': 'Samalkot',
-    'RJY': 'Rajahmundry', 'WADI': 'Wadi', 'YG': 'Yadgir', 'RC': 'Raichur',
-    'GTL': 'Guntakal', 'DHNE': 'Dhone', 'KRNT': 'Kurnool City', 'GWD': 'Gadwal',
-    'PNU': 'Palanpur', 'ABR': 'Abu Road', 'FA': 'Falna', 'MJ': 'Marwar Junction',
-    'AWR': 'Alwar', 'SUR': 'Solapur', 'GR': 'Gulbarga'
-}
+STATION_MAP = {'NTSK':'New Tinsukia', 'GHY':'Guwahati', 'NDLS':'New Delhi', 'HWH':'Howrah', 'PNBE':'Patna', 'BSB':'Varanasi', 'CNB':'Kanpur Central', 'LKO':'Lucknow', 'DDU':'Pt. Deen Dayal Upadhyaya', 'GAYA':'Gaya', 'MGS':'Mughalsarai', 'ASN':'Asansol', 'DHN':'Dhanbad', 'SC':'Secunderabad', 'MAS':'Chennai Central', 'SBC':'Bengaluru City', 'CSTM':'Mumbai CSMT', 'BCT':'Mumbai Central', 'PUNE':'Pune', 'ADI':'Ahmedabad', 'BRC':'Vadodara', 'JP':'Jaipur', 'AII':'Ajmer', 'BPL':'Bhopal', 'INDB':'Indore', 'JBP':'Jabalpur', 'NGP':'Nagpur', 'HYB':'Hyderabad', 'BZA':'Vijayawada', 'GNT':'Guntur', 'VSKP':'Visakhapatnam', 'BBS':'Bhubaneswar', 'KGP':'Kharagpur', 'KOAA':'Kolkata', 'NJP':'New Jalpaiguri', 'NBQ':'New Bongaigaon', 'KYQ':'Kamakhya', 'DBRG':'Dibrugarh', 'MXN':'Mariani Junction', 'FKG':'Furkating', 'JTI':'Jatinga', 'MFP':'Muzaffarpur', 'KIR':'Katihar Junction', 'DEL':'Delhi', 'SDAH':'Sealdah', 'TBM':'Tambaram', 'YPR':'Yesvantpur', 'SMVB':'SMVT Bengaluru', 'PRYJ':'Prayagraj', 'DNR':'Danapur', 'RE':'Rewari', 'AY':'Ayodhya', 'MLDT':'Malda Town', 'NNA':'Naugachia', 'CLG':'Kahalgaon', 'ROK':'Rohtak', 'BGP':'Bhagalpur', 'JMP':'Jamalpur', 'JYG':'Jaynagar', 'BJU':'Barauni', 'SPJ':'Samastipur', 'HJP':'Hajipur', 'PPTA':'Patliputra', 'ARA':'Ara', 'BXR':'Buxar', 'TDL':'Tundla', 'ALJN':'Aligarh', 'GZB':'Ghaziabad', 'BKN':'Bikaner', 'BME':'Barmer', 'JU':'Jodhpur', 'UDZ':'Udaipur', 'RTM':'Ratlam', 'UJN':'Ujjain', 'ST':'Surat', 'BL':'Valsad', 'PUNE':'Pune', 'TVC':'Thiruvananthapuram', 'ERS':'Ernakulam', 'MAQ':'Mangalore', 'MS':'Chennai Egmore', 'AF':'Agra Fort', 'MTJ':'Mathura', 'GWL':'Gwalior', 'JHS':'Jhansi', 'BHUJ':'Bhuj', 'GIMB':'Gandhidham', 'ANND':'Anand', 'ND':'Nadiad', 'BH':'Bharuch', 'NVS':'Navsari', 'BSR':'Vasai Road', 'BVI':'Borivali', 'DDR':'Dadar', 'KYN':'Kalyan', 'NK':'Nashik Road', 'MMR':'Manmad', 'BSL':'Bhusaval', 'AK':'Akola', 'BPQ':'Balharshah', 'SKZR':'Sirpur Kagaznagar', 'MCI':'Manchiryal', 'KZJ':'Kazipet', 'KCG':'Kacheguda', 'MBNR':'Mahbubnagar', 'TEL':'Tenali', 'OGL':'Ongole', 'NLR':'Nellore', 'GDR':'Gudur', 'CGL':'Chengalpattu', 'VM':'Villupuram', 'TJ':'Thanjavur', 'TPJ':'Tiruchirappalli', 'MDU':'Madurai', 'NCJ':'Nagercoil', 'QLN':'Kollam', 'ALLP':'Alappuzha', 'TCR':'Thrissur', 'PGT':'Palakkad', 'CBE':'Coimbatore', 'SA':'Salem', 'JTJ':'Jolarpettai', 'KPD':'Katpadi', 'AJJ':'Arakkonam', 'PER':'Perambur', 'KMU':'Kumbakonam', 'MV':'Mayiladuthurai', 'CDM':'Chidambaram', 'TDPR':'Tirupadripulyur', 'CTC':'Cuttack', 'BHC':'Bhadrak', 'SRC':'Santragachi', 'GMO':'Gomoh', 'KQR':'Koderma', 'MGS':'Mughalsarai', 'BBK':'Barabanki', 'GD':'Gonda', 'BST':'Basti', 'GKP':'Gorakhpur', 'DEOS':'Deoria Sadar', 'DGR':'Durgapur', 'BWN':'Bardhaman', 'VZM':'Vizianagaram', 'SLO':'Samalkot', 'RJY':'Rajahmundry', 'WADI':'Wadi', 'YG':'Yadgir', 'RC':'Raichur', 'GTL':'Guntakal', 'DHNE':'Dhone', 'KRNT':'Kurnool City', 'GWD':'Gadwal', 'PNU':'Palanpur', 'ABR':'Abu Road', 'FA':'Falna', 'MJ':'Marwar Junction', 'AWR':'Alwar', 'SUR':'Solapur', 'GR':'Gulbarga'}
 def get_station(code):
     if not code:
         return ''
     code = code.upper().strip()
     return f"{code} ({STATION_MAP[code]})" if code in STATION_MAP else code
 
-# ==================== SHEET LOADER ====================
+# ========== SHEET LOADER ==========
 @st.cache_data(ttl=60)
 def load_sheet_data_cached(sheet_name, start_row, sheet_id):
     try:
@@ -157,7 +108,7 @@ def load_sheet_data_cached(sheet_name, start_row, sheet_id):
         st.error(f"Error loading {sheet_name}: {e}")
         return pd.DataFrame()
 
-# ==================== SHEET CONFIG ====================
+# ========== SHEET CONFIG ==========
 SHEET_CONFIG = {
     "EQ": {"start_row": 5, "pnr_col": 2, "train_col": 6, "doj_col": 8},
     "DATA": {"start_row": 3, "pnr_col": 2, "train_col": 6, "doj_col": 8},
@@ -167,7 +118,7 @@ SHEET_CONFIG = {
     "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 1, "doj_col": None}
 }
 
-# ==================== UPLOAD & EXTRACTION ====================
+# ========== UPLOAD & EXTRACTION (simplified for brevity) ==========
 def upload_to_drive(file_bytes, filename, mime_type):
     try:
         drive_service = init_drive()
@@ -252,7 +203,7 @@ def save_to_sheet(sheet, records):
     except Exception as e:
         return {'error': str(e)}
 
-# ==================== THEME ====================
+# ========== THEME ==========
 def apply_theme(dark_mode):
     bg = "#0e1117" if dark_mode else "#f8f9fa"
     card_bg = "#262730" if dark_mode else "#ffffff"
@@ -271,18 +222,13 @@ def apply_theme(dark_mode):
         .pro-footer {{ text-align: center; padding: 20px 0 10px; opacity: 0.5; font-size: 0.8rem; border-top: 1px solid {border}; margin-top: 30px; }}
         .stExpander {{ border: 1px solid {border}; border-radius: 8px; background: {card_bg}; }}
         .stExpander .streamlit-expanderHeader {{ color: {text}; }}
-        /* Hide row index column that Streamlit adds by default */
+        /* Hide row index column */
         .stDataFrame thead tr th:first-child,
         .stDataFrame tbody tr th:first-child,
         .stDataFrame tbody tr td:first-child {{
             display: none !important;
         }}
-        .stDataFrame .dataframe thead tr th:first-child,
-        .stDataFrame .dataframe tbody tr th:first-child,
-        .stDataFrame .dataframe tbody tr td:first-child {{
-            display: none !important;
-        }}
-        /* But keep the Select column visible */
+        /* Ensure Select column is visible (it's the second column) */
         .stDataFrame thead tr th:nth-child(2),
         .stDataFrame tbody tr td:nth-child(2) {{
             display: table-cell !important;
@@ -298,7 +244,7 @@ def apply_theme(dark_mode):
     </style>
     """, unsafe_allow_html=True)
 
-# ==================== SHARE FUNCTION ====================
+# ========== SHARE FUNCTION ==========
 def share_data(df, sheet_name, selected_rows=None):
     if selected_rows is not None and len(selected_rows) > 0:
         data = df.iloc[selected_rows]
@@ -322,6 +268,8 @@ def share_data(df, sheet_name, selected_rows=None):
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 8)
     cols = data.columns.tolist()
+    if 'Select' in cols:
+        cols.remove('Select')
     col_width = 260 / len(cols) if len(cols) > 0 else 20
     for col in cols:
         pdf.cell(col_width, 7, str(col)[:12].encode('latin-1', 'ignore').decode('latin-1'), border=1, align='C')
@@ -338,7 +286,7 @@ def share_data(df, sheet_name, selected_rows=None):
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
     return msg, pdf_bytes
 
-# ==================== MAIN APP ====================
+# ========== MAIN APP ==========
 dark_mode = st.sidebar.toggle("🌙 Dark Mode", value=False)
 apply_theme(dark_mode)
 
@@ -450,9 +398,8 @@ end_idx = min(start_idx + page_size, len(filtered_df))
 page_df = filtered_df.iloc[start_idx:end_idx]
 
 if not page_df.empty:
-    # Add Select column at the beginning
+    # Add Select column
     page_df.insert(0, "Select", False)
-    
     edited_page = st.data_editor(
         page_df,
         use_container_width=True,
@@ -460,11 +407,9 @@ if not page_df.empty:
         column_config={"Select": st.column_config.CheckboxColumn("Select", width="small")},
         key=f"editor_{sheet_choice}_{page}"
     )
-    
-    # Get selected rows
     selected_indices = edited_page[edited_page["Select"]].index.tolist()
-    
-    # ---- Action Buttons ----
+
+    # ---- Buttons ----
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         if st.button("💾 Save Edits", use_container_width=True):
@@ -576,28 +521,39 @@ st.subheader("📄 Export & Print")
 col1, col2, col3 = st.columns(3)
 with col1:
     if st.button("🖨️ Print", use_container_width=True):
-        # Remove Select column from print view
+        # Generate printable table without Select column
         print_df = filtered_df.copy()
         if 'Select' in print_df.columns:
             print_df = print_df.drop('Select', axis=1)
         html_table = print_df.to_html(index=False, classes='print-table')
-        st.markdown(f"""
-        <style>
-            .print-table {{ width: 100%; border-collapse: collapse; font-size: 10px; font-family: Arial, sans-serif; }}
-            .print-table th {{ background-color: #2d7d46; color: white; font-weight: bold; padding: 6px; border: 1px solid #000; text-align: center; }}
-            .print-table td {{ padding: 4px; border: 1px solid #000; text-align: left; }}
-            @media print {{
-                body * {{ visibility: hidden; }}
-                .print-area, .print-area * {{ visibility: visible; }}
-                .print-area {{ position: absolute; left: 0; top: 0; width: 100%; }}
-            }}
-        </style>
-        <div class="print-area">
-            {html_table}
-            <p style="text-align:center; margin-top:20px; font-size:12px;">{sheet_choice} Report • {datetime.now().strftime('%d-%m-%Y %H:%M')}</p>
-        </div>
-        <script>window.print();</script>
-        """, unsafe_allow_html=True)
+        # Use components.html to trigger print with proper content
+        st.components.v1.html(f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; padding: 20px; }}
+                .print-table {{ width: 100%; border-collapse: collapse; font-size: 10px; }}
+                .print-table th {{ background-color: #2d7d46; color: white; font-weight: bold; padding: 6px; border: 1px solid #000; text-align: center; }}
+                .print-table td {{ padding: 4px; border: 1px solid #000; text-align: left; }}
+                @media print {{
+                    body * {{ visibility: visible; }}
+                }}
+            </style>
+        </head>
+        <body>
+            <div id="print-area">
+                {html_table}
+                <p style="text-align:center; margin-top:20px; font-size:12px;">{sheet_choice} Report • {datetime.now().strftime('%d-%m-%Y %H:%M')}</p>
+            </div>
+            <script>
+                window.onload = function() {{
+                    window.print();
+                }};
+            </script>
+        </body>
+        </html>
+        """, height=0, scrolling=False)
 with col2:
     try:
         pdf = FPDF('L', 'mm', 'A4')
@@ -630,5 +586,4 @@ with col3:
     csv = filtered_df.drop('Select', axis=1).to_csv(index=False).encode('utf-8') if 'Select' in filtered_df.columns else filtered_df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 CSV", data=csv, file_name=f"{sheet_choice}.csv", mime="text/csv", use_container_width=True)
 
-# ==================== FOOTER ====================
 st.markdown("<div class='pro-footer'>© 2026 AI EQMS Hub Pro – All rights reserved.</div>", unsafe_allow_html=True)
