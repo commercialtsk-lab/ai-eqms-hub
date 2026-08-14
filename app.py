@@ -17,7 +17,6 @@ from fpdf import FPDF
 import plotly.express as px
 import plotly.graph_objects as go
 
-# ========== PAGE CONFIG ==========
 st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide")
 
 # ========== CREDENTIALS ==========
@@ -327,14 +326,13 @@ def share_data(df, sheet_name, selected_rows=None):
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
     return msg, pdf_bytes
 
-# ========== DASHBOARD CHARTS (Fixed) ==========
+# ========== DASHBOARD CHARTS ==========
 def show_dashboard(df, sheet_name):
     if df.empty:
         st.info("No data to display charts.")
         return
 
     try:
-        # Metrics
         total_records = len(df)
         train_col = next((c for c in df.columns if 'T/N' in c.upper() or 'TRAIN' in c.upper()), None)
         unique_trains = df[train_col].nunique() if train_col and train_col in df else 0
@@ -349,14 +347,12 @@ def show_dashboard(df, sheet_name):
         col2.metric("🚂 Unique Trains", unique_trains)
         col3.metric("💺 Total Berths", int(total_berths) if total_berths else 0)
 
-        # Pie chart: Train distribution
         if train_col and train_col in df and df[train_col].notna().any():
             fig_pie = px.pie(df, names=train_col, title=f"Train Distribution ({sheet_name})",
                              hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3)
             fig_pie.update_layout(height=350)
             st.plotly_chart(fig_pie, use_container_width=True)
 
-        # Histogram: Berths
         if berth_col and berth_col in df:
             berth_vals = pd.to_numeric(df[berth_col], errors='coerce').dropna()
             if not berth_vals.empty:
@@ -366,7 +362,6 @@ def show_dashboard(df, sheet_name):
                 fig_hist.update_layout(height=350, bargap=0.2)
                 st.plotly_chart(fig_hist, use_container_width=True)
 
-        # Line chart: Daily trend
         doj_col = next((c for c in df.columns if 'DOJ' in c.upper()), None)
         if doj_col and doj_col in df:
             df_temp = df.copy()
@@ -379,7 +374,6 @@ def show_dashboard(df, sheet_name):
                 fig_line.update_layout(height=350)
                 st.plotly_chart(fig_line, use_container_width=True)
 
-        # Bar chart: Top 10 trains
         if train_col and train_col in df:
             top_trains = df[train_col].value_counts().head(10).reset_index()
             top_trains.columns = ['Train', 'Count']
@@ -432,52 +426,73 @@ if st.sidebar.button("🚀 Process & Save", use_container_width=True):
 
 st.sidebar.markdown("---")
 
-# ---- Sheet Selector & Filters ----
+# ---- Sheet Selector ----
 sheet_choice = st.sidebar.selectbox("Select Sheet", list(SHEET_CONFIG.keys()))
 config = SHEET_CONFIG[sheet_choice]
 start_row = config["start_row"]
 
-# Load data
-df = load_sheet_data_cached(sheet_choice, start_row, SHEET_ID)
-if df.empty:
-    st.sidebar.warning(f"No data in {sheet_choice} from row {start_row}.")
-    df = pd.DataFrame()  # empty
-
-# ---- Filters (sidebar) ----
+# ---- Filters (sidebar) with session state management ----
 st.sidebar.subheader("🔍 Filters")
-with st.sidebar.form(key="filter_form"):
-    pnr_filter = st.text_input("PNR (partial)", key=f"pnr_{sheet_choice}")
-    train_filter = st.text_input("Train (partial)", key=f"train_{sheet_choice}")
-    from_date = st.date_input("From DOJ", value=None, key=f"from_{sheet_choice}")
-    to_date = st.date_input("To DOJ", value=None, key=f"to_{sheet_choice}")
-    submitted = st.form_submit_button("Apply Filters")
-    if st.form_submit_button("Clear Filters"):
-        for key in [f"pnr_{sheet_choice}", f"train_{sheet_choice}", f"from_{sheet_choice}", f"to_{sheet_choice}"]:
-            if key in st.session_state:
-                del st.session_state[key]
+
+# Initialize session state for filters if not exist
+if 'pnr_filter' not in st.session_state:
+    st.session_state.pnr_filter = ''
+if 'train_filter' not in st.session_state:
+    st.session_state.train_filter = ''
+if 'from_date' not in st.session_state:
+    st.session_state.from_date = None
+if 'to_date' not in st.session_state:
+    st.session_state.to_date = None
+
+# Input widgets bound to session state
+pnr_val = st.sidebar.text_input("PNR (partial)", value=st.session_state.pnr_filter, key="pnr_input")
+train_val = st.sidebar.text_input("Train (partial)", value=st.session_state.train_filter, key="train_input")
+from_val = st.sidebar.date_input("From DOJ", value=st.session_state.from_date, key="from_input")
+to_val = st.sidebar.date_input("To DOJ", value=st.session_state.to_date, key="to_input")
+
+# Buttons: Apply and Clear
+col1, col2 = st.sidebar.columns(2)
+with col1:
+    if st.button("Apply Filters", use_container_width=True):
+        # Store current input values in session state
+        st.session_state.pnr_filter = pnr_val
+        st.session_state.train_filter = train_val
+        st.session_state.from_date = from_val
+        st.session_state.to_date = to_val
+        st.rerun()
+with col2:
+    if st.button("Clear Filters", use_container_width=True):
+        # Reset session state to defaults
+        st.session_state.pnr_filter = ''
+        st.session_state.train_filter = ''
+        st.session_state.from_date = None
+        st.session_state.to_date = None
         st.rerun()
 
-# ---- Apply Filters ----
-filtered_df = df.copy()
+# ---- Apply Filters using session state values ----
+filtered_df = load_sheet_data_cached(sheet_choice, start_row, SHEET_ID)
+if filtered_df.empty:
+    filtered_df = pd.DataFrame()
+
 if not filtered_df.empty:
     pnr_col_idx = config.get("pnr_col")
     train_col_idx = config.get("train_col")
     doj_col_idx = config.get("doj_col")
 
-    if pnr_filter and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
+    if st.session_state.pnr_filter and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
         col_name = filtered_df.columns[pnr_col_idx]
-        filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(pnr_filter, case=False, na=False)]
-    if train_filter and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
+        filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.pnr_filter, case=False, na=False)]
+    if st.session_state.train_filter and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
         col_name = filtered_df.columns[train_col_idx]
-        filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(train_filter, case=False, na=False)]
-    if (from_date or to_date) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
+        filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_filter, case=False, na=False)]
+    if (st.session_state.from_date or st.session_state.to_date) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
         col_name = filtered_df.columns[doj_col_idx]
         try:
             filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
-            if from_date:
-                filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(from_date)]
-            if to_date:
-                filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(to_date)]
+            if st.session_state.from_date:
+                filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(st.session_state.from_date)]
+            if st.session_state.to_date:
+                filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_date)]
             filtered_df = filtered_df.drop('_temp', axis=1)
         except:
             pass
@@ -485,7 +500,6 @@ if not filtered_df.empty:
 # ---- Print Button (sidebar) ----
 st.sidebar.subheader("🖨️ Print")
 if st.sidebar.button("Print Sheet", use_container_width=True):
-    # Generate printable table without Select column
     print_df = filtered_df.copy()
     if 'Select' in print_df.columns:
         print_df = print_df.drop('Select', axis=1)
@@ -518,184 +532,184 @@ if st.sidebar.button("Print Sheet", use_container_width=True):
     </html>
     """, height=0, scrolling=False)
 
-# ---- Main Area ----
+st.sidebar.markdown("---")
+
+# ---- Navigation: Data Table or Dashboard ----
+view = st.sidebar.radio("View", ["Data Table", "Dashboard"])
+
 st.markdown("<div class='pro-title'>🚂 AI EQMS Hub</div>", unsafe_allow_html=True)
 st.markdown("<div class='pro-subtitle'>Enterprise Quality Management – Pro Edition</div>", unsafe_allow_html=True)
 st.markdown("---")
 
-# ---- Dashboard Toggle ----
-show_dashboard_flag = st.sidebar.checkbox("📊 Show Dashboard", value=True)
-if show_dashboard_flag and not filtered_df.empty:
+# ---- Show Dashboard or Data Table ----
+if view == "Dashboard":
     st.subheader("📊 Dashboard")
     show_dashboard(filtered_df, sheet_choice)
 else:
+    # ---- Data Table ----
+    st.subheader(f"📋 {sheet_choice} – {len(filtered_df)} rows")
+
     if filtered_df.empty:
-        st.info("No data available for dashboard.")
+        st.info("No data to display.")
+    else:
+        # Pagination
+        page_size = st.selectbox("Rows per page", [15, 25, 50, 100], index=1, key="page_size")
+        total_pages = max(1, (len(filtered_df) + page_size - 1) // page_size)
+        page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1, key="page") - 1
+        start_idx = page * page_size
+        end_idx = min(start_idx + page_size, len(filtered_df))
+        page_df = filtered_df.iloc[start_idx:end_idx]
 
-# ---- Data Table ----
-st.subheader(f"📋 {sheet_choice} – {len(filtered_df)} rows")
+        if page_df.empty:
+            st.info("No rows on this page.")
+        else:
+            page_df.insert(0, "Select", False)
+            edited_page = st.data_editor(
+                page_df,
+                use_container_width=True,
+                height=400,
+                column_config={"Select": st.column_config.CheckboxColumn("Select", width="small")},
+                key="data_editor"
+            )
+            selected_indices = edited_page[edited_page["Select"]].index.tolist()
 
-# Pagination
-page_size = st.selectbox("Rows per page", [15, 25, 50, 100], index=1, key=f"page_size_{sheet_choice}")
-total_pages = max(1, (len(filtered_df) + page_size - 1) // page_size)
-page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1, key=f"page_{sheet_choice}") - 1
-start_idx = page * page_size
-end_idx = min(start_idx + page_size, len(filtered_df))
-page_df = filtered_df.iloc[start_idx:end_idx]
-
-if not page_df.empty:
-    # Add Select column
-    page_df.insert(0, "Select", False)
-    edited_page = st.data_editor(
-        page_df,
-        use_container_width=True,
-        height=400,
-        column_config={"Select": st.column_config.CheckboxColumn("Select", width="small")},
-        key=f"editor_{sheet_choice}_{page}"
-    )
-    selected_indices = edited_page[edited_page["Select"]].index.tolist()
-
-    # ---- Buttons ----
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        if st.button("💾 Save Edits", use_container_width=True):
-            try:
-                gc = init_sheets()
-                sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                data_to_update = edited_page.drop("Select", axis=1).values.tolist()
-                if data_to_update:
-                    num_cols = len(data_to_update[0])
-                    start_row_update = start_row + start_idx
-                    end_row_update = start_row_update + len(data_to_update) - 1
-                    col_letter = chr(64 + num_cols)
-                    range_name = f"A{start_row_update}:{col_letter}{end_row_update}"
-                    sheet.update(range_name, data_to_update)
-                    st.toast("✅ Changes saved!", icon="💾")
-                    st.cache_data.clear()
-                    time.sleep(0.5)
-                    st.rerun()
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                if st.button("💾 Save Edits", use_container_width=True):
+                    try:
+                        gc = init_sheets()
+                        sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                        data_to_update = edited_page.drop("Select", axis=1).values.tolist()
+                        if data_to_update:
+                            num_cols = len(data_to_update[0])
+                            start_row_update = start_row + start_idx
+                            end_row_update = start_row_update + len(data_to_update) - 1
+                            col_letter = chr(64 + num_cols)
+                            range_name = f"A{start_row_update}:{col_letter}{end_row_update}"
+                            sheet.update(range_name, data_to_update)
+                            st.toast("✅ Changes saved!", icon="💾")
+                            st.cache_data.clear()
+                            time.sleep(0.5)
+                            st.rerun()
+                        else:
+                            st.warning("No data to save.")
+                    except Exception as e:
+                        if "429" in str(e):
+                            st.error("❌ Write quota exceeded. Wait a minute and try again.")
+                        else:
+                            st.error(f"Save error: {e}")
+            with col2:
+                if st.button("➕ Add Row", use_container_width=True):
+                    try:
+                        gc = init_sheets()
+                        sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                        all_data = sheet.get_all_values()
+                        num_cols = len(all_data[0]) if all_data else 1
+                        blank_row = [''] * num_cols
+                        if len(all_data) >= start_row:
+                            next_sn = len(all_data) - start_row + 2
+                            blank_row[0] = next_sn
+                        sheet.append_row(blank_row)
+                        st.toast("✅ Blank row added!", icon="➕")
+                        st.cache_data.clear()
+                        time.sleep(0.5)
+                        st.rerun()
+                    except Exception as e:
+                        if "429" in str(e):
+                            st.error("❌ Write quota exceeded. Wait a minute and try again.")
+                        else:
+                            st.error(f"Add row error: {e}")
+            with col3:
+                if selected_indices:
+                    if st.button("🗑️ Delete Selected", use_container_width=True):
+                        actual_rows = [start_row + idx for idx in selected_indices]
+                        try:
+                            gc = init_sheets()
+                            sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                            for row_num in sorted(actual_rows, reverse=True):
+                                sheet.delete_rows(row_num)
+                            st.toast(f"✅ {len(selected_indices)} rows deleted!", icon="🗑️")
+                            st.cache_data.clear()
+                            time.sleep(0.5)
+                            st.rerun()
+                        except Exception as e:
+                            if "429" in str(e):
+                                st.error("❌ Write quota exceeded. Wait a minute and try again.")
+                            else:
+                                st.error(f"Delete error: {e}")
                 else:
-                    st.warning("No data to save.")
-            except Exception as e:
-                if "429" in str(e):
-                    st.error("❌ Write quota exceeded. Wait a minute and try again.")
+                    st.button("🗑️ Delete Selected", disabled=True, use_container_width=True)
+            with col4:
+                if selected_indices:
+                    if st.button("📤 Share Selected", use_container_width=True):
+                        msg, pdf_bytes = share_data(edited_page, sheet_choice, selected_indices)
+                        st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}_selected.pdf", mime="application/pdf")
+                        wa_link = f"https://api.whatsapp.com/send?text={msg.replace(' ', '%20')}"
+                        st.markdown(f'<a href="{wa_link}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
                 else:
-                    st.error(f"Save error: {e}")
-    with col2:
-        if st.button("➕ Add Row", use_container_width=True):
-            try:
-                gc = init_sheets()
-                sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                all_data = sheet.get_all_values()
-                num_cols = len(all_data[0]) if all_data else 1
-                blank_row = [''] * num_cols
-                if len(all_data) >= start_row:
-                    next_sn = len(all_data) - start_row + 2
-                    blank_row[0] = next_sn
-                sheet.append_row(blank_row)
-                st.toast("✅ Blank row added!", icon="➕")
-                st.cache_data.clear()
-                time.sleep(0.5)
-                st.rerun()
-            except Exception as e:
-                if "429" in str(e):
-                    st.error("❌ Write quota exceeded. Wait a minute and try again.")
-                else:
-                    st.error(f"Add row error: {e}")
-    with col3:
-        if selected_indices:
-            if st.button("🗑️ Delete Selected", use_container_width=True):
-                actual_rows = [start_row + idx for idx in selected_indices]
+                    st.button("📤 Share Selected", disabled=True, use_container_width=True)
+
+            # Quick Links
+            st.subheader("🔗 Quick Links")
+            col_indices = {'X': 23, 'Y': 24, 'Z': 25, 'AA': 26}
+            for idx, row in filtered_df.iterrows():
+                links = []
+                for label, col_idx in col_indices.items():
+                    if len(filtered_df.columns) > col_idx:
+                        col_name = filtered_df.columns[col_idx]
+                        val = row[col_name]
+                        if isinstance(val, str) and 'HYPERLINK' in val:
+                            url_match = re.search(r'HYPERLINK\("([^"]+)"', val)
+                            if url_match:
+                                url = url_match.group(1)
+                                if label == 'X':
+                                    links.append(f'<a href="{url}" target="_blank">View</a>')
+                                elif label == 'Y':
+                                    links.append(f'<a href="{url}&print=true" target="_blank">Print</a>')
+                                elif label == 'Z':
+                                    links.append('📝 Hover')
+                                elif label == 'AA':
+                                    links.append(f'<a href="{url}" target="_blank">PNR</a>')
+                        elif label == 'Z' and val and not isinstance(val, str):
+                            links.append(f'📝 {str(val)[:20]}')
+                if links:
+                    row_num = idx + 1
+                    st.markdown(f"**Row {row_num}:** " + " | ".join(links), unsafe_allow_html=True)
+
+            # Export PDF/CSV
+            st.subheader("📄 Export")
+            col1, col2 = st.columns(2)
+            with col1:
                 try:
-                    gc = init_sheets()
-                    sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                    for row_num in sorted(actual_rows, reverse=True):
-                        sheet.delete_rows(row_num)
-                    st.toast(f"✅ {len(selected_indices)} rows deleted!", icon="🗑️")
-                    st.cache_data.clear()
-                    time.sleep(0.5)
-                    st.rerun()
+                    pdf = FPDF('L', 'mm', 'A4')
+                    pdf.add_page()
+                    pdf.set_font("Arial", 'B', 14)
+                    pdf.cell(0, 10, f"{sheet_choice} Report", ln=True, align='C')
+                    pdf.ln(5)
+                    pdf.set_font("Arial", 'B', 8)
+                    cols = filtered_df.columns.tolist()
+                    if 'Select' in cols:
+                        cols.remove('Select')
+                    col_width = 260 / len(cols) if len(cols) > 0 else 20
+                    for col in cols:
+                        pdf.cell(col_width, 7, str(col)[:12].encode('latin-1', 'ignore').decode('latin-1'), border=1, align='C')
+                    pdf.ln()
+                    pdf.set_font("Arial", '', 7)
+                    for _, row in filtered_df.head(200).iterrows():
+                        for col in cols:
+                            val = str(row[col])[:15] if pd.notna(row[col]) else ''
+                            val_safe = val.encode('latin-1', 'ignore').decode('latin-1')
+                            pdf.cell(col_width, 6, val_safe, border=1, align='L')
+                        pdf.ln()
+                    if len(filtered_df) > 200:
+                        pdf.cell(0, 6, f"... and {len(filtered_df)-200} more rows", ln=True, align='C')
+                    pdf_bytes = pdf.output(dest='S').encode('latin-1')
+                    st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}.pdf", mime="application/pdf", use_container_width=True)
                 except Exception as e:
-                    if "429" in str(e):
-                        st.error("❌ Write quota exceeded. Wait a minute and try again.")
-                    else:
-                        st.error(f"Delete error: {e}")
-        else:
-            st.button("🗑️ Delete Selected", disabled=True, use_container_width=True)
-    with col4:
-        if selected_indices:
-            if st.button("📤 Share Selected", use_container_width=True):
-                msg, pdf_bytes = share_data(edited_page, sheet_choice, selected_indices)
-                st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}_selected.pdf", mime="application/pdf")
-                wa_link = f"https://api.whatsapp.com/send?text={msg.replace(' ', '%20')}"
-                st.markdown(f'<a href="{wa_link}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
-        else:
-            st.button("📤 Share Selected", disabled=True, use_container_width=True)
-
-    # ---- Quick Links ----
-    st.subheader("🔗 Quick Links")
-    col_indices = {'X': 23, 'Y': 24, 'Z': 25, 'AA': 26}
-    for idx, row in filtered_df.iterrows():
-        links = []
-        for label, col_idx in col_indices.items():
-            if len(filtered_df.columns) > col_idx:
-                col_name = filtered_df.columns[col_idx]
-                val = row[col_name]
-                if isinstance(val, str) and 'HYPERLINK' in val:
-                    url_match = re.search(r'HYPERLINK\("([^"]+)"', val)
-                    if url_match:
-                        url = url_match.group(1)
-                        if label == 'X':
-                            links.append(f'<a href="{url}" target="_blank">View</a>')
-                        elif label == 'Y':
-                            links.append(f'<a href="{url}&print=true" target="_blank">Print</a>')
-                        elif label == 'Z':
-                            links.append('📝 Hover')
-                        elif label == 'AA':
-                            links.append(f'<a href="{url}" target="_blank">PNR</a>')
-                elif label == 'Z' and val and not isinstance(val, str):
-                    links.append(f'📝 {str(val)[:20]}')
-        if links:
-            row_num = idx + 1
-            st.markdown(f"**Row {row_num}:** " + " | ".join(links), unsafe_allow_html=True)
-
-else:
-    st.info("No rows on this page.")
-
-# ---- Export PDF/CSV ----
-st.subheader("📄 Export")
-col1, col2 = st.columns(2)
-with col1:
-    try:
-        pdf = FPDF('L', 'mm', 'A4')
-        pdf.add_page()
-        pdf.set_font("Arial", 'B', 14)
-        pdf.cell(0, 10, f"{sheet_choice} Report", ln=True, align='C')
-        pdf.ln(5)
-        pdf.set_font("Arial", 'B', 8)
-        cols = filtered_df.columns.tolist()
-        if 'Select' in cols:
-            cols.remove('Select')
-        col_width = 260 / len(cols) if len(cols) > 0 else 20
-        for col in cols:
-            pdf.cell(col_width, 7, str(col)[:12].encode('latin-1', 'ignore').decode('latin-1'), border=1, align='C')
-        pdf.ln()
-        pdf.set_font("Arial", '', 7)
-        for _, row in filtered_df.head(200).iterrows():
-            for col in cols:
-                val = str(row[col])[:15] if pd.notna(row[col]) else ''
-                val_safe = val.encode('latin-1', 'ignore').decode('latin-1')
-                pdf.cell(col_width, 6, val_safe, border=1, align='L')
-            pdf.ln()
-        if len(filtered_df) > 200:
-            pdf.cell(0, 6, f"... and {len(filtered_df)-200} more rows", ln=True, align='C')
-        pdf_bytes = pdf.output(dest='S').encode('latin-1')
-        st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}.pdf", mime="application/pdf", use_container_width=True)
-    except Exception as e:
-        st.warning(f"PDF error: {e}")
-with col2:
-    csv = filtered_df.drop('Select', axis=1).to_csv(index=False).encode('utf-8') if 'Select' in filtered_df.columns else filtered_df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download CSV", data=csv, file_name=f"{sheet_choice}.csv", mime="text/csv", use_container_width=True)
+                    st.warning(f"PDF error: {e}")
+            with col2:
+                csv = filtered_df.drop('Select', axis=1).to_csv(index=False).encode('utf-8') if 'Select' in filtered_df.columns else filtered_df.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Download CSV", data=csv, file_name=f"{sheet_choice}.csv", mime="text/csv", use_container_width=True)
 
 # ========== FOOTER ==========
 st.markdown("<div class='pro-footer'>© 2026 AI EQMS Hub Pro – All rights reserved.</div>", unsafe_allow_html=True)
