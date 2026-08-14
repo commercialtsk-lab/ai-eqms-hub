@@ -4,6 +4,7 @@ import json
 import re
 import base64
 import io
+import time
 from datetime import datetime
 import google.generativeai as genai
 import gspread
@@ -74,7 +75,6 @@ def parse_date(date_str):
         return f"{day}-{month}-{year}"
     return date_str
 
-# Station map (shortened – include full in real deployment)
 STATION_MAP = {
     'NTSK': 'New Tinsukia', 'GHY': 'Guwahati', 'NDLS': 'New Delhi',
     'HWH': 'Howrah', 'PNBE': 'Patna', 'BSB': 'Varanasi', 'CNB': 'Kanpur Central',
@@ -126,11 +126,12 @@ def get_station(code):
     code = code.upper().strip()
     return f"{code} ({STATION_MAP[code]})" if code in STATION_MAP else code
 
-# ==================== SHEET LOADER ====================
-def load_sheet_data(sheet_name, start_row):
+# ==================== SHEET LOADER WITH CACHE ====================
+@st.cache_data(ttl=60)  # Cache data for 60 seconds to reduce read quota
+def load_sheet_data_cached(sheet_name, start_row, sheet_id):
     try:
         gc = init_sheets()
-        sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_name)
+        sheet = gc.open_by_key(sheet_id).worksheet(sheet_name)
         all_data = sheet.get_all_values()
         if len(all_data) < start_row:
             return pd.DataFrame()
@@ -161,13 +162,13 @@ def load_sheet_data(sheet_name, start_row):
 SHEET_CONFIG = {
     "EQ": {"start_row": 5, "pnr_col": 2, "train_col": 6, "doj_col": 8},
     "DATA": {"start_row": 3, "pnr_col": 2, "train_col": 6, "doj_col": 8},
-    "FINAL": {"start_row": 6, "pnr_col": 8, "train_col": 2, "doj_col": 13},  # row 6
+    "FINAL": {"start_row": 6, "pnr_col": 8, "train_col": 2, "doj_col": 13},
     "DATA2": {"start_row": 4, "pnr_col": 8, "train_col": 2, "doj_col": 13},
     "EMAIL_DATA": {"start_row": 2, "pnr_col": 8, "train_col": 9, "doj_col": 12},
     "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 1, "doj_col": None}
 }
 
-# ==================== UPLOAD & EXTRACTION (same as before) ====================
+# ==================== UPLOAD & EXTRACTION (unchanged) ====================
 def upload_to_drive(file_bytes, filename, mime_type):
     try:
         drive_service = init_drive()
@@ -247,6 +248,7 @@ def save_to_sheet(sheet, records):
                    now, rec.get('APPLICATION_DATE',''), rec.get('RAILWAY_ZONE',''), rec.get('PREFERENCE','General')]
             sheet.append_row(row)
             saved += 1
+            time.sleep(0.2)  # small delay to avoid hitting write quota
         return {'saved': saved}
     except Exception as e:
         return {'error': str(e)}
@@ -276,7 +278,7 @@ def apply_theme(dark_mode):
     </style>
     """, unsafe_allow_html=True)
 
-# ==================== SHARE FUNCTION (Unicode‑safe) ====================
+# ==================== SHARE FUNCTION ====================
 def share_data(df, sheet_name, selected_rows=None):
     if selected_rows is not None and len(selected_rows) > 0:
         data = df.iloc[selected_rows]
@@ -368,11 +370,11 @@ sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()))
 config = SHEET_CONFIG[sheet_choice]
 start_row = config["start_row"]
 
-# Load data
-df = load_sheet_data(sheet_choice, start_row)
+# Load data with cache
+df = load_sheet_data_cached(sheet_choice, start_row, SHEET_ID)
 if df.empty:
-    st.warning(f"No data found in {sheet_choice} from row {start_row}.")
-    st.stop()
+    st.warning(f"No data found in {sheet_choice} from row {start_row}. You can add new rows.")
+    # Still allow adding rows
 
 # ---- Total Records ----
 st.metric("📊 Total Records", len(df))
@@ -442,43 +444,63 @@ if not page_df.empty:
     )
     selected_indices = edited_page[edited_page["Select"]].index.tolist()
 
-    # ---- Buttons for actions ----
+    # ---- Buttons ----
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         if st.button("💾 Save Edits", use_container_width=True):
             try:
                 gc = init_sheets()
                 sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                # Update each row in the current page
-                for i, (orig_idx, row) in enumerate(edited_page.iterrows()):
-                    actual_row = start_row + start_idx + i
-                    # Drop the "Select" column
-                    row_data = row.drop("Select").tolist()
-                    for col_idx, val in enumerate(row_data, start=1):
-                        sheet.update_cell(actual_row, col_idx, val)
-                st.toast("✅ Changes saved!", icon="💾")
-                st.rerun()
+                # Prepare data for batch update (all rows in current page)
+                # We need to convert edited_page (without Select column) to list of lists
+                data_to_update = edited_page.drop("Select", axis=1).values.tolist()
+                # Determine range: rows from start_row+start_idx to start_row+start_idx+len(data_to_update)-1
+                # and columns from 1 to len(data_to_update[0])
+                num_cols = len(data_to_update[0]) if data_to_update else 0
+                if data_to_update:
+                    start_row_update = start_row + start_idx
+                    end_row_update = start_row_update + len(data_to_update) - 1
+                    # Use update with range
+                    sheet.update(
+                        f'A{start_row_update}:{chr(65 + num_cols - 1)}{end_row_update}',
+                        data_to_update
+                    )
+                    st.toast("✅ Changes saved!", icon="💾")
+                    # Invalidate cache to reload fresh data
+                    st.cache_data.clear()
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.warning("No data to save.")
             except Exception as e:
-                st.error(f"Save error: {e}")
+                if "429" in str(e):
+                    st.error("❌ Google Sheets write quota exceeded. Please wait a minute and try again.")
+                else:
+                    st.error(f"Save error: {e}")
     with col2:
         if st.button("➕ Add Row", use_container_width=True):
-            # Append a blank row to the sheet
             try:
                 gc = init_sheets()
                 sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                # Get number of columns
+                # Get current sheet data to determine number of columns
                 all_data = sheet.get_all_values()
                 num_cols = len(all_data[0]) if all_data else 1
                 blank_row = [''] * num_cols
-                # Set S/N to next number
+                # Set S/N
                 if len(all_data) >= start_row:
                     next_sn = len(all_data) - start_row + 2
                     blank_row[0] = next_sn
                 sheet.append_row(blank_row)
                 st.toast("✅ Blank row added!", icon="➕")
+                # Invalidate cache
+                st.cache_data.clear()
+                time.sleep(0.5)
                 st.rerun()
             except Exception as e:
-                st.error(f"Add row error: {e}")
+                if "429" in str(e):
+                    st.error("❌ Google Sheets write quota exceeded. Please wait a minute and try again.")
+                else:
+                    st.error(f"Add row error: {e}")
     with col3:
         if selected_indices:
             if st.button("🗑️ Delete Selected", use_container_width=True):
@@ -489,9 +511,14 @@ if not page_df.empty:
                     for row_num in sorted(actual_rows, reverse=True):
                         sheet.delete_rows(row_num)
                     st.toast(f"✅ {len(selected_indices)} rows deleted!", icon="🗑️")
+                    st.cache_data.clear()
+                    time.sleep(0.5)
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Delete error: {e}")
+                    if "429" in str(e):
+                        st.error("❌ Google Sheets write quota exceeded. Please wait a minute and try again.")
+                    else:
+                        st.error(f"Delete error: {e}")
         else:
             st.button("🗑️ Delete Selected", disabled=True, use_container_width=True)
     with col4:
@@ -505,15 +532,14 @@ if not page_df.empty:
             st.button("📤 Share Selected", disabled=True, use_container_width=True)
     with col5:
         if selected_indices:
-            # Print selected file (from Y or X column)
+            # Print selected file
             row_idx = selected_indices[0]
             y_col = None
             x_col = None
-            # Find Y and X columns by position (24=Y, 23=X)
             if len(edited_page.columns) > 24:
-                y_col = edited_page.columns[24]  # column Y
+                y_col = edited_page.columns[24]  # Y
             if len(edited_page.columns) > 23:
-                x_col = edited_page.columns[23]  # column X
+                x_col = edited_page.columns[23]  # X
             file_url = None
             if y_col and y_col in edited_page.columns:
                 link_val = edited_page.loc[row_idx, y_col]
@@ -537,7 +563,6 @@ if not page_df.empty:
 
     # ---- Show clickable links for X, Y, Z, AA ----
     st.subheader("🔗 Quick Links")
-    # Identify columns X (24), Y (25), Z (26), AA (27) if they exist
     col_indices = {'X': 23, 'Y': 24, 'Z': 25, 'AA': 26}
     for idx, row in filtered_df.iterrows():
         links = []
@@ -554,20 +579,17 @@ if not page_df.empty:
                         elif label == 'Y':
                             links.append(f'<a href="{url}&print=true" target="_blank">Print</a>')
                         elif label == 'Z':
-                            # Tooltip is note, not a link; we can show the note
-                            # We'll just show the note text (we can't display it easily here)
                             links.append('📝 Hover')
                         elif label == 'AA':
                             links.append(f'<a href="{url}" target="_blank">PNR</a>')
                 elif label == 'Z' and val and not isinstance(val, str):
-                    # Z may contain note text (not a hyperlink)
                     links.append(f'📝 {str(val)[:20]}')
         if links:
             row_num = idx + 1
             st.markdown(f"**Row {row_num}:** " + " | ".join(links), unsafe_allow_html=True)
 
 else:
-    st.info("No rows on this page.")
+    st.info("No rows on this page. Use 'Add Row' to create new entries.")
 
 # ---- Export Options ----
 st.subheader("📄 Export & Share")
