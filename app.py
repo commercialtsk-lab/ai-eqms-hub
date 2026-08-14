@@ -17,7 +17,6 @@ from google.oauth2.service_account import Credentials as GDriveCredentials
 from fpdf import FPDF
 import plotly.express as px
 import plotly.graph_objects as go
-import xlsxwriter
 
 # ========== PAGE CONFIG ==========
 st.set_page_config(
@@ -78,7 +77,7 @@ def init_drive():
     creds = GDriveCredentials.from_service_account_info(creds_dict, scopes=scopes)
     return build('drive', 'v3', credentials=creds)
 
-# ========== EXACT PARSER FUNCTIONS ==========
+# ========== HELPER FUNCTIONS ==========
 def clean_pnr(pnr):
     if not pnr:
         return ''
@@ -113,8 +112,6 @@ def smart_detect_warrant(text):
     patterns = [
         r'IC[-_\s]*(\d{2,4})',
         r'WARRANT\s*NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
-        r'WARRANT\s*NUMBER\s*[:#]?\s*([A-Z0-9\-]+)',
-        r'W[\/\-]?NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
         r'MP[-_\s]*(\d{2,4})',
         r'MLA[-_\s]*(\d{2,4})'
     ]
@@ -129,35 +126,18 @@ def smart_detect_warrant(text):
 def smart_detect_rail_board(text):
     if not text:
         return {'isRailBoard': False}
-    text = str(text).upper().replace('\\s+', ' ')
-    patterns = [
-        r'RAIL\s*BOARD',
-        r'OFFICE\s*OF\s*(?:THE\s*)?HON\'?BLE\s*MINISTER\s*RAILWAYS',
-        r'OFFICE\s*OF\s*(?:THE\s*)?HONOURABLE\s*MINISTER\s*RAILWAYS',
-        r'MINISTER\s*RAILWAYS',
-        r'MINISTRY\s*OF\s*RAILWAYS',
-        r'RAIL\s*MANTRI',
-        r'RAIL\s*BHAWAN'
-    ]
+    text = str(text).upper()
+    patterns = [r'RAIL\s*BOARD', r'MINISTER\s*RAILWAYS', r'RAIL\s*MANTRI', r'RAIL\s*BHAWAN']
     for pattern in patterns:
         if re.search(pattern, text):
             return {'isRailBoard': True}
-    keywords = ['MINISTER', 'RAILWAYS', 'RAILWAY', 'HONBLE', "HON'BLE", 'RAIL MANTRI', 'OFFICE', 'RAIL', 'BOARD']
-    score = sum(1 for kw in keywords if kw in text)
-    if score >= 4:
-        return {'isRailBoard': True}
     return {'isRailBoard': False}
 
 def smart_detect_diary(text):
     if not text:
         return {'diary': '', 'found': False}
     text = str(text).upper()
-    patterns = [
-        r'DIARY\s*NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)',
-        r'DIARY\s*NUMBER\s*[:#]?\s*([A-Z0-9\/\-]+)',
-        r'D\/?NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)',
-        r'NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)'
-    ]
+    patterns = [r'DIARY\s*NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)', r'NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)']
     for pattern in patterns:
         match = re.search(pattern, text)
         if match:
@@ -527,7 +507,6 @@ def save_to_sheet(sheet, records):
                     existing_pnrs.append(pnr)
         saved = 0
         skipped = 0
-        validation_errors = []
         for rec in records:
             pnr = clean_pnr(rec.get('PNR', ''))
             if not pnr or pnr in existing_pnrs:
@@ -544,27 +523,29 @@ def save_to_sheet(sheet, records):
             existing_pnrs.append(pnr)
             saved += 1
             time.sleep(0.15)
-        return {'saved': saved, 'skipped': skipped, 'validation_errors': validation_errors}
+        return {'saved': saved, 'skipped': skipped}
     except Exception as e:
         return {'error': str(e)}
 
-# ========== THEME ==========
+# ========== THEME (FULL DARK MODE) ==========
 def apply_theme(dark_mode):
     if dark_mode:
-        bg = "#0e1117"
-        card_bg = "#1e1e2e"
-        text_color = "#fafafa"
-        border = "#4a4a5a"
+        bg = "#0a0a0a"
+        card_bg = "#1a1a2e"
+        text_color = "#ffffff"
+        text_secondary = "#cccccc"
+        border = "#333344"
         input_bg = "#2a2a3a"
         primary_bg = "#1a5a32"
         primary_hover = "#2d7d46"
         primary_text = "#ffffff"
-        secondary_bg = "#2d2d3a"
+        secondary_bg = "#2a2a3a"
         secondary_text = "#e0e0e0"
     else:
         bg = "#f8f9fa"
         card_bg = "#ffffff"
         text_color = "#1e1e2e"
+        text_secondary = "#555555"
         border = "#d1d5db"
         input_bg = "#f1f3f4"
         primary_bg = "#1a5a32"
@@ -575,9 +556,13 @@ def apply_theme(dark_mode):
     
     st.markdown(f"""
     <style>
-        .stApp, .main .block-container, .css-1d391kg, .css-18e3th9 {{
+        /* Full App Background */
+        .stApp, .main .block-container, .css-1d391kg, .css-18e3th9,
+        .stSidebar, .sidebar-content, .css-1d391kg .sidebar-content {{
             background-color: {bg} !important;
         }}
+        
+        /* All Text */
         body, .stMarkdown, p, div, span, h1, h2, h3, h4, h5, h6,
         label, .stTextInput label, .stSelectbox label, .stDateInput label,
         .stNumberInput label, .stTextArea label, .stCheckbox label,
@@ -598,6 +583,8 @@ def apply_theme(dark_mode):
         .stChatInput input, .stChatInput textarea {{
             color: {text_color} !important;
         }}
+        
+        /* Buttons */
         .stButton button, .stButton button p {{
             background-color: {primary_bg} !important;
             color: {primary_text} !important;
@@ -606,7 +593,6 @@ def apply_theme(dark_mode):
             font-weight: 600 !important;
             padding: 8px 20px !important;
             transition: all 0.3s ease !important;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
         }}
         .stButton button:hover {{
             background-color: {primary_hover} !important;
@@ -614,27 +600,33 @@ def apply_theme(dark_mode):
             box-shadow: 0 4px 12px rgba(45, 125, 70, 0.4) !important;
         }}
         .stButton button:disabled {{
-            background-color: #6c757d !important;
-            color: #adb5bd !important;
+            background-color: #555555 !important;
+            color: #999999 !important;
             cursor: not-allowed !important;
-            transform: none !important;
-            box-shadow: none !important;
         }}
+        
+        /* Cards & Containers */
         .stMetric, .stExpander, .stDataFrame, .stTable,
         .stChatMessage, .stChatInput, .stSelectbox, .stTextInput,
         .stDateInput, .stNumberInput, .stTextArea {{
             background-color: {card_bg} !important;
             border-color: {border} !important;
         }}
+        
+        /* Data Editor */
         .stDataFrame thead th {{
             background: {primary_bg} !important;
             color: white !important;
         }}
-        .stExpander, .stDataFrame, .stTable, .stMetric,
-        .stChatMessage, .stChatInput {{
-            border: 1px solid {border} !important;
-            border-radius: 8px !important;
+        .stDataFrame tbody td {{
+            background-color: {card_bg} !important;
+            color: {text_color} !important;
         }}
+        .stDataFrame tbody tr:hover {{
+            background-color: {secondary_bg} !important;
+        }}
+        
+        /* Input Fields */
         .stTextInput input, .stSelectbox select, .stDateInput input,
         .stNumberInput input, .stTextArea textarea {{
             background-color: {input_bg} !important;
@@ -642,10 +634,21 @@ def apply_theme(dark_mode):
             border: 1px solid {border} !important;
             border-radius: 6px !important;
         }}
+        
+        /* Borders */
+        .stExpander, .stDataFrame, .stTable, .stMetric,
+        .stChatMessage, .stChatInput {{
+            border: 1px solid {border} !important;
+            border-radius: 8px !important;
+        }}
+        
+        /* Footer */
         .pro-footer {{
-            color: {text_color} !important;
+            color: {text_secondary} !important;
             border-top: 1px solid {border} !important;
         }}
+        
+        /* Hide row index */
         .stDataFrame thead tr th:first-child,
         .stDataFrame tbody tr th:first-child,
         .stDataFrame tbody tr td:first-child {{
@@ -655,14 +658,20 @@ def apply_theme(dark_mode):
         .stDataFrame tbody tr td:nth-child(2) {{
             display: table-cell !important;
         }}
+        
+        /* Toast */
         .stToast {{
             background: {card_bg} !important;
             border-left: 4px solid #2d7d46 !important;
             color: {text_color} !important;
         }}
+        
+        /* Progress Bar */
         .stProgress .st-bo {{
             background-color: #2d7d46 !important;
         }}
+        
+        /* Action Box */
         .action-box {{
             background: {card_bg};
             border: 1px solid {border};
@@ -670,6 +679,8 @@ def apply_theme(dark_mode):
             padding: 16px;
             margin-bottom: 16px;
         }}
+        
+        /* Suggestion Chips */
         .suggestion-chip {{
             display: inline-block;
             background: {secondary_bg};
@@ -685,28 +696,44 @@ def apply_theme(dark_mode):
             background: {primary_bg};
             color: white;
         }}
+        
+        /* Sidebar Toggle Button */
         .sidebar-toggle {{
-            cursor: pointer;
-            padding: 8px 12px;
             background: {primary_bg};
             color: white;
-            border-radius: 8px;
             border: none;
+            border-radius: 8px;
+            padding: 8px 16px;
             font-weight: 600;
             width: 100%;
+            cursor: pointer;
         }}
         .sidebar-toggle:hover {{
             background: {primary_hover};
         }}
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar {{
+            width: 6px;
+            height: 6px;
+        }}
+        ::-webkit-scrollbar-track {{
+            background: {bg};
+        }}
+        ::-webkit-scrollbar-thumb {{
+            background: {primary_bg};
+            border-radius: 10px;
+        }}
+        ::-webkit-scrollbar-thumb:hover {{
+            background: {primary_hover};
+        }}
+        
         @media print {{
             .stApp, .main .block-container {{
                 background-color: white !important;
             }}
             .stMetric, .stButton, .stExpander, .stSidebar, .action-box {{
                 display: none !important;
-            }}
-            .stDataFrame {{
-                display: block !important;
             }}
         }}
     </style>
@@ -724,10 +751,6 @@ def share_data(df, sheet_name, selected_rows=None):
     else:
         data = df
         msg = f"📊 {sheet_name} – Total {len(data)} rows\n"
-        train_col = next((c for c in data.columns if 'T/N' in c.upper() or 'TRAIN' in c.upper()), None)
-        if train_col:
-            train_counts = data[train_col].value_counts().head(5)
-            msg += "Top trains:\n" + "\n".join([f"{k}: {v}" for k,v in train_counts.items()])
 
     pdf = FPDF('L', 'mm', 'A4')
     pdf.add_page()
@@ -749,8 +772,6 @@ def share_data(df, sheet_name, selected_rows=None):
             val_safe = val.encode('latin-1', 'ignore').decode('latin-1')
             pdf.cell(col_width, 6, val_safe, border=1, align='L')
         pdf.ln()
-    if len(data) > 100:
-        pdf.cell(0, 6, f"... and {len(data)-100} more rows", ln=True, align='C')
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
     return msg, pdf_bytes
 
@@ -800,15 +821,6 @@ def show_dashboard(df, sheet_name):
                                    markers=True, color_discrete_sequence=['#ff6b6b'])
                 fig_line.update_layout(height=350)
                 st.plotly_chart(fig_line, use_container_width=True)
-
-        if train_col and train_col in df:
-            top_trains = df[train_col].value_counts().head(10).reset_index()
-            top_trains.columns = ['Train', 'Count']
-            if not top_trains.empty:
-                fig_bar = px.bar(top_trains, x='Train', y='Count', title="Top 10 Trains",
-                                 color='Count', color_continuous_scale='Viridis')
-                fig_bar.update_layout(height=350)
-                st.plotly_chart(fig_bar, use_container_width=True)
     except Exception as e:
         st.warning(f"Could not render dashboard: {str(e)}")
 
@@ -839,7 +851,7 @@ def chat_with_gemini_stream(messages):
 Sheet Summary:
 {context}
 
-Remember the conversation. Answer based on sheet data if relevant, otherwise use general knowledge. Be helpful, concise, and friendly. Use emojis where appropriate."""
+Remember the conversation. Answer based on sheet data if relevant, otherwise use general knowledge. Be helpful, concise, and friendly. Use emojis where appropriate. Provide meaningful responses to questions."""
         full_prompt = system_prompt + "\n\nConversation:\n"
         for msg in messages:
             full_prompt += f"{msg['role']}: {msg['content']}\n"
@@ -868,223 +880,235 @@ apply_theme(dark_mode)
 if st.sidebar.button("☰ Toggle Sidebar", use_container_width=True):
     st.session_state.sidebar_collapsed = not st.session_state.sidebar_collapsed
 
-sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
-st.sidebar.markdown("---")
-st.sidebar.markdown(f'<a href="{sheet_link}" target="_blank"><button style="padding:10px 20px; background:#1a5a32; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold; width:100%;">📊 Open Google Sheet</button></a>', unsafe_allow_html=True)
-st.sidebar.markdown("---")
+if not st.session_state.sidebar_collapsed:
+    sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(f'<a href="{sheet_link}" target="_blank"><button style="padding:10px 20px; background:#1a5a32; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold; width:100%;">📊 Open Google Sheet</button></a>', unsafe_allow_html=True)
+    st.sidebar.markdown("---")
 
-st.sidebar.title("⚡ AI EQMS Hub Pro")
-st.sidebar.write(f"📅 {datetime.now().strftime('%d-%m-%Y')}")
+    st.sidebar.title("⚡ AI EQMS Hub Pro")
+    st.sidebar.write(f"📅 {datetime.now().strftime('%d-%m-%Y')}")
 
-try:
-    eq_df = load_sheet_data_cached('EQ', 5, SHEET_ID)
-    total_records = len(eq_df) if not eq_df.empty else 0
-    st.sidebar.write(f"📊 Total Records: {total_records}")
-except:
-    st.sidebar.write("📊 Total Records: ?")
+    try:
+        eq_df = load_sheet_data_cached('EQ', 5, SHEET_ID)
+        total_records = len(eq_df) if not eq_df.empty else 0
+        st.sidebar.write(f"📊 Total Records: {total_records}")
+    except:
+        st.sidebar.write("📊 Total Records: ?")
 
-# ---- File Upload ----
-st.sidebar.subheader("📤 Upload File")
-uploaded_file = st.sidebar.file_uploader("Choose file (Image/PDF/Text)", type=['png','jpg','jpeg','pdf','txt'])
-caption = st.sidebar.text_input("Caption (optional)")
+    # ---- File Upload ----
+    st.sidebar.subheader("📤 Upload File")
+    uploaded_file = st.sidebar.file_uploader("Choose file (Image/PDF/Text)", type=['png','jpg','jpeg','pdf','txt'])
+    caption = st.sidebar.text_input("Caption (optional)")
 
-# ---- Bulk Import ----
-st.sidebar.subheader("📦 Bulk Import")
-bulk_file = st.sidebar.file_uploader("Import CSV/Excel", type=['csv','xlsx'], key="bulk_import")
+    # ---- Bulk Import ----
+    st.sidebar.subheader("📦 Bulk Import")
+    bulk_file = st.sidebar.file_uploader("Import CSV/Excel", type=['csv','xlsx'], key="bulk_import")
 
-if bulk_file:
-    if st.sidebar.button("📥 Import Bulk Data", use_container_width=True):
-        try:
-            gc = init_sheets()
-            eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
-            file_bytes = bulk_file.read()
-            file_type = 'csv' if bulk_file.name.endswith('.csv') else 'excel'
-            result = bulk_import(eq_sheet, file_bytes, file_type)
-            if 'error' in result:
-                st.sidebar.error(f"Import error: {result['error']}")
-            else:
-                st.sidebar.success(f"Imported {result['saved']} records! Skipped: {result['skipped']}")
-                log_activity("Bulk Import", f"Imported {result['saved']} records")
-                st.cache_data.clear()
-                st.rerun()
-        except Exception as e:
-            st.sidebar.error(f"Import error: {e}")
-
-if st.sidebar.button("🚀 Process & Save", use_container_width=True):
-    if uploaded_file:
-        file_bytes = uploaded_file.read()
-        file_type = 'pdf' if uploaded_file.type == 'application/pdf' else 'image'
-        
-        progress_text = st.sidebar.empty()
-        progress_bar = st.sidebar.progress(0)
-        
-        def update_progress(value, message):
-            progress_bar.progress(value)
-            progress_text.text(message)
-        
-        try:
-            with st.spinner("Processing..."):
-                b64 = base64.b64encode(file_bytes).decode('utf-8')
-                
-                parse_result = gemini_universal_parser(b64, file_type, uploaded_file.type, update_progress)
-                
-                if 'error' in parse_result:
-                    st.sidebar.error(f"Error: {parse_result['error']}")
+    if bulk_file:
+        if st.sidebar.button("📥 Import Bulk Data", use_container_width=True):
+            try:
+                gc = init_sheets()
+                eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
+                file_bytes = bulk_file.read()
+                file_type = 'csv' if bulk_file.name.endswith('.csv') else 'excel'
+                result = bulk_import(eq_sheet, file_bytes, file_type)
+                if 'error' in result:
+                    st.sidebar.error(f"Import error: {result['error']}")
                 else:
-                    st.sidebar.success(f"✅ Extracted {parse_result['count']} records!")
+                    st.sidebar.success(f"Imported {result['saved']} records! Skipped: {result['skipped']}")
+                    log_activity("Bulk Import", f"Imported {result['saved']} records")
+                    st.cache_data.clear()
+                    st.rerun()
+            except Exception as e:
+                st.sidebar.error(f"Import error: {e}")
+
+    if st.sidebar.button("🚀 Process & Save", use_container_width=True):
+        if uploaded_file:
+            file_bytes = uploaded_file.read()
+            file_type = 'pdf' if uploaded_file.type == 'application/pdf' else 'image'
+            
+            progress_text = st.sidebar.empty()
+            progress_bar = st.sidebar.progress(0)
+            
+            def update_progress(value, message):
+                progress_bar.progress(value)
+                progress_text.text(message)
+            
+            try:
+                with st.spinner("Processing..."):
+                    b64 = base64.b64encode(file_bytes).decode('utf-8')
                     
-                    if parse_result['records']:
-                        with st.sidebar.expander("📋 Extracted Data Preview"):
-                            st.dataframe(pd.DataFrame(parse_result['records']))
+                    parse_result = gemini_universal_parser(b64, file_type, uploaded_file.type, update_progress)
                     
-                    try:
-                        gc = init_sheets()
-                        eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
-                        save_res = save_to_sheet(eq_sheet, parse_result['records'])
+                    if 'error' in parse_result:
+                        st.sidebar.error(f"Error: {parse_result['error']}")
+                    else:
+                        st.sidebar.success(f"✅ Extracted {parse_result['count']} records!")
                         
-                        if 'error' in save_res:
-                            st.sidebar.error(f"Save error: {save_res['error']}")
-                        else:
-                            st.sidebar.success(f"✅ Saved {save_res['saved']} new records!")
+                        if parse_result['records']:
+                            with st.sidebar.expander("📋 Extracted Data Preview"):
+                                st.dataframe(pd.DataFrame(parse_result['records']))
+                        
+                        try:
+                            gc = init_sheets()
+                            eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
+                            save_res = save_to_sheet(eq_sheet, parse_result['records'])
                             
-                            # Upload to Drive
-                            drive_res = upload_to_drive(file_bytes, uploaded_file.name, uploaded_file.type)
-                            if drive_res['success']:
-                                st.sidebar.success(f"📁 File uploaded to Drive")
-                                st.session_state.last_uploaded_file = uploaded_file.name
-                                st.session_state.last_uploaded_drive_url = drive_res['print_url']
+                            if 'error' in save_res:
+                                st.sidebar.error(f"Save error: {save_res['error']}")
                             else:
-                                st.sidebar.error(f"Drive upload error: {drive_res['error']}")
-                            
-                            log_activity("File Upload", f"Uploaded {uploaded_file.name}, extracted {parse_result['count']} records")
-                            st.cache_data.clear()
-                            st.rerun()
-                    except Exception as e:
-                        st.sidebar.error(f"Sheet error: {e}")
-        except Exception as e:
-            st.sidebar.error(f"Processing error: {e}")
-        finally:
-            progress_bar.empty()
-            progress_text.empty()
-    else:
-        st.sidebar.warning("Please select a file.")
+                                st.sidebar.success(f"✅ Saved {save_res['saved']} new records!")
+                                
+                                # Upload to Drive
+                                drive_res = upload_to_drive(file_bytes, uploaded_file.name, uploaded_file.type)
+                                if drive_res['success']:
+                                    st.sidebar.success(f"📁 File uploaded to Drive")
+                                    st.session_state.last_uploaded_file = uploaded_file.name
+                                    st.session_state.last_uploaded_drive_url = drive_res['print_url']
+                                else:
+                                    st.sidebar.error(f"Drive upload error: {drive_res['error']}")
+                                
+                                log_activity("File Upload", f"Uploaded {uploaded_file.name}, extracted {parse_result['count']} records")
+                                st.cache_data.clear()
+                                st.rerun()
+                        except Exception as e:
+                            st.sidebar.error(f"Sheet error: {e}")
+            except Exception as e:
+                st.sidebar.error(f"Processing error: {e}")
+            finally:
+                progress_bar.empty()
+                progress_text.empty()
+        else:
+            st.sidebar.warning("Please select a file.")
 
-st.sidebar.markdown("---")
+    st.sidebar.markdown("---")
 
-# ---- Activity Log ----
-with st.sidebar.expander("📋 Activity Log", expanded=False):
-    if st.session_state.activity_log:
-        for log in st.session_state.activity_log[-10:]:
-            st.caption(f"🕐 {log['timestamp']}")
-            st.caption(f"📌 {log['action']}: {log['details']}")
-            st.divider()
-    else:
-        st.caption("No activity yet")
+    # ---- Activity Log ----
+    with st.sidebar.expander("📋 Activity Log", expanded=False):
+        if st.session_state.activity_log:
+            for log in st.session_state.activity_log[-10:]:
+                st.caption(f"🕐 {log['timestamp']}")
+                st.caption(f"📌 {log['action']}: {log['details']}")
+                st.divider()
+        else:
+            st.caption("No activity yet")
 
-st.sidebar.markdown("---")
+    st.sidebar.markdown("---")
 
-# ---- Sheet Selector ----
-sheet_choice = st.sidebar.selectbox("Select Sheet", list(SHEET_CONFIG.keys()))
-config = SHEET_CONFIG[sheet_choice]
-start_row = config["start_row"]
+    # ---- Sheet Selector ----
+    sheet_choice = st.sidebar.selectbox("Select Sheet", list(SHEET_CONFIG.keys()))
+    config = SHEET_CONFIG[sheet_choice]
+    start_row = config["start_row"]
 
-# ---- Filters ----
-st.sidebar.subheader("🔍 Filters")
-if 'pnr_val' not in st.session_state:
-    st.session_state.pnr_val = ''
-if 'train_val' not in st.session_state:
-    st.session_state.train_val = ''
-if 'from_val' not in st.session_state:
-    st.session_state.from_val = None
-if 'to_val' not in st.session_state:
-    st.session_state.to_val = None
-
-pnr_input = st.sidebar.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_input_widget")
-train_input = st.sidebar.text_input("Train (partial)", value=st.session_state.train_val, key="train_input_widget")
-from_input = st.sidebar.date_input("From DOJ", value=st.session_state.from_val, key="from_input_widget")
-to_input = st.sidebar.date_input("To DOJ", value=st.session_state.to_val, key="to_input_widget")
-
-col1, col2 = st.sidebar.columns(2)
-with col1:
-    if st.button("Apply Filters", use_container_width=True):
-        st.session_state.pnr_val = pnr_input
-        st.session_state.train_val = train_input
-        st.session_state.from_val = from_input
-        st.session_state.to_val = to_input
-        log_activity("Filter Applied", f"Sheet: {sheet_choice}")
-        st.rerun()
-with col2:
-    if st.button("Clear Filters", use_container_width=True):
+    # ---- Filters ----
+    st.sidebar.subheader("🔍 Filters")
+    if 'pnr_val' not in st.session_state:
         st.session_state.pnr_val = ''
+    if 'train_val' not in st.session_state:
         st.session_state.train_val = ''
+    if 'from_val' not in st.session_state:
         st.session_state.from_val = None
+    if 'to_val' not in st.session_state:
         st.session_state.to_val = None
-        st.rerun()
 
-# ---- Load and filter data ----
-df_raw = load_sheet_data_cached(sheet_choice, start_row, SHEET_ID)
-filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
+    pnr_input = st.sidebar.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_input_widget")
+    train_input = st.sidebar.text_input("Train (partial)", value=st.session_state.train_val, key="train_input_widget")
+    from_input = st.sidebar.date_input("From DOJ", value=st.session_state.from_val, key="from_input_widget")
+    to_input = st.sidebar.date_input("To DOJ", value=st.session_state.to_val, key="to_input_widget")
 
-if not filtered_df.empty:
-    pnr_col_idx = config.get("pnr_col")
-    train_col_idx = config.get("train_col")
-    doj_col_idx = config.get("doj_col")
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        if st.button("Apply Filters", use_container_width=True):
+            st.session_state.pnr_val = pnr_input
+            st.session_state.train_val = train_input
+            st.session_state.from_val = from_input
+            st.session_state.to_val = to_input
+            log_activity("Filter Applied", f"Sheet: {sheet_choice}")
+            st.rerun()
+    with col2:
+        if st.button("Clear Filters", use_container_width=True):
+            st.session_state.pnr_val = ''
+            st.session_state.train_val = ''
+            st.session_state.from_val = None
+            st.session_state.to_val = None
+            st.rerun()
 
-    if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
-        col_name = filtered_df.columns[pnr_col_idx]
-        filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.pnr_val, case=False, na=False)]
+    # ---- Load and filter data ----
+    df_raw = load_sheet_data_cached(sheet_choice, start_row, SHEET_ID)
+    filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
 
-    if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
-        col_name = filtered_df.columns[train_col_idx]
-        filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
+    if not filtered_df.empty:
+        pnr_col_idx = config.get("pnr_col")
+        train_col_idx = config.get("train_col")
+        doj_col_idx = config.get("doj_col")
 
-    if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
-        col_name = filtered_df.columns[doj_col_idx]
-        try:
-            filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
-            if filtered_df['_temp'].isna().all():
+        if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
+            col_name = filtered_df.columns[pnr_col_idx]
+            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.pnr_val, case=False, na=False)]
+
+        if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
+            col_name = filtered_df.columns[train_col_idx]
+            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
+
+        if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
+            col_name = filtered_df.columns[doj_col_idx]
+            try:
+                filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
+                if filtered_df['_temp'].isna().all():
+                    filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
+            except:
                 filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
-        except:
-            filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
-        if st.session_state.from_val:
-            filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
-        if st.session_state.to_val:
-            filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
-        filtered_df = filtered_df.drop('_temp', axis=1)
+            if st.session_state.from_val:
+                filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
+            if st.session_state.to_val:
+                filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
+            filtered_df = filtered_df.drop('_temp', axis=1)
 
-# ---- Print ----
-st.sidebar.subheader("🖨️ Print")
-if st.sidebar.button("🖨️ Print Sheet", use_container_width=True):
-    print_df = filtered_df.copy()
-    if 'Select' in print_df.columns:
-        print_df = print_df.drop('Select', axis=1)
-    html_table = print_df.to_html(index=False, classes='print-table')
-    st.components.v1.html(f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{ font-family: Arial, sans-serif; padding: 20px; }}
-            .print-table {{ width: 100%; border-collapse: collapse; font-size: 10px; }}
-            .print-table th {{ background-color: #2d7d46; color: white; font-weight: bold; padding: 6px; border: 1px solid #000; text-align: center; }}
-            .print-table td {{ padding: 4px; border: 1px solid #000; text-align: left; }}
-            @media print {{ body * {{ visibility: visible; }} }}
-        </style>
-    </head>
-    <body>
-        <div id="print-area">
-            {html_table}
-            <p style="text-align:center; margin-top:20px; font-size:12px;">{sheet_choice} Report • {datetime.now().strftime('%d-%m-%Y %H:%M')}</p>
-        </div>
-        <script>window.onload = function() {{ window.print(); }};</script>
-    </body>
-    </html>
-    """, height=0, scrolling=False)
+    # ---- Print ----
+    st.sidebar.subheader("🖨️ Print")
+    if st.sidebar.button("🖨️ Print Sheet", use_container_width=True):
+        print_df = filtered_df.copy()
+        if 'Select' in print_df.columns:
+            print_df = print_df.drop('Select', axis=1)
+        html_table = print_df.to_html(index=False, classes='print-table')
+        st.components.v1.html(f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; padding: 20px; }}
+                .print-table {{ width: 100%; border-collapse: collapse; font-size: 10px; }}
+                .print-table th {{ background-color: #2d7d46; color: white; font-weight: bold; padding: 6px; border: 1px solid #000; text-align: center; }}
+                .print-table td {{ padding: 4px; border: 1px solid #000; text-align: left; }}
+                @media print {{ body * {{ visibility: visible; }} }}
+            </style>
+        </head>
+        <body>
+            <div id="print-area">
+                {html_table}
+                <p style="text-align:center; margin-top:20px; font-size:12px;">{sheet_choice} Report • {datetime.now().strftime('%d-%m-%Y %H:%M')}</p>
+            </div>
+            <script>window.onload = function() {{ window.print(); }};</script>
+        </body>
+        </html>
+        """, height=0, scrolling=False)
 
-st.sidebar.markdown("---")
+    st.sidebar.markdown("---")
 
-# ---- Navigation ----
-view = st.sidebar.radio("View", ["Data Table", "Dashboard", "💬 Chat with Gemini"])
+    # ---- Navigation ----
+    view = st.sidebar.radio("View", ["Data Table", "Dashboard", "💬 Chat with Gemini"])
+
+else:
+    st.sidebar.markdown("")
+    st.sidebar.markdown("")
+    st.sidebar.markdown("")
+    view = "Data Table"
+    sheet_choice = "EQ"
+    config = SHEET_CONFIG["EQ"]
+    start_row = config["start_row"]
+    df_raw = load_sheet_data_cached("EQ", start_row, SHEET_ID)
+    filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
 
 st.markdown("<div class='pro-title'>🚂 AI EQMS Hub</div>", unsafe_allow_html=True)
 st.markdown("<div class='pro-subtitle'>Enterprise Quality Management – Pro Edition</div>", unsafe_allow_html=True)
@@ -1169,7 +1193,7 @@ else:
             col1, col2, col3, col4, col5 = st.columns(5)
             
             with col1:
-                if st.button("💾 Save Edits", use_container_width=True, help="Save all changes to Google Sheets"):
+                if st.button("💾 Save Edits", use_container_width=True):
                     try:
                         gc = init_sheets()
                         sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
@@ -1189,13 +1213,10 @@ else:
                         else:
                             st.warning("No data to save.")
                     except Exception as e:
-                        if "429" in str(e):
-                            st.error("❌ Write quota exceeded. Wait a minute and try again.")
-                        else:
-                            st.error(f"Save error: {e}")
+                        st.error(f"Save error: {e}")
             
             with col2:
-                if st.button("➕ Add Row", use_container_width=True, help="Add a new blank row"):
+                if st.button("➕ Add Row", use_container_width=True):
                     try:
                         gc = init_sheets()
                         sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
@@ -1216,7 +1237,7 @@ else:
             
             with col3:
                 if selected_indices:
-                    if st.button("🗑️ Delete Selected", use_container_width=True, help="Delete selected rows"):
+                    if st.button("🗑️ Delete Selected", use_container_width=True):
                         actual_rows = [start_row + idx for idx in selected_indices]
                         try:
                             gc = init_sheets()
@@ -1235,7 +1256,7 @@ else:
             
             with col4:
                 if selected_indices:
-                    if st.button("📤 Share Selected", use_container_width=True, help="Share selected rows as PDF"):
+                    if st.button("📤 Share Selected", use_container_width=True):
                         msg, pdf_bytes = share_data(edited_page, sheet_choice, selected_indices)
                         st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}_selected.pdf", mime="application/pdf")
                         wa_link = f"https://api.whatsapp.com/send?text={msg.replace(' ', '%20')}"
@@ -1245,9 +1266,8 @@ else:
                     st.button("📤 Share Selected", disabled=True, use_container_width=True)
             
             with col5:
-                # Print Selected File (if uploaded)
                 if st.session_state.last_uploaded_drive_url:
-                    if st.button("🖨️ Print File", use_container_width=True, help="Print the uploaded file"):
+                    if st.button("🖨️ Print File", use_container_width=True):
                         st.markdown(f'<script>window.open("{st.session_state.last_uploaded_drive_url}&print=true", "_blank");</script>', unsafe_allow_html=True)
                 else:
                     st.button("🖨️ Print File", disabled=True, use_container_width=True)
@@ -1306,8 +1326,6 @@ else:
                             val_safe = val.encode('latin-1', 'ignore').decode('latin-1')
                             pdf.cell(col_width, 6, val_safe, border=1, align='L')
                         pdf.ln()
-                    if len(filtered_df) > 200:
-                        pdf.cell(0, 6, f"... and {len(filtered_df)-200} more rows", ln=True, align='C')
                     pdf_bytes = pdf.output(dest='S').encode('latin-1')
                     st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}.pdf", mime="application/pdf", use_container_width=True)
                 except Exception as e:
