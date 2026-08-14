@@ -527,7 +527,7 @@ def save_to_sheet(sheet, records):
     except Exception as e:
         return {'error': str(e)}
 
-# ========== THEME (DeepSeek Style + Text-Only Buttons) ==========
+# ========== THEME (DeepSeek Perfect Dark/Light) ==========
 def apply_theme(dark_mode):
     if dark_mode:
         bg = "#0d1117"
@@ -536,12 +536,14 @@ def apply_theme(dark_mode):
         text_secondary = "#8b949e"
         border = "#30363d"
         input_bg = "#0d1117"
-        primary_bg = "#238636"
-        primary_hover = "#2ea043"
+        primary_bg = "#58a6ff"
+        primary_hover = "#79c0ff"
         primary_text = "#ffffff"
         secondary_bg = "#21262d"
         secondary_text = "#c9d1d9"
         header_bg = "#161b22"
+        button_text = "#58a6ff"
+        button_hover = "#79c0ff"
     else:
         bg = "#f6f8fa"
         card_bg = "#ffffff"
@@ -549,16 +551,18 @@ def apply_theme(dark_mode):
         text_secondary = "#57606a"
         border = "#d0d7de"
         input_bg = "#f6f8fa"
-        primary_bg = "#2da44e"
-        primary_hover = "#2c974b"
+        primary_bg = "#0969da"
+        primary_hover = "#0550ae"
         primary_text = "#ffffff"
         secondary_bg = "#f6f8fa"
         secondary_text = "#24292f"
         header_bg = "#f6f8fa"
+        button_text = "#0969da"
+        button_hover = "#0550ae"
     
     st.markdown(f"""
     <style>
-        /* Full App Background */
+        /* DeepSeek Style */
         .stApp, .main .block-container, .css-1d391kg, .css-18e3th9,
         .stSidebar, .sidebar-content, .css-1d391kg .sidebar-content {{
             background-color: {bg} !important;
@@ -586,7 +590,7 @@ def apply_theme(dark_mode):
             color: {text_color} !important;
         }}
         
-        /* File Uploader Text */
+        /* File Uploader */
         .stFileUploader label, .stFileUploader div, .stFileUploader span,
         .stFileUploader .st-ae, .stFileUploader .st-bb {{
             color: {text_color} !important;
@@ -598,21 +602,22 @@ def apply_theme(dark_mode):
             padding: 8px !important;
         }}
         
-        /* ===== BUTTONS - TEXT ONLY ===== */
+        /* Buttons - DeepSeek Style */
         .stButton button, .stButton button p {{
             background: transparent !important;
-            color: {text_color} !important;
+            color: {button_text} !important;
             border: none !important;
             border-radius: 0 !important;
-            font-weight: 400 !important;
+            font-weight: 500 !important;
             padding: 4px 12px !important;
             transition: all 0.2s ease !important;
             box-shadow: none !important;
             font-size: 0.9rem !important;
+            cursor: pointer !important;
         }}
         .stButton button:hover {{
             background: transparent !important;
-            color: {primary_bg} !important;
+            color: {button_hover} !important;
             text-decoration: underline !important;
         }}
         .stButton button:disabled {{
@@ -624,7 +629,7 @@ def apply_theme(dark_mode):
         .action-box {{
             background: {card_bg};
             border: 1px solid {border};
-            border-radius: 12px;
+            border-radius: 8px;
             padding: 16px;
             margin-bottom: 16px;
         }}
@@ -726,8 +731,7 @@ def apply_theme(dark_mode):
             cursor: pointer !important;
         }}
         .sidebar-toggle:hover {{
-            color: {primary_bg} !important;
-            text-decoration: underline !important;
+            color: {button_hover} !important;
         }}
         
         /* Scrollbar */
