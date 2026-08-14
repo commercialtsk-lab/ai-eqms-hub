@@ -16,9 +16,22 @@ def get_sheets_client():
 client = get_sheets_client()
 sheet_names = ["EQ", "EMAIL_DATA", "NOTE", "DATA", "FINAL", "DATA2"]
 
-# --- Logic Definitions (Aapke 8 JavaScipt Logics yahan Python mein ayenge) ---
+# Duplicate columns ko unique banane ka function
+def make_headers_unique(headers):
+    seen = {}
+    unique_headers = []
+    for h in headers:
+        h_str = str(h).strip()
+        if h_str in seen:
+            seen[h_str] += 1
+            unique_headers.append(f"{h_str}_{seen[h_str]}")
+        else:
+            seen[h_str] = 0
+            unique_headers.append(h_str if h_str else "Unnamed")
+    return unique_headers
+
+# --- Logic Definitions ---
 def run_logic(logic_id):
-    # Yahan aap apne 8 logic code likhenge
     st.write(f"Executing Logic {logic_id}...")
 
 # --- UI ---
@@ -35,9 +48,15 @@ if menu == "Sheets View":
                 sh = client.open("EQ Master Bot")
                 worksheet = sh.worksheet(sheet_names[i])
                 data = worksheet.get_all_values()
-                if data:
-                    df = pd.DataFrame(data[1:], columns=data[0])
+                if data and len(data) > 1:
+                    unique_headers = make_headers_unique(data[0])
+                    df = pd.DataFrame(data[1:], columns=unique_headers)
                     st.dataframe(df, use_container_width=True)
+                elif data:
+                    df = pd.DataFrame(data)
+                    st.dataframe(df, use_container_width=True)
+                else:
+                    st.warning("Sheet is empty.")
             except Exception as e:
                 st.error(f"Error loading {sheet_names[i]}: {e}")
 
