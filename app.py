@@ -15,6 +15,12 @@ try:
   creds_json = st.secrets["GOOGLE_CREDENTIALS_JSON"]
   creds_dict = json.loads(creds_json)
 
+  # Fix for private key newline characters
+  if "private_key" in creds_dict:
+    creds_dict["private_key"] = creds_dict["private_key"].replace(
+        "\\n", "\n"
+    )
+
   scopes = [
       "https://spreadsheets.google.com/feeds",
       "https://www.googleapis.com/auth/drive",
@@ -120,10 +126,7 @@ elif selected_tab == "Live Google Sheets":
     df = pd.DataFrame(data)
     st.dataframe(df)
   except Exception as e:
-    st.info(
-        "Google Sheet 'Railway_Emergency_Data' load karne mein error aaya ya"
-        f" sheet milti nahi rahi: {e}"
-    )
+    st.info(f"Google Sheet load karne mein error: {e}")
 
 elif selected_tab == "System Settings":
   st.markdown(
