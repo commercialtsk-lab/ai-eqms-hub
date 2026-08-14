@@ -6,6 +6,7 @@ import base64
 import io
 import time
 import math
+import requests
 from datetime import datetime, timedelta
 from collections import Counter
 import google.generativeai as genai
@@ -58,6 +59,10 @@ if 'chat_suggestions' not in st.session_state:
         "Quota status",
         "PNR status"
     ]
+if 'dark_mode' not in st.session_state:
+    st.session_state.dark_mode = False
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = 1
 
 # ========== HEADINGS ==========
 HEADINGS = [
@@ -270,7 +275,7 @@ def load_sheet_data_cached(sheet_name, sheet_id):
         st.error(f"Error loading {sheet_name}: {e}")
         return pd.DataFrame()
 
-# ========== GEMINI EXTRACTION ==========
+# ========== GEMINI EXTRACTION - FIXED ==========
 def gemini_universal_parser(input_data, input_type, mime_type, progress_callback=None):
     url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}'
     
@@ -652,6 +657,7 @@ Previous conversation:
 
 # ========== THEME ==========
 def apply_theme(dark_mode):
+    st.session_state.dark_mode = dark_mode
     if dark_mode:
         bg = "#0d1117"
         card_bg = "#161b22"
@@ -661,6 +667,7 @@ def apply_theme(dark_mode):
         input_bg = "#0d1117"
         button_text = "#58a6ff"
         button_hover = "#79c0ff"
+        header_bg = "#161b22"
     else:
         bg = "#f6f8fa"
         card_bg = "#ffffff"
@@ -670,6 +677,7 @@ def apply_theme(dark_mode):
         input_bg = "#f6f8fa"
         button_text = "#0969da"
         button_hover = "#0550ae"
+        header_bg = "#ffffff"
 
     st.markdown(f"""
     <style>
@@ -678,7 +686,10 @@ def apply_theme(dark_mode):
             background-color: {bg} !important;
         }}
         header, .st-emotion-cache-1avcm0n, .st-emotion-cache-6qob1r {{
-            background-color: {bg} !important;
+            background-color: {header_bg} !important;
+        }}
+        .stSidebar .sidebar-content {{
+            background-color: {card_bg} !important;
         }}
         body, .stMarkdown, p, div, span, h1, h2, h3, h4, h5, h6,
         label, .stTextInput label, .stSelectbox label, .stDateInput label,
@@ -702,7 +713,9 @@ def apply_theme(dark_mode):
         .stFileUploader label, .stFileUploader div, .stFileUploader span,
         .stFileUploader .st-ae, .stFileUploader .st-bb,
         .stFileUploader .st-b6, .stFileUploader .st-b7,
-        .stFileUploader .st-b8 {{
+        .stFileUploader .st-b8,
+        .stSidebar .stButton button,
+        .stSidebar .stButton button p {{
             color: {text_color} !important;
         }}
         .stFileUploader {{
@@ -818,12 +831,220 @@ def apply_theme(dark_mode):
         .stChatInput input {{
             color: {text_color} !important;
         }}
+        .st-emotion-cache-1r6slb0 {{
+            background-color: {card_bg} !important;
+        }}
+        .st-emotion-cache-1y4p8pa {{
+            background-color: {card_bg} !important;
+        }}
+        .st-emotion-cache-1v0mbdj {{
+            background-color: {card_bg} !important;
+        }}
+        .st-emotion-cache-1y4p8pa .stButton button {{
+            background: transparent !important;
+            color: {button_text} !important;
+        }}
+        .st-emotion-cache-1y4p8pa .stButton button:hover {{
+            background: transparent !important;
+            color: {button_hover} !important;
+        }}
+        .st-emotion-cache-1d391kg {{
+            background-color: {bg} !important;
+        }}
+        .st-emotion-cache-1avcm0n {{
+            background-color: {header_bg} !important;
+        }}
+        .st-emotion-cache-6qob1r {{
+            background-color: {header_bg} !important;
+        }}
+        .st-emotion-cache-1pk3h9a {{
+            background-color: {card_bg} !important;
+        }}
+        .st-emotion-cache-16idsys {{
+            background-color: {card_bg} !important;
+        }}
+        .st-emotion-cache-10trblm {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1p1nrtl {{
+            background-color: {card_bg} !important;
+            border-color: {border} !important;
+        }}
+        .st-emotion-cache-1p1nrtl p {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1m7yq6c {{
+            background-color: {card_bg} !important;
+        }}
+        .st-emotion-cache-1m7yq6c .stButton button {{
+            background: transparent !important;
+            color: {button_text} !important;
+        }}
+        .st-emotion-cache-1m7yq6c .stButton button:hover {{
+            background: transparent !important;
+            color: {button_hover} !important;
+        }}
+        .st-emotion-cache-1m7yq6c p {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1pk3h9a .stButton button {{
+            background: transparent !important;
+            color: {button_text} !important;
+        }}
+        .st-emotion-cache-1pk3h9a .stButton button:hover {{
+            background: transparent !important;
+            color: {button_hover} !important;
+        }}
+        .st-emotion-cache-1qg05tj {{
+            background-color: {card_bg} !important;
+            border-color: {border} !important;
+        }}
+        .st-emotion-cache-1qg05tj p {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1qg05tj .stButton button {{
+            background: transparent !important;
+            color: {button_text} !important;
+        }}
+        .st-emotion-cache-1qg05tj .stButton button:hover {{
+            background: transparent !important;
+            color: {button_hover} !important;
+        }}
+        .st-emotion-cache-1dj0hjr {{
+            background-color: {card_bg} !important;
+        }}
+        .st-emotion-cache-1dj0hjr p {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1dj0hjr .stButton button {{
+            background: transparent !important;
+            color: {button_text} !important;
+        }}
+        .st-emotion-cache-1dj0hjr .stButton button:hover {{
+            background: transparent !important;
+            color: {button_hover} !important;
+        }}
+        .st-emotion-cache-1r6slb0 .stButton button {{
+            background: transparent !important;
+            color: {button_text} !important;
+        }}
+        .st-emotion-cache-1r6slb0 .stButton button:hover {{
+            background: transparent !important;
+            color: {button_hover} !important;
+        }}
+        .st-emotion-cache-1r6slb0 p {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1v0mbdj .stButton button {{
+            background: transparent !important;
+            color: {button_text} !important;
+        }}
+        .st-emotion-cache-1v0mbdj .stButton button:hover {{
+            background: transparent !important;
+            color: {button_hover} !important;
+        }}
+        .st-emotion-cache-1v0mbdj p {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1xarl3l {{
+            background-color: {card_bg} !important;
+        }}
+        .st-emotion-cache-1xarl3l .stButton button {{
+            background: transparent !important;
+            color: {button_text} !important;
+        }}
+        .st-emotion-cache-1xarl3l .stButton button:hover {{
+            background: transparent !important;
+            color: {button_hover} !important;
+        }}
+        .st-emotion-cache-1xarl3l p {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1xarl3l label {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1y4p8pa label {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1pk3h9a label {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1dj0hjr label {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1r6slb0 label {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1v0mbdj label {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1m7yq6c label {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1qg05tj label {{
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1xarl3l .stSelectbox select {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1y4p8pa .stSelectbox select {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1pk3h9a .stSelectbox select {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1dj0hjr .stSelectbox select {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1r6slb0 .stSelectbox select {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1v0mbdj .stSelectbox select {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1m7yq6c .stSelectbox select {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        .st-emotion-cache-1qg05tj .stSelectbox select {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        .stSidebar .stSelectbox select {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        .stSidebar .stTextInput input {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        .stSidebar .stDateInput input {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        .stSidebar .stNumberInput input {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        .stSidebar .stTextArea textarea {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        .stSidebar .stFileUploader {{
+            background-color: {input_bg} !important;
+        }}
     </style>
     """, unsafe_allow_html=True)
 
 # ========== MAIN APP ==========
 def main():
-    dark_mode = st.sidebar.toggle("🌙 Dark Mode", value=False)
+    dark_mode = st.sidebar.toggle("🌙 Dark Mode", value=st.session_state.get('dark_mode', False))
     apply_theme(dark_mode)
 
     # ---- SIDEBAR ----
@@ -911,6 +1132,9 @@ def main():
                                         st.success(f"📁 File uploaded to Drive")
                                         st.session_state.last_uploaded_file = uploaded_file.name
                                         st.session_state.last_uploaded_drive_url = drive_res['print_url']
+                                        
+                                        # Show print button
+                                        st.markdown(f'<a href="{drive_res["print_url"]}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">🖨️ Print File (Ctrl+P)</button></a>', unsafe_allow_html=True)
                                     else:
                                         st.error(f"Drive upload error: {drive_res['error']}")
 
@@ -1047,6 +1271,7 @@ def main():
                     st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
 
+        # Clear Chat button outside chat box, below it
         if st.button("🗑️ Clear Chat", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
