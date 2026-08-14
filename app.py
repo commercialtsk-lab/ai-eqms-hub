@@ -275,7 +275,7 @@ def load_sheet_data_cached(sheet_name, sheet_id):
         st.error(f"Error loading {sheet_name}: {e}")
         return pd.DataFrame()
 
-# ========== GEMINI EXTRACTION - FIXED ==========
+# ========== GEMINI EXTRACTION ==========
 def gemini_universal_parser(input_data, input_type, mime_type, progress_callback=None):
     url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}'
     
@@ -639,6 +639,7 @@ Instructions:
 2. For general railway questions, use your knowledge.
 3. Be helpful, concise, and friendly.
 4. Use emojis occasionally.
+5. Respond naturally as if you are having a conversation.
 
 Previous conversation:
 """
@@ -668,6 +669,8 @@ def apply_theme(dark_mode):
         button_text = "#58a6ff"
         button_hover = "#79c0ff"
         header_bg = "#161b22"
+        chat_user_bg = "#1f2937"
+        chat_assistant_bg = "#2d3748"
     else:
         bg = "#f6f8fa"
         card_bg = "#ffffff"
@@ -678,6 +681,8 @@ def apply_theme(dark_mode):
         button_text = "#0969da"
         button_hover = "#0550ae"
         header_bg = "#ffffff"
+        chat_user_bg = "#e1f5fe"
+        chat_assistant_bg = "#f5f5f5"
 
     st.markdown(f"""
     <style>
@@ -1039,6 +1044,70 @@ def apply_theme(dark_mode):
         .stSidebar .stFileUploader {{
             background-color: {input_bg} !important;
         }}
+        /* Chat message styling */
+        .stChatMessage {{
+            background-color: {card_bg} !important;
+            border: 1px solid {border} !important;
+            border-radius: 12px !important;
+            padding: 12px !important;
+            margin-bottom: 8px !important;
+        }}
+        .stChatMessage.user {{
+            background-color: {chat_user_bg} !important;
+            border-left: 4px solid {button_text} !important;
+        }}
+        .stChatMessage.assistant {{
+            background-color: {chat_assistant_bg} !important;
+            border-left: 4px solid #10b981 !important;
+        }}
+        .stChatMessage .stMarkdown {{
+            color: {text_color} !important;
+        }}
+        .stChatInput {{
+            background-color: {input_bg} !important;
+            border: 1px solid {border} !important;
+            border-radius: 12px !important;
+            padding: 8px !important;
+        }}
+        .stChatInput input {{
+            color: {text_color} !important;
+            background-color: transparent !important;
+        }}
+        /* Suggestion buttons */
+        .suggestion-btn {{
+            background: {card_bg} !important;
+            border: 1px solid {border} !important;
+            border-radius: 8px !important;
+            color: {text_color} !important;
+            padding: 8px 12px !important;
+            cursor: pointer !important;
+            font-size: 0.85rem !important;
+            width: 100% !important;
+            text-align: center !important;
+            transition: all 0.2s !important;
+        }}
+        .suggestion-btn:hover {{
+            background: {button_text} !important;
+            color: white !important;
+            border-color: {button_text} !important;
+        }}
+        /* Clear Chat button */
+        .clear-chat-btn {{
+            background: transparent !important;
+            color: {text_secondary} !important;
+            border: 1px solid {border} !important;
+            border-radius: 8px !important;
+            padding: 8px 16px !important;
+            cursor: pointer !important;
+            font-size: 0.9rem !important;
+            transition: all 0.2s !important;
+            width: 100% !important;
+        }}
+        .clear-chat-btn:hover {{
+            background: #ef4444 !important;
+            color: white !important;
+            border-color: #ef4444 !important;
+        }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -1089,13 +1158,19 @@ def main():
 
         # ---- File Upload ----
         st.subheader("📤 Upload File")
-        uploaded_file = st.file_uploader("Choose file (Image/PDF/Text)", type=['png','jpg','jpeg','pdf','txt'])
-        caption = st.text_input("Caption (optional)")
+        st.markdown("<p style='font-size:0.85rem; color: #6b7280;'>Upload Image, PDF, Text, or Audio</p>", unsafe_allow_html=True)
+        uploaded_file = st.file_uploader("Choose a file", type=['png','jpg','jpeg','pdf','txt','mp3','wav','ogg','m4a'], label_visibility="collapsed")
+        caption = st.text_input("📝 Caption (optional)")
 
         if st.button("🚀 Process & Save", use_container_width=True):
             if uploaded_file:
                 file_bytes = uploaded_file.read()
                 file_type = 'pdf' if uploaded_file.type == 'application/pdf' else 'image'
+                if uploaded_file.type.startswith('audio/'):
+                    file_type = 'audio'
+                elif uploaded_file.type == 'text/plain':
+                    file_type = 'text'
+                
                 progress_text = st.empty()
                 progress_bar = st.progress(0)
 
@@ -1106,7 +1181,11 @@ def main():
                 try:
                     with st.spinner("Processing..."):
                         b64 = base64.b64encode(file_bytes).decode('utf-8')
-                        parse_result = gemini_universal_parser(b64, file_type, uploaded_file.type, update_progress)
+                        
+                        if file_type == 'text':
+                            parse_result = gemini_universal_parser(uploaded_file.getvalue().decode('utf-8'), 'text', None, update_progress)
+                        else:
+                            parse_result = gemini_universal_parser(b64, file_type, uploaded_file.type, update_progress)
 
                         if 'error' in parse_result:
                             st.error(f"Error: {parse_result['error']}")
@@ -1134,7 +1213,13 @@ def main():
                                         st.session_state.last_uploaded_drive_url = drive_res['print_url']
                                         
                                         # Show print button
-                                        st.markdown(f'<a href="{drive_res["print_url"]}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">🖨️ Print File (Ctrl+P)</button></a>', unsafe_allow_html=True)
+                                        st.markdown(f'''
+                                        <a href="{drive_res['print_url']}" target="_blank">
+                                            <button style="padding:12px 24px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer; font-size:16px; font-weight:bold; width:100%;">
+                                                🖨️ Print File (Ctrl+P)
+                                            </button>
+                                        </a>
+                                        ''', unsafe_allow_html=True)
                                     else:
                                         st.error(f"Drive upload error: {drive_res['error']}")
 
@@ -1150,7 +1235,7 @@ def main():
                     progress_bar.empty()
                     progress_text.empty()
             else:
-                st.warning("Please select a file.")
+                st.warning("⚠️ Please select a file first.")
 
         st.markdown("---")
 
@@ -1238,8 +1323,8 @@ def main():
         view = st.radio("View", ["Data Table", "Dashboard", "💬 Chat with Gemini"])
 
     # ---- MAIN AREA ----
-    st.markdown("<div class='pro-title'>🚂 AI EQMS Hub Pro</div>", unsafe_allow_html=True)
-    st.markdown("<div class='pro-subtitle'>Enterprise Railway EQ Management System with Real-Time Sync</div>", unsafe_allow_html=True)
+    st.markdown("<div class='pro-title' style='font-size:28px; font-weight:bold;'>🚂 AI EQMS Hub Pro</div>", unsafe_allow_html=True)
+    st.markdown("<div class='pro-subtitle' style='font-size:16px; color: #6b7280;'>Enterprise Railway EQ Management System with Real-Time Sync</div>", unsafe_allow_html=True)
     st.markdown("---")
 
     if view == "💬 Chat with Gemini":
@@ -1254,14 +1339,18 @@ def main():
                     st.rerun()
         st.divider()
 
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
+        # Chat messages container
+        chat_container = st.container()
+        with chat_container:
+            if "messages" not in st.session_state:
+                st.session_state.messages = []
 
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+            for msg in st.session_state.messages:
+                with st.chat_message(msg["role"]):
+                    st.markdown(msg["content"])
 
-        if prompt := st.chat_input("Ask a question..."):
+        # Chat input at the bottom
+        if prompt := st.chat_input("Ask a question about EQ, trains, quota, or anything..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
@@ -1271,7 +1360,8 @@ def main():
                     st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
 
-        # Clear Chat button outside chat box, below it
+        # Clear Chat button below the chat input
+        st.markdown("---")
         if st.button("🗑️ Clear Chat", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
