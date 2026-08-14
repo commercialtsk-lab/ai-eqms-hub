@@ -271,6 +271,22 @@ def apply_theme(dark_mode):
         .pro-footer {{ text-align: center; padding: 20px 0 10px; opacity: 0.5; font-size: 0.8rem; border-top: 1px solid {border}; margin-top: 30px; }}
         .stExpander {{ border: 1px solid {border}; border-radius: 8px; background: {card_bg}; }}
         .stExpander .streamlit-expanderHeader {{ color: {text}; }}
+        /* Hide row index column that Streamlit adds by default */
+        .stDataFrame thead tr th:first-child,
+        .stDataFrame tbody tr th:first-child,
+        .stDataFrame tbody tr td:first-child {{
+            display: none !important;
+        }}
+        .stDataFrame .dataframe thead tr th:first-child,
+        .stDataFrame .dataframe tbody tr th:first-child,
+        .stDataFrame .dataframe tbody tr td:first-child {{
+            display: none !important;
+        }}
+        /* But keep the Select column visible */
+        .stDataFrame thead tr th:nth-child(2),
+        .stDataFrame tbody tr td:nth-child(2) {{
+            display: table-cell !important;
+        }}
         @media print {{
             .stApp {{ background-color: white !important; }}
             .main .block-container {{ max-width: 100% !important; padding: 0 !important; }}
@@ -434,13 +450,19 @@ end_idx = min(start_idx + page_size, len(filtered_df))
 page_df = filtered_df.iloc[start_idx:end_idx]
 
 if not page_df.empty:
-    # NO SELECT COLUMN – Directly show data
+    # Add Select column at the beginning
+    page_df.insert(0, "Select", False)
+    
     edited_page = st.data_editor(
         page_df,
         use_container_width=True,
         height=400,
+        column_config={"Select": st.column_config.CheckboxColumn("Select", width="small")},
         key=f"editor_{sheet_choice}_{page}"
     )
+    
+    # Get selected rows
+    selected_indices = edited_page[edited_page["Select"]].index.tolist()
     
     # ---- Action Buttons ----
     col1, col2, col3, col4 = st.columns(4)
@@ -449,7 +471,7 @@ if not page_df.empty:
             try:
                 gc = init_sheets()
                 sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                data_to_update = edited_page.values.tolist()
+                data_to_update = edited_page.drop("Select", axis=1).values.tolist()
                 if data_to_update:
                     num_cols = len(data_to_update[0])
                     start_row_update = start_row + start_idx
@@ -490,30 +512,34 @@ if not page_df.empty:
                 else:
                     st.error(f"Add row error: {e}")
     with col3:
-        if st.button("🗑️ Delete Last Row", use_container_width=True):
-            try:
-                gc = init_sheets()
-                sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                last_row = sheet.get_last_row()
-                if last_row >= start_row:
-                    sheet.delete_rows(last_row)
-                    st.toast("✅ Last row deleted!", icon="🗑️")
+        if selected_indices:
+            if st.button("🗑️ Delete Selected", use_container_width=True):
+                actual_rows = [start_row + idx for idx in selected_indices]
+                try:
+                    gc = init_sheets()
+                    sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                    for row_num in sorted(actual_rows, reverse=True):
+                        sheet.delete_rows(row_num)
+                    st.toast(f"✅ {len(selected_indices)} rows deleted!", icon="🗑️")
                     st.cache_data.clear()
                     time.sleep(0.5)
                     st.rerun()
-                else:
-                    st.warning("No rows to delete.")
-            except Exception as e:
-                if "429" in str(e):
-                    st.error("❌ Write quota exceeded. Wait a minute and try again.")
-                else:
-                    st.error(f"Delete error: {e}")
+                except Exception as e:
+                    if "429" in str(e):
+                        st.error("❌ Write quota exceeded. Wait a minute and try again.")
+                    else:
+                        st.error(f"Delete error: {e}")
+        else:
+            st.button("🗑️ Delete Selected", disabled=True, use_container_width=True)
     with col4:
-        if st.button("📤 Share Sheet", use_container_width=True):
-            msg, pdf_bytes = share_data(filtered_df, sheet_choice, None)
-            st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}.pdf", mime="application/pdf")
-            wa_link = f"https://api.whatsapp.com/send?text={msg.replace(' ', '%20')}"
-            st.markdown(f'<a href="{wa_link}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
+        if selected_indices:
+            if st.button("📤 Share Selected", use_container_width=True):
+                msg, pdf_bytes = share_data(edited_page, sheet_choice, selected_indices)
+                st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}_selected.pdf", mime="application/pdf")
+                wa_link = f"https://api.whatsapp.com/send?text={msg.replace(' ', '%20')}"
+                st.markdown(f'<a href="{wa_link}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
+        else:
+            st.button("📤 Share Selected", disabled=True, use_container_width=True)
 
     # ---- Quick Links ----
     st.subheader("🔗 Quick Links")
@@ -550,7 +576,11 @@ st.subheader("📄 Export & Print")
 col1, col2, col3 = st.columns(3)
 with col1:
     if st.button("🖨️ Print", use_container_width=True):
-        html_table = filtered_df.to_html(index=False, classes='print-table')
+        # Remove Select column from print view
+        print_df = filtered_df.copy()
+        if 'Select' in print_df.columns:
+            print_df = print_df.drop('Select', axis=1)
+        html_table = print_df.to_html(index=False, classes='print-table')
         st.markdown(f"""
         <style>
             .print-table {{ width: 100%; border-collapse: collapse; font-size: 10px; font-family: Arial, sans-serif; }}
@@ -560,7 +590,6 @@ with col1:
                 body * {{ visibility: hidden; }}
                 .print-area, .print-area * {{ visibility: visible; }}
                 .print-area {{ position: absolute; left: 0; top: 0; width: 100%; }}
-                .print-area .no-print {{ display: none !important; }}
             }}
         </style>
         <div class="print-area">
@@ -578,6 +607,8 @@ with col2:
         pdf.ln(5)
         pdf.set_font("Arial", 'B', 8)
         cols = filtered_df.columns.tolist()
+        if 'Select' in cols:
+            cols.remove('Select')
         col_width = 260 / len(cols) if len(cols) > 0 else 20
         for col in cols:
             pdf.cell(col_width, 7, str(col)[:12].encode('latin-1', 'ignore').decode('latin-1'), border=1, align='C')
@@ -596,7 +627,7 @@ with col2:
     except Exception as e:
         st.warning(f"PDF error: {e}")
 with col3:
-    csv = filtered_df.to_csv(index=False).encode('utf-8')
+    csv = filtered_df.drop('Select', axis=1).to_csv(index=False).encode('utf-8') if 'Select' in filtered_df.columns else filtered_df.to_csv(index=False).encode('utf-8')
     st.download_button("📥 CSV", data=csv, file_name=f"{sheet_choice}.csv", mime="text/csv", use_container_width=True)
 
 # ==================== FOOTER ====================
