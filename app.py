@@ -74,6 +74,7 @@ def parse_date(date_str):
         return f"{day}-{month}-{year}"
     return date_str
 
+# Station map (shortened – include full in real deployment)
 STATION_MAP = {
     'NTSK': 'New Tinsukia', 'GHY': 'Guwahati', 'NDLS': 'New Delhi',
     'HWH': 'Howrah', 'PNBE': 'Patna', 'BSB': 'Varanasi', 'CNB': 'Kanpur Central',
@@ -156,17 +157,17 @@ def load_sheet_data(sheet_name, start_row):
         st.error(f"Error loading {sheet_name}: {e}")
         return pd.DataFrame()
 
-# ==================== SHEET CONFIG (FINAL row = 5) ====================
+# ==================== SHEET CONFIG ====================
 SHEET_CONFIG = {
     "EQ": {"start_row": 5, "pnr_col": 2, "train_col": 6, "doj_col": 8},
     "DATA": {"start_row": 3, "pnr_col": 2, "train_col": 6, "doj_col": 8},
-    "FINAL": {"start_row": 5, "pnr_col": 8, "train_col": 2, "doj_col": 13},   # corrected to 5
+    "FINAL": {"start_row": 6, "pnr_col": 8, "train_col": 2, "doj_col": 13},  # row 6
     "DATA2": {"start_row": 4, "pnr_col": 8, "train_col": 2, "doj_col": 13},
     "EMAIL_DATA": {"start_row": 2, "pnr_col": 8, "train_col": 9, "doj_col": 12},
     "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 1, "doj_col": None}
 }
 
-# ==================== UPLOAD & EXTRACTION ====================
+# ==================== UPLOAD & EXTRACTION (same as before) ====================
 def upload_to_drive(file_bytes, filename, mime_type):
     try:
         drive_service = init_drive()
@@ -270,6 +271,8 @@ def apply_theme(dark_mode):
         .pro-footer {{ text-align: center; padding: 20px 0 10px; opacity: 0.5; font-size: 0.8rem; border-top: 1px solid {border}; margin-top: 30px; }}
         .stExpander {{ border: 1px solid {border}; border-radius: 8px; background: {card_bg}; }}
         .stExpander .streamlit-expanderHeader {{ color: {text}; }}
+        .stLinkButton {{ color: #2d7d46; text-decoration: underline; }}
+        .stLinkButton:hover {{ color: #1a5a32; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -428,6 +431,7 @@ end_idx = min(start_idx + page_size, len(filtered_df))
 page_df = filtered_df.iloc[start_idx:end_idx]
 
 if not page_df.empty:
+    # Add "Select" column
     page_df.insert(0, "Select", False)
     edited_page = st.data_editor(
         page_df,
@@ -437,10 +441,46 @@ if not page_df.empty:
         key=f"editor_{sheet_choice}_{page}"
     )
     selected_indices = edited_page[edited_page["Select"]].index.tolist()
-    if selected_indices:
-        st.warning(f"{len(selected_indices)} rows selected.")
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
+
+    # ---- Buttons for actions ----
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        if st.button("💾 Save Edits", use_container_width=True):
+            try:
+                gc = init_sheets()
+                sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                # Update each row in the current page
+                for i, (orig_idx, row) in enumerate(edited_page.iterrows()):
+                    actual_row = start_row + start_idx + i
+                    # Drop the "Select" column
+                    row_data = row.drop("Select").tolist()
+                    for col_idx, val in enumerate(row_data, start=1):
+                        sheet.update_cell(actual_row, col_idx, val)
+                st.toast("✅ Changes saved!", icon="💾")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Save error: {e}")
+    with col2:
+        if st.button("➕ Add Row", use_container_width=True):
+            # Append a blank row to the sheet
+            try:
+                gc = init_sheets()
+                sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                # Get number of columns
+                all_data = sheet.get_all_values()
+                num_cols = len(all_data[0]) if all_data else 1
+                blank_row = [''] * num_cols
+                # Set S/N to next number
+                if len(all_data) >= start_row:
+                    next_sn = len(all_data) - start_row + 2
+                    blank_row[0] = next_sn
+                sheet.append_row(blank_row)
+                st.toast("✅ Blank row added!", icon="➕")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Add row error: {e}")
+    with col3:
+        if selected_indices:
             if st.button("🗑️ Delete Selected", use_container_width=True):
                 actual_rows = [start_row + idx for idx in selected_indices]
                 try:
@@ -452,55 +492,82 @@ if not page_df.empty:
                     st.rerun()
                 except Exception as e:
                     st.error(f"Delete error: {e}")
-        with col2:
-            if st.button("💾 Save Edits", use_container_width=True):
-                try:
-                    gc = init_sheets()
-                    sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                    for i, (orig_idx, row) in enumerate(edited_page.iterrows()):
-                        actual_row = start_row + start_idx + i
-                        row_data = row.drop("Select").tolist()
-                        for col_idx, val in enumerate(row_data, start=1):
-                            sheet.update_cell(actual_row, col_idx, val)
-                    st.toast("✅ Changes saved!", icon="💾")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Save error: {e}")
-        with col3:
+        else:
+            st.button("🗑️ Delete Selected", disabled=True, use_container_width=True)
+    with col4:
+        if selected_indices:
             if st.button("📤 Share Selected", use_container_width=True):
                 msg, pdf_bytes = share_data(edited_page, sheet_choice, selected_indices)
                 st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}_selected.pdf", mime="application/pdf")
                 wa_link = f"https://api.whatsapp.com/send?text={msg.replace(' ', '%20')}"
                 st.markdown(f'<a href="{wa_link}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
-        with col4:
-            if selected_indices:
-                row_idx = selected_indices[0]
-                y_col = None
-                x_col = None
-                if len(edited_page.columns) > 24:
-                    y_col = edited_page.columns[24] if 'Y' in edited_page.columns[24] or 'PRINT' in edited_page.columns[24].upper() else None
-                if len(edited_page.columns) > 23:
-                    x_col = edited_page.columns[23]
-                file_url = None
-                if y_col and y_col in edited_page.columns:
-                    link_val = edited_page.loc[row_idx, y_col]
-                    if isinstance(link_val, str) and 'HYPERLINK' in link_val:
-                        url_match = re.search(r'HYPERLINK\("([^"]+)"', link_val)
-                        if url_match:
-                            file_url = url_match.group(1)
-                if not file_url and x_col and x_col in edited_page.columns:
-                    link_val = edited_page.loc[row_idx, x_col]
-                    if isinstance(link_val, str) and 'HYPERLINK' in link_val:
-                        url_match = re.search(r'HYPERLINK\("([^"]+)"', link_val)
-                        if url_match:
-                            file_url = url_match.group(1)
-                if file_url:
-                    if st.button("🖨️ Print Selected File", use_container_width=True):
-                        st.markdown(f'<script>window.open("{file_url}&print=true", "_blank");</script>', unsafe_allow_html=True)
-                else:
-                    st.info("No file link found in selected row.")
-    else:
-        st.info("Select rows to enable share/delete/print.")
+        else:
+            st.button("📤 Share Selected", disabled=True, use_container_width=True)
+    with col5:
+        if selected_indices:
+            # Print selected file (from Y or X column)
+            row_idx = selected_indices[0]
+            y_col = None
+            x_col = None
+            # Find Y and X columns by position (24=Y, 23=X)
+            if len(edited_page.columns) > 24:
+                y_col = edited_page.columns[24]  # column Y
+            if len(edited_page.columns) > 23:
+                x_col = edited_page.columns[23]  # column X
+            file_url = None
+            if y_col and y_col in edited_page.columns:
+                link_val = edited_page.loc[row_idx, y_col]
+                if isinstance(link_val, str) and 'HYPERLINK' in link_val:
+                    url_match = re.search(r'HYPERLINK\("([^"]+)"', link_val)
+                    if url_match:
+                        file_url = url_match.group(1)
+            if not file_url and x_col and x_col in edited_page.columns:
+                link_val = edited_page.loc[row_idx, x_col]
+                if isinstance(link_val, str) and 'HYPERLINK' in link_val:
+                    url_match = re.search(r'HYPERLINK\("([^"]+)"', link_val)
+                    if url_match:
+                        file_url = url_match.group(1)
+            if file_url:
+                if st.button("🖨️ Print Selected File", use_container_width=True):
+                    st.markdown(f'<script>window.open("{file_url}&print=true", "_blank");</script>', unsafe_allow_html=True)
+            else:
+                st.button("🖨️ Print Selected File", disabled=True, use_container_width=True)
+        else:
+            st.button("🖨️ Print Selected File", disabled=True, use_container_width=True)
+
+    # ---- Show clickable links for X, Y, Z, AA ----
+    st.subheader("🔗 Quick Links")
+    # Identify columns X (24), Y (25), Z (26), AA (27) if they exist
+    col_indices = {'X': 23, 'Y': 24, 'Z': 25, 'AA': 26}
+    for idx, row in filtered_df.iterrows():
+        links = []
+        for label, col_idx in col_indices.items():
+            if len(filtered_df.columns) > col_idx:
+                col_name = filtered_df.columns[col_idx]
+                val = row[col_name]
+                if isinstance(val, str) and 'HYPERLINK' in val:
+                    url_match = re.search(r'HYPERLINK\("([^"]+)"', val)
+                    if url_match:
+                        url = url_match.group(1)
+                        if label == 'X':
+                            links.append(f'<a href="{url}" target="_blank">View</a>')
+                        elif label == 'Y':
+                            links.append(f'<a href="{url}&print=true" target="_blank">Print</a>')
+                        elif label == 'Z':
+                            # Tooltip is note, not a link; we can show the note
+                            # We'll just show the note text (we can't display it easily here)
+                            links.append('📝 Hover')
+                        elif label == 'AA':
+                            links.append(f'<a href="{url}" target="_blank">PNR</a>')
+                elif label == 'Z' and val and not isinstance(val, str):
+                    # Z may contain note text (not a hyperlink)
+                    links.append(f'📝 {str(val)[:20]}')
+        if links:
+            row_num = idx + 1
+            st.markdown(f"**Row {row_num}:** " + " | ".join(links), unsafe_allow_html=True)
+
+else:
+    st.info("No rows on this page.")
 
 # ---- Export Options ----
 st.subheader("📄 Export & Share")
@@ -567,42 +634,6 @@ with col4:
         st.download_button("📥 Download PDF", data=pdf_bytes_full, file_name=f"{sheet_choice}_full.pdf", mime="application/pdf")
         wa_link_full = f"https://api.whatsapp.com/send?text={msg_full.replace(' ', '%20')}"
         st.markdown(f'<a href="{wa_link_full}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
-
-# ---- Print Individual File (per row) ----
-if len(filtered_df.columns) >= 24:
-    y_col = filtered_df.columns[24] if len(filtered_df.columns) > 24 else None
-    x_col = filtered_df.columns[23] if len(filtered_df.columns) > 23 else None
-    st.subheader("🖨️ Print File from Row")
-    for idx, row in filtered_df.iterrows():
-        file_url = None
-        if y_col and y_col in filtered_df.columns:
-            link = row[y_col]
-            if isinstance(link, str) and 'HYPERLINK' in link:
-                url_match = re.search(r'HYPERLINK\("([^"]+)"', link)
-                if url_match:
-                    file_url = url_match.group(1)
-        if not file_url and x_col and x_col in filtered_df.columns:
-            link = row[x_col]
-            if isinstance(link, str) and 'HYPERLINK' in link:
-                url_match = re.search(r'HYPERLINK\("([^"]+)"', link)
-                if url_match:
-                    file_url = url_match.group(1)
-        if file_url:
-            if st.button(f"🖨️ Print File (Row {idx+1})", key=f"print_{idx}_{sheet_choice}"):
-                st.markdown(f'<script>window.open("{file_url}&print=true", "_blank");</script>', unsafe_allow_html=True)
-
-# ---- Display PNR URL column (AA) ----
-pnr_url_col = None
-for col in filtered_df.columns:
-    if 'PNR' in col.upper() and ('URL' in col.upper() or 'LINK' in col.upper()):
-        pnr_url_col = col
-        break
-if pnr_url_col:
-    st.subheader("🔗 PNR URLs")
-    for idx, row in filtered_df.iterrows():
-        url = row[pnr_url_col]
-        if url and isinstance(url, str) and url.startswith('http'):
-            st.markdown(f"Row {idx+1}: [PNR Link]({url})")
 
 # ==================== FOOTER ====================
 st.markdown("<div class='pro-footer'>© 2026 AI EQMS Hub Pro – All rights reserved.</div>", unsafe_allow_html=True)
