@@ -851,208 +851,199 @@ with st.sidebar:
     if st.button("☰ Toggle Sidebar", use_container_width=True):
         st.session_state.sidebar_collapsed = not st.session_state.sidebar_collapsed
 
-    if not st.session_state.sidebar_collapsed:
-        sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
-        st.markdown("---")
-        st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
-        st.markdown("---")
+    sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
+    st.markdown("---")
+    st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
+    st.markdown("---")
 
-        st.title("⚡ AI EQMS Hub Pro")
-        st.write(f"📅 {datetime.now().strftime('%d-%m-%Y')}")
+    st.title("⚡ AI EQMS Hub Pro")
+    st.write(f"📅 {datetime.now().strftime('%d-%m-%Y')}")
 
-        try:
-            eq_df = load_sheet_data_cached('EQ', 5, SHEET_ID)
-            total_records = len(eq_df) if not eq_df.empty else 0
-            st.write(f"📊 Total Records: {total_records}")
-        except:
-            st.write("📊 Total Records: ?")
+    try:
+        eq_df = load_sheet_data_cached('EQ', 5, SHEET_ID)
+        total_records = len(eq_df) if not eq_df.empty else 0
+        st.write(f"📊 Total Records: {total_records}")
+    except:
+        st.write("📊 Total Records: ?")
 
-        # ---- File Upload ----
-        st.subheader("📤 Upload File")
-        uploaded_file = st.file_uploader("Choose file (Image/PDF/Text)", type=['png','jpg','jpeg','pdf','txt'])
+    # ---- File Upload ----
+    st.subheader("📤 Upload File")
+    uploaded_file = st.file_uploader("Choose file (Image/PDF/Text)", type=['png','jpg','jpeg','pdf','txt'])
 
-        if st.button("🚀 Process & Save", use_container_width=True):
-            if uploaded_file:
-                file_bytes = uploaded_file.read()
-                file_type = 'pdf' if uploaded_file.type == 'application/pdf' else 'image'
+    if st.button("🚀 Process & Save", use_container_width=True):
+        if uploaded_file:
+            file_bytes = uploaded_file.read()
+            file_type = 'pdf' if uploaded_file.type == 'application/pdf' else 'image'
 
-                progress_text = st.empty()
-                progress_bar = st.progress(0)
+            progress_text = st.empty()
+            progress_bar = st.progress(0)
 
-                def update_progress(value, message):
-                    progress_bar.progress(value)
-                    progress_text.text(message)
+            def update_progress(value, message):
+                progress_bar.progress(value)
+                progress_text.text(message)
 
-                try:
-                    with st.spinner("Processing..."):
-                        b64 = base64.b64encode(file_bytes).decode('utf-8')
+            try:
+                with st.spinner("Processing..."):
+                    b64 = base64.b64encode(file_bytes).decode('utf-8')
 
-                        parse_result = gemini_universal_parser(b64, file_type, uploaded_file.type, update_progress)
+                    parse_result = gemini_universal_parser(b64, file_type, uploaded_file.type, update_progress)
 
-                        if 'error' in parse_result:
-                            st.error(f"Error: {parse_result['error']}")
-                        else:
-                            st.success(f"✅ Extracted {parse_result['count']} records!")
+                    if 'error' in parse_result:
+                        st.error(f"Error: {parse_result['error']}")
+                    else:
+                        st.success(f"✅ Extracted {parse_result['count']} records!")
 
-                            if parse_result['records']:
-                                with st.expander("📋 Extracted Data Preview"):
-                                    st.dataframe(pd.DataFrame(parse_result['records']))
+                        if parse_result['records']:
+                            with st.expander("📋 Extracted Data Preview"):
+                                st.dataframe(pd.DataFrame(parse_result['records']))
 
-                            try:
-                                gc = init_sheets()
-                                eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
-                                save_res = save_to_sheet(eq_sheet, parse_result['records'])
+                        try:
+                            gc = init_sheets()
+                            eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
+                            save_res = save_to_sheet(eq_sheet, parse_result['records'])
 
-                                if 'error' in save_res:
-                                    st.error(f"Save error: {save_res['error']}")
+                            if 'error' in save_res:
+                                st.error(f"Save error: {save_res['error']}")
+                            else:
+                                st.success(f"✅ Saved {save_res['saved']} new records!")
+
+                                drive_res = upload_to_drive(file_bytes, uploaded_file.name, uploaded_file.type)
+                                if drive_res['success']:
+                                    st.success(f"📁 File uploaded to Drive")
+                                    st.session_state.last_uploaded_file = uploaded_file.name
+                                    st.session_state.last_uploaded_drive_url = drive_res['print_url']
                                 else:
-                                    st.success(f"✅ Saved {save_res['saved']} new records!")
+                                    st.error(f"Drive upload error: {drive_res['error']}")
 
-                                    drive_res = upload_to_drive(file_bytes, uploaded_file.name, uploaded_file.type)
-                                    if drive_res['success']:
-                                        st.success(f"📁 File uploaded to Drive")
-                                        st.session_state.last_uploaded_file = uploaded_file.name
-                                        st.session_state.last_uploaded_drive_url = drive_res['print_url']
-                                    else:
-                                        st.error(f"Drive upload error: {drive_res['error']}")
+                                log_activity("File Upload", f"Uploaded {uploaded_file.name}, extracted {parse_result['count']} records")
+                                st.cache_data.clear()
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"Sheet error: {e}")
+            except Exception as e:
+                st.error(f"Processing error: {e}")
+            finally:
+                progress_bar.empty()
+                progress_text.empty()
+        else:
+            st.warning("Please select a file.")
 
-                                    log_activity("File Upload", f"Uploaded {uploaded_file.name}, extracted {parse_result['count']} records")
-                                    st.cache_data.clear()
-                                    st.rerun()
-                            except Exception as e:
-                                st.error(f"Sheet error: {e}")
-                except Exception as e:
-                    st.error(f"Processing error: {e}")
-                finally:
-                    progress_bar.empty()
-                    progress_text.empty()
-            else:
-                st.warning("Please select a file.")
+    st.markdown("---")
 
-        st.markdown("---")
+    # ---- Activity Log ----
+    with st.expander("📋 Activity Log", expanded=False):
+        if st.session_state.activity_log:
+            for log in st.session_state.activity_log[-10:]:
+                st.caption(f"🕐 {log['timestamp']}")
+                st.caption(f"📌 {log['action']}: {log['details']}")
+                st.divider()
+        else:
+            st.caption("No activity yet")
 
-        # ---- Activity Log ----
-        with st.expander("📋 Activity Log", expanded=False):
-            if st.session_state.activity_log:
-                for log in st.session_state.activity_log[-10:]:
-                    st.caption(f"🕐 {log['timestamp']}")
-                    st.caption(f"📌 {log['action']}: {log['details']}")
-                    st.divider()
-            else:
-                st.caption("No activity yet")
+    st.markdown("---")
 
-        st.markdown("---")
-
-        # ---- Sheet Selector ----
-        sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()))
-        config = SHEET_CONFIG[sheet_choice]
-        start_row = config["start_row"]
-
-        # ---- Filters ----
-        st.subheader("🔍 Filters")
-        if 'pnr_val' not in st.session_state:
-            st.session_state.pnr_val = ''
-        if 'train_val' not in st.session_state:
-            st.session_state.train_val = ''
-        if 'from_val' not in st.session_state:
-            st.session_state.from_val = None
-        if 'to_val' not in st.session_state:
-            st.session_state.to_val = None
-
-        pnr_input = st.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_input_widget")
-        train_input = st.text_input("Train (partial)", value=st.session_state.train_val, key="train_input_widget")
-        from_input = st.date_input("From DOJ", value=st.session_state.from_val, key="from_input_widget")
-        to_input = st.date_input("To DOJ", value=st.session_state.to_val, key="to_input_widget")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Apply Filters", use_container_width=True):
-                st.session_state.pnr_val = pnr_input
-                st.session_state.train_val = train_input
-                st.session_state.from_val = from_input
-                st.session_state.to_val = to_input
-                log_activity("Filter Applied", f"Sheet: {sheet_choice}")
-                st.rerun()
-        with col2:
-            if st.button("Clear Filters", use_container_width=True):
-                st.session_state.pnr_val = ''
-                st.session_state.train_val = ''
-                st.session_state.from_val = None
-                st.session_state.to_val = None
-                st.rerun()
-
-        # ---- Load and filter data ----
-        df_raw = load_sheet_data_cached(sheet_choice, start_row, SHEET_ID)
-        filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
-
-        if not filtered_df.empty:
-            pnr_col_idx = config.get("pnr_col")
-            train_col_idx = config.get("train_col")
-            doj_col_idx = config.get("doj_col")
-
-            if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
-                col_name = filtered_df.columns[pnr_col_idx]
-                filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.pnr_val, case=False, na=False)]
-
-            if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
-                col_name = filtered_df.columns[train_col_idx]
-                filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
-
-            if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
-                col_name = filtered_df.columns[doj_col_idx]
-                try:
-                    filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
-                    if filtered_df['_temp'].isna().all():
-                        filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
-                except:
-                    filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
-                if st.session_state.from_val:
-                    filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
-                if st.session_state.to_val:
-                    filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
-                filtered_df = filtered_df.drop('_temp', axis=1)
-
-        # ---- Print ----
-        st.subheader("🖨️ Print")
-        if st.button("🖨️ Print Sheet", use_container_width=True):
-            print_df = filtered_df.copy()
-            if 'Select' in print_df.columns:
-                print_df = print_df.drop('Select', axis=1)
-            html_table = print_df.to_html(index=False, classes='print-table')
-            st.components.v1.html(f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <style>
-                    body {{ font-family: Arial, sans-serif; padding: 20px; }}
-                    .print-table {{ width: 100%; border-collapse: collapse; font-size: 10px; }}
-                    .print-table th {{ background-color: #2d7d46; color: white; font-weight: bold; padding: 6px; border: 1px solid #000; text-align: center; }}
-                    .print-table td {{ padding: 4px; border: 1px solid #000; text-align: left; }}
-                    @media print {{ body * {{ visibility: visible; }} }}
-                </style>
-            </head>
-            <body>
-                <div id="print-area">
-                    {html_table}
-                    <p style="text-align:center; margin-top:20px; font-size:12px;">{sheet_choice} Report • {datetime.now().strftime('%d-%m-%Y %H:%M')}</p>
-                </div>
-                <script>window.onload = function() {{ window.print(); }};</script>
-            </body>
-            </html>
-            """, height=0, scrolling=False)
-
-        st.markdown("---")
-
-        # ---- Navigation ----
-        view = st.radio("View", ["Data Table", "Dashboard", "💬 Chat with Gemini"])
-
-else:
-    sheet_choice = "EQ"
-    config = SHEET_CONFIG["EQ"]
+    # ---- Sheet Selector ----
+    sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()))
+    config = SHEET_CONFIG[sheet_choice]
     start_row = config["start_row"]
-    df_raw = load_sheet_data_cached("EQ", start_row, SHEET_ID)
+
+    # ---- Filters ----
+    st.subheader("🔍 Filters")
+    if 'pnr_val' not in st.session_state:
+        st.session_state.pnr_val = ''
+    if 'train_val' not in st.session_state:
+        st.session_state.train_val = ''
+    if 'from_val' not in st.session_state:
+        st.session_state.from_val = None
+    if 'to_val' not in st.session_state:
+        st.session_state.to_val = None
+
+    pnr_input = st.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_input_widget")
+    train_input = st.text_input("Train (partial)", value=st.session_state.train_val, key="train_input_widget")
+    from_input = st.date_input("From DOJ", value=st.session_state.from_val, key="from_input_widget")
+    to_input = st.date_input("To DOJ", value=st.session_state.to_val, key="to_input_widget")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Apply Filters", use_container_width=True):
+            st.session_state.pnr_val = pnr_input
+            st.session_state.train_val = train_input
+            st.session_state.from_val = from_input
+            st.session_state.to_val = to_input
+            log_activity("Filter Applied", f"Sheet: {sheet_choice}")
+            st.rerun()
+    with col2:
+        if st.button("Clear Filters", use_container_width=True):
+            st.session_state.pnr_val = ''
+            st.session_state.train_val = ''
+            st.session_state.from_val = None
+            st.session_state.to_val = None
+            st.rerun()
+
+    # ---- Load and filter data ----
+    df_raw = load_sheet_data_cached(sheet_choice, start_row, SHEET_ID)
     filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
-    view = "Data Table"
+
+    if not filtered_df.empty:
+        pnr_col_idx = config.get("pnr_col")
+        train_col_idx = config.get("train_col")
+        doj_col_idx = config.get("doj_col")
+
+        if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
+            col_name = filtered_df.columns[pnr_col_idx]
+            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.pnr_val, case=False, na=False)]
+
+        if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
+            col_name = filtered_df.columns[train_col_idx]
+            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
+
+        if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
+            col_name = filtered_df.columns[doj_col_idx]
+            try:
+                filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
+                if filtered_df['_temp'].isna().all():
+                    filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
+            except:
+                filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
+            if st.session_state.from_val:
+                filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
+            if st.session_state.to_val:
+                filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
+            filtered_df = filtered_df.drop('_temp', axis=1)
+
+    # ---- Print ----
+    st.subheader("🖨️ Print")
+    if st.button("🖨️ Print Sheet", use_container_width=True):
+        print_df = filtered_df.copy()
+        if 'Select' in print_df.columns:
+            print_df = print_df.drop('Select', axis=1)
+        html_table = print_df.to_html(index=False, classes='print-table')
+        st.components.v1.html(f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; padding: 20px; }}
+                .print-table {{ width: 100%; border-collapse: collapse; font-size: 10px; }}
+                .print-table th {{ background-color: #2d7d46; color: white; font-weight: bold; padding: 6px; border: 1px solid #000; text-align: center; }}
+                .print-table td {{ padding: 4px; border: 1px solid #000; text-align: left; }}
+                @media print {{ body * {{ visibility: visible; }} }}
+            </style>
+        </head>
+        <body>
+            <div id="print-area">
+                {html_table}
+                <p style="text-align:center; margin-top:20px; font-size:12px;">{sheet_choice} Report • {datetime.now().strftime('%d-%m-%Y %H:%M')}</p>
+            </div>
+            <script>window.onload = function() {{ window.print(); }};</script>
+        </body>
+        </html>
+        """, height=0, scrolling=False)
+
+    st.markdown("---")
+
+    # ---- Navigation ----
+    view = st.radio("View", ["Data Table", "Dashboard", "💬 Chat with Gemini"])
 
 # ---- MAIN AREA ----
 st.markdown("<div class='pro-title'>🚂 AI EQMS Hub</div>", unsafe_allow_html=True)
