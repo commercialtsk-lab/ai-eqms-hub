@@ -155,16 +155,17 @@ def load_sheet_data_cached(sheet_name, start_row, sheet_id):
         return pd.DataFrame()
 
 # ========== SHEET CONFIG ==========
+# Correct column indices (0-based) for each sheet
 SHEET_CONFIG = {
-    "EQ": {"start_row": 5, "pnr_col": 2, "train_col": 6, "doj_col": 8},
-    "DATA": {"start_row": 3, "pnr_col": 2, "train_col": 6, "doj_col": 8},
-    "FINAL": {"start_row": 6, "pnr_col": 8, "train_col": 2, "doj_col": 13},
-    "DATA2": {"start_row": 4, "pnr_col": 8, "train_col": 2, "doj_col": 13},
-    "EMAIL_DATA": {"start_row": 2, "pnr_col": 8, "train_col": 9, "doj_col": 12},
-    "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 1, "doj_col": None}
+    "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "doj_col": 7},
+    "DATA": {"start_row": 3, "pnr_col": 1, "train_col": 5, "doj_col": 7},
+    "FINAL": {"start_row": 6, "pnr_col": 7, "train_col": 1, "doj_col": 12},
+    "DATA2": {"start_row": 4, "pnr_col": 7, "train_col": 1, "doj_col": 12},
+    "EMAIL_DATA": {"start_row": 2, "pnr_col": 7, "train_col": 8, "doj_col": 11},
+    "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "doj_col": None}
 }
 
-# ========== UPLOAD & EXTRACTION (simplified) ==========
+# ========== UPLOAD & EXTRACTION ==========
 def upload_to_drive(file_bytes, filename, mime_type):
     try:
         drive_service = init_drive()
@@ -276,7 +277,6 @@ def apply_theme(dark_mode):
         .stDataFrame tbody tr td:first-child {{
             display: none !important;
         }}
-        /* Ensure Select column is visible (second column) */
         .stDataFrame thead tr th:nth-child(2),
         .stDataFrame tbody tr td:nth-child(2) {{
             display: table-cell !important;
@@ -331,7 +331,6 @@ def show_dashboard(df, sheet_name):
     if df.empty:
         st.info("No data to display charts.")
         return
-
     try:
         total_records = len(df)
         train_col = next((c for c in df.columns if 'T/N' in c.upper() or 'TRAIN' in c.upper()), None)
@@ -431,71 +430,76 @@ sheet_choice = st.sidebar.selectbox("Select Sheet", list(SHEET_CONFIG.keys()))
 config = SHEET_CONFIG[sheet_choice]
 start_row = config["start_row"]
 
-# ---- Filters (sidebar) with session state management ----
+# ---- Filters with session state ----
 st.sidebar.subheader("🔍 Filters")
+if 'pnr_val' not in st.session_state:
+    st.session_state.pnr_val = ''
+if 'train_val' not in st.session_state:
+    st.session_state.train_val = ''
+if 'from_val' not in st.session_state:
+    st.session_state.from_val = None
+if 'to_val' not in st.session_state:
+    st.session_state.to_val = None
 
-# Initialize session state for filters if not exist
-if 'pnr_filter' not in st.session_state:
-    st.session_state.pnr_filter = ''
-if 'train_filter' not in st.session_state:
-    st.session_state.train_filter = ''
-if 'from_date' not in st.session_state:
-    st.session_state.from_date = None
-if 'to_date' not in st.session_state:
-    st.session_state.to_date = None
+# Input widgets
+pnr_input = st.sidebar.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_input_widget")
+train_input = st.sidebar.text_input("Train (partial)", value=st.session_state.train_val, key="train_input_widget")
+from_input = st.sidebar.date_input("From DOJ", value=st.session_state.from_val, key="from_input_widget")
+to_input = st.sidebar.date_input("To DOJ", value=st.session_state.to_val, key="to_input_widget")
 
-# Input widgets bound to session state
-pnr_val = st.sidebar.text_input("PNR (partial)", value=st.session_state.pnr_filter, key="pnr_input")
-train_val = st.sidebar.text_input("Train (partial)", value=st.session_state.train_filter, key="train_input")
-from_val = st.sidebar.date_input("From DOJ", value=st.session_state.from_date, key="from_input")
-to_val = st.sidebar.date_input("To DOJ", value=st.session_state.to_date, key="to_input")
-
-# Buttons: Apply and Clear
 col1, col2 = st.sidebar.columns(2)
 with col1:
     if st.button("Apply Filters", use_container_width=True):
-        # Store current input values in session state
-        st.session_state.pnr_filter = pnr_val
-        st.session_state.train_filter = train_val
-        st.session_state.from_date = from_val
-        st.session_state.to_date = to_val
+        st.session_state.pnr_val = pnr_input
+        st.session_state.train_val = train_input
+        st.session_state.from_val = from_input
+        st.session_state.to_val = to_input
         st.rerun()
 with col2:
     if st.button("Clear Filters", use_container_width=True):
-        # Reset session state to defaults
-        st.session_state.pnr_filter = ''
-        st.session_state.train_filter = ''
-        st.session_state.from_date = None
-        st.session_state.to_date = None
+        st.session_state.pnr_val = ''
+        st.session_state.train_val = ''
+        st.session_state.from_val = None
+        st.session_state.to_val = None
         st.rerun()
 
-# ---- Apply Filters using session state values ----
-filtered_df = load_sheet_data_cached(sheet_choice, start_row, SHEET_ID)
-if filtered_df.empty:
-    filtered_df = pd.DataFrame()
+# ---- Load and filter data ----
+df_raw = load_sheet_data_cached(sheet_choice, start_row, SHEET_ID)
+filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
 
 if not filtered_df.empty:
     pnr_col_idx = config.get("pnr_col")
     train_col_idx = config.get("train_col")
     doj_col_idx = config.get("doj_col")
 
-    if st.session_state.pnr_filter and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
+    # Apply PNR filter
+    if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
         col_name = filtered_df.columns[pnr_col_idx]
-        filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.pnr_filter, case=False, na=False)]
-    if st.session_state.train_filter and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
+        filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.pnr_val, case=False, na=False)]
+
+    # Apply Train filter
+    if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
         col_name = filtered_df.columns[train_col_idx]
-        filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_filter, case=False, na=False)]
-    if (st.session_state.from_date or st.session_state.to_date) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
+        filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
+
+    # Apply Date filter
+    if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
         col_name = filtered_df.columns[doj_col_idx]
+        # Convert to datetime with flexible format
         try:
+            # Try parsing as DD-MM-YYYY first
             filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
-            if st.session_state.from_date:
-                filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(st.session_state.from_date)]
-            if st.session_state.to_date:
-                filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_date)]
-            filtered_df = filtered_df.drop('_temp', axis=1)
+            # If many NaNs, try other formats
+            if filtered_df['_temp'].isna().all():
+                filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
         except:
-            pass
+            filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
+        
+        if st.session_state.from_val:
+            filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
+        if st.session_state.to_val:
+            filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
+        filtered_df = filtered_df.drop('_temp', axis=1)
 
 # ---- Print Button (sidebar) ----
 st.sidebar.subheader("🖨️ Print")
@@ -548,9 +552,8 @@ if view == "Dashboard":
 else:
     # ---- Data Table ----
     st.subheader(f"📋 {sheet_choice} – {len(filtered_df)} rows")
-
     if filtered_df.empty:
-        st.info("No data to display.")
+        st.info("No data to display. Try adjusting filters or clearing them.")
     else:
         # Pagination
         page_size = st.selectbox("Rows per page", [15, 25, 50, 100], index=1, key="page_size")
