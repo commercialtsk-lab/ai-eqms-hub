@@ -6,6 +6,8 @@ import base64
 import io
 import time
 import math
+import requests
+import urllib.parse
 from datetime import datetime, timedelta
 from collections import Counter
 import google.generativeai as genai
@@ -37,27 +39,34 @@ SHEET_ID = "1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI"
 DRIVE_FOLDER_ID = "1H1gf8WqfoTYFT_pU9WfIDLrHg-NpuUSI"
 
 # ========== SESSION STATE ==========
-if 'messages' not in st.session_state:
-    st.session_state.messages = []
-if 'activity_log' not in st.session_state:
-    st.session_state.activity_log = []
-if 'sidebar_collapsed' not in st.session_state:
-    st.session_state.sidebar_collapsed = False
-if 'last_uploaded_file' not in st.session_state:
-    st.session_state.last_uploaded_file = None
-if 'last_uploaded_drive_url' not in st.session_state:
-    st.session_state.last_uploaded_drive_url = None
-if 'last_refresh' not in st.session_state:
-    st.session_state.last_refresh = time.time()
-if 'chat_suggestions' not in st.session_state:
-    st.session_state.chat_suggestions = [
+defaults = {
+    'messages': [],
+    'activity_log': [],
+    'last_uploaded_file': None,
+    'last_uploaded_drive_url': None,
+    'last_uploaded_view_url': None,
+    'last_refresh': time.time(),
+    'chat_suggestions': [
         "Show me EQ summary",
         "How many records today?",
         "Train wise breakup",
         "Pending EQ requests",
         "Quota status",
         "PNR status"
-    ]
+    ],
+    'dark_mode': False,
+    'current_page': 1,
+    'pnr_val': '',
+    'train_val': '',
+    'from_val': None,
+    'to_val': None,
+    'upload_success': False,
+    'last_upload_time': None,
+}
+
+for key, val in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
 # ========== HEADINGS ==========
 HEADINGS = [
@@ -156,9 +165,9 @@ def parse_date(date_str):
     if isinstance(date_str, datetime):
         return date_str.strftime("%d-%m-%Y")
     date_str = str(date_str).strip()
-    match = re.search(r'(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})', date_str)
-    if match:
-        day, month, year = match.groups()
+    multi_match = re.search(r'(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})', date_str)
+    if multi_match:
+        day, month, year = multi_match.groups()
         day = day.zfill(2); month = month.zfill(2)
         if len(year) == 2: year = '20' + year
         if int(month) > 12 and int(day) <= 12: day, month = month, day
@@ -220,15 +229,6 @@ def is_flag_time():
     end = now.replace(hour=sunset_h, minute=sunset_m, second=0, microsecond=0)
     return start <= now <= end
 
-def get_flag_colors():
-    if is_flag_time():
-        return {
-            'saffron': {'red': 1.0, 'green': 0.6, 'blue': 0.0},
-            'white': {'red': 1.0, 'green': 1.0, 'blue': 1.0},
-            'green': {'red': 0.0, 'green': 0.6, 'blue': 0.2}
-        }
-    return None
-
 # ========== SHEET CONFIG ==========
 SHEET_CONFIG = {
     "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "doj_col": 7},
@@ -264,6 +264,8 @@ def load_sheet_data_cached(sheet_name, sheet_id):
             else:
                 seen[h_str] = 0
                 unique_headers.append(h_str)
+        if not data_rows:
+            return pd.DataFrame()
         df = pd.DataFrame(data_rows, columns=unique_headers[:len(data_rows[0])] if data_rows else [])
         return df
     except Exception as e:
@@ -273,7 +275,7 @@ def load_sheet_data_cached(sheet_name, sheet_id):
 # ========== GEMINI EXTRACTION ==========
 def gemini_universal_parser(input_data, input_type, mime_type, progress_callback=None):
     url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}'
-    
+
     system_prompt = """
 You are TSKEQ Bot's AI extraction engine. You are an EXPERT at reading messy, handwritten, torn, or low-quality railway forms.
 
@@ -281,9 +283,11 @@ You are TSKEQ Bot's AI extraction engine. You are an EXPERT at reading messy, ha
 PNR, T_N (Train Number), CLASS, DOJ (DD-MM-YYYY), FROM, TO, BOARDING, PASS_NAME, PASS_PH (10 digits), T_BERTHS, PURPOSE, ADDRESS, DIARY_NO, RECOMMENDATION, DESIGNATION, VIP_STATUS, APPLICATION_DATE, RAILWAY_ZONE, PREFERENCE, PHONE_NUBER, WARRANT_NO
 
 === SPECIAL RULES ===
-1. DIARY_NO: Look for "No." or "Diary No." pattern.
+1. DIARY_NO: Look for "No." or "Diary No." pattern. Preserve as-is. Do NOT overwrite with RAIL BOARD unless explicitly stated.
 2. PREFERENCE: If you see "Lower Berth", "Lower Seat", "Coupe", set PREFERENCE = "Lower Seat".
 3. RAIL BOARD: If you see "Office of the Hon'ble Minister Railways", set DIARY_NO="RAIL BOARD", RAILWAY_ZONE="RAIL BOARD".
+4. DOJ: If you see "24/25.06.26", return the FIRST date: "24-06-2026".
+5. Multiple entries: If a table has multiple rows, extract ALL valid entries.
 
 === OUTPUT FORMAT ===
 Return ONLY a valid JSON array. No explanations.
@@ -387,7 +391,7 @@ def extract_data_manually(response_text, input_data):
         return {'error': 'No PNR found'}
     train_matches = re.findall(r'\b\d{3,5}\b', text)
     trains = [t for t in train_matches if len(t) != 10]
-    date_matches = re.findall(r'\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}', text)
+    date_matches = re.findall(r'\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4}', text)
     station_matches = re.findall(r'\b[A-Z]{3,4}\b', text)
     name_matches = re.findall(r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*', text)
     names = [n for n in name_matches if 3 < len(n) < 40]
@@ -395,7 +399,7 @@ def extract_data_manually(response_text, input_data):
     diary_match = re.search(r'No\.?\s*[:#]?\s*([A-Z0-9\/\-]+)', text.upper())
     diary = diary_match.group(1).strip() if diary_match else ''
     app_date = ''
-    date_pattern = r'Dated\s*[:#]?\s*(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})'
+    date_pattern = r'Dated\s*[:#]?\s*(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})'
     date_match = re.search(date_pattern, text, re.IGNORECASE)
     if date_match:
         app_date = date_match.group(1)
@@ -558,13 +562,16 @@ def upload_to_drive(file_bytes, filename, mime_type):
         file_metadata = {'name': filename, 'parents': [DRIVE_FOLDER_ID]}
         media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type, resumable=True)
         file = drive_service.files().create(body=file_metadata, media_body=media, fields='id,name,webViewLink,size').execute()
+        file_id = file.get('id')
         return {
             'success': True,
-            'id': file.get('id'),
+            'id': file_id,
             'name': file.get('name'),
             'url': file.get('webViewLink'),
             'size': file.get('size'),
-            'print_url': f"https://drive.google.com/file/d/{file.get('id')}/preview"
+            'view_url': f"https://drive.google.com/file/d/{file_id}/view",
+            'print_url': f"https://drive.google.com/file/d/{file_id}/preview",
+            'download_url': f"https://drive.google.com/uc?export=download&id={file_id}"
         }
     except Exception as e:
         return {'success': False, 'error': str(e)}
@@ -574,27 +581,32 @@ def save_to_sheet(sheet, records):
     try:
         all_data = sheet.get_all_values()
         existing_pnrs = []
-        for row in all_data[4:]:
+        start_row = 5
+        for row in all_data[start_row-1:]:
             if row and len(row) > 1:
                 pnr = clean_pnr(row[1])
                 if pnr:
                     existing_pnrs.append(pnr)
         saved = 0
         skipped = 0
+        next_sn = len(all_data) - start_row + 2
         for rec in records:
             pnr = clean_pnr(rec.get('PNR', ''))
             if not pnr or pnr in existing_pnrs:
                 skipped += 1
                 continue
             now = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-            row = [len(all_data)+1, pnr, rec.get('FROM',''), rec.get('TO',''), rec.get('BOARDING',''),
-                   rec.get('T_N',''), rec.get('CLASS',''), rec.get('DOJ',''), rec.get('PASS_NAME',''),
-                   rec.get('PASS_PH',''), rec.get('T_BERTHS',1), rec.get('PURPOSE',''), rec.get('ADDRESS',''),
-                   rec.get('DIARY_NO',''), rec.get('RECOMMENDATION',''), rec.get('DESIGNATION',''),
-                   rec.get('PHONE_NUBER',''), rec.get('VIP_STATUS',''), rec.get('WARRANT_NO',''),
-                   now, rec.get('APPLICATION_DATE',''), rec.get('RAILWAY_ZONE',''), rec.get('PREFERENCE','General')]
+            row = [
+                next_sn, pnr, rec.get('FROM',''), rec.get('TO',''), rec.get('BOARDING',''),
+                rec.get('T_N',''), rec.get('CLASS',''), rec.get('DOJ',''), rec.get('PASS_NAME',''),
+                rec.get('PASS_PH',''), rec.get('T_BERTHS',1), rec.get('PURPOSE',''), rec.get('ADDRESS',''),
+                rec.get('DIARY_NO',''), rec.get('RECOMMENDATION',''), rec.get('DESIGNATION',''),
+                rec.get('PHONE_NUBER',''), rec.get('VIP_STATUS',''), rec.get('WARRANT_NO',''),
+                now, rec.get('APPLICATION_DATE',''), rec.get('RAILWAY_ZONE',''), rec.get('PREFERENCE','General')
+            ]
             sheet.append_row(row)
             existing_pnrs.append(pnr)
+            next_sn += 1
             saved += 1
             time.sleep(0.15)
         return {'saved': saved, 'skipped': skipped}
@@ -607,7 +619,7 @@ def get_sheet_context():
         gc = init_sheets()
         eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
         all_data = eq_sheet.get_all_values()
-        total = len(all_data) - 4
+        total = max(0, len(all_data) - 4)
         summary = f"EQ Sheet has {total} records.\n"
         if total > 0:
             sample = all_data[-5:] if len(all_data) > 5 else all_data[4:]
@@ -634,6 +646,8 @@ Instructions:
 2. For general railway questions, use your knowledge.
 3. Be helpful, concise, and friendly.
 4. Use emojis occasionally.
+5. Respond naturally as if you are having a conversation.
+6. You can discuss ANY topic - not just railways. Be like ChatGPT.
 
 Previous conversation:
 """
@@ -648,10 +662,11 @@ Previous conversation:
         response = model.generate_content(system_prompt)
         return response.text
     except Exception as e:
-        return f"Error: Could not process your request. Please try again later."
+        return f"Error: Could not process your request. Please try again later. ({str(e)})"
 
 # ========== THEME ==========
 def apply_theme(dark_mode):
+    st.session_state.dark_mode = dark_mode
     if dark_mode:
         bg = "#0d1117"
         card_bg = "#161b22"
@@ -659,8 +674,12 @@ def apply_theme(dark_mode):
         text_secondary = "#8b949e"
         border = "#30363d"
         input_bg = "#0d1117"
-        button_text = "#58a6ff"
-        button_hover = "#79c0ff"
+        accent = "#58a6ff"
+        accent_hover = "#79c0ff"
+        success = "#3fb950"
+        danger = "#f85149"
+        chat_user_bg = "#1f2937"
+        chat_assistant_bg = "#2d3748"
     else:
         bg = "#f6f8fa"
         card_bg = "#ffffff"
@@ -668,115 +687,180 @@ def apply_theme(dark_mode):
         text_secondary = "#57606a"
         border = "#d0d7de"
         input_bg = "#f6f8fa"
-        button_text = "#0969da"
-        button_hover = "#0550ae"
+        accent = "#0969da"
+        accent_hover = "#0550ae"
+        success = "#1a7f37"
+        danger = "#cf222e"
+        chat_user_bg = "#e1f5fe"
+        chat_assistant_bg = "#f5f5f5"
 
-    st.markdown(f"""
+    css = f"""
     <style>
-        .stApp, .main .block-container, .css-1d391kg, .css-18e3th9,
-        .stSidebar, .sidebar-content, .css-1d391kg .sidebar-content {{
+        .stApp {{
             background-color: {bg} !important;
         }}
-        header, .st-emotion-cache-1avcm0n, .st-emotion-cache-6qob1r {{
-            background-color: {bg} !important;
+        [data-testid="stSidebar"] {{
+            background-color: {card_bg} !important;
+            border-right: 1px solid {border} !important;
         }}
-        body, .stMarkdown, p, div, span, h1, h2, h3, h4, h5, h6,
-        label, .stTextInput label, .stSelectbox label, .stDateInput label,
-        .stNumberInput label, .stTextArea label, .stCheckbox label,
-        .stRadio label, .stSlider label, .stFileUploader label,
-        .stDataFrame, .stDataFrame div, .stDataFrame span,
-        .stTable, .stTable div, .stTable span,
-        .stMetric, .stMetric label, .stMetric div,
-        .stChatMessage, .stChatMessage div, .stChatMessage p,
-        .stSidebar .sidebar-content, .stSidebar .sidebar-content p,
-        .stSidebar .sidebar-content div, .stSidebar .sidebar-content label,
-        .stExpander, .stExpander .streamlit-expanderHeader,
-        .stSelectbox, .stSelectbox div, .stSelectbox span,
-        .stTextInput, .stTextInput div, .stTextInput span,
-        .stDateInput, .stDateInput div, .stDateInput span,
-        .stNumberInput, .stNumberInput div, .stNumberInput span,
-        .stTextArea, .stTextArea div, .stTextArea span,
-        .stChatInput, .stChatInput div, .stChatInput span,
-        .stChatInput input, .stChatInput textarea,
-        .stSelectbox select,
-        .stFileUploader label, .stFileUploader div, .stFileUploader span,
-        .stFileUploader .st-ae, .stFileUploader .st-bb,
-        .stFileUploader .st-b6, .stFileUploader .st-b7,
-        .stFileUploader .st-b8 {{
+        [data-testid="stSidebar"] .stMarkdown p,
+        [data-testid="stSidebar"] .stMarkdown div,
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] .stTextInput label,
+        [data-testid="stSidebar"] .stSelectbox label,
+        [data-testid="stSidebar"] .stDateInput label,
+        [data-testid="stSidebar"] .stNumberInput label,
+        [data-testid="stSidebar"] .stTextArea label {{
             color: {text_color} !important;
+        }}
+        header[data-testid="stHeader"] {{
+            background-color: {card_bg} !important;
+            border-bottom: 1px solid {border} !important;
+        }}
+        h1, h2, h3, h4, h5, h6,
+        .stMarkdown p, .stMarkdown div, .stMarkdown span,
+        .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
+        [data-testid="stMetricLabel"],
+        [data-testid="stMetricValue"] {{
+            color: {text_color} !important;
+        }}
+        .stTextInput input, .stNumberInput input,
+        .stDateInput input, .stTextArea textarea,
+        .stSelectbox > div > div > div {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+            border: 1px solid {border} !important;
+            border-radius: 8px !important;
+        }}
+        .stButton > button {{
+            background-color: transparent !important;
+            color: {accent} !important;
+            border: 1px solid {border} !important;
+            border-radius: 8px !important;
+            font-weight: 500 !important;
+            transition: all 0.2s ease !important;
+        }}
+        .stButton > button:hover {{
+            background-color: {accent} !important;
+            color: white !important;
+            border-color: {accent} !important;
+        }}
+        .stButton > button:disabled {{
+            opacity: 0.5 !important;
+            cursor: not-allowed !important;
         }}
         .stFileUploader {{
             background-color: {input_bg} !important;
-            border: 1px dashed {border} !important;
-            border-radius: 8px !important;
-            padding: 8px !important;
+            border: 2px dashed {border} !important;
+            border-radius: 12px !important;
+            padding: 16px !important;
         }}
-        .sheet-link-btn {{
-            display: inline-block !important;
-            padding: 10px 20px !important;
-            background: transparent !important;
-            color: {button_text} !important;
+        .stFileUploader:hover {{
+            border-color: {accent} !important;
+        }}
+        .stFileUploader label {{
+            color: {text_secondary} !important;
+        }}
+        .stDataFrame, [data-testid="stDataFrame"] {{
+            background-color: {card_bg} !important;
             border: 1px solid {border} !important;
             border-radius: 8px !important;
-            cursor: pointer !important;
-            font-weight: 500 !important;
-            text-decoration: none !important;
-            text-align: center !important;
-            width: 100% !important;
         }}
-        .sheet-link-btn:hover {{
-            color: {button_hover} !important;
-            border-color: {button_hover} !important;
+        .stDataFrame th {{
+            background-color: {card_bg} !important;
+            color: {text_color} !important;
+            border-bottom: 2px solid {border} !important;
+            font-weight: 600 !important;
         }}
-        .stButton button, .stButton button p {{
-            background: transparent !important;
-            color: {button_text} !important;
-            border: none !important;
-            border-radius: 0 !important;
-            font-weight: 500 !important;
-            padding: 4px 12px !important;
-            font-size: 0.9rem !important;
-            cursor: pointer !important;
+        .stDataFrame td {{
+            background-color: {card_bg} !important;
+            color: {text_color} !important;
+            border-color: {border} !important;
         }}
-        .stButton button:hover {{
-            background: transparent !important;
-            color: {button_hover} !important;
-            text-decoration: underline !important;
+        .stExpander {{
+            background-color: {card_bg} !important;
+            border: 1px solid {border} !important;
+            border-radius: 8px !important;
+        }}
+        .streamlit-expanderHeader {{
+            color: {text_color} !important;
+            font-weight: 600 !important;
+        }}
+        .stChatMessage {{
+            background-color: {card_bg} !important;
+            border: 1px solid {border} !important;
+            border-radius: 12px !important;
+            padding: 12px !important;
+            margin-bottom: 8px !important;
+        }}
+        .stChatMessage [data-testid="stChatMessageAvatar"] + div {{
+            color: {text_color} !important;
+        }}
+        .stChatInput {{
+            background-color: {input_bg} !important;
+            border: 1px solid {border} !important;
+            border-radius: 12px !important;
+        }}
+        .stChatInput input {{
+            color: {text_color} !important;
+        }}
+        [data-testid="stMetric"] {{
+            background-color: {card_bg} !important;
+            border: 1px solid {border} !important;
+            border-radius: 8px !important;
+            padding: 12px !important;
+        }}
+        .stCheckbox label, .stRadio label {{
+            color: {text_color} !important;
+        }}
+        .stTabs [data-baseweb="tab-list"] {{
+            background-color: {card_bg} !important;
+            border-bottom: 1px solid {border} !important;
+        }}
+        .stTabs [data-baseweb="tab"] {{
+            color: {text_secondary} !important;
+        }}
+        .stTabs [data-baseweb="tab-highlight"] {{
+            background-color: {accent} !important;
+        }}
+        ::-webkit-scrollbar {{
+            width: 8px;
+            height: 8px;
+        }}
+        ::-webkit-scrollbar-track {{
+            background: {bg};
+        }}
+        ::-webkit-scrollbar-thumb {{
+            background: {border};
+            border-radius: 10px;
+        }}
+        ::-webkit-scrollbar-thumb:hover {{
+            background: {accent};
         }}
         .action-box {{
             background: {card_bg};
             border: 1px solid {border};
-            border-radius: 8px;
-            padding: 16px;
+            border-radius: 12px;
+            padding: 20px;
             margin-bottom: 16px;
         }}
-        .stMetric, .stExpander, .stDataFrame, .stTable,
-        .stChatMessage, .stChatInput, .stSelectbox, .stTextInput,
-        .stDateInput, .stNumberInput, .stTextArea {{
-            background-color: {card_bg} !important;
-            border-color: {border} !important;
+        .file-card {{
+            background: {card_bg};
+            border: 1px solid {border};
+            border-radius: 12px;
+            padding: 16px;
+            margin: 12px 0;
         }}
-        .stDataFrame thead th {{
-            background: {card_bg} !important;
-            color: {text_color} !important;
-            border-bottom: 2px solid {border} !important;
+        .file-card-title {{
+            color: {text_color};
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 4px;
         }}
-        .stDataFrame tbody td {{
-            background-color: {card_bg} !important;
-            color: {text_color} !important;
-            border-color: {border} !important;
-        }}
-        .stTextInput input, .stSelectbox select, .stDateInput input,
-        .stNumberInput input, .stTextArea textarea {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-            border: 1px solid {border} !important;
-            border-radius: 6px !important;
-        }}
-        .stExpander, .stDataFrame, .stTable, .stMetric,
-        .stChatMessage, .stChatInput {{
-            border: 1px solid {border} !important;
-            border-radius: 8px !important;
+        .file-card-meta {{
+            color: {text_secondary};
+            font-size: 0.85rem;
+            margin-bottom: 12px;
         }}
         .pro-footer {{
             color: {text_secondary} !important;
@@ -785,45 +869,75 @@ def apply_theme(dark_mode):
             padding: 20px 0 10px !important;
             margin-top: 30px !important;
         }}
-        .stDataFrame thead tr th:first-child,
-        .stDataFrame tbody tr th:first-child,
-        .stDataFrame tbody tr td:first-child {{
-            display: none !important;
+        .sheet-link-btn {{
+            display: inline-block !important;
+            padding: 10px 20px !important;
+            background: transparent !important;
+            color: {accent} !important;
+            border: 1px solid {border} !important;
+            border-radius: 8px !important;
+            text-decoration: none !important;
+            text-align: center !important;
+            width: 100% !important;
+            transition: all 0.2s !important;
         }}
-        .stDataFrame thead tr th:nth-child(2),
-        .stDataFrame tbody tr td:nth-child(2) {{
-            display: table-cell !important;
+        .sheet-link-btn:hover {{
+            background: {accent} !important;
+            color: white !important;
+            border-color: {accent} !important;
+        }}
+        .suggestion-pill {{
+            display: inline-block;
+            padding: 6px 14px;
+            background: {card_bg};
+            border: 1px solid {border};
+            border-radius: 20px;
+            color: {text_color};
+            font-size: 0.85rem;
+            margin: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }}
+        .suggestion-pill:hover {{
+            background: {accent};
+            color: white;
+            border-color: {accent};
         }}
         .stToast {{
             background: {card_bg} !important;
-            border-left: 4px solid {button_text} !important;
+            border-left: 4px solid {accent} !important;
             color: {text_color} !important;
         }}
-        ::-webkit-scrollbar {{
-            width: 6px;
-            height: 6px;
+        .stDataFrame [data-testid="stTable"] th:first-child,
+        .stDataFrame [data-testid="stTable"] td:first-child {{
+            display: none !important;
         }}
-        ::-webkit-scrollbar-track {{
-            background: {bg};
-        }}
-        ::-webkit-scrollbar-thumb {{
-            background: {button_text};
-            border-radius: 10px;
-        }}
-        .stChatInput {{
-            background: {input_bg} !important;
-            border: 1px solid {border} !important;
-            border-radius: 8px !important;
-        }}
-        .stChatInput input {{
-            color: {text_color} !important;
+        * {{
+            transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
         }}
     </style>
-    """, unsafe_allow_html=True)
+    """
+    st.markdown(css, unsafe_allow_html=True)
+
+# ========== WHATSAPP SHARE ==========
+def build_whatsapp_message(sheet_name, selected_count, pnrs):
+    now_str = datetime.now().strftime("%d-%m-%Y %H:%M")
+    msg = f"📊 *{sheet_name}* — {selected_count} rows selected\n🕐 {now_str}"
+    if pnrs:
+        pnr_text = ", ".join(str(p) for p in pnrs[:15])
+        if len(pnrs) > 15:
+            pnr_text += f" (+{len(pnrs)-15} more)"
+        msg += f"\n🎫 PNRs: {pnr_text}"
+    msg += f"\n🔗 Sheet: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
+    return msg
 
 # ========== MAIN APP ==========
 def main():
-    dark_mode = st.sidebar.toggle("🌙 Dark Mode", value=False)
+    # ---- THEME TOGGLE ----
+    dark_mode = st.sidebar.toggle("🌙 Dark Mode", value=st.session_state.dark_mode)
+    if dark_mode != st.session_state.dark_mode:
+        st.session_state.dark_mode = dark_mode
+        st.rerun()
     apply_theme(dark_mode)
 
     # ---- SIDEBAR ----
@@ -834,10 +948,12 @@ def main():
         if 5 <= hour < 12:
             if is_flag_time():
                 st.markdown("""
-                🇮🇳 **Good Morning!**
-                <div style="color:#FF9933">🟠 Saffron</div>
-                <div style="color:#000000">⚪ White</div>
-                <div style="color:#138808">🟢 Green</div>
+                <div style="text-align:center; margin-bottom:10px;">
+                    <div style="font-size:24px; margin-bottom:4px;">🇮🇳</div>
+                    <div style="font-weight:600; color:#FF9933;">🟠 Good Morning</div>
+                    <div style="font-weight:600; color:#000000;">⚪ Jai Hind</div>
+                    <div style="font-weight:600; color:#138808;">🟢 Vande Mataram</div>
+                </div>
                 """, unsafe_allow_html=True)
             else:
                 st.markdown("☀️ **Good Morning!**")
@@ -866,15 +982,25 @@ def main():
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
         st.markdown("---")
 
-        # ---- File Upload ----
+        # ---- File Upload Section ----
         st.subheader("📤 Upload File")
-        uploaded_file = st.file_uploader("Choose file (Image/PDF/Text)", type=['png','jpg','jpeg','pdf','txt'])
-        caption = st.text_input("Caption (optional)")
+        st.caption("Image, PDF, Text, or Audio")
+        uploaded_file = st.file_uploader(
+            "Choose a file",
+            type=['png','jpg','jpeg','pdf','txt','mp3','wav','ogg','m4a'],
+            label_visibility="collapsed"
+        )
+        caption = st.text_input("📝 Caption (optional)", placeholder="Add notes...")
 
-        if st.button("🚀 Process & Save", use_container_width=True):
+        if st.button("🚀 Process & Save", use_container_width=True, type="primary"):
             if uploaded_file:
                 file_bytes = uploaded_file.read()
                 file_type = 'pdf' if uploaded_file.type == 'application/pdf' else 'image'
+                if uploaded_file.type.startswith('audio/'):
+                    file_type = 'audio'
+                elif uploaded_file.type == 'text/plain':
+                    file_type = 'text'
+
                 progress_text = st.empty()
                 progress_bar = st.progress(0)
 
@@ -885,16 +1011,24 @@ def main():
                 try:
                     with st.spinner("Processing..."):
                         b64 = base64.b64encode(file_bytes).decode('utf-8')
-                        parse_result = gemini_universal_parser(b64, file_type, uploaded_file.type, update_progress)
+
+                        if file_type == 'text':
+                            parse_result = gemini_universal_parser(uploaded_file.getvalue().decode('utf-8'), 'text', None, update_progress)
+                        else:
+                            parse_result = gemini_universal_parser(b64, file_type, uploaded_file.type, update_progress)
 
                         if 'error' in parse_result:
-                            st.error(f"Error: {parse_result['error']}")
+                            st.error(f"❌ Error: {parse_result['error']}")
+                            st.session_state.activity_log.append({
+                                'timestamp': datetime.now().strftime("%H:%M:%S"),
+                                'action': f"❌ Parse failed: {parse_result['error']}"
+                            })
                         else:
                             st.success(f"✅ Extracted {parse_result['count']} records!")
 
                             if parse_result['records']:
                                 with st.expander("📋 Extracted Data Preview"):
-                                    st.dataframe(pd.DataFrame(parse_result['records']))
+                                    st.dataframe(pd.DataFrame(parse_result['records']), use_container_width=True)
 
                             try:
                                 gc = init_sheets()
@@ -902,74 +1036,110 @@ def main():
                                 save_res = save_to_sheet(eq_sheet, parse_result['records'])
 
                                 if 'error' in save_res:
-                                    st.error(f"Save error: {save_res['error']}")
+                                    st.error(f"❌ Save error: {save_res['error']}")
                                 else:
-                                    st.success(f"✅ Saved {save_res['saved']} new records!")
+                                    st.success(f"✅ Saved {save_res['saved']} new records! ({save_res['skipped']} skipped)")
 
+                                    # Upload to Drive
                                     drive_res = upload_to_drive(file_bytes, uploaded_file.name, uploaded_file.type)
                                     if drive_res['success']:
-                                        st.success(f"📁 File uploaded to Drive")
+                                        st.success(f"📁 Uploaded to Drive: {drive_res['name']}")
                                         st.session_state.last_uploaded_file = uploaded_file.name
                                         st.session_state.last_uploaded_drive_url = drive_res['print_url']
+                                        st.session_state.last_uploaded_view_url = drive_res['view_url']
+                                        st.session_state.upload_success = True
+                                        st.session_state.last_upload_time = datetime.now().strftime("%H:%M:%S")
+
+                                        st.session_state.activity_log.append({
+                                            'timestamp': datetime.now().strftime("%H:%M:%S"),
+                                            'action': f"✅ Uploaded {uploaded_file.name} — {save_res['saved']} records saved"
+                                        })
                                     else:
-                                        st.error(f"Drive upload error: {drive_res['error']}")
+                                        st.error(f"❌ Drive upload error: {drive_res['error']}")
+                                        st.session_state.activity_log.append({
+                                            'timestamp': datetime.now().strftime("%H:%M:%S"),
+                                            'action': f"❌ Drive failed: {drive_res['error']}"
+                                        })
 
                                     st.cache_data.clear()
                                     st.session_state.last_refresh = time.time()
                                     time.sleep(0.5)
                                     st.rerun()
                             except Exception as e:
-                                st.error(f"Sheet error: {e}")
+                                st.error(f"❌ Sheet error: {e}")
+                                st.session_state.activity_log.append({
+                                    'timestamp': datetime.now().strftime("%H:%M:%S"),
+                                    'action': f"❌ Sheet error: {str(e)[:50]}"
+                                })
                 except Exception as e:
-                    st.error(f"Processing error: {e}")
+                    st.error(f"❌ Processing error: {e}")
                 finally:
                     progress_bar.empty()
                     progress_text.empty()
             else:
-                st.warning("Please select a file.")
+                st.warning("⚠️ Please select a file first.")
+
+        # ---- Uploaded File Actions (if available) ----
+        if st.session_state.upload_success and st.session_state.last_uploaded_file:
+            st.markdown("---")
+            st.markdown(f"""
+            <div class="file-card">
+                <div class="file-card-title">📄 {st.session_state.last_uploaded_file}</div>
+                <div class="file-card-meta">Uploaded at {st.session_state.get('last_upload_time', 'N/A')}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.session_state.last_uploaded_view_url:
+                    st.link_button("👁️ View File", st.session_state.last_uploaded_view_url, use_container_width=True)
+            with c2:
+                if st.session_state.last_uploaded_drive_url:
+                    st.link_button("🖨️ Print File", st.session_state.last_uploaded_drive_url, use_container_width=True)
+
+            if st.button("🗑️ Clear File History", use_container_width=True):
+                st.session_state.last_uploaded_file = None
+                st.session_state.last_uploaded_drive_url = None
+                st.session_state.last_uploaded_view_url = None
+                st.session_state.upload_success = False
+                st.rerun()
 
         st.markdown("---")
 
         # ---- Activity Log ----
         with st.expander("📋 Activity Log", expanded=False):
             if st.session_state.activity_log:
-                for log in st.session_state.activity_log[-10:]:
-                    st.caption(f"🕐 {log['timestamp'] if 'timestamp' in log else ''}")
-                    st.caption(f"📌 {log['action'] if 'action' in log else ''}")
-                    st.divider()
+                for log in reversed(st.session_state.activity_log[-15:]):
+                    st.caption(f"🕐 {log.get('timestamp', '')} — {log.get('action', '')}")
             else:
                 st.caption("No activity yet")
 
         st.markdown("---")
 
         # ---- Sheet Selector ----
-        sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()))
+        sheet_choice = st.selectbox("📑 Select Sheet", list(SHEET_CONFIG.keys()))
         config = SHEET_CONFIG[sheet_choice]
         start_row = config["start_row"]
 
         # ---- Filters ----
         st.subheader("🔍 Filters")
-        if 'pnr_val' not in st.session_state:
-            st.session_state.pnr_val = ''
-        if 'train_val' not in st.session_state:
-            st.session_state.train_val = ''
-        if 'from_val' not in st.session_state:
-            st.session_state.from_val = None
-        if 'to_val' not in st.session_state:
-            st.session_state.to_val = None
+        pnr_input = st.text_input("🔢 PNR (partial)", value=st.session_state.pnr_val, key="pnr_input_widget")
+        train_input = st.text_input("🚂 Train (partial)", value=st.session_state.train_val, key="train_input_widget")
 
-        pnr_input = st.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_input_widget")
-        train_input = st.text_input("Train (partial)", value=st.session_state.train_val, key="train_input_widget")
-        from_input = st.date_input("From DOJ", value=st.session_state.from_val, key="from_input_widget")
-        to_input = st.date_input("To DOJ", value=st.session_state.to_val, key="to_input_widget")
+        c1, c2 = st.columns(2)
+        with c1:
+            from_input = st.date_input("📅 From DOJ", value=st.session_state.from_val, key="from_input_widget")
+        with c2:
+            to_input = st.date_input("📅 To DOJ", value=st.session_state.to_val, key="to_input_widget")
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("Apply Filters", use_container_width=True):
+            if st.button("Apply Filters", use_container_width=True, type="primary"):
                 st.session_state.pnr_val = pnr_input
                 st.session_state.train_val = train_input
                 st.session_state.from_val = from_input
                 st.session_state.to_val = to_input
+                st.session_state.current_page = 1
                 st.rerun()
         with col2:
             if st.button("Clear Filters", use_container_width=True):
@@ -977,6 +1147,7 @@ def main():
                 st.session_state.train_val = ''
                 st.session_state.from_val = None
                 st.session_state.to_val = None
+                st.session_state.current_page = 1
                 st.rerun()
 
         # ---- Load and filter data ----
@@ -1011,49 +1182,52 @@ def main():
                 filtered_df = filtered_df.drop('_temp', axis=1)
 
         # ---- Navigation ----
-        view = st.radio("View", ["Data Table", "Dashboard", "💬 Chat with Gemini"])
+        view = st.radio("👁️ View", ["📋 Data Table", "📊 Dashboard", "💬 Chat with Gemini"])
 
     # ---- MAIN AREA ----
-    st.markdown("<div class='pro-title'>🚂 AI EQMS Hub Pro</div>", unsafe_allow_html=True)
-    st.markdown("<div class='pro-subtitle'>Enterprise Railway EQ Management System with Real-Time Sync</div>", unsafe_allow_html=True)
+    st.markdown("<h1 style='font-size:32px; font-weight:bold; margin-bottom:4px;'>🚂 AI EQMS Hub Pro</h1>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color: #6b7280; font-size:15px; margin-bottom:16px;'>Enterprise Railway EQ Management System • Last sync: {datetime.now().strftime('%H:%M:%S')}</p>", unsafe_allow_html=True)
     st.markdown("---")
 
     if view == "💬 Chat with Gemini":
         st.subheader("💬 Chat with TSKEQ Bot")
+        st.caption("Ask about EQ data, trains, quota, or anything else!")
 
-        st.markdown("**💡 Suggested Questions:**")
-        cols = st.columns(3)
+        # Suggestions
+        st.markdown("**💡 Try asking:**")
+        sugg_cols = st.columns(3)
         for i, suggestion in enumerate(st.session_state.chat_suggestions):
-            with cols[i % 3]:
+            with sugg_cols[i % 3]:
                 if st.button(suggestion, key=f"suggestion_{i}", use_container_width=True):
                     st.session_state.messages.append({"role": "user", "content": suggestion})
                     st.rerun()
         st.divider()
 
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
-
+        # Chat messages
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
+        # Chat input
         if prompt := st.chat_input("Ask a question..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
             with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
-                    response = chat_with_gemini(prompt, st.session_state.messages[-30:])
+                with st.spinner("🤔 Thinking..."):
+                    response = chat_with_gemini(prompt, st.session_state.messages)
                     st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
+            st.rerun()
 
+        st.markdown("---")
         if st.button("🗑️ Clear Chat", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
 
-    elif view == "Dashboard":
-        st.subheader("📊 Dashboard")
-        
+    elif view == "📊 Dashboard":
+        st.subheader("📊 Analytics Dashboard")
+
         # Metrics
         m1, m2, m3, m4 = st.columns(4)
         with m1:
@@ -1077,39 +1251,53 @@ def main():
                 expired = sum(1 for _, r in filtered_df.iterrows() if is_expired(r.get(doj_col, '')))
             st.metric("⏰ Expired DOJ", expired)
 
+        st.markdown("---")
+
         # Charts
         if not filtered_df.empty:
-            train_col = next((c for c in filtered_df.columns if 'T/N' in c.upper() or 'TRAIN' in c.upper()), None)
-            if train_col and train_col in filtered_df and filtered_df[train_col].notna().any():
-                fig_pie = px.pie(filtered_df, names=train_col, title=f"Train Distribution ({sheet_choice})",
-                                 hole=0.4, color_discrete_sequence=px.colors.qualitative.Set3)
-                fig_pie.update_layout(height=350)
-                st.plotly_chart(fig_pie, use_container_width=True)
+            c1, c2 = st.columns(2)
 
-            berth_col = next((c for c in filtered_df.columns if 'BERTH' in c.upper() or 'T/BERTHS' in c.upper()), None)
-            if berth_col and berth_col in filtered_df:
-                berth_vals = pd.to_numeric(filtered_df[berth_col], errors='coerce').dropna()
-                if not berth_vals.empty:
-                    fig_hist = px.histogram(berth_vals, nbins=10, title="Berths Distribution",
-                                            labels={'value': 'Berths', 'count': 'Frequency'},
-                                            color_discrete_sequence=['#2d7d46'])
-                    fig_hist.update_layout(height=350, bargap=0.2)
-                    st.plotly_chart(fig_hist, use_container_width=True)
+            with c1:
+                train_col = next((c for c in filtered_df.columns if 'T/N' in c.upper() or 'TRAIN' in c.upper()), None)
+                if train_col and train_col in filtered_df and filtered_df[train_col].notna().any():
+                    train_counts = filtered_df[train_col].value_counts().head(10).reset_index()
+                    train_counts.columns = ['Train', 'Count']
+                    fig_pie = px.pie(train_counts, names='Train', values='Count', 
+                                     title="🚂 Train Distribution",
+                                     hole=0.45, color_discrete_sequence=px.colors.qualitative.Set3)
+                    fig_pie.update_layout(height=380, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                    st.plotly_chart(fig_pie, use_container_width=True)
+
+            with c2:
+                berth_col = next((c for c in filtered_df.columns if 'BERTH' in c.upper() or 'T/BERTHS' in c.upper()), None)
+                if berth_col and berth_col in filtered_df:
+                    berth_vals = pd.to_numeric(filtered_df[berth_col], errors='coerce').dropna()
+                    if not berth_vals.empty:
+                        fig_hist = px.histogram(berth_vals, nbins=10, title="💺 Berths Distribution",
+                                                labels={'value': 'Berths Requested', 'count': 'Frequency'},
+                                                color_discrete_sequence=['#2d7d46'])
+                        fig_hist.update_layout(height=380, bargap=0.2, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig_hist, use_container_width=True)
 
             doj_col = next((c for c in filtered_df.columns if 'DOJ' in c.upper()), None)
             if doj_col and doj_col in filtered_df:
                 df_temp = filtered_df.copy()
                 df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
+                if df_temp['_date'].isna().all():
+                    df_temp['_date'] = pd.to_datetime(df_temp[doj_col], errors='coerce')
                 daily_counts = df_temp.groupby('_date').size().reset_index(name='count')
                 if not daily_counts.empty:
-                    fig_line = px.line(daily_counts, x='_date', y='count', title="Daily Records Trend",
+                    fig_line = px.line(daily_counts, x='_date', y='count', title="📈 Daily Records Trend",
                                        labels={'_date': 'Date', 'count': 'Number of Records'},
                                        markers=True, color_discrete_sequence=['#ff6b6b'])
-                    fig_line.update_layout(height=350)
+                    fig_line.update_layout(height=380, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
                     st.plotly_chart(fig_line, use_container_width=True)
+        else:
+            st.info("📭 No data available for charts. Try adjusting filters or selecting a different sheet.")
 
     else:
-        st.subheader(f"📋 {sheet_choice} – {len(filtered_df)} rows")
+        st.subheader(f"📋 {sheet_choice} — {len(filtered_df)} rows")
         if filtered_df.empty:
             st.info("No data to display. Try adjusting filters or clearing them.")
         else:
@@ -1168,6 +1356,10 @@ def main():
                                 range_name = f"A{start_row_update}:{col_letter}{end_row_update}"
                                 sheet.update(range_name, data_to_update)
                                 st.toast("✅ Changes saved!", icon="💾")
+                                st.session_state.activity_log.append({
+                                    'timestamp': datetime.now().strftime("%H:%M:%S"),
+                                    'action': f"💾 Saved edits in {sheet_choice}"
+                                })
                                 st.cache_data.clear()
                                 st.session_state.last_refresh = time.time()
                                 time.sleep(0.5)
@@ -1193,6 +1385,10 @@ def main():
                                 blank_row[0] = next_sn
                             sheet.append_row(blank_row)
                             st.toast("✅ Blank row added!", icon="➕")
+                            st.session_state.activity_log.append({
+                                'timestamp': datetime.now().strftime("%H:%M:%S"),
+                                'action': f"➕ Added row in {sheet_choice}"
+                            })
                             st.cache_data.clear()
                             st.session_state.last_refresh = time.time()
                             time.sleep(0.5)
@@ -1210,6 +1406,10 @@ def main():
                                 for row_num in sorted(actual_rows, reverse=True):
                                     sheet.delete_rows(row_num)
                                 st.toast(f"✅ {len(selected_indices)} rows deleted!", icon="🗑️")
+                                st.session_state.activity_log.append({
+                                    'timestamp': datetime.now().strftime("%H:%M:%S"),
+                                    'action': f"🗑️ Deleted {len(selected_indices)} rows from {sheet_choice}"
+                                })
                                 st.cache_data.clear()
                                 st.session_state.last_refresh = time.time()
                                 time.sleep(0.5)
@@ -1221,30 +1421,31 @@ def main():
 
                 with b4:
                     if selected_indices:
-                        if st.button("📤 Share Selected", use_container_width=True):
-                            msg = f"📊 {sheet_choice} – Selected {len(selected_indices)} rows"
-                            pnr_col = next((c for c in edited_page.columns if 'PNR' in c.upper()), None)
-                            if pnr_col:
-                                pnrs = edited_page[edited_page.index.isin(selected_indices)][pnr_col].tolist()
-                                msg += f"\nPNRs: {', '.join(str(p) for p in pnrs[:10])}{'...' if len(pnrs)>10 else ''}"
-                            wa_link = f"https://api.whatsapp.com/send?text={msg.replace(' ', '%20')}"
-                            st.markdown(f'<a href="{wa_link}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
+                        pnr_col = next((c for c in edited_page.columns if 'PNR' in c.upper()), None)
+                        pnrs = []
+                        if pnr_col:
+                            pnrs = edited_page[edited_page.index.isin(selected_indices)][pnr_col].tolist()
+
+                        msg = build_whatsapp_message(sheet_choice, len(selected_indices), pnrs)
+                        wa_url = f"https://api.whatsapp.com/send?text={urllib.parse.quote(msg)}"
+
+                        st.link_button("📤 Share via WhatsApp", wa_url, use_container_width=True)
                     else:
-                        st.button("📤 Share Selected", disabled=True, use_container_width=True)
+                        st.button("📤 Share via WhatsApp", disabled=True, use_container_width=True)
 
                 with b5:
                     if st.session_state.last_uploaded_drive_url:
-                        if st.button("🖨️ Print File", use_container_width=True):
-                            st.markdown(f'<script>window.open("{st.session_state.last_uploaded_drive_url}&print=true", "_blank");</script>', unsafe_allow_html=True)
+                        st.link_button("🖨️ Print File", st.session_state.last_uploaded_drive_url, use_container_width=True)
                     else:
                         st.button("🖨️ Print File", disabled=True, use_container_width=True)
 
                 st.markdown('</div>', unsafe_allow_html=True)
 
-                # Quick Links
+                # Quick Links for EQ sheet
                 if sheet_choice == "EQ":
                     st.subheader("🔗 Quick Links")
                     col_indices = {'X': 23, 'Y': 24, 'Z': 25, 'AA': 26}
+                    link_data = []
                     for idx, row in filtered_df.iterrows():
                         links = []
                         for label, col_idx in col_indices.items():
@@ -1256,18 +1457,24 @@ def main():
                                     if url_match:
                                         url = url_match.group(1)
                                         if label == 'X':
-                                            links.append(f'<a href="{url}" target="_blank">View</a>')
+                                            links.append(f'<a href="{url}" target="_blank">👁️ View</a>')
                                         elif label == 'Y':
-                                            links.append(f'<a href="{url}&print=true" target="_blank">Print</a>')
+                                            links.append(f'<a href="{url}&print=true" target="_blank">🖨️ Print</a>')
                                         elif label == 'Z':
                                             links.append('📝 Hover')
                                         elif label == 'AA':
-                                            links.append(f'<a href="{url}" target="_blank">PNR</a>')
+                                            links.append(f'<a href="{url}" target="_blank">🎫 PNR</a>')
                                 elif label == 'Z' and val and not isinstance(val, str):
                                     links.append(f'📝 {str(val)[:20]}')
                         if links:
-                            row_num = idx + 1
-                            st.markdown(f"**Row {row_num}:** " + " | ".join(links), unsafe_allow_html=True)
+                            link_data.append(f"**Row {idx + 1}:** " + " | ".join(links))
+
+                    if link_data:
+                        with st.expander(f"Show {len(link_data)} link rows"):
+                            for ld in link_data[:20]:
+                                st.markdown(ld, unsafe_allow_html=True)
+                            if len(link_data) > 20:
+                                st.caption(f"... and {len(link_data) - 20} more")
 
                 # Export
                 st.subheader("📄 Export")
