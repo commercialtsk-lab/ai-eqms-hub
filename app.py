@@ -79,7 +79,7 @@ defaults = {
         "Quota status",
         "PNR status"
     ],
-    'theme': 'Day',  # 'Day', 'Dark', 'Custom'
+    'theme': 'Day',
     'custom_bg': '#ffffff',
     'custom_text': '#000000',
     'current_page': 1,
@@ -992,7 +992,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             align-items: center;
             margin-bottom: 8px;
         }}
-        .train-counts {{
+        .train-count-box {{
             display: flex;
             flex-wrap: wrap;
             gap: 6px 14px;
@@ -1013,13 +1013,13 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
         @media print {{
             body * {{ visibility: hidden; }}
-            .print-table, .print-table * {{ visibility: visible !important; }}
-            .print-table {{ position: absolute; left: 0; top: 0; width: 100%; }}
+            .print-content, .print-content * {{ visibility: visible !important; }}
+            .print-content {{ position: absolute; left: 0; top: 0; width: 100%; }}
             .stApp, header, footer, .stSidebar, .stButton, .stExpander, .stTabs, .stSelectbox,
             .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio, .stCheckbox,
             .stFileUploader, .stMarkdown, .stCaption, .stImage, .stVideo, .stAudio,
             .stPlotlyChart, .action-box, .pro-footer, .top-bar, .status-pill, .sheet-link-btn,
-            .stDataEditor *:not(.print-table *) {{ display: none !important; }}
+            .stDataEditor *:not(.print-content *) {{ display: none !important; }}
         }}
         * {{
             transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
@@ -1581,7 +1581,7 @@ def main():
 
         # ---------- STATS ROW ----------
         if not filtered_df.empty:
-            col_stats = st.columns(5)
+            col_stats = st.columns(4)  # Four metrics, then train count box separately
             with col_stats[0]:
                 st.metric("Total", len(filtered_df))
             with col_stats[1]:
@@ -1597,16 +1597,13 @@ def main():
                 if berth_col:
                     total_berths = pd.to_numeric(filtered_df[berth_col], errors='coerce').sum()
                 st.metric("Total Berths", int(total_berths) if total_berths else 0)
-            with col_stats[4]:
-                # Train count summary on the right side
-                if train_col:
-                    train_counts = filtered_df[train_col].value_counts()
-                    count_str = ", ".join([f"{t}: {c}" for t, c in train_counts.head(10).items()])
-                    if len(train_counts) > 10:
-                        count_str += f" (+{len(train_counts)-10} more)"
-                    st.metric("Train Counts", count_str)
-                else:
-                    st.metric("Train Counts", "N/A")
+
+            # ----- Train count box (right side) -----
+            if train_col and not filtered_df.empty:
+                train_counts_series = filtered_df[train_col].value_counts()
+                count_items = [f"{train}: {cnt}" for train, cnt in train_counts_series.items()]
+                chips = ''.join([f'<span class="train-count-item">{t}</span>' for t in count_items])
+                st.markdown(f'<div class="train-count-box">🚆 Train Counts: {chips}</div>', unsafe_allow_html=True)
             st.markdown("---")
 
         # Refresh button
@@ -1649,8 +1646,8 @@ def main():
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
 
-            # Wrap the data editor in a div with class "print-table"
-            st.markdown('<div class="print-table">', unsafe_allow_html=True)
+            # Wrap the data editor in a div with class "print-content"
+            st.markdown('<div class="print-content">', unsafe_allow_html=True)
             edited_page = st.data_editor(
                 display_df,
                 use_container_width=True,
@@ -1789,7 +1786,7 @@ def main():
                         )
 
             with a5:
-                # PRINT – using a reliable JavaScript trigger
+                # PRINT – using reliable JavaScript trigger
                 st.components.v1.html("""
                 <div style="width:100%;">
                     <button onclick="window.print();" style="
