@@ -70,7 +70,7 @@ defaults = {
     'last_uploaded_drive_url': None,
     'last_uploaded_view_url': None,
     'last_uploaded_print_url': None,
-    'last_refresh': now_ist(),  # store as datetime
+    'last_refresh': now_ist(),  # FIXED: now a datetime object
     'chat_suggestions': [
         "Show me EQ summary",
         "How many records today?",
@@ -89,7 +89,7 @@ defaults = {
     'last_upload_time': None,
     'selected_sheet': "EQ",
     'view_mode': "📋 Data Table",
-    'pending_chat': None,  # for instant suggestion replies
+    'pending_chat': None,
 }
 
 for key, val in defaults.items():
@@ -279,7 +279,7 @@ SHEET_CONFIG = {
 }
 
 # ========== LOAD SHEET DATA (with original row numbers) ==========
-@st.cache_data(ttl=10, show_spinner=False)  # faster sync
+@st.cache_data(ttl=10, show_spinner=False)
 def load_sheet_data_cached(sheet_name, sheet_id):
     try:
         gc = init_sheets()
@@ -733,7 +733,6 @@ def apply_theme(dark_mode: bool):
         button_bg = "#21262d"
         button_text = "#e6edf3"
         button_border = "#30363d"
-        # data editor background
         data_bg = "#0d1117"
     else:
         bg = "#f6f8fa"
@@ -948,12 +947,14 @@ def apply_theme(dark_mode: bool):
             align-items: center;
             margin-bottom: 8px;
         }}
-        /* Print styles */
+        /* Print styles – hide everything except the table */
         @media print {{
             body * {{ visibility: hidden; }}
             .print-area, .print-area * {{ visibility: visible; }}
             .print-area {{ position: absolute; left: 0; top: 0; width: 100%; }}
-            .stApp, header, footer, .stSidebar, .stButton, .stExpander {{ display: none !important; }}
+            .stApp, header, footer, .stSidebar, .stButton, .stExpander, .stTabs, .stSelectbox, .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio, .stCheckbox, .stFileUploader, .stMarkdown, .stCaption, .stImage, .stVideo, .stAudio, .stPlotlyChart, .stDataFrame, [data-testid="stDataFrame"] {{ display: none !important; }}
+            /* Keep the table visible */
+            .print-area table, .print-area thead, .print-area tbody, .print-area th, .print-area td {{ visibility: visible !important; }}
         }}
         * {{
             transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
@@ -978,7 +979,7 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs):
 def main():
     apply_theme(st.session_state.dark_mode)
 
-    # ---- SIDEBAR (all collapsible) ----
+    # ---- SIDEBAR ----
     with st.sidebar:
         # Devanagari Welcome
         st.markdown("""
@@ -1021,7 +1022,6 @@ def main():
         # ---- Upload ----
         with st.expander("📤 Upload & Process", expanded=True):
             st.caption("Image • PDF • Text • Audio")
-            # File type selection
             file_type_choice = st.selectbox("File type", ["Image", "PDF", "Text", "Audio"], index=0)
             uploaded_file = st.file_uploader(
                 "Choose a file",
@@ -1033,7 +1033,6 @@ def main():
             if st.button("🚀 Process & Save", use_container_width=True, type="primary"):
                 if uploaded_file:
                     file_bytes = uploaded_file.read()
-                    # Determine actual type from selection
                     if file_type_choice == "Image":
                         input_type = 'image'
                         mime = uploaded_file.type if uploaded_file.type else 'image/jpeg'
@@ -1043,7 +1042,7 @@ def main():
                     elif file_type_choice == "Text":
                         input_type = 'text'
                         mime = 'text/plain'
-                    else:  # Audio
+                    else:
                         input_type = 'audio'
                         mime = uploaded_file.type if uploaded_file.type else 'audio/ogg'
 
@@ -1287,9 +1286,7 @@ def main():
         for i, suggestion in enumerate(st.session_state.chat_suggestions):
             with sugg_cols[i % 3]:
                 if st.button(suggestion, key=f"sugg_{i}", use_container_width=True):
-                    # Append user message and immediately generate response
                     st.session_state.messages.append({"role": "user", "content": suggestion})
-                    # Generate assistant response
                     with st.spinner("Thinking..."):
                         response = chat_with_gemini(suggestion, st.session_state.messages)
                         st.session_state.messages.append({"role": "assistant", "content": response})
@@ -1347,7 +1344,6 @@ def main():
         st.markdown("---")
 
         if not filtered_df.empty:
-            # Layout: Pie chart left, Histogram right
             col1, col2 = st.columns(2)
             with col1:
                 train_col = next((c for c in filtered_df.columns if 'T/N' in str(c).upper() or 'TRAIN' in str(c).upper()), None)
@@ -1370,7 +1366,6 @@ def main():
                         fig.update_layout(height=360, bargap=0.2, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
                         st.plotly_chart(fig, use_container_width=True)
 
-            # Daily trend below
             doj_col = next((c for c in filtered_df.columns if 'DOJ' in str(c).upper()), None)
             if doj_col and doj_col in filtered_df:
                 df_temp = filtered_df.copy()
@@ -1527,7 +1522,7 @@ def main():
                     st.button("🗑️ Delete", disabled=True, use_container_width=True)
 
             with a4:
-                # Share options dropdown
+                # Share dropdown
                 share_option = st.selectbox("Share via", ["WhatsApp", "Email", "SMS", "Twitter", "Facebook"], key="share_opt")
                 if selected_indices:
                     pnr_col = next((c for c in edited_page.columns if 'PNR' in str(c).upper()), None)
@@ -1551,14 +1546,23 @@ def main():
                     st.button("📤 Share", disabled=True, use_container_width=True)
 
             with a5:
-                # Print button - triggers window.print()
-                if st.button("🖨️ Print Sheet", use_container_width=True):
-                    # We'll use a JavaScript call to print
-                    st.markdown("""
-                        <script>
-                            window.print();
-                        </script>
-                    """, unsafe_allow_html=True)
+                # Print button – uses JavaScript to print only the table
+                st.markdown(
+                    """
+                    <button onclick="window.print()" style="
+                        background-color: #f0f0f0;
+                        border: 1px solid #d0d7de;
+                        border-radius: 8px;
+                        padding: 9px 16px;
+                        width: 100%;
+                        font-weight: 500;
+                        cursor: pointer;
+                        transition: 0.15s;
+                        color: #1f2328;
+                    ">🖨️ Print Sheet</button>
+                    """,
+                    unsafe_allow_html=True
+                )
 
             with a6:
                 if st.session_state.last_uploaded_print_url:
