@@ -76,7 +76,6 @@ defaults = {
         "PNR status"
     ],
     'dark_mode': False,          # Global dark mode (sidebar toggle)
-    'sheet_dark': False,         # Sheet‑only dark mode (top‑right toggle)
     'current_page': 1,
     'pnr_val': '',
     'train_val': '',
@@ -725,20 +724,9 @@ Previous conversation:
         return f"⚠️ Error: Could not process your request. Please try again later. ({str(e)})"
 
 # ========== THEME ==========
-def apply_theme(dark_mode: bool, sheet_dark: bool = False):
-    """
-    dark_mode: global dark/light (sidebar toggle)
-    sheet_dark: sheet‑only dark (top‑right toggle)
-    The table will be dark if sheet_dark is True, else it follows dark_mode.
-    """
+def apply_theme(dark_mode: bool):
     st.session_state.dark_mode = dark_mode
-    st.session_state.sheet_dark = sheet_dark
-
-    # Determine table background based on sheet_dark or fallback to dark_mode
-    table_dark = sheet_dark or dark_mode
-
     if dark_mode:
-        # Global dark
         bg = "#0d1117"
         card_bg = "#161b22"
         text_color = "#e6edf3"
@@ -756,7 +744,6 @@ def apply_theme(dark_mode: bool, sheet_dark: bool = False):
         button_hover_text = "white"
         button_hover_border = accent
     else:
-        # Global light
         bg = "#f6f8fa"
         card_bg = "#ffffff"
         text_color = "#1f2328"
@@ -773,20 +760,6 @@ def apply_theme(dark_mode: bool, sheet_dark: bool = False):
         button_hover_bg = accent
         button_hover_text = "white"
         button_hover_border = accent
-
-    # Table specific colors
-    if table_dark:
-        data_bg = "#0d1117"
-        editor_bg = "#0d1117"
-        editor_text = "#e6edf3"
-        editor_border = "#30363d"
-        cell_bg = "#0d1117"
-    else:
-        data_bg = "#ffffff"
-        editor_bg = "#ffffff"
-        editor_text = "#1f2328"
-        editor_border = "#d0d7de"
-        cell_bg = "#ffffff"
 
     css = f"""
     <style>
@@ -861,7 +834,6 @@ def apply_theme(dark_mode: bool, sheet_dark: bool = False):
         }}
         .stFileUploader:hover {{ border-color: {accent} !important; }}
         .stFileUploader label {{ color: {text_secondary} !important; }}
-        /* Data table and editor – controlled by sheet_dark */
         .stDataFrame, [data-testid="stDataFrame"],
         .stDataFrame table, [data-testid="stDataFrame"] table,
         .stDataFrame thead, [data-testid="stDataFrame"] thead,
@@ -875,17 +847,14 @@ def apply_theme(dark_mode: bool, sheet_dark: bool = False):
         .stDataEditor th, [data-testid="stDataEditor"] th,
         .stDataEditor td, [data-testid="stDataEditor"] td,
         .stDataEditor input, .stDataEditor textarea {{
-            background-color: {data_bg} !important;
-            color: {editor_text} !important;
-            border-color: {editor_border} !important;
+            background-color: {card_bg} !important;
+            color: {text_color} !important;
+            border-color: {border} !important;
         }}
         .stDataFrame th, [data-testid="stDataFrame"] th,
         .stDataEditor th, [data-testid="stDataEditor"] th {{
-            border-bottom: 2px solid {editor_border} !important;
+            border-bottom: 2px solid {border} !important;
             font-weight: 600 !important;
-        }}
-        .stDataEditor .cell {{
-            background-color: {cell_bg} !important;
         }}
         .stExpander {{
             background-color: {card_bg} !important;
@@ -1064,22 +1033,41 @@ def generate_pdf(df, title, full=True):
         return output
 
 # ========== WHATSAPP SHARE ==========
-def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows):
+def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     now_str = format_datetime()
+    # Build a simple text table
+    if not df.empty:
+        cols = list(df.columns)
+        if '_sheet_row' in cols:
+            cols.remove('_sheet_row')
+        cols = cols[:7]  # limit for readability
+        table_lines = []
+        # header
+        table_lines.append(" | ".join(cols))
+        table_lines.append("-" * 40)
+        # data rows (first 5)
+        for _, row in df.head(5).iterrows():
+            row_vals = [str(row.get(c, ""))[:12] for c in cols]
+            table_lines.append(" | ".join(row_vals))
+        if len(df) > 5:
+            table_lines.append(f"... and {len(df)-5} more rows")
+        table_text = "\n".join(table_lines)
+    else:
+        table_text = "No data"
+
     if selected_count > 0 and pnrs:
         pnr_text = ", ".join(str(p) for p in pnrs[:15])
         if len(pnrs) > 15:
             pnr_text += f" (+{len(pnrs)-15} more)"
-        msg = f"📊 *{sheet_name}* — {selected_count} rows selected\n🕐 {now_str}\n🎫 PNRs: {pnr_text}"
+        msg = f"📊 *{sheet_name}* — {selected_count} rows selected\n🕐 {now_str}\n🎫 PNRs: {pnr_text}\n\n```\n{table_text}\n```"
     else:
-        msg = f"📊 *{sheet_name}* — Total {total_rows} rows\n🕐 {now_str}"
+        msg = f"📊 *{sheet_name}* — Total {total_rows} rows\n🕐 {now_str}\n\n```\n{table_text}\n```"
     msg += f"\n🔗 Sheet: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
     return msg
 
 # ========== MAIN APP ==========
 def main():
-    # Apply theme – pass both global and sheet dark flags
-    apply_theme(st.session_state.dark_mode, st.session_state.sheet_dark)
+    apply_theme(st.session_state.dark_mode)
 
     # ---- SIDEBAR ----
     with st.sidebar:
@@ -1095,7 +1083,7 @@ def main():
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
         # Global dark mode toggle (entire app)
-        dark_mode = st.toggle("🌙 Dark Mode (Global)", value=st.session_state.dark_mode, key="global_dark")
+        dark_mode = st.toggle("🌙 Dark Mode", value=st.session_state.dark_mode, key="global_dark")
         if dark_mode != st.session_state.dark_mode:
             st.session_state.dark_mode = dark_mode
             st.rerun()
@@ -1365,7 +1353,7 @@ def main():
         )
 
     # ========== MAIN AREA ==========
-    top_c1, top_c2, top_c3 = st.columns([3, 2, 2])
+    top_c1, top_c2 = st.columns([4, 1])
     with top_c1:
         st.markdown(
             "<h1 style='font-size:22px; font-weight:700; margin:0;'>🚂 AI EQMS Hub Pro</h1>",
@@ -1373,18 +1361,12 @@ def main():
         )
     with top_c2:
         st.markdown(
-            f"<div style='padding-top:6px;'>"
+            f"<div style='padding-top:6px; text-align:right;'>"
             f"<span class='status-pill status-live'>● Live</span> &nbsp; "
             f"<span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span>"
             f"</div>",
             unsafe_allow_html=True
         )
-    with top_c3:
-        # Sheet-only dark mode toggle (only affects the table)
-        sheet_dark = st.toggle("🌙 Dark Sheet", value=st.session_state.sheet_dark, key="sheet_dark_toggle")
-        if sheet_dark != st.session_state.sheet_dark:
-            st.session_state.sheet_dark = sheet_dark
-            st.rerun()
 
     st.caption(f"Enterprise Railway EQ Management  •  {format_date()}  •  {format_time()} IST")
     st.markdown("---")
@@ -1474,6 +1456,13 @@ def main():
                         fig.update_layout(height=360, bargap=0.2, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
                         st.plotly_chart(fig, use_container_width=True)
 
+            # ---- Train-wise EQ count table ----
+            st.markdown("#### Train-wise EQ Count")
+            if train_col:
+                train_counts = filtered_df[train_col].value_counts().reset_index()
+                train_counts.columns = ['Train Number', 'EQ Count']
+                st.dataframe(train_counts, use_container_width=True, height=300)
+
             doj_col = next((c for c in filtered_df.columns if 'DOJ' in str(c).upper()), None)
             if doj_col and doj_col in filtered_df:
                 df_temp = filtered_df.copy()
@@ -1512,8 +1501,6 @@ def main():
                     total_berths = pd.to_numeric(filtered_df[berth_col], errors='coerce').sum()
                 st.metric("Total Berths", int(total_berths) if total_berths else 0)
             st.markdown("---")
-
-        # Sheet-only dark toggle is already in top bar (top_c3)
 
         if st.button("🔄 Refresh Data", use_container_width=False):
             st.cache_data.clear()
@@ -1554,6 +1541,8 @@ def main():
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
 
+            # Wrap the data editor in a div with class "print-table"
+            st.markdown('<div class="print-table">', unsafe_allow_html=True)
             edited_page = st.data_editor(
                 display_df,
                 use_container_width=True,
@@ -1563,6 +1552,7 @@ def main():
                 },
                 key=f"editor_{sheet_choice}_{st.session_state.current_page}"
             )
+            st.markdown('</div>', unsafe_allow_html=True)
 
             select_all = st.checkbox("Select All", value=st.session_state.select_all, key="select_all_checkbox")
             if select_all != st.session_state.select_all:
@@ -1668,7 +1658,7 @@ def main():
 
             with a4:
                 # WhatsApp share – always enabled
-                msg = build_whatsapp_message(sheet_choice, len(selected_indices), selected_pnrs, len(filtered_df))
+                msg = build_whatsapp_message(sheet_choice, len(selected_indices), selected_pnrs, len(filtered_df), filtered_df)
                 encoded = urllib.parse.quote(msg)
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
                 st.link_button("📤 WhatsApp Share", wa_url, use_container_width=True)
