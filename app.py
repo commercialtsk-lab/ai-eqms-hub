@@ -68,7 +68,7 @@ defaults = {
     'last_uploaded_drive_url': None,
     'last_uploaded_view_url': None,
     'last_uploaded_print_url': None,
-    'last_refresh': time.time(),  # store timestamp, not datetime
+    'last_refresh': time.time(),
     'chat_suggestions': [
         "Show me EQ summary",
         "How many records today?",
@@ -88,6 +88,7 @@ defaults = {
     'selected_sheet': "EQ",
     'view_mode': "📋 Data Table",
     'select_all': False,
+    'text_input_content': '',  # for manual text entry
 }
 
 for key, val in defaults.items():
@@ -294,7 +295,7 @@ SHEET_CONFIG = {
     "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "doj_col": None}
 }
 
-# ========== LOAD SHEET DATA (with original row numbers) ==========
+# ========== LOAD SHEET DATA ==========
 @st.cache_data(ttl=10, show_spinner=False)
 def load_sheet_data_cached(sheet_name, sheet_id):
     try:
@@ -1033,7 +1034,6 @@ def main():
 
     # ---- SIDEBAR ----
     with st.sidebar:
-        # Devanagari Welcome – removed green background from white text
         st.markdown("""
         <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8;">
             <span style="color:#FF9933;">🟠 नमस्ते आपका स्वागत है</span><br>
@@ -1074,68 +1074,92 @@ def main():
         with st.expander("📤 Upload & Process", expanded=True):
             st.caption("Image • PDF • Text • Audio")
             file_type_choice = st.selectbox("File type", ["Image", "PDF", "Text", "Audio"], index=0)
-            uploaded_file = st.file_uploader(
-                "Choose a file",
-                type=['png', 'jpg', 'jpeg', 'pdf', 'txt', 'mp3', 'wav', 'ogg', 'm4a'],
-                label_visibility="collapsed"
-            )
+            
+            # For Text type, show a text area
+            if file_type_choice == "Text":
+                text_input = st.text_area("Paste or type your text here", height=200, key="text_input_area")
+                if text_input:
+                    st.session_state.text_input_content = text_input
+                uploaded_file = None
+            else:
+                uploaded_file = st.file_uploader(
+                    "Choose a file",
+                    type=['png', 'jpg', 'jpeg', 'pdf', 'mp3', 'wav', 'ogg', 'm4a'],
+                    label_visibility="collapsed"
+                )
+                if uploaded_file and file_type_choice == "Audio":
+                    st.audio(uploaded_file, format='audio/mp3')
+                st.session_state.text_input_content = ''  # clear text when not in text mode
+
             st.text_input("📝 Caption (optional)", placeholder="Add notes...", key="upload_caption")
 
             if st.button("🚀 Process & Save", use_container_width=True, type="primary"):
-                if uploaded_file:
+                if file_type_choice == "Text":
+                    if st.session_state.text_input_content.strip():
+                        input_type = 'text'
+                        input_data = st.session_state.text_input_content
+                        mime = 'text/plain'
+                    else:
+                        st.warning("⚠️ Please enter some text.")
+                        st.stop()
+                else:
+                    if not uploaded_file:
+                        st.warning("⚠️ Please select a file.")
+                        st.stop()
                     file_bytes = uploaded_file.read()
                     if file_type_choice == "Image":
                         input_type = 'image'
                         mime = uploaded_file.type if uploaded_file.type else 'image/jpeg'
+                        input_data = base64.b64encode(file_bytes).decode('utf-8')
                     elif file_type_choice == "PDF":
                         input_type = 'pdf'
                         mime = 'application/pdf'
-                    elif file_type_choice == "Text":
-                        input_type = 'text'
-                        mime = 'text/plain'
-                    else:
+                        input_data = base64.b64encode(file_bytes).decode('utf-8')
+                    else:  # Audio
                         input_type = 'audio'
                         mime = uploaded_file.type if uploaded_file.type else 'audio/ogg'
+                        input_data = base64.b64encode(file_bytes).decode('utf-8')
 
-                    progress_text = st.empty()
-                    progress_bar = st.progress(0)
+                progress_text = st.empty()
+                progress_bar = st.progress(0)
 
-                    def update_progress(value, message):
-                        progress_bar.progress(value)
-                        progress_text.text(message)
+                def update_progress(value, message):
+                    progress_bar.progress(value)
+                    progress_text.text(message)
 
-                    try:
-                        with st.spinner("AI is reading the file..."):
-                            if input_type == 'text':
-                                parse_result = gemini_universal_parser(
-                                    uploaded_file.getvalue().decode('utf-8'), 'text', None, update_progress
-                                )
-                            else:
-                                b64 = base64.b64encode(file_bytes).decode('utf-8')
-                                parse_result = gemini_universal_parser(
-                                    b64, input_type, mime, update_progress
-                                )
+                try:
+                    with st.spinner("AI is reading the file..."):
+                        if input_type == 'text':
+                            parse_result = gemini_universal_parser(
+                                input_data, 'text', None, update_progress
+                            )
+                        else:
+                            parse_result = gemini_universal_parser(
+                                input_data, input_type, mime, update_progress
+                            )
 
-                            if 'error' in parse_result:
-                                st.error(f"❌ {parse_result['error']}")
-                                log_activity(f"❌ Parse failed: {parse_result['error'][:50]}")
-                            else:
-                                st.success(f"✅ Extracted {parse_result['count']} record(s)")
-                                if parse_result.get('records'):
-                                    with st.expander("Preview extracted data"):
-                                        st.dataframe(pd.DataFrame(parse_result['records']), use_container_width=True)
+                        if 'error' in parse_result:
+                            st.error(f"❌ {parse_result['error']}")
+                            log_activity(f"❌ Parse failed: {parse_result['error'][:50]}")
+                        else:
+                            st.success(f"✅ Extracted {parse_result['count']} record(s)")
+                            if parse_result.get('records'):
+                                with st.expander("Preview extracted data"):
+                                    st.dataframe(pd.DataFrame(parse_result['records']), use_container_width=True)
 
-                                try:
-                                    gc = init_sheets()
-                                    eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
-                                    save_res = save_to_sheet(eq_sheet, parse_result['records'])
+                            try:
+                                gc = init_sheets()
+                                eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
+                                save_res = save_to_sheet(eq_sheet, parse_result['records'])
 
-                                    if 'error' in save_res:
-                                        st.error(f"❌ Save error: {save_res['error']}")
-                                        log_activity(f"❌ Save error: {save_res['error'][:40]}")
-                                    else:
-                                        st.success(f"✅ Saved {save_res['saved']} new • {save_res['skipped']} skipped")
+                                if 'error' in save_res:
+                                    st.error(f"❌ Save error: {save_res['error']}")
+                                    log_activity(f"❌ Save error: {save_res['error'][:40]}")
+                                else:
+                                    st.success(f"✅ Saved {save_res['saved']} new • {save_res['skipped']} skipped")
 
+                                    # If we have a file, upload to drive
+                                    if uploaded_file:
                                         drive_res = upload_to_drive(file_bytes, uploaded_file.name, mime)
                                         if drive_res['success']:
                                             st.success(f"📁 Drive: {drive_res['name']}")
@@ -1149,22 +1173,24 @@ def main():
                                         else:
                                             st.error(f"❌ Drive: {drive_res['error']}")
                                             log_activity(f"❌ Drive failed: {drive_res['error'][:40]}")
+                                    else:
+                                        st.session_state.upload_success = True
+                                        st.session_state.last_upload_time = format_time()
+                                        log_activity(f"✅ Text input → {save_res['saved']} records")
 
-                                        st.cache_data.clear()
-                                        st.session_state.last_refresh = time.time()
-                                        time.sleep(0.3)
-                                        st.rerun()
-                                except Exception as e:
-                                    st.error(f"❌ Sheet error: {e}")
-                                    log_activity(f"❌ Sheet: {str(e)[:40]}")
-                    except Exception as e:
-                        st.error(f"❌ Processing error: {e}")
-                        log_activity(f"❌ Process: {str(e)[:40]}")
-                    finally:
-                        progress_bar.empty()
-                        progress_text.empty()
-                else:
-                    st.warning("⚠️ Please select a file first")
+                                    st.cache_data.clear()
+                                    st.session_state.last_refresh = time.time()
+                                    time.sleep(0.3)
+                                    st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Sheet error: {e}")
+                                log_activity(f"❌ Sheet: {str(e)[:40]}")
+                except Exception as e:
+                    st.error(f"❌ Processing error: {e}")
+                    log_activity(f"❌ Process: {str(e)[:40]}")
+                finally:
+                    progress_bar.empty()
+                    progress_text.empty()
 
         if st.session_state.upload_success and st.session_state.last_uploaded_file:
             with st.expander("📄 Last Uploaded File", expanded=True):
@@ -1328,7 +1354,6 @@ def main():
         st.subheader("💬 Chat with TSKEQ Bot")
         st.caption("Ask about EQ data, trains, quota, PNR or anything else.")
 
-        # Chat input at the top
         if prompt := st.chat_input("Type your question..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
@@ -1340,12 +1365,10 @@ def main():
             st.session_state.messages.append({"role": "assistant", "content": response})
             st.rerun()
 
-        # Display chat messages
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
 
-        # Quick suggestions below the conversation
         st.markdown("**Quick questions**")
         sugg_cols = st.columns(3)
         for i, suggestion in enumerate(st.session_state.chat_suggestions):
@@ -1431,7 +1454,7 @@ def main():
     else:
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
 
-        # Summary stats box
+        # Quick Stats
         if not filtered_df.empty:
             col_stats = st.columns(4)
             with col_stats[0]:
@@ -1599,6 +1622,7 @@ def main():
                     st.button("🗑️ Delete", disabled=True, use_container_width=True)
 
             with a4:
+                # Share: now with PDF option
                 share_option = st.selectbox("Share via", ["WhatsApp", "Email", "SMS", "Twitter", "Facebook"], key="share_opt")
                 if selected_indices:
                     pnr_col = next((c for c in edited_page.columns if 'PNR' in str(c).upper()), None)
@@ -1622,7 +1646,7 @@ def main():
                     st.button("📤 Share", disabled=True, use_container_width=True)
 
             with a5:
-                # Print button using a custom HTML component that reliably triggers window.print()
+                # Print button – uses st.components.v1.html for reliable window.print()
                 st.components.v1.html("""
                 <div style="width:100%;">
                     <button onclick="window.print()" style="
@@ -1694,7 +1718,7 @@ def main():
                                 safe_val = sanitize_latin(val)
                                 pdf.cell(col_width, 4, safe_val, border=1, align='L')
                             pdf.ln()
-                        pdf_bytes = pdf.output(dest='S').encode('latin-1')
+                        pdf_bytes = pdf.output(dest='S')  # FIX: output already returns bytes
                         st.download_button(
                             "📥 PDF",
                             data=pdf_bytes,
@@ -1717,7 +1741,6 @@ def main():
                 )
 
             with e3:
-                # Excel export using pandas
                 export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
                 excel_buffer = io.BytesIO()
                 with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
