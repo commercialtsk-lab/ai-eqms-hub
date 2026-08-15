@@ -55,8 +55,6 @@ if 'dark_mode' not in st.session_state:
     st.session_state.dark_mode = False
 if 'current_page' not in st.session_state:
     st.session_state.current_page = 1
-if 'share_data' not in st.session_state:
-    st.session_state.share_data = None
 
 # ========== HEADINGS ==========
 HEADINGS = [
@@ -218,15 +216,6 @@ def is_flag_time():
     start = now.replace(hour=6, minute=0, second=0, microsecond=0)
     end = now.replace(hour=sunset_h, minute=sunset_m, second=0, microsecond=0)
     return start <= now <= end
-
-def get_flag_colors():
-    if is_flag_time():
-        return {
-            'saffron': {'red': 1.0, 'green': 0.6, 'blue': 0.0},
-            'white': {'red': 1.0, 'green': 1.0, 'blue': 1.0},
-            'green': {'red': 0.0, 'green': 0.6, 'blue': 0.2}
-        }
-    return None
 
 # ========== SHEET CONFIG ==========
 SHEET_CONFIG = {
@@ -668,10 +657,12 @@ def apply_theme(dark_mode):
         accent_color = "#6c63ff"
         accent_hover = "#8a82ff"
         success_color = "#00c853"
-        warning_color = "#ffab00"
-        danger_color = "#ff1744"
         card_shadow = "0 4px 15px rgba(108, 99, 255, 0.1)"
         sidebar_bg = "#12122a"
+        button_bg = "transparent"
+        button_border = "#2a2a4a"
+        button_hover_bg = "#6c63ff"
+        button_hover_color = "white"
     else:
         bg = "#f0f2f6"
         card_bg = "#ffffff"
@@ -687,10 +678,12 @@ def apply_theme(dark_mode):
         accent_color = "#4a4aff"
         accent_hover = "#6c63ff"
         success_color = "#00c853"
-        warning_color = "#ffab00"
-        danger_color = "#ff1744"
         card_shadow = "0 4px 15px rgba(0, 0, 0, 0.08)"
         sidebar_bg = "#ffffff"
+        button_bg = "transparent"
+        button_border = "#d0d0d0"
+        button_hover_bg = "#4a4aff"
+        button_hover_color = "white"
 
     st.markdown(f"""
     <style>
@@ -755,24 +748,26 @@ def apply_theme(dark_mode):
             border-color: {accent_color} !important;
         }}
         
-        /* Buttons */
+        /* Buttons - FREE style, highlight on hover */
         .stButton button, .stButton button p {{
-            background: transparent !important;
+            background: {button_bg} !important;
             color: {button_text} !important;
-            border: 1px solid {border} !important;
+            border: 1px solid {button_border} !important;
             border-radius: 8px !important;
             font-weight: 500 !important;
-            padding: 6px 16px !important;
+            padding: 8px 16px !important;
             font-size: 0.9rem !important;
             cursor: pointer !important;
-            transition: all 0.3s !important;
+            transition: all 0.3s ease !important;
+            width: 100% !important;
+            text-align: center !important;
         }}
         .stButton button:hover {{
-            background: {accent_color} !important;
-            color: white !important;
-            border-color: {accent_color} !important;
-            transform: translateY(-1px) !important;
-            box-shadow: 0 4px 15px rgba(108, 99, 255, 0.3) !important;
+            background: {button_hover_bg} !important;
+            color: {button_hover_color} !important;
+            border-color: {button_hover_bg} !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 20px rgba(108, 99, 255, 0.3) !important;
         }}
         
         /* Sheet link button */
@@ -788,7 +783,7 @@ def apply_theme(dark_mode):
             text-decoration: none !important;
             text-align: center !important;
             width: 100% !important;
-            transition: all 0.3s !important;
+            transition: all 0.3s ease !important;
         }}
         .sheet-link-btn:hover {{
             background: {accent_hover} !important;
@@ -907,20 +902,20 @@ def apply_theme(dark_mode):
             margin-top: 30px !important;
         }}
         
-        /* Print button */
+        /* Print button - FREE style, highlight on hover */
         .print-btn {{
+            display: inline-block !important;
+            padding: 12px 24px !important;
             background: {success_color} !important;
             color: white !important;
             border: none !important;
             border-radius: 10px !important;
-            padding: 12px 24px !important;
             font-size: 16px !important;
             font-weight: 600 !important;
             cursor: pointer !important;
-            transition: all 0.3s !important;
+            transition: all 0.3s ease !important;
             width: 100% !important;
             text-decoration: none !important;
-            display: inline-block !important;
             text-align: center !important;
         }}
         .print-btn:hover {{
@@ -930,20 +925,20 @@ def apply_theme(dark_mode):
             color: white !important;
         }}
         
-        /* WhatsApp share button */
+        /* WhatsApp share button - FREE style, highlight on hover */
         .wa-btn {{
+            display: inline-block !important;
+            padding: 12px 24px !important;
             background: #25D366 !important;
             color: white !important;
             border: none !important;
             border-radius: 10px !important;
-            padding: 12px 24px !important;
             font-size: 16px !important;
             font-weight: 600 !important;
             cursor: pointer !important;
-            transition: all 0.3s !important;
+            transition: all 0.3s ease !important;
             width: 100% !important;
             text-decoration: none !important;
-            display: inline-block !important;
             text-align: center !important;
         }}
         .wa-btn:hover {{
@@ -978,20 +973,6 @@ def apply_theme(dark_mode):
             color: {accent_color} !important;
         }}
         
-        /* Selectbox dropdown */
-        .stSelectbox select {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        
-        /* Radio buttons */
-        .stRadio label {{
-            color: {text_color} !important;
-        }}
-        .stRadio .st-ae {{
-            color: {accent_color} !important;
-        }}
-        
         /* Sidebar specific */
         .stSidebar .stSelectbox select {{
             background-color: {input_bg} !important;
@@ -1017,8 +998,11 @@ def apply_theme(dark_mode):
             background-color: {input_bg} !important;
         }}
         
-        /* Metric value color */
-        .stMetric .stMetricValue {{
+        /* Radio buttons */
+        .stRadio label {{
+            color: {text_color} !important;
+        }}
+        .stRadio .st-ae {{
             color: {accent_color} !important;
         }}
     </style>
@@ -1126,7 +1110,7 @@ def main():
                                         st.session_state.last_uploaded_drive_url = drive_res['print_url']
                                         st.session_state.last_uploaded_drive_id = drive_res['id']
                                         
-                                        # Show print button with proper link
+                                        # Show print button with proper link - Ctrl+P works
                                         st.markdown(f'''
                                         <a href="{drive_res['print_url']}" target="_blank" class="print-btn">
                                             🖨️ Print File (Ctrl+P)
