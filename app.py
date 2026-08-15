@@ -75,7 +75,8 @@ defaults = {
         "Quota status",
         "PNR status"
     ],
-    'dark_mode': False,
+    'dark_mode': False,          # Global dark mode (sidebar toggle)
+    'sheet_dark': False,         # Sheet‑only dark mode (checkbox near table)
     'current_page': 1,
     'pnr_val': '',
     'train_val': '',
@@ -724,9 +725,20 @@ Previous conversation:
         return f"⚠️ Error: Could not process your request. Please try again later. ({str(e)})"
 
 # ========== THEME ==========
-def apply_theme(dark_mode: bool):
+def apply_theme(dark_mode: bool, sheet_dark: bool = False):
+    """
+    dark_mode: global dark/light (sidebar toggle)
+    sheet_dark: sheet‑only dark (checkbox near table)
+    The table will be dark if sheet_dark is True, else it follows dark_mode.
+    """
     st.session_state.dark_mode = dark_mode
+    st.session_state.sheet_dark = sheet_dark
+
+    # Determine table background based on sheet_dark or fallback to dark_mode
+    table_dark = sheet_dark or dark_mode
+
     if dark_mode:
+        # Global dark
         bg = "#0d1117"
         card_bg = "#161b22"
         text_color = "#e6edf3"
@@ -740,12 +752,8 @@ def apply_theme(dark_mode: bool):
         button_bg = "#21262d"
         button_text = "#e6edf3"
         button_border = "#30363d"
-        data_bg = "#0d1117"
-        editor_bg = "#0d1117"
-        editor_text = "#e6edf3"
-        editor_border = "#30363d"
-        cell_bg = "#0d1117"
     else:
+        # Global light
         bg = "#f6f8fa"
         card_bg = "#ffffff"
         text_color = "#1f2328"
@@ -759,6 +767,15 @@ def apply_theme(dark_mode: bool):
         button_bg = "#f6f8fa"
         button_text = "#1f2328"
         button_border = "#d0d7de"
+
+    # Table specific colors
+    if table_dark:
+        data_bg = "#0d1117"
+        editor_bg = "#0d1117"
+        editor_text = "#e6edf3"
+        editor_border = "#30363d"
+        cell_bg = "#0d1117"
+    else:
         data_bg = "#ffffff"
         editor_bg = "#ffffff"
         editor_text = "#1f2328"
@@ -795,6 +812,12 @@ def apply_theme(dark_mode: bool):
         [data-testid="stMetricValue"],
         .stCaption {{
             color: {text_color} !important;
+        }}
+        /* Make the upload caption more visible */
+        .stCaption {{
+            font-size: 1rem !important;
+            font-weight: 500 !important;
+            color: {accent} !important;
         }}
         .stTextInput input, .stNumberInput input,
         .stDateInput input, .stTextArea textarea,
@@ -838,6 +861,7 @@ def apply_theme(dark_mode: bool):
         }}
         .stFileUploader:hover {{ border-color: {accent} !important; }}
         .stFileUploader label {{ color: {text_secondary} !important; }}
+        /* Data table and editor – controlled by sheet_dark */
         .stDataFrame, [data-testid="stDataFrame"],
         .stDataFrame table, [data-testid="stDataFrame"] table,
         .stDataFrame thead, [data-testid="stDataFrame"] thead,
@@ -852,12 +876,12 @@ def apply_theme(dark_mode: bool):
         .stDataEditor td, [data-testid="stDataEditor"] td,
         .stDataEditor input, .stDataEditor textarea {{
             background-color: {data_bg} !important;
-            color: {text_color} !important;
-            border-color: {border} !important;
+            color: {editor_text} !important;
+            border-color: {editor_border} !important;
         }}
         .stDataFrame th, [data-testid="stDataFrame"] th,
         .stDataEditor th, [data-testid="stDataEditor"] th {{
-            border-bottom: 2px solid {border} !important;
+            border-bottom: 2px solid {editor_border} !important;
             font-weight: 600 !important;
         }}
         .stDataEditor .cell {{
@@ -972,15 +996,16 @@ def apply_theme(dark_mode: bool):
             align-items: center;
             margin-bottom: 8px;
         }}
+        /* Print styles: hide all UI, show only the table */
         @media print {{
             body * {{ visibility: hidden; }}
-            .print-content, .print-content * {{ visibility: visible !important; }}
-            .print-content {{ position: absolute; left: 0; top: 0; width: 100%; }}
+            .print-table, .print-table * {{ visibility: visible !important; }}
+            .print-table {{ position: absolute; left: 0; top: 0; width: 100%; }}
             .stApp, header, footer, .stSidebar, .stButton, .stExpander, .stTabs, .stSelectbox,
             .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio, .stCheckbox,
             .stFileUploader, .stMarkdown, .stCaption, .stImage, .stVideo, .stAudio,
-            .stPlotlyChart, .action-box, .pro-footer, .top-bar, .status-pill, .sheet-link-btn
-            {{ display: none !important; }}
+            .stPlotlyChart, .action-box, .pro-footer, .top-bar, .status-pill, .sheet-link-btn,
+            .stDataEditor *:not(.print-table *) {{ display: none !important; }}
         }}
         * {{
             transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
@@ -1000,10 +1025,8 @@ def generate_pdf(df, title, full=True):
     pdf.ln(3)
     
     cols = list(df.columns)
-    # Remove internal columns
     if '_sheet_row' in cols:
         cols.remove('_sheet_row')
-    # Limit columns for PDF readability
     if len(cols) > 15:
         cols = cols[:15]
     
@@ -1041,20 +1064,24 @@ def generate_pdf(df, title, full=True):
         return output
 
 # ========== WHATSAPP SHARE ==========
-def build_whatsapp_message(sheet_name, selected_count, pnrs):
+def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows):
     now_str = format_datetime()
-    msg = f"📊 *{sheet_name}* — {selected_count} rows selected\n🕐 {now_str}"
-    if pnrs:
-        pnr_text = ", ".join(str(p) for p in pnrs[:15])
-        if len(pnrs) > 15:
-            pnr_text += f" (+{len(pnrs)-15} more)"
-        msg += f"\n🎫 PNRs: {pnr_text}"
+    if selected_count > 0:
+        msg = f"📊 *{sheet_name}* — {selected_count} rows selected\n🕐 {now_str}"
+        if pnrs:
+            pnr_text = ", ".join(str(p) for p in pnrs[:15])
+            if len(pnrs) > 15:
+                pnr_text += f" (+{len(pnrs)-15} more)"
+            msg += f"\n🎫 PNRs: {pnr_text}"
+    else:
+        msg = f"📊 *{sheet_name}* — Total {total_rows} rows\n🕐 {now_str}"
     msg += f"\n🔗 Sheet: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
     return msg
 
 # ========== MAIN APP ==========
 def main():
-    apply_theme(st.session_state.dark_mode)
+    # Apply theme – pass both global and sheet dark flags
+    apply_theme(st.session_state.dark_mode, st.session_state.sheet_dark)
 
     # ---- SIDEBAR ----
     with st.sidebar:
@@ -1069,7 +1096,8 @@ def main():
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
-        dark_mode = st.toggle("🌙 Dark Mode", value=st.session_state.dark_mode, key="sidebar_theme")
+        # Global dark mode toggle (entire app)
+        dark_mode = st.toggle("🌙 Dark Mode (Global)", value=st.session_state.dark_mode, key="global_dark")
         if dark_mode != st.session_state.dark_mode:
             st.session_state.dark_mode = dark_mode
             st.rerun()
@@ -1095,9 +1123,9 @@ def main():
         sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
 
-        # ===== UPLOAD SECTION (From Your Code - Working Audio + Text) =====
+        # ===== UPLOAD SECTION =====
         with st.expander("📤 Upload & Process", expanded=True):
-            st.caption("Image • PDF • Text • Audio")
+            st.caption("📷 Image • 📄 PDF • 📝 Text • 🎤 Audio")  # now larger and visible
             mode = st.radio("Type", ["📷 Image / PDF", "📝 Text", "🎤 Voice / Audio"], horizontal=True, label_visibility="collapsed")
 
             uploaded = None
@@ -1354,9 +1382,10 @@ def main():
             unsafe_allow_html=True
         )
     with top_c3:
-        main_theme = st.toggle("🌙 Dark", value=st.session_state.dark_mode, key="main_theme")
-        if main_theme != st.session_state.dark_mode:
-            st.session_state.dark_mode = main_theme
+        # Sheet-only dark mode toggle (only affects the table)
+        sheet_dark = st.toggle("🌙 Dark Sheet", value=st.session_state.sheet_dark, key="sheet_dark_toggle")
+        if sheet_dark != st.session_state.sheet_dark:
+            st.session_state.sheet_dark = sheet_dark
             st.rerun()
 
     st.caption(f"Enterprise Railway EQ Management  •  {format_date()}  •  {format_time()} IST")
@@ -1486,6 +1515,8 @@ def main():
                 st.metric("Total Berths", int(total_berths) if total_berths else 0)
             st.markdown("---")
 
+        # Sheet-only dark toggle is already in top bar (top_c3)
+
         if st.button("🔄 Refresh Data", use_container_width=False):
             st.cache_data.clear()
             st.session_state.last_refresh = time.time()
@@ -1555,6 +1586,10 @@ def main():
                         selected_sheet_rows.append(sheet_rows[pos])
                     except (ValueError, IndexError):
                         pass
+
+            # Get selected PNRs for sharing
+            pnr_col = next((c for c in edited_page.columns if 'PNR' in str(c).upper()), None)
+            selected_pnrs = edited_page.loc[selected_indices, pnr_col].tolist() if pnr_col and selected_indices else []
 
             st.markdown('<div class="action-box">', unsafe_allow_html=True)
             st.markdown("**⚡ Quick Actions**")
@@ -1634,77 +1669,29 @@ def main():
                     st.button("🗑️ Delete", disabled=True, use_container_width=True)
 
             with a4:
-                share_option = st.selectbox("Share via", ["WhatsApp", "Email", "SMS", "Twitter", "Facebook"], key="share_opt")
-                if selected_indices:
-                    pnr_col = next((c for c in edited_page.columns if 'PNR' in str(c).upper()), None)
-                    pnrs = edited_page.loc[selected_indices, pnr_col].tolist() if pnr_col else []
-                    
-                    if share_option == "WhatsApp":
-                        msg = build_whatsapp_message(sheet_choice, len(selected_indices), pnrs)
-                        encoded = urllib.parse.quote(msg)
-                        url = f"https://api.whatsapp.com/send?text={encoded}"
-                        st.link_button("📤 WhatsApp Share", url, use_container_width=True)
-                    elif share_option == "Email":
-                        # Create a PDF of selected rows and attach? For simplicity, we send a text.
-                        msg = f"EQ Data\nSheet: {sheet_choice}\nSelected: {len(selected_indices)}\nPNRs: {', '.join(map(str, pnrs[:10]))}\nTime: {format_datetime()}"
-                        encoded = urllib.parse.quote(msg)
-                        url = f"mailto:?subject=EQ Data Share&body={encoded}"
-                        st.link_button("📤 Email Share", url, use_container_width=True)
-                    elif share_option == "SMS":
-                        msg = f"EQ Data: {len(selected_indices)} rows, PNRs: {', '.join(map(str, pnrs[:5]))}"
-                        encoded = urllib.parse.quote(msg)
-                        url = f"sms:?body={encoded}"
-                        st.link_button("📤 SMS Share", url, use_container_width=True)
-                    elif share_option == "Twitter":
-                        msg = f"EQ Data: {len(selected_indices)} rows, PNRs: {', '.join(map(str, pnrs[:5]))} #EQMS #Railway"
-                        encoded = urllib.parse.quote(msg)
-                        url = f"https://twitter.com/intent/tweet?text={encoded}"
-                        st.link_button("🐦 Twitter Share", url, use_container_width=True)
-                    else:  # Facebook
-                        msg = f"EQ Data: {len(selected_indices)} rows, PNRs: {', '.join(map(str, pnrs[:5]))}"
-                        encoded = urllib.parse.quote(msg)
-                        url = f"https://www.facebook.com/sharer/sharer.php?u={urllib.parse.quote('https://docs.google.com/spreadsheets/d/'+SHEET_ID)}&quote={encoded}"
-                        st.link_button("📘 Facebook Share", url, use_container_width=True)
-                else:
-                    st.button("📤 Share", disabled=True, use_container_width=True)
+                # WhatsApp share – always enabled
+                msg = build_whatsapp_message(sheet_choice, len(selected_indices), selected_pnrs, len(filtered_df))
+                encoded = urllib.parse.quote(msg)
+                wa_url = f"https://api.whatsapp.com/send?text={encoded}"
+                st.link_button("📤 WhatsApp Share", wa_url, use_container_width=True)
 
             with a5:
-                # PRINT BUTTON: Generate PDF of ALL filtered data and open print dialog
-                if not filtered_df.empty:
-                    # Generate PDF of full filtered data
-                    pdf_bytes = generate_pdf(filtered_df, sheet_choice, full=True)
-                    b64_pdf = base64.b64encode(pdf_bytes).decode()
-                    # Create a data URI
-                    pdf_data_uri = f"data:application/pdf;base64,{b64_pdf}"
-                    # Use JavaScript to open a new window with the PDF and print it
-                    js_code = f"""
-                    <div style="width:100%;">
-                        <button onclick="printPDF()" style="
-                            background: linear-gradient(135deg, #7c3aed, #6d28d9);
-                            color: white;
-                            border: none;
-                            border-radius: 8px;
-                            padding: 9px 16px;
-                            width: 100%;
-                            font-weight: 600;
-                            cursor: pointer;
-                            font-size: 1rem;
-                        ">🖨️ Print Sheet (All Rows)</button>
-                    </div>
-                    <script>
-                        function printPDF() {{
-                            var win = window.open('{pdf_data_uri}', '_blank');
-                            win.onload = function() {{
-                                setTimeout(function() {{
-                                    win.print();
-                                }}, 1000);
-                            }};
-                        }}
-                    </script>
-                    """
-                    st.components.v1.html(js_code, height=60)
-                else:
-                    st.button("🖨️ Print Sheet", disabled=True, use_container_width=True)
+                # Print – use window.print()
+                st.markdown("""
+                <div style="width:100%;">
+                    <button onclick="window.print()" style="
+                        background: linear-gradient(135deg, #7c3aed, #6d28d9);
+                        color: white;
+                        border: none;
+                        border-radius: 8px;
+                        padding: 9px 16px;
+                        width: 100%;
+                        font-weight: 600;
+                        cursor: pointer;
+                        font-size: 1rem;
+                    ">🖨️ Print Sheet (Ctrl+P)</button>
+                </div>
+                """, unsafe_allow_html=True)
 
             with a6:
                 if st.session_state.last_uploaded_print_url:
@@ -1714,8 +1701,9 @@ def main():
 
             st.markdown('</div>', unsafe_allow_html=True)
 
+            # ===== QUICK LINKS =====
             if sheet_choice == "EQ" and not filtered_df.empty:
-                with st.expander("🔗 Quick Links (first 15 rows)"):
+                with st.expander("🔗 Quick Links (first 15 rows)", expanded=False):
                     link_cols = [c for c in filtered_df.columns if any(x in str(c).upper() for x in ['LINK', 'PRINT', 'VIEW', 'PNR STATUS'])]
                     if link_cols:
                         for idx, row in filtered_df.head(15).iterrows():
@@ -1724,16 +1712,17 @@ def main():
                                 url = extract_hyperlink_url(row.get(col, ''))
                                 if url:
                                     if 'PRINT' in str(col).upper():
-                                        links.append(f'<a href="{url}" target="_blank">🖨️ Print</a>')
+                                        links.append(f'<a href="{url}" target="_blank" style="color:#58a6ff;">🖨️ Print</a>')
                                     elif 'VIEW' in str(col).upper() or 'LINK' in str(col).upper():
-                                        links.append(f'<a href="{url}" target="_blank">👁️ View</a>')
+                                        links.append(f'<a href="{url}" target="_blank" style="color:#58a6ff;">👁️ View</a>')
                                     elif 'PNR' in str(col).upper():
-                                        links.append(f'<a href="{url}" target="_blank">🎫 PNR</a>')
+                                        links.append(f'<a href="{url}" target="_blank" style="color:#58a6ff;">🎫 PNR</a>')
                             if links:
                                 st.markdown(f"**Row {idx+1}:** " + " | ".join(links), unsafe_allow_html=True)
                     else:
                         st.caption("No hyperlink columns found")
 
+            # ===== EXPORT =====
             st.markdown("**📄 Export**")
             e1, e2, e3 = st.columns(3)
             with e1:
