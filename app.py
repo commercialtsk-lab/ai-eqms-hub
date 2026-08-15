@@ -75,8 +75,8 @@ defaults = {
         "Quota status",
         "PNR status"
     ],
-    'dark_mode': False,          # Global dark mode (sidebar toggle)
-    'sheet_dark': False,         # Sheet‑only dark mode (checkbox near table)
+    'dark_mode': False,
+    'sheet_dark': False,
     'current_page': 1,
     'pnr_val': '',
     'train_val': '',
@@ -275,6 +275,33 @@ def sanitize_latin(text):
     for k, v in replacements.items():
         text = text.replace(k, v)
     return text.encode('latin-1', 'ignore').decode('latin-1')
+
+def table_to_markdown(df, max_rows=None):
+    """Convert DataFrame to markdown table for WhatsApp sharing."""
+    if df.empty:
+        return "No data"
+    if max_rows and len(df) > max_rows:
+        df = df.head(max_rows)
+        truncated = f"\n... and {len(df)-max_rows} more rows"
+    else:
+        truncated = ""
+    # Select first 10 columns to avoid too long messages
+    cols = list(df.columns)
+    if len(cols) > 10:
+        cols = cols[:10]
+        col_truncated = f" (first 10 of {len(df.columns)} columns)"
+    else:
+        col_truncated = ""
+    df_sub = df[cols]
+    # Build markdown table
+    header = "| " + " | ".join(cols) + " |"
+    sep = "|" + "|".join([" --- "]*len(cols)) + "|"
+    rows = []
+    for _, row in df_sub.iterrows():
+        row_str = "| " + " | ".join(str(row[c])[:20] for c in cols) + " |"
+        rows.append(row_str)
+    table = "\n".join([header, sep] + rows)
+    return f"📊 *{len(df)} rows*{col_truncated}\n{table}{truncated}"
 
 # ========== SHEET CONFIG ==========
 SHEET_CONFIG = {
@@ -726,19 +753,12 @@ Previous conversation:
 
 # ========== THEME ==========
 def apply_theme(dark_mode: bool, sheet_dark: bool = False):
-    """
-    dark_mode: global dark/light (sidebar toggle)
-    sheet_dark: sheet‑only dark (checkbox near table)
-    The table will be dark if sheet_dark is True, else it follows dark_mode.
-    """
     st.session_state.dark_mode = dark_mode
     st.session_state.sheet_dark = sheet_dark
 
-    # Determine table background based on sheet_dark or fallback to dark_mode
     table_dark = sheet_dark or dark_mode
 
     if dark_mode:
-        # Global dark
         bg = "#0d1117"
         card_bg = "#161b22"
         text_color = "#e6edf3"
@@ -753,7 +773,6 @@ def apply_theme(dark_mode: bool, sheet_dark: bool = False):
         button_text = "#e6edf3"
         button_border = "#30363d"
     else:
-        # Global light
         bg = "#f6f8fa"
         card_bg = "#ffffff"
         text_color = "#1f2328"
@@ -768,7 +787,6 @@ def apply_theme(dark_mode: bool, sheet_dark: bool = False):
         button_text = "#1f2328"
         button_border = "#d0d7de"
 
-    # Table specific colors
     if table_dark:
         data_bg = "#0d1117"
         editor_bg = "#0d1117"
@@ -813,7 +831,6 @@ def apply_theme(dark_mode: bool, sheet_dark: bool = False):
         .stCaption {{
             color: {text_color} !important;
         }}
-        /* Make the upload caption more visible */
         .stCaption {{
             font-size: 1rem !important;
             font-weight: 500 !important;
@@ -861,7 +878,6 @@ def apply_theme(dark_mode: bool, sheet_dark: bool = False):
         }}
         .stFileUploader:hover {{ border-color: {accent} !important; }}
         .stFileUploader label {{ color: {text_secondary} !important; }}
-        /* Data table and editor – controlled by sheet_dark */
         .stDataFrame, [data-testid="stDataFrame"],
         .stDataFrame table, [data-testid="stDataFrame"] table,
         .stDataFrame thead, [data-testid="stDataFrame"] thead,
@@ -996,7 +1012,6 @@ def apply_theme(dark_mode: bool, sheet_dark: bool = False):
             align-items: center;
             margin-bottom: 8px;
         }}
-        /* Print styles: hide all UI, show only the table */
         @media print {{
             body * {{ visibility: hidden; }}
             .print-table, .print-table * {{ visibility: visible !important; }}
@@ -1063,27 +1078,10 @@ def generate_pdf(df, title, full=True):
     else:
         return output
 
-# ========== WHATSAPP SHARE ==========
-def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows):
-    now_str = format_datetime()
-    if selected_count > 0:
-        msg = f"📊 *{sheet_name}* — {selected_count} rows selected\n🕐 {now_str}"
-        if pnrs:
-            pnr_text = ", ".join(str(p) for p in pnrs[:15])
-            if len(pnrs) > 15:
-                pnr_text += f" (+{len(pnrs)-15} more)"
-            msg += f"\n🎫 PNRs: {pnr_text}"
-    else:
-        msg = f"📊 *{sheet_name}* — Total {total_rows} rows\n🕐 {now_str}"
-    msg += f"\n🔗 Sheet: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
-    return msg
-
 # ========== MAIN APP ==========
 def main():
-    # Apply theme – pass both global and sheet dark flags
     apply_theme(st.session_state.dark_mode, st.session_state.sheet_dark)
 
-    # ---- SIDEBAR ----
     with st.sidebar:
         st.markdown("""
         <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8;">
@@ -1096,7 +1094,6 @@ def main():
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
-        # Global dark mode toggle (entire app)
         dark_mode = st.toggle("🌙 Dark Mode (Global)", value=st.session_state.dark_mode, key="global_dark")
         if dark_mode != st.session_state.dark_mode:
             st.session_state.dark_mode = dark_mode
@@ -1123,9 +1120,8 @@ def main():
         sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
 
-        # ===== UPLOAD SECTION =====
         with st.expander("📤 Upload & Process", expanded=True):
-            st.caption("📷 Image • 📄 PDF • 📝 Text • 🎤 Audio")  # now larger and visible
+            st.caption("📷 Image • 📄 PDF • 📝 Text • 🎤 Audio")
             mode = st.radio("Type", ["📷 Image / PDF", "📝 Text", "🎤 Voice / Audio"], horizontal=True, label_visibility="collapsed")
 
             uploaded = None
@@ -1231,7 +1227,6 @@ def main():
                         prog.empty()
                         status.empty()
 
-        # ---- Last uploaded file ----
         if st.session_state.upload_success and st.session_state.last_uploaded_file:
             with st.expander("📄 Last Uploaded File", expanded=True):
                 st.markdown(f"""
@@ -1246,7 +1241,7 @@ def main():
                         st.link_button("👁️ View", st.session_state.last_uploaded_view_url, use_container_width=True)
                 with c2:
                     if st.session_state.last_uploaded_print_url:
-                        st.link_button("🖨️ Print", st.session_state.last_uploaded_print_url, use_container_width=True)
+                        st.link_button("🖨️ Print File", st.session_state.last_uploaded_print_url, use_container_width=True)
                 if st.button("🗑️ Clear History", use_container_width=True):
                     st.session_state.last_uploaded_file = None
                     st.session_state.last_uploaded_drive_url = None
@@ -1255,7 +1250,6 @@ def main():
                     st.session_state.upload_success = False
                     st.rerun()
 
-        # ---- Activity Log ----
         with st.expander("📋 Activity Log", expanded=True):
             if st.session_state.activity_log:
                 for log in reversed(st.session_state.activity_log[-20:]):
@@ -1354,7 +1348,6 @@ def main():
                     filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
                 filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
 
-        # Radio buttons – instant switching
         def set_view_mode():
             st.session_state.view_mode = st.session_state._view_radio
         view = st.radio(
@@ -1382,7 +1375,6 @@ def main():
             unsafe_allow_html=True
         )
     with top_c3:
-        # Sheet-only dark mode toggle (only affects the table)
         sheet_dark = st.toggle("🌙 Dark Sheet", value=st.session_state.sheet_dark, key="sheet_dark_toggle")
         if sheet_dark != st.session_state.sheet_dark:
             st.session_state.sheet_dark = sheet_dark
@@ -1514,8 +1506,6 @@ def main():
                     total_berths = pd.to_numeric(filtered_df[berth_col], errors='coerce').sum()
                 st.metric("Total Berths", int(total_berths) if total_berths else 0)
             st.markdown("---")
-
-        # Sheet-only dark toggle is already in top bar (top_c3)
 
         if st.button("🔄 Refresh Data", use_container_width=False):
             st.cache_data.clear()
@@ -1669,11 +1659,17 @@ def main():
                     st.button("🗑️ Delete", disabled=True, use_container_width=True)
 
             with a4:
-                # WhatsApp share – always enabled
-                msg = build_whatsapp_message(sheet_choice, len(selected_indices), selected_pnrs, len(filtered_df))
-                encoded = urllib.parse.quote(msg)
-                wa_url = f"https://api.whatsapp.com/send?text={encoded}"
-                st.link_button("📤 WhatsApp Share", wa_url, use_container_width=True)
+                # WhatsApp share – share entire filtered table as markdown
+                if not filtered_df.empty:
+                    # Get all data (including selected rows? we share the whole filtered table)
+                    # We'll share the entire filtered_df as a markdown table
+                    markdown_table = table_to_markdown(filtered_df, max_rows=50)  # limit rows to avoid message too long
+                    msg = f"📊 *{sheet_choice}* — {len(filtered_df)} rows\n{markdown_table}\n\n🔗 Sheet: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
+                    encoded = urllib.parse.quote(msg)
+                    wa_url = f"https://api.whatsapp.com/send?text={encoded}"
+                    st.link_button("📤 WhatsApp Share (Full Table)", wa_url, use_container_width=True)
+                else:
+                    st.button("📤 WhatsApp Share", disabled=True, use_container_width=True)
 
             with a5:
                 # Print – use window.print()
@@ -1700,27 +1696,6 @@ def main():
                     st.button("🖨️ Print File", disabled=True, use_container_width=True)
 
             st.markdown('</div>', unsafe_allow_html=True)
-
-            # ===== QUICK LINKS =====
-            if sheet_choice == "EQ" and not filtered_df.empty:
-                with st.expander("🔗 Quick Links (first 15 rows)", expanded=False):
-                    link_cols = [c for c in filtered_df.columns if any(x in str(c).upper() for x in ['LINK', 'PRINT', 'VIEW', 'PNR STATUS'])]
-                    if link_cols:
-                        for idx, row in filtered_df.head(15).iterrows():
-                            links = []
-                            for col in link_cols:
-                                url = extract_hyperlink_url(row.get(col, ''))
-                                if url:
-                                    if 'PRINT' in str(col).upper():
-                                        links.append(f'<a href="{url}" target="_blank" style="color:#58a6ff;">🖨️ Print</a>')
-                                    elif 'VIEW' in str(col).upper() or 'LINK' in str(col).upper():
-                                        links.append(f'<a href="{url}" target="_blank" style="color:#58a6ff;">👁️ View</a>')
-                                    elif 'PNR' in str(col).upper():
-                                        links.append(f'<a href="{url}" target="_blank" style="color:#58a6ff;">🎫 PNR</a>')
-                            if links:
-                                st.markdown(f"**Row {idx+1}:** " + " | ".join(links), unsafe_allow_html=True)
-                    else:
-                        st.caption("No hyperlink columns found")
 
             # ===== EXPORT =====
             st.markdown("**📄 Export**")
