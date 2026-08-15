@@ -784,10 +784,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         button_hover_text = "white"
         button_hover_border = accent
 
-    # Store in session state for other parts to use
-    st.session_state.theme_bg = bg
-    st.session_state.theme_text = text_color
-
     css = f"""
     <style>
         .block-container {{
@@ -1081,39 +1077,32 @@ def generate_pdf(df, title, full=True):
     else:
         return output
 
-# ========== TABLE AS IMAGE (using matplotlib fallback) ==========
+# ========== TABLE AS IMAGE (using matplotlib) ==========
 def create_table_image(df, title):
     if df.empty:
         return None
-    # Use matplotlib to create a table image (no external engine needed)
     fig, ax = plt.subplots(figsize=(12, 0.5 + 0.4 * min(len(df), 30)))
     ax.axis('off')
-    # Prepare table data
     cols = list(df.columns)
     if '_sheet_row' in cols:
         cols.remove('_sheet_row')
     if len(cols) > 8:
         cols = cols[:8]
-    # Limit rows for image
     data = df[cols].head(50).values
-    # Create table
     table = ax.table(cellText=data, colLabels=cols, loc='center', cellLoc='left')
     table.auto_set_font_size(False)
     table.set_fontsize(10)
     table.scale(1, 1.5)
-    # Style
     for (i, j), cell in table.get_celld().items():
-        if i == 0:  # header
+        if i == 0:
             cell.set_facecolor('#4a90d9')
             cell.set_text_props(color='white', weight='bold')
         else:
             cell.set_facecolor('#f0f4fa' if i % 2 == 0 else 'white')
             cell.set_text_props(color='black')
         cell.set_edgecolor('#cccccc')
-    # Title
     plt.title(title, fontsize=14, weight='bold', pad=20)
     plt.tight_layout()
-    # Save to bytes
     buf = io.BytesIO()
     plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
     buf.seek(0)
