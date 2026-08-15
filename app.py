@@ -18,7 +18,8 @@ from googleapiclient.http import MediaIoBaseUpload
 from fpdf import FPDF
 import plotly.express as px
 import plotly.graph_objects as go
-from PIL import Image
+import matplotlib.pyplot as plt
+from matplotlib.table import Table as MplTable
 import numpy as np
 
 # ========== PAGE CONFIG ==========
@@ -78,7 +79,9 @@ defaults = {
         "Quota status",
         "PNR status"
     ],
-    'dark_mode': False,
+    'theme': 'Day',  # 'Day', 'Dark', 'Custom'
+    'custom_bg': '#ffffff',
+    'custom_text': '#000000',
     'current_page': 1,
     'pnr_val': '',
     'train_val': '',
@@ -727,27 +730,9 @@ Previous conversation:
     except Exception as e:
         return f"⚠️ Error: Could not process your request. Please try again later. ({str(e)})"
 
-# ========== THEME ==========
-def apply_theme(dark_mode: bool):
-    st.session_state.dark_mode = dark_mode
-    if dark_mode:
-        bg = "#0d1117"
-        card_bg = "#161b22"
-        text_color = "#e6edf3"
-        text_secondary = "#8b949e"
-        border = "#30363d"
-        input_bg = "#0d1117"
-        accent = "#58a6ff"
-        accent_hover = "#79c0ff"
-        success = "#3fb950"
-        danger = "#f85149"
-        button_bg = "#21262d"
-        button_text = "#e6edf3"
-        button_border = "#30363d"
-        button_hover_bg = accent
-        button_hover_text = "white"
-        button_hover_border = accent
-    else:
+# ========== THEME (with Custom option) ==========
+def apply_theme(theme, custom_bg=None, custom_text=None):
+    if theme == 'Day':
         bg = "#f6f8fa"
         card_bg = "#ffffff"
         text_color = "#1f2328"
@@ -764,10 +749,47 @@ def apply_theme(dark_mode: bool):
         button_hover_bg = accent
         button_hover_text = "white"
         button_hover_border = accent
+    elif theme == 'Dark':
+        bg = "#0d1117"
+        card_bg = "#161b22"
+        text_color = "#e6edf3"
+        text_secondary = "#8b949e"
+        border = "#30363d"
+        input_bg = "#0d1117"
+        accent = "#58a6ff"
+        accent_hover = "#79c0ff"
+        success = "#3fb950"
+        danger = "#f85149"
+        button_bg = "#21262d"
+        button_text = "#e6edf3"
+        button_border = "#30363d"
+        button_hover_bg = accent
+        button_hover_text = "white"
+        button_hover_border = accent
+    else:  # Custom
+        bg = custom_bg if custom_bg else "#ffffff"
+        card_bg = bg
+        text_color = custom_text if custom_text else "#000000"
+        text_secondary = text_color
+        border = "#d0d7de"  # keep neutral
+        input_bg = bg
+        accent = "#0969da"
+        accent_hover = "#0550ae"
+        success = "#1a7f37"
+        danger = "#cf222e"
+        button_bg = bg
+        button_text = text_color
+        button_border = border
+        button_hover_bg = accent
+        button_hover_text = "white"
+        button_hover_border = accent
+
+    # Store in session state for other parts to use
+    st.session_state.theme_bg = bg
+    st.session_state.theme_text = text_color
 
     css = f"""
     <style>
-        /* Reduce top padding */
         .block-container {{
             padding-top: 0.5rem !important;
             padding-bottom: 1rem !important;
@@ -1059,38 +1081,44 @@ def generate_pdf(df, title, full=True):
     else:
         return output
 
-# ========== TABLE AS IMAGE ==========
+# ========== TABLE AS IMAGE (using matplotlib fallback) ==========
 def create_table_image(df, title):
     if df.empty:
         return None
-    # Use plotly to create a table figure
+    # Use matplotlib to create a table image (no external engine needed)
+    fig, ax = plt.subplots(figsize=(12, 0.5 + 0.4 * min(len(df), 30)))
+    ax.axis('off')
+    # Prepare table data
     cols = list(df.columns)
     if '_sheet_row' in cols:
         cols.remove('_sheet_row')
-    # Limit columns for readability
     if len(cols) > 8:
         cols = cols[:8]
-    # Prepare data
-    header_vals = [c[:20] for c in cols]
-    cell_vals = []
-    for _, row in df.head(50).iterrows():
-        cell_vals.append([str(row.get(c, ""))[:25] for c in cols])
-    
-    fig = go.Figure(data=[go.Table(
-        header=dict(values=header_vals, fill_color='#4a90d9', align='left', font=dict(color='white', size=12)),
-        cells=dict(values=list(zip(*cell_vals)), fill_color=[['white', '#f0f4fa']*len(cell_vals)],
-                   align='left', font=dict(color='black', size=11))
-    )])
-    fig.update_layout(
-        title=title,
-        width=900,
-        height=200 + 40*len(cell_vals),
-        paper_bgcolor='rgba(255,255,255,1)',
-        margin=dict(l=10, r=10, t=40, b=10)
-    )
-    # Return image as bytes
-    img_bytes = fig.to_image(format="png", scale=2)
-    return img_bytes
+    # Limit rows for image
+    data = df[cols].head(50).values
+    # Create table
+    table = ax.table(cellText=data, colLabels=cols, loc='center', cellLoc='left')
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1, 1.5)
+    # Style
+    for (i, j), cell in table.get_celld().items():
+        if i == 0:  # header
+            cell.set_facecolor('#4a90d9')
+            cell.set_text_props(color='white', weight='bold')
+        else:
+            cell.set_facecolor('#f0f4fa' if i % 2 == 0 else 'white')
+            cell.set_text_props(color='black')
+        cell.set_edgecolor('#cccccc')
+    # Title
+    plt.title(title, fontsize=14, weight='bold', pad=20)
+    plt.tight_layout()
+    # Save to bytes
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+    buf.seek(0)
+    plt.close()
+    return buf.getvalue()
 
 # ========== WHATSAPP SHARE ==========
 def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
@@ -1124,7 +1152,25 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
 
 # ========== MAIN APP ==========
 def main():
-    apply_theme(st.session_state.dark_mode)
+    # Theme selection
+    theme_options = ['Day', 'Dark', 'Custom']
+    theme_choice = st.sidebar.selectbox("🎨 Theme", theme_options, index=theme_options.index(st.session_state.theme))
+    if theme_choice != st.session_state.theme:
+        st.session_state.theme = theme_choice
+        st.rerun()
+
+    if theme_choice == 'Custom':
+        custom_bg = st.sidebar.color_picker("Background Color", value=st.session_state.custom_bg)
+        custom_text = st.sidebar.color_picker("Text Color", value=st.session_state.custom_text)
+        if custom_bg != st.session_state.custom_bg or custom_text != st.session_state.custom_text:
+            st.session_state.custom_bg = custom_bg
+            st.session_state.custom_text = custom_text
+            st.rerun()
+    else:
+        custom_bg = None
+        custom_text = None
+
+    apply_theme(theme_choice, custom_bg, custom_text)
 
     # ---- SIDEBAR ----
     with st.sidebar:
@@ -1138,11 +1184,6 @@ def main():
 
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
-
-        dark_mode = st.toggle("🌙 Dark Mode", value=st.session_state.dark_mode, key="global_dark")
-        if dark_mode != st.session_state.dark_mode:
-            st.session_state.dark_mode = dark_mode
-            st.rerun()
 
         with st.expander("🔄 Sync & Status", expanded=True):
             auto_refresh = st.checkbox("Auto Sync (every 10s)", value=True)
@@ -1574,7 +1615,6 @@ def main():
             if train_col and not filtered_df.empty:
                 train_counts_series = filtered_df[train_col].value_counts()
                 count_items = [f"{train}: {cnt}" for train, cnt in train_counts_series.items()]
-                # Build HTML with styled chips
                 chips = ''.join([f'<span class="train-count-item">{t}</span>' for t in count_items])
                 st.markdown(f'<div class="train-counts">{chips}</div>', unsafe_allow_html=True)
             st.markdown("---")
@@ -1659,7 +1699,6 @@ def main():
             st.markdown('<div class="action-box">', unsafe_allow_html=True)
             st.markdown("**⚡ Quick Actions**")
 
-            # 5 columns (Save, Add, Delete, WhatsApp, Print)
             a1, a2, a3, a4, a5 = st.columns(5)
 
             with a1:
@@ -1741,8 +1780,7 @@ def main():
                     st.session_state.delete_confirm = False
 
             with a4:
-                # WhatsApp share
-                # Show both text share and image download
+                # WhatsApp share: text and image
                 msg = build_whatsapp_message(sheet_choice, len(selected_indices), selected_pnrs, len(filtered_df), filtered_df)
                 encoded = urllib.parse.quote(msg)
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
@@ -1848,7 +1886,7 @@ def main():
 
             with e4:
                 # Copy to clipboard (CSV)
-                csv_full = get_table_csv(filtered_df)
+                csv_full = filtered_df.drop(columns=['_sheet_row'], errors='ignore').to_csv(index=False).encode('utf-8')
                 st.download_button(
                     "📋 Copy CSV",
                     data=csv_full,
