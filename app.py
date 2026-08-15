@@ -266,6 +266,26 @@ def log_activity(action: str):
     if len(st.session_state.activity_log) > 50:
         st.session_state.activity_log = st.session_state.activity_log[-50:]
 
+def sanitize_latin(text):
+    """Replace unsupported characters with safe ASCII equivalents."""
+    if not text:
+        return ''
+    # Replace common problematic characters
+    replacements = {
+        '•': '-',
+        '·': '-',
+        '‘': "'",
+        '’': "'",
+        '“': '"',
+        '”': '"',
+        '–': '-',
+        '—': '-',
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    # Encode to latin-1, ignore any remaining
+    return text.encode('latin-1', 'ignore').decode('latin-1')
+
 # ========== SHEET CONFIG ==========
 SHEET_CONFIG = {
     "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "doj_col": 7},
@@ -735,6 +755,8 @@ def apply_theme(dark_mode: bool):
         editor_bg = "#0d1117"
         editor_text = "#e6edf3"
         editor_border = "#30363d"
+        # For data editor cells
+        cell_bg = "#0d1117"
     else:
         bg = "#f6f8fa"
         card_bg = "#ffffff"
@@ -753,6 +775,7 @@ def apply_theme(dark_mode: bool):
         editor_bg = "#ffffff"
         editor_text = "#1f2328"
         editor_border = "#d0d7de"
+        cell_bg = "#ffffff"
 
     css = f"""
     <style>
@@ -833,28 +856,25 @@ def apply_theme(dark_mode: bool):
         .stDataFrame thead, [data-testid="stDataFrame"] thead,
         .stDataFrame tbody, [data-testid="stDataFrame"] tbody,
         .stDataFrame th, [data-testid="stDataFrame"] th,
-        .stDataFrame td, [data-testid="stDataFrame"] td {{
+        .stDataFrame td, [data-testid="stDataFrame"] td,
+        .stDataEditor, [data-testid="stDataEditor"],
+        .stDataEditor table, [data-testid="stDataEditor"] table,
+        .stDataEditor thead, [data-testid="stDataEditor"] thead,
+        .stDataEditor tbody, [data-testid="stDataEditor"] tbody,
+        .stDataEditor th, [data-testid="stDataEditor"] th,
+        .stDataEditor td, [data-testid="stDataEditor"] td,
+        .stDataEditor input, .stDataEditor textarea {{
             background-color: {data_bg} !important;
             color: {text_color} !important;
             border-color: {border} !important;
         }}
-        .stDataFrame th, [data-testid="stDataFrame"] th {{
+        .stDataFrame th, [data-testid="stDataFrame"] th,
+        .stDataEditor th, [data-testid="stDataEditor"] th {{
             border-bottom: 2px solid {border} !important;
             font-weight: 600 !important;
         }}
-        /* Data editor overrides */
-        .stDataEditor, [data-testid="stDataEditor"] {{
-            background-color: {editor_bg} !important;
-            color: {editor_text} !important;
-        }}
-        .stDataEditor * {{
-            background-color: {editor_bg} !important;
-            color: {editor_text} !important;
-            border-color: {editor_border} !important;
-        }}
-        .stDataEditor input, .stDataEditor textarea {{
-            background-color: {input_bg} !important;
-            color: {editor_text} !important;
+        .stDataEditor .cell {{
+            background-color: {cell_bg} !important;
         }}
         .stExpander {{
             background-color: {card_bg} !important;
@@ -965,13 +985,31 @@ def apply_theme(dark_mode: bool):
             align-items: center;
             margin-bottom: 8px;
         }}
-        /* Print styles – hide everything except the table */
+        /* Print styles – hide everything except the data editor table */
         @media print {{
             body * {{ visibility: hidden; }}
-            .print-area, .print-area * {{ visibility: visible; }}
-            .print-area {{ position: absolute; left: 0; top: 0; width: 100%; }}
-            .stApp, header, footer, .stSidebar, .stButton, .stExpander, .stTabs, .stSelectbox, .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio, .stCheckbox, .stFileUploader, .stMarkdown, .stCaption, .stImage, .stVideo, .stAudio, .stPlotlyChart, .stDataFrame, [data-testid="stDataFrame"] {{ display: none !important; }}
-            .print-area table, .print-area thead, .print-area tbody, .print-area th, .print-area td {{ visibility: visible !important; }}
+            /* Make data editor and its contents visible */
+            .stDataEditor, [data-testid="stDataEditor"],
+            .stDataFrame, [data-testid="stDataFrame"],
+            .stDataEditor *, [data-testid="stDataEditor"] *,
+            .stDataFrame *, [data-testid="stDataFrame"] * {{ visibility: visible; }}
+            .stDataEditor, [data-testid="stDataEditor"],
+            .stDataFrame, [data-testid="stDataFrame"] {{
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                background: white !important;
+                color: black !important;
+            }}
+            .stApp, header, footer, .stSidebar, .stButton, .stExpander, .stTabs, .stSelectbox,
+            .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio, .stCheckbox,
+            .stFileUploader, .stMarkdown, .stCaption, .stImage, .stVideo, .stAudio,
+            .stPlotlyChart, .action-box, .pro-footer, .top-bar, .status-pill, .sheet-link-btn
+            {{ display: none !important; }}
+            /* Ensure table cells are visible */
+            .stDataEditor td, .stDataEditor th,
+            .stDataFrame td, .stDataFrame th {{ border: 1px solid #ddd !important; }}
         }}
         * {{
             transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
@@ -994,31 +1032,27 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs):
 
 # ========== MAIN APP ==========
 def main():
-    # Apply theme on every run
     apply_theme(st.session_state.dark_mode)
 
     # ---- SIDEBAR ----
     with st.sidebar:
-        # Devanagari Welcome with saffron/white/green bullets
+        # Devanagari Welcome – removed green background from white text
         st.markdown("""
         <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8;">
             <span style="color:#FF9933;">🟠 नमस्ते आपका स्वागत है</span><br>
-            <span style="color:#FFFFFF; background-color:#138808; padding:0 8px; border-radius:4px;">⚪ हम भारत के लोग</span><br>
+            <span style="color:#FFFFFF;">⚪ हम भारत के लोग</span><br>
             <span style="color:#138808; font-weight:bold;">🟢 जय हिंद</span>
         </div>
         """, unsafe_allow_html=True)
 
-        # Real time clock
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
-        # Theme toggle
         dark_mode = st.toggle("🌙 Dark Mode", value=st.session_state.dark_mode, key="sidebar_theme")
         if dark_mode != st.session_state.dark_mode:
             st.session_state.dark_mode = dark_mode
             st.rerun()
 
-        # ---- Sync ----
         with st.expander("🔄 Sync & Status", expanded=True):
             auto_refresh = st.checkbox("Auto Sync (every 10s)", value=True)
             if auto_refresh:
@@ -1033,11 +1067,9 @@ def main():
                 st.rerun()
             st.caption(f"Last sync: {format_time(st.session_state.last_refresh)} IST")
 
-        # ---- Sheet Link ----
         sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
 
-        # ---- Upload ----
         with st.expander("📤 Upload & Process", expanded=True):
             st.caption("Image • PDF • Text • Audio")
             file_type_choice = st.selectbox("File type", ["Image", "PDF", "Text", "Audio"], index=0)
@@ -1133,7 +1165,6 @@ def main():
                 else:
                     st.warning("⚠️ Please select a file first")
 
-        # ---- Last uploaded file ----
         if st.session_state.upload_success and st.session_state.last_uploaded_file:
             with st.expander("📄 Last Uploaded File", expanded=True):
                 st.markdown(f"""
@@ -1157,7 +1188,6 @@ def main():
                     st.session_state.upload_success = False
                     st.rerun()
 
-        # ---- Activity Log ----
         with st.expander("📋 Activity Log", expanded=False):
             if st.session_state.activity_log:
                 for log in reversed(st.session_state.activity_log[-15:]):
@@ -1167,7 +1197,6 @@ def main():
 
         st.markdown("---")
 
-        # ---- Sheet + Filters ----
         with st.expander("📑 Sheet & Filters", expanded=True):
             sheet_choice = st.selectbox(
                 "Select Sheet",
@@ -1179,7 +1208,6 @@ def main():
             config = SHEET_CONFIG[sheet_choice]
             start_row = config["start_row"]
 
-            # Instant filter callbacks
             def update_pnr():
                 st.session_state.pnr_val = st.session_state._pnr_input
                 st.session_state.current_page = 1
@@ -1224,7 +1252,6 @@ def main():
                     format="DD-MM-YYYY"
                 )
 
-        # Load data
         df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
         filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
 
@@ -1259,17 +1286,19 @@ def main():
                     filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
                 filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
 
-        # View selector in sidebar
+        # Radio buttons – instant switching
+        def set_view_mode():
+            st.session_state.view_mode = st.session_state._view_radio
         view = st.radio(
             "View Mode",
             ["📋 Data Table", "📊 Dashboard", "💬 Chat"],
             index=["📋 Data Table", "📊 Dashboard", "💬 Chat"].index(st.session_state.view_mode)
-            if st.session_state.view_mode in ["📋 Data Table", "📊 Dashboard", "💬 Chat"] else 0
+            if st.session_state.view_mode in ["📋 Data Table", "📊 Dashboard", "💬 Chat"] else 0,
+            key="_view_radio",
+            on_change=set_view_mode
         )
-        st.session_state.view_mode = view
 
     # ========== MAIN AREA ==========
-    # Top bar
     top_c1, top_c2, top_c3 = st.columns([3, 2, 2])
     with top_c1:
         st.markdown(
@@ -1298,27 +1327,7 @@ def main():
         st.subheader("💬 Chat with TSKEQ Bot")
         st.caption("Ask about EQ data, trains, quota, PNR or anything else.")
 
-        # Quick suggestions
-        st.markdown("**Quick questions**")
-        sugg_cols = st.columns(3)
-        for i, suggestion in enumerate(st.session_state.chat_suggestions):
-            with sugg_cols[i % 3]:
-                if st.button(suggestion, key=f"sugg_{i}", use_container_width=True):
-                    # Append user message and get response
-                    st.session_state.messages.append({"role": "user", "content": suggestion})
-                    with st.spinner("Thinking..."):
-                        response = chat_with_gemini(suggestion, st.session_state.messages)
-                        st.session_state.messages.append({"role": "assistant", "content": response})
-                    st.rerun()
-
-        st.divider()
-
-        # Display chat messages
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-
-        # Chat input at the bottom of the conversation
+        # Chat input at the top
         if prompt := st.chat_input("Type your question..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
@@ -1330,7 +1339,23 @@ def main():
             st.session_state.messages.append({"role": "assistant", "content": response})
             st.rerun()
 
-        # Clear chat button
+        # Display chat messages
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+        # Quick suggestions below the conversation
+        st.markdown("**Quick questions**")
+        sugg_cols = st.columns(3)
+        for i, suggestion in enumerate(st.session_state.chat_suggestions):
+            with sugg_cols[i % 3]:
+                if st.button(suggestion, key=f"sugg_{i}", use_container_width=True):
+                    st.session_state.messages.append({"role": "user", "content": suggestion})
+                    with st.spinner("Thinking..."):
+                        response = chat_with_gemini(suggestion, st.session_state.messages)
+                        st.session_state.messages.append({"role": "assistant", "content": response})
+                    st.rerun()
+
         if st.button("🗑️ Clear Chat", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
@@ -1405,7 +1430,6 @@ def main():
     else:
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
 
-        # Refresh button in the main area
         if st.button("🔄 Refresh Data", use_container_width=False):
             st.cache_data.clear()
             st.session_state.last_refresh = now_ist()
@@ -1442,11 +1466,9 @@ def main():
 
             sheet_rows = page_df['_sheet_row'].tolist() if '_sheet_row' in page_df.columns else []
 
-            # Prepare display (hide internal column)
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
 
-            # Data editor
             edited_page = st.data_editor(
                 display_df,
                 use_container_width=True,
@@ -1457,23 +1479,10 @@ def main():
                 key=f"editor_{sheet_choice}_{st.session_state.current_page}"
             )
 
-            # Handle "Select All" checkbox (extra feature)
             select_all = st.checkbox("Select All", value=st.session_state.select_all, key="select_all_checkbox")
             if select_all != st.session_state.select_all:
                 st.session_state.select_all = select_all
-                # Update the editor's Select column via rerun? We'll handle on next rerun.
-                # We'll just set all rows selected in session and rerun.
-                # Simpler: we can set the checkboxes via the data editor's state,
-                # but we cannot directly modify the editor's values from outside.
-                # Instead, we'll use a workaround: create a new column with all True/False.
-                # But that would require a new data editor. Better to use the built-in
-                # checkbox column and let user select individually.
-                # We'll just skip this for now and keep it as a simple extra feature.
-                # Actually, we can use the data editor's "Select" column by setting
-                # the 'Select' column to True for all rows. But we need to modify the
-                # edited_page DataFrame. We'll do that in a controlled way.
                 if select_all:
-                    # Set all rows to selected in the editor's underlying data
                     edited_page['Select'] = True
                 else:
                     edited_page['Select'] = False
@@ -1491,7 +1500,6 @@ def main():
                     except (ValueError, IndexError):
                         pass
 
-            # Actions
             st.markdown('<div class="action-box">', unsafe_allow_html=True)
             st.markdown("**⚡ Quick Actions**")
 
@@ -1570,7 +1578,6 @@ def main():
                     st.button("🗑️ Delete", disabled=True, use_container_width=True)
 
             with a4:
-                # Share dropdown
                 share_option = st.selectbox("Share via", ["WhatsApp", "Email", "SMS", "Twitter", "Facebook"], key="share_opt")
                 if selected_indices:
                     pnr_col = next((c for c in edited_page.columns if 'PNR' in str(c).upper()), None)
@@ -1594,7 +1601,7 @@ def main():
                     st.button("📤 Share", disabled=True, use_container_width=True)
 
             with a5:
-                # Print button – uses JavaScript to print only the table
+                # Print button using HTML/JS to trigger native print dialog
                 st.markdown(
                     """
                     <button onclick="window.print()" style="
@@ -1620,7 +1627,6 @@ def main():
 
             st.markdown('</div>', unsafe_allow_html=True)
 
-            # Quick links for EQ
             if sheet_choice == "EQ" and not filtered_df.empty:
                 with st.expander("🔗 Quick Links (first 15 rows)"):
                     link_cols = [c for c in filtered_df.columns if any(x in str(c).upper() for x in ['LINK', 'PRINT', 'VIEW', 'PNR STATUS'])]
@@ -1641,7 +1647,6 @@ def main():
                     else:
                         st.caption("No hyperlink columns found")
 
-            # Export
             st.markdown("**📄 Export**")
             e1, e2 = st.columns(2)
             with e1:
@@ -1650,22 +1655,24 @@ def main():
                     pdf = FPDF('L', 'mm', 'A4')
                     pdf.add_page()
                     pdf.set_font("Arial", 'B', 12)
-                    pdf.cell(0, 8, f"{sheet_choice} Report • {format_datetime()}", ln=True, align='C')
+                    # Sanitize title to avoid encoding issues
+                    title = sanitize_latin(f"{sheet_choice} Report - {format_datetime()}")
+                    pdf.cell(0, 8, title, ln=True, align='C')
                     pdf.ln(3)
                     pdf.set_font("Arial", 'B', 6)
                     cols = export_df.columns.tolist()
                     if cols:
                         col_width = min(22, 270 / max(len(cols), 1))
                         for col in cols:
-                            safe = str(col)[:12].encode('latin-1', 'ignore').decode('latin-1')
-                            pdf.cell(col_width, 5, safe, border=1, align='C')
+                            safe_col = sanitize_latin(str(col)[:12])
+                            pdf.cell(col_width, 5, safe_col, border=1, align='C')
                         pdf.ln()
                         pdf.set_font("Arial", '', 5)
                         for _, row in export_df.head(120).iterrows():
                             for col in cols:
                                 val = str(row[col])[:14] if pd.notna(row[col]) else ''
-                                val_safe = val.encode('latin-1', 'ignore').decode('latin-1')
-                                pdf.cell(col_width, 4, val_safe, border=1, align='L')
+                                safe_val = sanitize_latin(val)
+                                pdf.cell(col_width, 4, safe_val, border=1, align='L')
                             pdf.ln()
                         pdf_bytes = pdf.output(dest='S').encode('latin-1')
                         st.download_button(
@@ -1676,7 +1683,7 @@ def main():
                             use_container_width=True
                         )
                 except Exception as e:
-                    st.warning(f"PDF: {e}")
+                    st.warning(f"PDF generation error: {e}")
 
             with e2:
                 export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
@@ -1689,7 +1696,6 @@ def main():
                     use_container_width=True
                 )
 
-    # Footer
     st.markdown("""
     <div class='pro-footer'>
         🚂 AI EQMS Hub Pro • Created by Sharique<br>
