@@ -18,6 +18,8 @@ from googleapiclient.http import MediaIoBaseUpload
 from fpdf import FPDF
 import plotly.express as px
 import plotly.graph_objects as go
+from PIL import Image
+import numpy as np
 
 # ========== PAGE CONFIG ==========
 st.set_page_config(
@@ -87,7 +89,6 @@ defaults = {
     'selected_sheet': "EQ",
     'view_mode': "📋 Data Table",
     'select_all': False,
-    'quick_train': '',          # for quick filter dropdown
     'delete_confirm': False,
 }
 
@@ -766,6 +767,11 @@ def apply_theme(dark_mode: bool):
 
     css = f"""
     <style>
+        /* Reduce top padding */
+        .block-container {{
+            padding-top: 0.5rem !important;
+            padding-bottom: 1rem !important;
+        }}
         .stApp {{ background-color: {bg} !important; }}
         [data-testid="stSidebar"] {{
             background-color: {card_bg} !important;
@@ -968,7 +974,25 @@ def apply_theme(dark_mode: bool):
             align-items: center;
             margin-bottom: 8px;
         }}
-        /* Print styles: hide all UI, show only the table */
+        .train-counts {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 14px;
+            padding: 8px 0;
+            font-size: 0.9rem;
+            background: {card_bg};
+            border-radius: 8px;
+            border: 1px solid {border};
+            padding: 10px 14px;
+            margin: 6px 0 12px 0;
+        }}
+        .train-count-item {{
+            background: {input_bg};
+            padding: 2px 10px;
+            border-radius: 12px;
+            border: 1px solid {border};
+            font-weight: 500;
+        }}
         @media print {{
             body * {{ visibility: hidden; }}
             .print-table, .print-table * {{ visibility: visible !important; }}
@@ -1035,6 +1059,39 @@ def generate_pdf(df, title, full=True):
     else:
         return output
 
+# ========== TABLE AS IMAGE ==========
+def create_table_image(df, title):
+    if df.empty:
+        return None
+    # Use plotly to create a table figure
+    cols = list(df.columns)
+    if '_sheet_row' in cols:
+        cols.remove('_sheet_row')
+    # Limit columns for readability
+    if len(cols) > 8:
+        cols = cols[:8]
+    # Prepare data
+    header_vals = [c[:20] for c in cols]
+    cell_vals = []
+    for _, row in df.head(50).iterrows():
+        cell_vals.append([str(row.get(c, ""))[:25] for c in cols])
+    
+    fig = go.Figure(data=[go.Table(
+        header=dict(values=header_vals, fill_color='#4a90d9', align='left', font=dict(color='white', size=12)),
+        cells=dict(values=list(zip(*cell_vals)), fill_color=[['white', '#f0f4fa']*len(cell_vals)],
+                   align='left', font=dict(color='black', size=11))
+    )])
+    fig.update_layout(
+        title=title,
+        width=900,
+        height=200 + 40*len(cell_vals),
+        paper_bgcolor='rgba(255,255,255,1)',
+        margin=dict(l=10, r=10, t=40, b=10)
+    )
+    # Return image as bytes
+    img_bytes = fig.to_image(format="png", scale=2)
+    return img_bytes
+
 # ========== WHATSAPP SHARE ==========
 def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     now_str = format_datetime()
@@ -1064,15 +1121,6 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
         msg = f"📊 *{sheet_name}* — Total {total_rows} rows\n🕐 {now_str}\n\n```\n{table_text}\n```"
     msg += f"\n🔗 Sheet: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
     return msg
-
-# ========== COPY TABLE TO CLIPBOARD ==========
-def get_table_csv(df):
-    if df.empty:
-        return ""
-    cols = list(df.columns)
-    if '_sheet_row' in cols:
-        cols.remove('_sheet_row')
-    return df[cols].to_csv(index=False)
 
 # ========== MAIN APP ==========
 def main():
@@ -1348,17 +1396,16 @@ def main():
                     filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
                 filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
 
-        # ----- Quick Filter by Train (new) -----
+        # ----- Quick Filter by Train (dropdown) -----
         train_col = None
-        if not filtered_df.empty:
-            for c in filtered_df.columns:
-                if 'T/N' in c.upper() or 'TRAIN' in c.upper():
-                    train_col = c
-                    break
+        for c in filtered_df.columns:
+            if 'T/N' in c.upper() or 'TRAIN' in c.upper():
+                train_col = c
+                break
         if train_col and not filtered_df.empty:
             train_options = sorted(filtered_df[train_col].dropna().unique())
             if train_options:
-                selected_train = st.selectbox("Quick Filter by Train", [""] + train_options, key="quick_train_select")
+                selected_train = st.selectbox("🚆 Quick Filter by Train", [""] + train_options, key="quick_train_select")
                 if selected_train:
                     filtered_df = filtered_df[filtered_df[train_col] == selected_train]
                     st.session_state.train_val = selected_train  # sync with main filter
@@ -1488,7 +1535,7 @@ def main():
                     fig_line.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
                     st.plotly_chart(fig_line, use_container_width=True)
 
-            # Train-wise count table (already shown above as bar, but we also show the table)
+            # Train-wise count table
             with st.expander("📊 Train-wise EQ Count (Full List)", expanded=False):
                 if train_col:
                     train_counts_full = filtered_df[train_col].value_counts().reset_index()
@@ -1502,7 +1549,7 @@ def main():
     else:
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
 
-        # ---------- STATS ROW (with train counts) ----------
+        # ---------- STATS ROW ----------
         if not filtered_df.empty:
             col_stats = st.columns(5)
             with col_stats[0]:
@@ -1521,17 +1568,15 @@ def main():
                     total_berths = pd.to_numeric(filtered_df[berth_col], errors='coerce').sum()
                 st.metric("Total Berths", int(total_berths) if total_berths else 0)
             with col_stats[4]:
-                # Show total trains count
                 st.metric("Total Train Entries", len(filtered_df) if not filtered_df.empty else 0)
 
             # ----- Train Counts as horizontal scrollable list -----
             if train_col and not filtered_df.empty:
                 train_counts_series = filtered_df[train_col].value_counts()
                 count_items = [f"{train}: {cnt}" for train, cnt in train_counts_series.items()]
-                count_str = " | ".join(count_items[:20])  # show first 20
-                if len(count_items) > 20:
-                    count_str += " ..."
-                st.markdown(f"**📊 Train Counts:** {count_str}")
+                # Build HTML with styled chips
+                chips = ''.join([f'<span class="train-count-item">{t}</span>' for t in count_items])
+                st.markdown(f'<div class="train-counts">{chips}</div>', unsafe_allow_html=True)
             st.markdown("---")
 
         # Refresh button
@@ -1614,7 +1659,7 @@ def main():
             st.markdown('<div class="action-box">', unsafe_allow_html=True)
             st.markdown("**⚡ Quick Actions**")
 
-            # 5 columns (removed Print File)
+            # 5 columns (Save, Add, Delete, WhatsApp, Print)
             a1, a2, a3, a4, a5 = st.columns(5)
 
             with a1:
@@ -1672,7 +1717,6 @@ def main():
             with a3:
                 if selected_sheet_rows:
                     if st.button("🗑️ Delete", use_container_width=True):
-                        # Confirmation
                         if not st.session_state.delete_confirm:
                             st.session_state.delete_confirm = True
                             st.warning("Confirm delete by clicking again.")
@@ -1698,10 +1742,23 @@ def main():
 
             with a4:
                 # WhatsApp share
+                # Show both text share and image download
                 msg = build_whatsapp_message(sheet_choice, len(selected_indices), selected_pnrs, len(filtered_df), filtered_df)
                 encoded = urllib.parse.quote(msg)
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
-                st.link_button("📤 WhatsApp Share", wa_url, use_container_width=True)
+                st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
+                # Also provide image download
+                if not filtered_df.empty:
+                    img_bytes = create_table_image(filtered_df, f"{sheet_choice} Table")
+                    if img_bytes:
+                        st.download_button(
+                            "🖼️ Download Table as Image",
+                            data=img_bytes,
+                            file_name=f"{sheet_choice}_table.png",
+                            mime="image/png",
+                            use_container_width=True,
+                            help="Download PNG and then share on WhatsApp"
+                        )
 
             with a5:
                 # PRINT – only this button now
@@ -1744,7 +1801,7 @@ def main():
                     else:
                         st.caption("No hyperlink columns found")
 
-            # ===== EXPORT (with selected rows option) =====
+            # ===== EXPORT =====
             st.markdown("**📄 Export**")
             e1, e2, e3, e4 = st.columns(4)
             with e1:
