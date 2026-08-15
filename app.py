@@ -508,6 +508,240 @@ def process_extracted_records(records):
         seen.add(pnr)
         full_text = ' '.join([
             str(rec.get('PURPOSE', '')),
+            str(rec.get('ADDRESS', 'eplacements = {
+        '•': '-', '·': '-', '‘': "'", '’': "'",
+        '“': '"', '”': '"', '–': '-', '—': '-',
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return text.encode('latin-1', 'ignore').decode('latin-1')
+
+# ========== SHEET CONFIG ==========
+SHEET_CONFIG = {
+    "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "doj_col": 7},
+    "DATA": {"start_row": 3, "pnr_col": 1, "train_col": 5, "doj_col": 7},
+    "FINAL": {"start_row": 6, "pnr_col": 7, "train_col": 1, "doj_col": 12},
+    "DATA2": {"start_row": 4, "pnr_col": 7, "train_col": 1, "doj_col": 12},
+    "EMAIL_DATA": {"start_row": 2, "pnr_col": 7, "train_col": 8, "doj_col": 11},
+    "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "doj_col": None}
+}
+
+# ========== LOAD SHEET DATA ==========
+@st.cache_data(ttl=10, show_spinner=False)
+def load_sheet_data_cached(sheet_name, sheet_id):
+    try:
+        gc = init_sheets()
+        sheet = gc.open_by_key(sheet_id).worksheet(sheet_name)
+        all_data = sheet.get_all_values()
+        config = SHEET_CONFIG.get(sheet_name, {"start_row": 1})
+        start_row = config["start_row"]
+        if len(all_data) < start_row:
+            return pd.DataFrame()
+
+        headers_raw = all_data[start_row - 2] if start_row > 1 else (all_data[0] if all_data else [])
+        data_rows = all_data[start_row - 1:] if start_row <= len(all_data) else []
+
+        seen = {}
+        unique_headers = []
+        for h in headers_raw:
+            h_str = str(h).strip() or "Unnamed"
+            if h_str in seen:
+                seen[h_str] += 1
+                unique_headers.append(f"{h_str}_{seen[h_str]}")
+            else:
+                seen[h_str] = 0
+                unique_headers.append(h_str)
+
+        if not data_rows:
+            return pd.DataFrame()
+
+        max_cols = len(unique_headers)
+        padded_rows = []
+        for row in data_rows:
+            padded = list(row) + [''] * (max_cols - len(row))
+            padded_rows.append(padded[:max_cols])
+
+        df = pd.DataFrame(padded_rows, columns=unique_headers)
+        df['_sheet_row'] = list(range(start_row, start_row + len(df)))
+        return df
+    except Exception as e:
+        st.error(f"Error loading {sheet_name}: {e}")
+        return pd.DataFrame()
+
+# ========== GEMINI EXTRACTION ==========
+def gemini_universal_parser(input_data, input_type, mime_type, progress_callback=None):
+    url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}'
+
+    system_prompt = """
+You are TSKEQ Bot's AI extraction engine. You are an EXPERT at reading messy, handwritten, torn, or low-quality railway forms.
+
+=== FIELDS TO EXTRACT (21 fields) ===
+PNR, T_N (Train Number), CLASS, DOJ (DD-MM-YYYY), FROM, TO, BOARDING, PASS_NAME, PASS_PH (10 digits), T_BERTHS, PURPOSE, ADDRESS, DIARY_NO, RECOMMENDATION, DESIGNATION, VIP_STATUS, APPLICATION_DATE, RAILWAY_ZONE, PREFERENCE, PHONE_NUBER, WARRANT_NO
+
+=== SPECIAL RULES ===
+1. DIARY_NO: Look for "No." or "Diary No." pattern. Preserve as-is. Do NOT overwrite with RAIL BOARD unless explicitly stated.
+2. PREFERENCE: If you see "Lower Berth", "Lower Seat", "Coupe", set PREFERENCE = "Lower Seat".
+3. RAIL BOARD: If you see "Office of the Hon'ble Minister Railways", set DIARY_NO="RAIL BOARD", RAILWAY_ZONE="RAIL BOARD".
+4. DOJ: If you see "24/25.06.26", return the FIRST date: "24-06-2026".
+5. Multiple entries: If a table has multiple rows, extract ALL valid entries.
+
+=== OUTPUT FORMAT ===
+Return ONLY a valid JSON array. No explanations.
+[
+  {
+    "PNR": "6307598699",
+    "T_N": "20503",
+    "CLASS": "1A",
+    "DOJ": "12-08-2026",
+    "FROM": "HJP",
+    "TO": "LKO",
+    "BOARDING": "",
+    "PASS_NAME": "INDU DUBEY",
+    "PASS_PH": "9771425900",
+    "T_BERTHS": 1,
+    "PURPOSE": "",
+    "ADDRESS": "",
+    "DIARY_NO": "ECR/CRM/PCCM Cell/EQ/01/2026",
+    "RECOMMENDATION": "MRITYUNJAY KUMAR",
+    "DESIGNATION": "Secy to PCCM",
+    "VIP_STATUS": "",
+    "APPLICATION_DATE": "10-08-2026",
+    "RAILWAY_ZONE": "ECR",
+    "PREFERENCE": "Lower Seat",
+    "PHONE_NUBER": "9771425962",
+    "WARRANT_NO": ""
+  }
+]
+CRITICAL: Return ONLY the JSON array.
+"""
+    parts = []
+    if input_type in ['image', 'pdf']:
+        mime = mime_type or ("image/jpeg" if input_type == 'image' else "application/pdf")
+        parts.append({"inline_data": {"mime_type": mime, "data": input_data}})
+        parts.append({"text": system_prompt})
+    elif input_type == 'audio':
+        parts.append({"inline_data": {"mime_type": mime_type or "audio/ogg", "data": input_data}})
+        parts.append({"text": system_prompt})
+    elif input_type == 'text':
+        parts.append({"text": system_prompt + "\n\nINPUT DATA:\n" + input_data})
+    else:
+        return {'error': 'Unsupported type'}
+
+    if progress_callback:
+        progress_callback(30, "Sending to Gemini...")
+
+    payload = {
+        "contents": [{"parts": parts}],
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 16384}
+    }
+    try:
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, json=payload, headers=headers, timeout=120)
+        if response.status_code != 200:
+            return {'error': f'Gemini API Error: {response.status_code}'}
+        data = response.json()
+        if not data.get('candidates') or not data['candidates'][0].get('content', {}).get('parts'):
+            return {'error': 'Empty response from Gemini'}
+        response_text = data['candidates'][0]['content']['parts'][0]['text']
+
+        if progress_callback:
+            progress_callback(60, "Parsing Gemini response...")
+
+        json_match = re.search(r'\[\s*\{[\s\S]*\}\s*\]', response_text)
+        if not json_match:
+            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                if progress_callback:
+                    progress_callback(80, "Using fallback extraction...")
+                return extract_data_manually(response_text, input_data)
+        else:
+            json_str = json_match.group(0)
+
+        json_str = json_str.replace('```json', '').replace('```', '').strip()
+        json_str = re.sub(r',\s*}', '}', json_str)
+        json_str = re.sub(r',\s*]', ']', json_str)
+        json_str = re.sub(r'([a-zA-Z0-9_]+)\s*:', r'"\1":', json_str)
+        json_str = json_str.replace("'", '"')
+        records = json.loads(json_str)
+        if isinstance(records, dict):
+            records = [records]
+
+        if progress_callback:
+            progress_callback(90, "Processing records...")
+
+        result = process_extracted_records(records)
+        if progress_callback:
+            progress_callback(100, "Complete!")
+        return result
+    except Exception as e:
+        return {'error': f'Parser Error: {e}', 'raw': response_text[:500] if 'response_text' in locals() else ''}
+
+def extract_data_manually(response_text, input_data):
+    records = []
+    text = response_text + ' ' + str(input_data or '')
+    text = re.sub(r'\s+', ' ', text).strip()
+    pnr_matches = re.findall(r'\b\d{10}\b', text)
+    if not pnr_matches:
+        return {'error': 'No PNR found'}
+    train_matches = re.findall(r'\b\d{3,5}\b', text)
+    trains = [t for t in train_matches if len(t) != 10]
+    date_matches = re.findall(r'\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4}', text)
+    station_matches = re.findall(r'\b[A-Z]{3,4}\b', text)
+    name_matches = re.findall(r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*', text)
+    names = [n for n in name_matches if 3 < len(n) < 40]
+    phone_matches = re.findall(r'\b\d{10}\b', text)
+    diary_match = re.search(r'No\.?\s*[:#]?\s*([A-Z0-9\/\-]+)', text.upper())
+    diary = diary_match.group(1).strip() if diary_match else ''
+    app_date = ''
+    date_pattern = r'Dated\s*[:#]?\s*(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})'
+    date_match = re.search(date_pattern, text, re.IGNORECASE)
+    if date_match:
+        app_date = date_match.group(1)
+    lower_seat = any(kw in text.upper() for kw in ['LOWER BERTH', 'COUPE', 'WOMAN', 'LOWER SEAT'])
+    is_rail_board = smart_detect_rail_board(text)['isRailBoard']
+    max_records = max(len(pnr_matches), len(trains), len(date_matches), len(station_matches), len(names))
+    if max_records == 0:
+        return {'error': 'No data extracted'}
+    for i in range(min(max_records, 5)):
+        rec = {
+            'PNR': pnr_matches[i] if i < len(pnr_matches) else '',
+            'T_N': trains[i] if i < len(trains) else '',
+            'CLASS': '',
+            'DOJ': parse_date(date_matches[i]) if i < len(date_matches) else '',
+            'FROM': station_matches[i] if i < len(station_matches) else '',
+            'TO': station_matches[i+1] if i+1 < len(station_matches) else '',
+            'BOARDING': '',
+            'PASS_NAME': names[i] if i < len(names) else '',
+            'PASS_PH': phone_matches[i] if i < len(phone_matches) else '',
+            'T_BERTHS': 1,
+            'PURPOSE': '',
+            'ADDRESS': '',
+            'DIARY_NO': diary if diary else ('RAIL BOARD' if is_rail_board else ''),
+            'RECOMMENDATION': '',
+            'DESIGNATION': '',
+            'VIP_STATUS': 'MINISTER' if is_rail_board else '',
+            'APPLICATION_DATE': parse_date(app_date) if app_date else '',
+            'RAILWAY_ZONE': 'RAIL BOARD' if is_rail_board else '',
+            'PREFERENCE': 'Lower Seat' if lower_seat else ('RAIL BOARD' if is_rail_board else 'General'),
+            'PHONE_NUBER': '',
+            'WARRANT_NO': ''
+        }
+        if rec['PNR']:
+            records.append(rec)
+    return process_extracted_records(records)
+
+def process_extracted_records(records):
+    cleaned = []
+    seen = set()
+    for rec in records:
+        pnr = clean_pnr(rec.get('PNR', ''))
+        if not pnr or pnr in seen:
+            continue
+        seen.add(pnr)
+        full_text = ' '.join([
+            str(rec.get('PURPOSE', '')),
             str(rec.get('ADDRESS', '')),
             str(rec.get('RECOMMENDATION', '')),
             str(rec.get('DESIGNATION', '')),
