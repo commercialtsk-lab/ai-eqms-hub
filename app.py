@@ -974,28 +974,13 @@ def apply_theme(dark_mode: bool):
         }}
         @media print {{
             body * {{ visibility: hidden; }}
-            .stDataEditor, [data-testid="stDataEditor"],
-            .stDataFrame, [data-testid="stDataFrame"],
-            .stDataEditor *, [data-testid="stDataEditor"] *,
-            .stDataFrame *, [data-testid="stDataFrame"] * {{
-                visibility: visible !important;
-            }}
-            .stDataEditor, [data-testid="stDataEditor"],
-            .stDataFrame, [data-testid="stDataFrame"] {{
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
-                background: white !important;
-                color: black !important;
-            }}
+            .print-content, .print-content * {{ visibility: visible !important; }}
+            .print-content {{ position: absolute; left: 0; top: 0; width: 100%; }}
             .stApp, header, footer, .stSidebar, .stButton, .stExpander, .stTabs, .stSelectbox,
             .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio, .stCheckbox,
             .stFileUploader, .stMarkdown, .stCaption, .stImage, .stVideo, .stAudio,
             .stPlotlyChart, .action-box, .pro-footer, .top-bar, .status-pill, .sheet-link-btn
             {{ display: none !important; }}
-            .stDataEditor td, .stDataEditor th,
-            .stDataFrame td, .stDataFrame th {{ border: 1px solid #ddd !important; }}
         }}
         * {{
             transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
@@ -1003,6 +988,57 @@ def apply_theme(dark_mode: bool):
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
+
+# ========== PDF GENERATION ==========
+def generate_pdf(df, title, full=True):
+    pdf = FPDF('L', 'mm', 'A4')
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(0, 8, f"AI EQMS Hub Pro - {title}", ln=True, align='C')
+    pdf.set_font("Arial", '', 8)
+    pdf.cell(0, 6, f"Generated: {format_datetime()} IST | Rows: {len(df)}", ln=True, align='C')
+    pdf.ln(3)
+    
+    cols = list(df.columns)
+    # Remove internal columns
+    if '_sheet_row' in cols:
+        cols.remove('_sheet_row')
+    # Limit columns for PDF readability
+    if len(cols) > 15:
+        cols = cols[:15]
+    
+    col_width = min(25, 277 / max(len(cols), 1))
+    
+    pdf.set_font("Arial", 'B', 7)
+    for c in cols:
+        safe_c = sanitize_latin(str(c)[:15])
+        pdf.cell(col_width, 6, safe_c, border=1)
+    pdf.ln()
+    
+    pdf.set_font("Arial", '', 6)
+    max_rows = len(df) if full else min(120, len(df))
+    for idx, row in df.head(max_rows).iterrows():
+        for c in cols:
+            val = str(row.get(c, ""))[:20]
+            safe_val = sanitize_latin(val)
+            pdf.cell(col_width, 5, safe_val, border=1)
+        pdf.ln()
+        if pdf.get_y() > 185:
+            pdf.add_page()
+            pdf.set_font("Arial", 'B', 7)
+            for c in cols:
+                safe_c = sanitize_latin(str(c)[:15])
+                pdf.cell(col_width, 6, safe_c, border=1)
+            pdf.ln()
+            pdf.set_font("Arial", '', 6)
+    
+    output = pdf.output(dest='S')
+    if isinstance(output, bytearray):
+        return bytes(output)
+    elif isinstance(output, str):
+        return output.encode('latin-1')
+    else:
+        return output
 
 # ========== WHATSAPP SHARE ==========
 def build_whatsapp_message(sheet_name, selected_count, pnrs):
@@ -1071,11 +1107,17 @@ def main():
             if mode == "📷 Image / PDF":
                 uploaded = st.file_uploader("Image or PDF", type=["png","jpg","jpeg","pdf"], label_visibility="collapsed")
             elif mode == "📝 Text":
-                text_data = st.text_area("Paste text", height=120, placeholder="Messy text yahan paste karein...", label_visibility="collapsed")
+                text_data = st.text_area("📝 Paste text", height=150, placeholder="Messy text yahan paste karein...", label_visibility="collapsed")
+                if text_data:
+                    st.caption(f"✓ {len(text_data)} characters ready")
             else:
-                st.caption("Mic se record karein")
+                st.caption("🎤 Mic se record karein")
                 audio_data = st.audio_input("Record", label_visibility="collapsed")
                 uploaded = st.file_uploader("Ya file upload", type=["mp3","wav","ogg","m4a"], label_visibility="collapsed")
+                if audio_data:
+                    st.audio(audio_data, format='audio/wav')
+                elif uploaded:
+                    st.audio(uploaded, format='audio/mp3')
 
             if st.button("🚀 Process & Save", type="primary", use_container_width=True):
                 if mode == "📝 Text" and not text_data.strip():
@@ -1114,7 +1156,7 @@ def main():
                         else:
                             st.success(f"✅ Extracted {res['count']} record(s)")
                             if res.get('records'):
-                                with st.expander("Preview extracted data"):
+                                with st.expander("🔍 Preview extracted data"):
                                     st.dataframe(pd.DataFrame(res['records']), use_container_width=True)
 
                             try:
@@ -1185,9 +1227,10 @@ def main():
                     st.session_state.upload_success = False
                     st.rerun()
 
-        with st.expander("📋 Activity Log", expanded=False):
+        # ---- Activity Log ----
+        with st.expander("📋 Activity Log", expanded=True):
             if st.session_state.activity_log:
-                for log in reversed(st.session_state.activity_log[-15:]):
+                for log in reversed(st.session_state.activity_log[-20:]):
                     st.caption(f"{log.get('timestamp', '')} — {log.get('action', '')}")
             else:
                 st.caption("No activity yet")
@@ -1595,41 +1638,73 @@ def main():
                 if selected_indices:
                     pnr_col = next((c for c in edited_page.columns if 'PNR' in str(c).upper()), None)
                     pnrs = edited_page.loc[selected_indices, pnr_col].tolist() if pnr_col else []
-                    msg = build_whatsapp_message(sheet_choice, len(selected_indices), pnrs)
-                    encoded = urllib.parse.quote(msg)
+                    
                     if share_option == "WhatsApp":
+                        msg = build_whatsapp_message(sheet_choice, len(selected_indices), pnrs)
+                        encoded = urllib.parse.quote(msg)
                         url = f"https://api.whatsapp.com/send?text={encoded}"
+                        st.link_button("📤 WhatsApp Share", url, use_container_width=True)
                     elif share_option == "Email":
-                        url = f"mailto:?subject=EQ Data&body={encoded}"
+                        # Create a PDF of selected rows and attach? For simplicity, we send a text.
+                        msg = f"EQ Data\nSheet: {sheet_choice}\nSelected: {len(selected_indices)}\nPNRs: {', '.join(map(str, pnrs[:10]))}\nTime: {format_datetime()}"
+                        encoded = urllib.parse.quote(msg)
+                        url = f"mailto:?subject=EQ Data Share&body={encoded}"
+                        st.link_button("📤 Email Share", url, use_container_width=True)
                     elif share_option == "SMS":
+                        msg = f"EQ Data: {len(selected_indices)} rows, PNRs: {', '.join(map(str, pnrs[:5]))}"
+                        encoded = urllib.parse.quote(msg)
                         url = f"sms:?body={encoded}"
+                        st.link_button("📤 SMS Share", url, use_container_width=True)
                     elif share_option == "Twitter":
+                        msg = f"EQ Data: {len(selected_indices)} rows, PNRs: {', '.join(map(str, pnrs[:5]))} #EQMS #Railway"
+                        encoded = urllib.parse.quote(msg)
                         url = f"https://twitter.com/intent/tweet?text={encoded}"
-                    elif share_option == "Facebook":
+                        st.link_button("🐦 Twitter Share", url, use_container_width=True)
+                    else:  # Facebook
+                        msg = f"EQ Data: {len(selected_indices)} rows, PNRs: {', '.join(map(str, pnrs[:5]))}"
+                        encoded = urllib.parse.quote(msg)
                         url = f"https://www.facebook.com/sharer/sharer.php?u={urllib.parse.quote('https://docs.google.com/spreadsheets/d/'+SHEET_ID)}&quote={encoded}"
-                    else:
-                        url = f"https://api.whatsapp.com/send?text={encoded}"
-                    st.link_button("📤 Share", url, use_container_width=True)
+                        st.link_button("📘 Facebook Share", url, use_container_width=True)
                 else:
                     st.button("📤 Share", disabled=True, use_container_width=True)
 
             with a5:
-                st.markdown("""
-                <div style="width:100%;">
-                    <button onclick="window.print()" style="
-                        background-color: #f0f0f0;
-                        border: 1px solid #d0d7de;
-                        border-radius: 8px;
-                        padding: 9px 16px;
-                        width: 100%;
-                        font-weight: 500;
-                        cursor: pointer;
-                        transition: 0.15s;
-                        color: #1f2328;
-                        font-size: 1rem;
-                    ">🖨️ Print Sheet</button>
-                </div>
-                """, unsafe_allow_html=True)
+                # PRINT BUTTON: Generate PDF of ALL filtered data and open print dialog
+                if not filtered_df.empty:
+                    # Generate PDF of full filtered data
+                    pdf_bytes = generate_pdf(filtered_df, sheet_choice, full=True)
+                    b64_pdf = base64.b64encode(pdf_bytes).decode()
+                    # Create a data URI
+                    pdf_data_uri = f"data:application/pdf;base64,{b64_pdf}"
+                    # Use JavaScript to open a new window with the PDF and print it
+                    js_code = f"""
+                    <div style="width:100%;">
+                        <button onclick="printPDF()" style="
+                            background: linear-gradient(135deg, #7c3aed, #6d28d9);
+                            color: white;
+                            border: none;
+                            border-radius: 8px;
+                            padding: 9px 16px;
+                            width: 100%;
+                            font-weight: 600;
+                            cursor: pointer;
+                            font-size: 1rem;
+                        ">🖨️ Print Sheet (All Rows)</button>
+                    </div>
+                    <script>
+                        function printPDF() {{
+                            var win = window.open('{pdf_data_uri}', '_blank');
+                            win.onload = function() {{
+                                setTimeout(function() {{
+                                    win.print();
+                                }}, 1000);
+                            }};
+                        }}
+                    </script>
+                    """
+                    st.components.v1.html(js_code, height=60)
+                else:
+                    st.button("🖨️ Print Sheet", disabled=True, use_container_width=True)
 
             with a6:
                 if st.session_state.last_uploaded_print_url:
@@ -1664,37 +1739,16 @@ def main():
             with e1:
                 try:
                     export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
-                    pdf = FPDF('L', 'mm', 'A4')
-                    pdf.add_page()
-                    pdf.set_font("Arial", 'B', 12)
-                    title = sanitize_latin(f"{sheet_choice} Report - {format_datetime()}")
-                    pdf.cell(0, 8, title, ln=True, align='C')
-                    pdf.ln(3)
-                    pdf.set_font("Arial", 'B', 6)
-                    cols = export_df.columns.tolist()
-                    if cols:
-                        col_width = min(22, 270 / max(len(cols), 1))
-                        for col in cols:
-                            safe_col = sanitize_latin(str(col)[:12])
-                            pdf.cell(col_width, 5, safe_col, border=1, align='C')
-                        pdf.ln()
-                        pdf.set_font("Arial", '', 5)
-                        for _, row in export_df.head(120).iterrows():
-                            for col in cols:
-                                val = str(row[col])[:14] if pd.notna(row[col]) else ''
-                                safe_val = sanitize_latin(val)
-                                pdf.cell(col_width, 4, safe_val, border=1, align='L')
-                            pdf.ln()
-                        pdf_bytes = pdf.output(dest='S')
-                        st.download_button(
-                            "📥 PDF",
-                            data=pdf_bytes,
-                            file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True
-                        )
+                    pdf_bytes = generate_pdf(export_df, sheet_choice, full=True)
+                    st.download_button(
+                        "📥 PDF (All Rows)",
+                        data=pdf_bytes,
+                        file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
                 except Exception as e:
-                    st.warning(f"PDF generation error: {e}")
+                    st.warning(f"PDF error: {e}")
 
             with e2:
                 export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
