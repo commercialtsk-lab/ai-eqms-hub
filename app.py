@@ -612,17 +612,15 @@ def chat_with_gemini(user_message, chat_history):
         model = init_gemini()
         context = get_sheet_context()
 
-        system_prompt = f"""You are TSKEQ Bot - a railway EQ assistant. You have access to the EQ sheet data.
+        system_prompt = f"""You are TSKEQ Bot - a helpful AI assistant created by Sharique. You can answer ANY question.
 
-Sheet Context:
+=== YOUR CAPABILITIES ===
+- Answer any question about railway EQ, general knowledge, tech, creative writing, etc.
+- Use the sheet context below if relevant.
+- Be friendly, concise, and use emojis.
+
+Sheet Context (if needed):
 {context}
-
-Instructions:
-1. Answer questions based on the sheet data if relevant.
-2. For general railway questions, use your knowledge.
-3. Be helpful, concise, and friendly.
-4. Use emojis occasionally.
-5. Respond naturally as if you are having a conversation.
 
 Previous conversation:
 """
@@ -1015,7 +1013,6 @@ def main():
 
     # ---- SIDEBAR ----
     with st.sidebar:
-        # Greeting with flag colors
         now = datetime.now()
         hour = now.hour
         if 5 <= hour < 12:
@@ -1038,7 +1035,6 @@ def main():
         st.write(f"📅 {now.strftime('%d-%m-%Y')}")
         st.write(f"🕐 {now.strftime('%H:%M:%S')}")
 
-        # ---- Auto Refresh ----
         auto_refresh = st.checkbox("🔄 Auto Sync (30s)", value=True)
         if auto_refresh:
             if time.time() - st.session_state.last_refresh > 30:
@@ -1047,13 +1043,10 @@ def main():
                 st.rerun()
 
         st.markdown("---")
-
-        # ---- Sheet Link ----
         sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
         st.markdown("---")
 
-        # ---- File Upload ----
         st.subheader("📤 Upload File")
         st.markdown("<p style='font-size:0.85rem; color: #6b7280;'>Upload Image, PDF, Text, or Audio</p>", unsafe_allow_html=True)
         uploaded_file = st.file_uploader("Choose a file", type=['png','jpg','jpeg','pdf','txt','mp3','wav','ogg','m4a'], label_visibility="collapsed")
@@ -1110,12 +1103,21 @@ def main():
                                         st.session_state.last_uploaded_drive_url = drive_res['print_url']
                                         st.session_state.last_uploaded_drive_id = drive_res['id']
                                         
-                                        # Show print button with proper link - Ctrl+P works
-                                        st.markdown(f'''
-                                        <a href="{drive_res['print_url']}" target="_blank" class="print-btn">
+                                        # Print button with JavaScript to open and trigger print
+                                        print_js = f"""
+                                        <script>
+                                        function printFile() {{
+                                            var win = window.open("{drive_res['print_url']}", "_blank");
+                                            win.onload = function() {{
+                                                win.print();
+                                            }};
+                                        }}
+                                        </script>
+                                        <button onclick="printFile()" class="print-btn">
                                             🖨️ Print File (Ctrl+P)
-                                        </a>
-                                        ''', unsafe_allow_html=True)
+                                        </button>
+                                        """
+                                        st.components.v1.html(print_js, height=60)
                                     else:
                                         st.error(f"Drive upload error: {drive_res['error']}")
 
@@ -1135,7 +1137,6 @@ def main():
 
         st.markdown("---")
 
-        # ---- Activity Log ----
         with st.expander("📋 Activity Log", expanded=False):
             if st.session_state.activity_log:
                 for log in st.session_state.activity_log[-10:]:
@@ -1147,12 +1148,10 @@ def main():
 
         st.markdown("---")
 
-        # ---- Sheet Selector ----
         sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()))
         config = SHEET_CONFIG[sheet_choice]
         start_row = config["start_row"]
 
-        # ---- Filters ----
         st.subheader("🔍 Filters")
         if 'pnr_val' not in st.session_state:
             st.session_state.pnr_val = ''
@@ -1184,7 +1183,6 @@ def main():
                 st.session_state.to_val = None
                 st.rerun()
 
-        # ---- Load and filter data ----
         df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
         filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
 
@@ -1215,7 +1213,6 @@ def main():
                     filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
                 filtered_df = filtered_df.drop('_temp', axis=1)
 
-        # ---- Navigation ----
         view = st.radio("View", ["Data Table", "Dashboard", "💬 Chat with Gemini"])
 
     # ---- MAIN AREA ----
@@ -1225,21 +1222,15 @@ def main():
 
     if view == "💬 Chat with Gemini":
         st.subheader("💬 Chat with TSKEQ Bot")
-        st.markdown("*Ask me anything - railway EQ, general questions, or any topic!*")
-
+        st.markdown("*Ask me anything – railway EQ, general questions, or any topic!*")
         st.divider()
 
-        # Chat messages container
         chat_container = st.container()
         with chat_container:
-            if "messages" not in st.session_state:
-                st.session_state.messages = []
-
             for msg in st.session_state.messages:
                 with st.chat_message(msg["role"]):
                     st.markdown(msg["content"])
 
-        # Chat input at the bottom
         if prompt := st.chat_input("Ask me anything..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
@@ -1250,7 +1241,6 @@ def main():
                     st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
 
-        # Clear Chat button below the chat input
         st.markdown("---")
         if st.button("🗑️ Clear Chat", use_container_width=True):
             st.session_state.messages = []
@@ -1258,8 +1248,6 @@ def main():
 
     elif view == "Dashboard":
         st.subheader("📊 Dashboard")
-        
-        # Metrics
         m1, m2, m3, m4 = st.columns(4)
         with m1:
             total_records = len(filtered_df) if not filtered_df.empty else 0
@@ -1282,7 +1270,6 @@ def main():
                 expired = sum(1 for _, r in filtered_df.iterrows() if is_expired(r.get(doj_col, '')))
             st.metric("⏰ Expired DOJ", expired)
 
-        # Charts
         if not filtered_df.empty:
             train_col = next((c for c in filtered_df.columns if 'T/N' in c.upper() or 'TRAIN' in c.upper()), None)
             if train_col and train_col in filtered_df and filtered_df[train_col].notna().any():
@@ -1439,17 +1426,25 @@ def main():
 
                 with b5:
                     if st.session_state.last_uploaded_drive_url:
-                        st.markdown(f'''
-                        <a href="{st.session_state.last_uploaded_drive_url}" target="_blank" class="print-btn">
+                        print_js = f"""
+                        <script>
+                        function printFile() {{
+                            var win = window.open("{st.session_state.last_uploaded_drive_url}", "_blank");
+                            win.onload = function() {{
+                                win.print();
+                            }};
+                        }}
+                        </script>
+                        <button onclick="printFile()" class="print-btn">
                             🖨️ Print File (Ctrl+P)
-                        </a>
-                        ''', unsafe_allow_html=True)
+                        </button>
+                        """
+                        st.components.v1.html(print_js, height=60)
                     else:
                         st.button("🖨️ Print File", disabled=True, use_container_width=True)
 
                 st.markdown('</div>', unsafe_allow_html=True)
 
-                # Quick Links
                 if sheet_choice == "EQ":
                     st.subheader("🔗 Quick Links")
                     col_indices = {'X': 23, 'Y': 24, 'Z': 25, 'AA': 26}
@@ -1477,7 +1472,6 @@ def main():
                             row_num = idx + 1
                             st.markdown(f"**Row {row_num}:** " + " | ".join(links), unsafe_allow_html=True)
 
-                # Export
                 st.subheader("📄 Export")
                 e1, e2 = st.columns(2)
                 with e1:
@@ -1510,7 +1504,6 @@ def main():
                     csv = filtered_df.drop('Select', axis=1).to_csv(index=False).encode('utf-8') if 'Select' in filtered_df.columns else filtered_df.to_csv(index=False).encode('utf-8')
                     st.download_button("📥 Download CSV", data=csv, file_name=f"{sheet_choice}.csv", mime="text/csv", use_container_width=True)
 
-    # ---- FOOTER ----
     st.markdown("""
     <div class='pro-footer'>
         🚂 AI EQMS Hub Pro – Created by Sharique<br>
