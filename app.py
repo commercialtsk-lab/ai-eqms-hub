@@ -17,6 +17,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 from fpdf import FPDF
 import plotly.express as px
+import plotly.graph_objects as go
 
 # ========== PAGE CONFIG ==========
 st.set_page_config(
@@ -75,7 +76,7 @@ defaults = {
         "Quota status",
         "PNR status"
     ],
-    'dark_mode': False,          # Global dark mode (sidebar toggle)
+    'dark_mode': False,
     'current_page': 1,
     'pnr_val': '',
     'train_val': '',
@@ -86,6 +87,8 @@ defaults = {
     'selected_sheet': "EQ",
     'view_mode': "📋 Data Table",
     'select_all': False,
+    'quick_train': '',          # for quick filter dropdown
+    'delete_confirm': False,
 }
 
 for key, val in defaults.items():
@@ -1035,17 +1038,14 @@ def generate_pdf(df, title, full=True):
 # ========== WHATSAPP SHARE ==========
 def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     now_str = format_datetime()
-    # Build a simple text table
     if not df.empty:
         cols = list(df.columns)
         if '_sheet_row' in cols:
             cols.remove('_sheet_row')
-        cols = cols[:7]  # limit for readability
+        cols = cols[:7]
         table_lines = []
-        # header
         table_lines.append(" | ".join(cols))
         table_lines.append("-" * 40)
-        # data rows (first 5)
         for _, row in df.head(5).iterrows():
             row_vals = [str(row.get(c, ""))[:12] for c in cols]
             table_lines.append(" | ".join(row_vals))
@@ -1065,6 +1065,15 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     msg += f"\n🔗 Sheet: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
     return msg
 
+# ========== COPY TABLE TO CLIPBOARD ==========
+def get_table_csv(df):
+    if df.empty:
+        return ""
+    cols = list(df.columns)
+    if '_sheet_row' in cols:
+        cols.remove('_sheet_row')
+    return df[cols].to_csv(index=False)
+
 # ========== MAIN APP ==========
 def main():
     apply_theme(st.session_state.dark_mode)
@@ -1082,7 +1091,6 @@ def main():
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
-        # Global dark mode toggle (entire app)
         dark_mode = st.toggle("🌙 Dark Mode", value=st.session_state.dark_mode, key="global_dark")
         if dark_mode != st.session_state.dark_mode:
             st.session_state.dark_mode = dark_mode
@@ -1232,7 +1240,7 @@ def main():
                         st.link_button("👁️ View", st.session_state.last_uploaded_view_url, use_container_width=True)
                 with c2:
                     if st.session_state.last_uploaded_print_url:
-                        st.link_button("🖨️ Print File", st.session_state.last_uploaded_print_url, use_container_width=True)
+                        st.link_button("🖨️ Print File (Drive)", st.session_state.last_uploaded_print_url, use_container_width=True)
                 if st.button("🗑️ Clear History", use_container_width=True):
                     st.session_state.last_uploaded_file = None
                     st.session_state.last_uploaded_drive_url = None
@@ -1340,6 +1348,21 @@ def main():
                     filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
                 filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
 
+        # ----- Quick Filter by Train (new) -----
+        train_col = None
+        if not filtered_df.empty:
+            for c in filtered_df.columns:
+                if 'T/N' in c.upper() or 'TRAIN' in c.upper():
+                    train_col = c
+                    break
+        if train_col and not filtered_df.empty:
+            train_options = sorted(filtered_df[train_col].dropna().unique())
+            if train_options:
+                selected_train = st.selectbox("Quick Filter by Train", [""] + train_options, key="quick_train_select")
+                if selected_train:
+                    filtered_df = filtered_df[filtered_df[train_col] == selected_train]
+                    st.session_state.train_val = selected_train  # sync with main filter
+
         # Radio buttons – instant switching
         def set_view_mode():
             st.session_state.view_mode = st.session_state._view_radio
@@ -1415,8 +1438,7 @@ def main():
             total_records = len(filtered_df) if not filtered_df.empty else 0
             st.metric("Total Records", total_records)
         with m2:
-            train_col = next((c for c in filtered_df.columns if 'T/N' in str(c).upper() or 'TRAIN' in str(c).upper()), None)
-            unique_trains = filtered_df[train_col].nunique() if train_col and train_col in filtered_df else 0
+            unique_trains = filtered_df[train_col].nunique() if train_col else 0
             st.metric("Unique Trains", unique_trains)
         with m3:
             berth_col = next((c for c in filtered_df.columns if 'BERTH' in str(c).upper() or 'T/BERTHS' in str(c).upper()), None)
@@ -1434,48 +1456,45 @@ def main():
         st.markdown("---")
 
         if not filtered_df.empty:
-            col1, col2 = st.columns(2)
-            with col1:
-                train_col = next((c for c in filtered_df.columns if 'T/N' in str(c).upper() or 'TRAIN' in str(c).upper()), None)
-                if train_col and train_col in filtered_df and filtered_df[train_col].notna().any():
-                    train_counts = filtered_df[train_col].value_counts().head(10).reset_index()
-                    train_counts.columns = ['Train', 'Count']
-                    fig = px.pie(train_counts, names='Train', values='Count', title="Top 10 Trains", hole=0.45,
-                                 color_discrete_sequence=px.colors.qualitative.Set3)
-                    fig.update_layout(height=360, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig, use_container_width=True)
-
-            with col2:
-                berth_col = next((c for c in filtered_df.columns if 'BERTH' in str(c).upper() or 'T/BERTHS' in str(c).upper()), None)
-                if berth_col and berth_col in filtered_df:
-                    berth_vals = pd.to_numeric(filtered_df[berth_col], errors='coerce').dropna()
-                    if not berth_vals.empty:
-                        fig = px.histogram(berth_vals, nbins=10, title="Berths Distribution",
-                                           labels={'value': 'Berths', 'count': 'Count'},
-                                           color_discrete_sequence=['#2d7d46'])
-                        fig.update_layout(height=360, bargap=0.2, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig, use_container_width=True)
-
-            # ---- Train-wise EQ count table ----
-            st.markdown("#### Train-wise EQ Count")
+            # Train‑wise bar chart
             if train_col:
                 train_counts = filtered_df[train_col].value_counts().reset_index()
-                train_counts.columns = ['Train Number', 'EQ Count']
-                st.dataframe(train_counts, use_container_width=True, height=300)
+                train_counts.columns = ['Train', 'Count']
+                fig_bar = px.bar(train_counts.head(15), x='Train', y='Count', title="Top 15 Trains by EQ Count",
+                                 color='Count', color_continuous_scale='Blues')
+                fig_bar.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_bar, use_container_width=True)
 
-            doj_col = next((c for c in filtered_df.columns if 'DOJ' in str(c).upper()), None)
-            if doj_col and doj_col in filtered_df:
+            # Pie chart for class distribution (if available)
+            class_col = next((c for c in filtered_df.columns if 'CLASS' in c.upper()), None)
+            if class_col:
+                class_counts = filtered_df[class_col].value_counts().reset_index()
+                class_counts.columns = ['Class', 'Count']
+                fig_pie = px.pie(class_counts, names='Class', values='Count', title="Class Distribution", hole=0.4)
+                fig_pie.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig_pie, use_container_width=True)
+
+            # DOJ trend
+            if doj_col:
                 df_temp = filtered_df.copy()
                 df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
                 if df_temp['_date'].isna().all():
                     df_temp['_date'] = pd.to_datetime(df_temp[doj_col], errors='coerce')
                 daily = df_temp.groupby('_date').size().reset_index(name='count')
                 if not daily.empty:
-                    fig = px.line(daily, x='_date', y='count', title="Daily Trend", markers=True,
-                                  labels={'_date': 'Date', 'count': 'Records'},
-                                  color_discrete_sequence=['#ff6b6b'])
-                    fig.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig, use_container_width=True)
+                    fig_line = px.line(daily, x='_date', y='count', title="Daily Trend", markers=True,
+                                       labels={'_date': 'Date', 'count': 'Records'},
+                                       color_discrete_sequence=['#ff6b6b'])
+                    fig_line.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_line, use_container_width=True)
+
+            # Train-wise count table (already shown above as bar, but we also show the table)
+            with st.expander("📊 Train-wise EQ Count (Full List)", expanded=False):
+                if train_col:
+                    train_counts_full = filtered_df[train_col].value_counts().reset_index()
+                    train_counts_full.columns = ['Train Number', 'EQ Count']
+                    st.dataframe(train_counts_full, use_container_width=True, height=400)
+
         else:
             st.info("No data for charts. Adjust filters or choose another sheet.")
 
@@ -1483,8 +1502,9 @@ def main():
     else:
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
 
+        # ---------- STATS ROW (with train counts) ----------
         if not filtered_df.empty:
-            col_stats = st.columns(4)
+            col_stats = st.columns(5)
             with col_stats[0]:
                 st.metric("Total", len(filtered_df))
             with col_stats[1]:
@@ -1500,8 +1520,21 @@ def main():
                 if berth_col:
                     total_berths = pd.to_numeric(filtered_df[berth_col], errors='coerce').sum()
                 st.metric("Total Berths", int(total_berths) if total_berths else 0)
+            with col_stats[4]:
+                # Show total trains count
+                st.metric("Total Train Entries", len(filtered_df) if not filtered_df.empty else 0)
+
+            # ----- Train Counts as horizontal scrollable list -----
+            if train_col and not filtered_df.empty:
+                train_counts_series = filtered_df[train_col].value_counts()
+                count_items = [f"{train}: {cnt}" for train, cnt in train_counts_series.items()]
+                count_str = " | ".join(count_items[:20])  # show first 20
+                if len(count_items) > 20:
+                    count_str += " ..."
+                st.markdown(f"**📊 Train Counts:** {count_str}")
             st.markdown("---")
 
+        # Refresh button
         if st.button("🔄 Refresh Data", use_container_width=False):
             st.cache_data.clear()
             st.session_state.last_refresh = time.time()
@@ -1575,14 +1608,14 @@ def main():
                     except (ValueError, IndexError):
                         pass
 
-            # Get selected PNRs for sharing
             pnr_col = next((c for c in edited_page.columns if 'PNR' in str(c).upper()), None)
             selected_pnrs = edited_page.loc[selected_indices, pnr_col].tolist() if pnr_col and selected_indices else []
 
             st.markdown('<div class="action-box">', unsafe_allow_html=True)
             st.markdown("**⚡ Quick Actions**")
 
-            a1, a2, a3, a4, a5, a6 = st.columns(6)
+            # 5 columns (removed Print File)
+            a1, a2, a3, a4, a5 = st.columns(5)
 
             with a1:
                 if st.button("💾 Save Edits", use_container_width=True):
@@ -1639,32 +1672,39 @@ def main():
             with a3:
                 if selected_sheet_rows:
                     if st.button("🗑️ Delete", use_container_width=True):
-                        try:
-                            gc = init_sheets()
-                            sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                            for row_num in sorted(selected_sheet_rows, reverse=True):
-                                sheet.delete_rows(row_num)
-                            st.toast(f"✅ Deleted {len(selected_sheet_rows)}", icon="🗑️")
-                            log_activity(f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}")
-                            st.cache_data.clear()
-                            st.session_state.last_refresh = time.time()
-                            time.sleep(0.3)
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Delete error: {e}")
-                            log_activity(f"❌ Delete: {str(e)[:40]}")
+                        # Confirmation
+                        if not st.session_state.delete_confirm:
+                            st.session_state.delete_confirm = True
+                            st.warning("Confirm delete by clicking again.")
+                        else:
+                            try:
+                                gc = init_sheets()
+                                sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                                for row_num in sorted(selected_sheet_rows, reverse=True):
+                                    sheet.delete_rows(row_num)
+                                st.toast(f"✅ Deleted {len(selected_sheet_rows)}", icon="🗑️")
+                                log_activity(f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}")
+                                st.session_state.delete_confirm = False
+                                st.cache_data.clear()
+                                st.session_state.last_refresh = time.time()
+                                time.sleep(0.3)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Delete error: {e}")
+                                log_activity(f"❌ Delete: {str(e)[:40]}")
                 else:
                     st.button("🗑️ Delete", disabled=True, use_container_width=True)
+                    st.session_state.delete_confirm = False
 
             with a4:
-                # WhatsApp share – always enabled
+                # WhatsApp share
                 msg = build_whatsapp_message(sheet_choice, len(selected_indices), selected_pnrs, len(filtered_df), filtered_df)
                 encoded = urllib.parse.quote(msg)
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
                 st.link_button("📤 WhatsApp Share", wa_url, use_container_width=True)
 
             with a5:
-                # Print – use window.print()
+                # PRINT – only this button now
                 st.markdown("""
                 <div style="width:100%;">
                     <button onclick="window.print()" style="
@@ -1677,15 +1717,9 @@ def main():
                         font-weight: 600;
                         cursor: pointer;
                         font-size: 1rem;
-                    ">🖨️ Print Sheet (Ctrl+P)</button>
+                    ">🖨️ PRINT</button>
                 </div>
                 """, unsafe_allow_html=True)
-
-            with a6:
-                if st.session_state.last_uploaded_print_url:
-                    st.link_button("🖨️ Print File", st.session_state.last_uploaded_print_url, use_container_width=True)
-                else:
-                    st.button("🖨️ Print File", disabled=True, use_container_width=True)
 
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1710,15 +1744,15 @@ def main():
                     else:
                         st.caption("No hyperlink columns found")
 
-            # ===== EXPORT =====
+            # ===== EXPORT (with selected rows option) =====
             st.markdown("**📄 Export**")
-            e1, e2, e3 = st.columns(3)
+            e1, e2, e3, e4 = st.columns(4)
             with e1:
                 try:
                     export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
                     pdf_bytes = generate_pdf(export_df, sheet_choice, full=True)
                     st.download_button(
-                        "📥 PDF (All Rows)",
+                        "📥 PDF (All)",
                         data=pdf_bytes,
                         file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.pdf",
                         mime="application/pdf",
@@ -1728,12 +1762,15 @@ def main():
                     st.warning(f"PDF error: {e}")
 
             with e2:
-                export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
-                csv = export_df.to_csv(index=False).encode('utf-8')
+                if selected_indices:
+                    export_sel = filtered_df.iloc[selected_indices].drop(columns=['_sheet_row'], errors='ignore')
+                else:
+                    export_sel = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
+                csv_sel = export_sel.to_csv(index=False).encode('utf-8')
                 st.download_button(
-                    "📥 CSV",
-                    data=csv,
-                    file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.csv",
+                    "📥 CSV (Selected)" if selected_indices else "📥 CSV (All)",
+                    data=csv_sel,
+                    file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}_selected.csv",
                     mime="text/csv",
                     use_container_width=True
                 )
@@ -1750,6 +1787,18 @@ def main():
                     file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
+                )
+
+            with e4:
+                # Copy to clipboard (CSV)
+                csv_full = get_table_csv(filtered_df)
+                st.download_button(
+                    "📋 Copy CSV",
+                    data=csv_full,
+                    file_name="table.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    help="Download CSV and then you can copy its content"
                 )
 
     st.markdown("""
