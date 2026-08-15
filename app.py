@@ -42,23 +42,12 @@ if 'messages' not in st.session_state:
     st.session_state.messages = []
 if 'activity_log' not in st.session_state:
     st.session_state.activity_log = []
-if 'sidebar_collapsed' not in st.session_state:
-    st.session_state.sidebar_collapsed = False
 if 'last_uploaded_file' not in st.session_state:
     st.session_state.last_uploaded_file = None
 if 'last_uploaded_drive_url' not in st.session_state:
     st.session_state.last_uploaded_drive_url = None
 if 'last_refresh' not in st.session_state:
     st.session_state.last_refresh = time.time()
-if 'chat_suggestions' not in st.session_state:
-    st.session_state.chat_suggestions = [
-        "Show me EQ summary",
-        "How many records today?",
-        "Train wise breakup",
-        "Pending EQ requests",
-        "Quota status",
-        "PNR status"
-    ]
 if 'dark_mode' not in st.session_state:
     st.session_state.dark_mode = False
 if 'current_page' not in st.session_state:
@@ -225,15 +214,6 @@ def is_flag_time():
     end = now.replace(hour=sunset_h, minute=sunset_m, second=0, microsecond=0)
     return start <= now <= end
 
-def get_flag_colors():
-    if is_flag_time():
-        return {
-            'saffron': {'red': 1.0, 'green': 0.6, 'blue': 0.0},
-            'white': {'red': 1.0, 'green': 1.0, 'blue': 1.0},
-            'green': {'red': 0.0, 'green': 0.6, 'blue': 0.2}
-        }
-    return None
-
 # ========== SHEET CONFIG ==========
 SHEET_CONFIG = {
     "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "doj_col": 7},
@@ -275,7 +255,7 @@ def load_sheet_data_cached(sheet_name, sheet_id):
         st.error(f"Error loading {sheet_name}: {e}")
         return pd.DataFrame()
 
-# ========== GEMINI EXTRACTION ==========
+# ========== GEMINI EXTRACTION - EXACT ORIGINAL ==========
 def gemini_universal_parser(input_data, input_type, mime_type, progress_callback=None):
     url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}'
     
@@ -606,7 +586,7 @@ def save_to_sheet(sheet, records):
     except Exception as e:
         return {'error': str(e)}
 
-# ========== GEMINI CHAT ==========
+# ========== GEMINI CHAT - HANDLES ALL QUESTIONS ==========
 def get_sheet_context():
     try:
         gc = init_sheets()
@@ -629,19 +609,20 @@ def chat_with_gemini(user_message, chat_history):
         model = init_gemini()
         context = get_sheet_context()
 
-        system_prompt = f"""You are TSKEQ Bot - a railway EQ assistant. You have access to the EQ sheet data.
+        system_prompt = f"""You are TSKEQ Bot - an AI assistant created by Sharique. You can answer ANY question the user asks.
 
-Sheet Context:
+=== YOUR CAPABILITIES ===
+1. Answer ANY question - general, technical, creative, railway, personal, etc.
+2. Use your knowledge to help with ANY topic
+3. Be friendly, helpful, and conversational
+4. Use emojis occasionally
+5. If the user asks about railway EQ, use the sheet data provided
+6. For any other question, use your general knowledge
+
+=== SHEET CONTEXT (if relevant) ===
 {context}
 
-Instructions:
-1. Answer questions based on the sheet data if relevant.
-2. For general railway questions, use your knowledge.
-3. Be helpful, concise, and friendly.
-4. Use emojis occasionally.
-5. Respond naturally as if you are having a conversation.
-
-Previous conversation:
+=== CONVERSATION HISTORY ===
 """
         for msg in chat_history[-10:]:
             if msg['role'] == 'user':
@@ -656,46 +637,63 @@ Previous conversation:
     except Exception as e:
         return f"Error: Could not process your request. Please try again later."
 
-# ========== THEME ==========
+# ========== IMPROVED DARK/LIGHT THEME ==========
 def apply_theme(dark_mode):
     st.session_state.dark_mode = dark_mode
     if dark_mode:
-        bg = "#0d1117"
-        card_bg = "#161b22"
-        text_color = "#f0f6fc"
-        text_secondary = "#8b949e"
-        border = "#30363d"
-        input_bg = "#0d1117"
-        button_text = "#58a6ff"
-        button_hover = "#79c0ff"
-        header_bg = "#161b22"
-        chat_user_bg = "#1f2937"
-        chat_assistant_bg = "#2d3748"
+        bg = "#0a0a0a"
+        card_bg = "#1a1a2e"
+        text_color = "#e0e0e0"
+        text_secondary = "#a0a0a0"
+        border = "#2a2a4a"
+        input_bg = "#12122a"
+        button_text = "#6c63ff"
+        button_hover = "#8a82ff"
+        header_bg = "#0f0f1f"
+        chat_user_bg = "#1e1e3f"
+        chat_assistant_bg = "#25254a"
+        accent_color = "#6c63ff"
+        accent_hover = "#8a82ff"
+        success_color = "#00c853"
+        warning_color = "#ffab00"
+        danger_color = "#ff1744"
+        card_shadow = "0 4px 15px rgba(108, 99, 255, 0.1)"
     else:
-        bg = "#f6f8fa"
+        bg = "#f0f2f6"
         card_bg = "#ffffff"
-        text_color = "#24292f"
-        text_secondary = "#57606a"
-        border = "#d0d7de"
-        input_bg = "#f6f8fa"
-        button_text = "#0969da"
-        button_hover = "#0550ae"
+        text_color = "#1a1a2e"
+        text_secondary = "#666680"
+        border = "#d0d0d0"
+        input_bg = "#f8f9fa"
+        button_text = "#4a4aff"
+        button_hover = "#6c63ff"
         header_bg = "#ffffff"
-        chat_user_bg = "#e1f5fe"
-        chat_assistant_bg = "#f5f5f5"
+        chat_user_bg = "#e8f0fe"
+        chat_assistant_bg = "#f5f5ff"
+        accent_color = "#4a4aff"
+        accent_hover = "#6c63ff"
+        success_color = "#00c853"
+        warning_color = "#ffab00"
+        danger_color = "#ff1744"
+        card_shadow = "0 4px 15px rgba(0, 0, 0, 0.08)"
 
     st.markdown(f"""
     <style>
+        /* Main background */
         .stApp, .main .block-container, .css-1d391kg, .css-18e3th9,
         .stSidebar, .sidebar-content, .css-1d391kg .sidebar-content {{
             background-color: {bg} !important;
         }}
         header, .st-emotion-cache-1avcm0n, .st-emotion-cache-6qob1r {{
             background-color: {header_bg} !important;
+            border-bottom: 1px solid {border} !important;
         }}
         .stSidebar .sidebar-content {{
             background-color: {card_bg} !important;
+            border-right: 1px solid {border} !important;
         }}
+        
+        /* Text colors */
         body, .stMarkdown, p, div, span, h1, h2, h3, h4, h5, h6,
         label, .stTextInput label, .stSelectbox label, .stDateInput label,
         .stNumberInput label, .stTextArea label, .stCheckbox label,
@@ -716,107 +714,160 @@ def apply_theme(dark_mode):
         .stChatInput input, .stChatInput textarea,
         .stSelectbox select,
         .stFileUploader label, .stFileUploader div, .stFileUploader span,
-        .stFileUploader .st-ae, .stFileUploader .st-bb,
-        .stFileUploader .st-b6, .stFileUploader .st-b7,
-        .stFileUploader .st-b8,
         .stSidebar .stButton button,
         .stSidebar .stButton button p {{
             color: {text_color} !important;
         }}
-        .stFileUploader {{
-            background-color: {input_bg} !important;
-            border: 1px dashed {border} !important;
-            border-radius: 8px !important;
-            padding: 8px !important;
-        }}
-        .sheet-link-btn {{
-            display: inline-block !important;
-            padding: 10px 20px !important;
-            background: transparent !important;
-            color: {button_text} !important;
-            border: 1px solid {border} !important;
-            border-radius: 8px !important;
-            cursor: pointer !important;
-            font-weight: 500 !important;
-            text-decoration: none !important;
-            text-align: center !important;
-            width: 100% !important;
-        }}
-        .sheet-link-btn:hover {{
-            color: {button_hover} !important;
-            border-color: {button_hover} !important;
-        }}
-        .stButton button, .stButton button p {{
-            background: transparent !important;
-            color: {button_text} !important;
-            border: none !important;
-            border-radius: 0 !important;
-            font-weight: 500 !important;
-            padding: 4px 12px !important;
-            font-size: 0.9rem !important;
-            cursor: pointer !important;
-        }}
-        .stButton button:hover {{
-            background: transparent !important;
-            color: {button_hover} !important;
-            text-decoration: underline !important;
-        }}
-        .action-box {{
-            background: {card_bg};
-            border: 1px solid {border};
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 16px;
-        }}
+        
+        /* Cards and containers */
         .stMetric, .stExpander, .stDataFrame, .stTable,
         .stChatMessage, .stChatInput, .stSelectbox, .stTextInput,
         .stDateInput, .stNumberInput, .stTextArea {{
             background-color: {card_bg} !important;
             border-color: {border} !important;
+            border-radius: 12px !important;
+            box-shadow: {card_shadow} !important;
         }}
+        
+        /* File uploader */
+        .stFileUploader {{
+            background-color: {input_bg} !important;
+            border: 2px dashed {border} !important;
+            border-radius: 12px !important;
+            padding: 12px !important;
+        }}
+        .stFileUploader:hover {{
+            border-color: {accent_color} !important;
+        }}
+        
+        /* Buttons */
+        .stButton button, .stButton button p {{
+            background: transparent !important;
+            color: {button_text} !important;
+            border: 1px solid {border} !important;
+            border-radius: 8px !important;
+            font-weight: 500 !important;
+            padding: 6px 16px !important;
+            font-size: 0.9rem !important;
+            cursor: pointer !important;
+            transition: all 0.3s !important;
+        }}
+        .stButton button:hover {{
+            background: {accent_color} !important;
+            color: white !important;
+            border-color: {accent_color} !important;
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 15px rgba(108, 99, 255, 0.3) !important;
+        }}
+        
+        /* Sheet link button */
+        .sheet-link-btn {{
+            display: inline-block !important;
+            padding: 12px 20px !important;
+            background: {accent_color} !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 10px !important;
+            cursor: pointer !important;
+            font-weight: 600 !important;
+            text-decoration: none !important;
+            text-align: center !important;
+            width: 100% !important;
+            transition: all 0.3s !important;
+        }}
+        .sheet-link-btn:hover {{
+            background: {accent_hover} !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 20px rgba(108, 99, 255, 0.4) !important;
+            color: white !important;
+        }}
+        
+        /* Data table */
         .stDataFrame thead th {{
-            background: {card_bg} !important;
-            color: {text_color} !important;
-            border-bottom: 2px solid {border} !important;
+            background: {accent_color} !important;
+            color: white !important;
+            border: none !important;
+            padding: 8px !important;
         }}
         .stDataFrame tbody td {{
             background-color: {card_bg} !important;
             color: {text_color} !important;
             border-color: {border} !important;
+            padding: 6px !important;
         }}
+        .stDataFrame tbody tr:hover {{
+            background-color: {input_bg} !important;
+        }}
+        
+        /* Input fields */
         .stTextInput input, .stSelectbox select, .stDateInput input,
         .stNumberInput input, .stTextArea textarea {{
             background-color: {input_bg} !important;
             color: {text_color} !important;
             border: 1px solid {border} !important;
-            border-radius: 6px !important;
-        }}
-        .stExpander, .stDataFrame, .stTable, .stMetric,
-        .stChatMessage, .stChatInput {{
-            border: 1px solid {border} !important;
             border-radius: 8px !important;
+            padding: 8px 12px !important;
         }}
-        .pro-footer {{
-            color: {text_secondary} !important;
-            border-top: 1px solid {border} !important;
-            text-align: center !important;
-            padding: 20px 0 10px !important;
-            margin-top: 30px !important;
+        .stTextInput input:focus, .stSelectbox select:focus,
+        .stDateInput input:focus, .stNumberInput input:focus,
+        .stTextArea textarea:focus {{
+            border-color: {accent_color} !important;
+            box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.1) !important;
         }}
-        .stDataFrame thead tr th:first-child,
-        .stDataFrame tbody tr th:first-child,
-        .stDataFrame tbody tr td:first-child {{
-            display: none !important;
+        
+        /* Chat messages */
+        .stChatMessage {{
+            border-radius: 12px !important;
+            padding: 14px !important;
+            margin-bottom: 10px !important;
+            box-shadow: {card_shadow} !important;
         }}
-        .stDataFrame thead tr th:nth-child(2),
-        .stDataFrame tbody tr td:nth-child(2) {{
-            display: table-cell !important;
+        .stChatMessage.user {{
+            background-color: {chat_user_bg} !important;
+            border-left: 4px solid {accent_color} !important;
         }}
+        .stChatMessage.assistant {{
+            background-color: {chat_assistant_bg} !important;
+            border-left: 4px solid {success_color} !important;
+        }}
+        
+        /* Chat input */
+        .stChatInput {{
+            background-color: {input_bg} !important;
+            border: 2px solid {border} !important;
+            border-radius: 12px !important;
+            padding: 8px !important;
+        }}
+        .stChatInput input {{
+            color: {text_color} !important;
+            background-color: transparent !important;
+        }}
+        .stChatInput:focus-within {{
+            border-color: {accent_color} !important;
+            box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.1) !important;
+        }}
+        
+        /* Expander */
+        .stExpander {{
+            border: 1px solid {border} !important;
+            border-radius: 12px !important;
+        }}
+        .stExpander .streamlit-expanderHeader {{
+            background-color: {card_bg} !important;
+            color: {text_color} !important;
+            border-radius: 12px !important;
+        }}
+        
+        /* Toast notifications */
         .stToast {{
             background: {card_bg} !important;
-            border-left: 4px solid {button_text} !important;
+            border-left: 4px solid {accent_color} !important;
             color: {text_color} !important;
+            border-radius: 8px !important;
+            box-shadow: {card_shadow} !important;
         }}
+        
+        /* Scrollbar */
         ::-webkit-scrollbar {{
             width: 6px;
             height: 6px;
@@ -825,288 +876,101 @@ def apply_theme(dark_mode):
             background: {bg};
         }}
         ::-webkit-scrollbar-thumb {{
-            background: {button_text};
+            background: {accent_color};
             border-radius: 10px;
         }}
-        .stChatInput {{
-            background: {input_bg} !important;
-            border: 1px solid {border} !important;
-            border-radius: 8px !important;
-        }}
-        .stChatInput input {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1r6slb0 {{
-            background-color: {card_bg} !important;
-        }}
-        .st-emotion-cache-1y4p8pa {{
-            background-color: {card_bg} !important;
-        }}
-        .st-emotion-cache-1v0mbdj {{
-            background-color: {card_bg} !important;
-        }}
-        .st-emotion-cache-1y4p8pa .stButton button {{
-            background: transparent !important;
-            color: {button_text} !important;
-        }}
-        .st-emotion-cache-1y4p8pa .stButton button:hover {{
-            background: transparent !important;
-            color: {button_hover} !important;
-        }}
-        .st-emotion-cache-1d391kg {{
-            background-color: {bg} !important;
-        }}
-        .st-emotion-cache-1avcm0n {{
-            background-color: {header_bg} !important;
-        }}
-        .st-emotion-cache-6qob1r {{
-            background-color: {header_bg} !important;
-        }}
-        .st-emotion-cache-1pk3h9a {{
-            background-color: {card_bg} !important;
-        }}
-        .st-emotion-cache-16idsys {{
-            background-color: {card_bg} !important;
-        }}
-        .st-emotion-cache-10trblm {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1p1nrtl {{
-            background-color: {card_bg} !important;
-            border-color: {border} !important;
-        }}
-        .st-emotion-cache-1p1nrtl p {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1m7yq6c {{
-            background-color: {card_bg} !important;
-        }}
-        .st-emotion-cache-1m7yq6c .stButton button {{
-            background: transparent !important;
-            color: {button_text} !important;
-        }}
-        .st-emotion-cache-1m7yq6c .stButton button:hover {{
-            background: transparent !important;
-            color: {button_hover} !important;
-        }}
-        .st-emotion-cache-1m7yq6c p {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1pk3h9a .stButton button {{
-            background: transparent !important;
-            color: {button_text} !important;
-        }}
-        .st-emotion-cache-1pk3h9a .stButton button:hover {{
-            background: transparent !important;
-            color: {button_hover} !important;
-        }}
-        .st-emotion-cache-1qg05tj {{
-            background-color: {card_bg} !important;
-            border-color: {border} !important;
-        }}
-        .st-emotion-cache-1qg05tj p {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1qg05tj .stButton button {{
-            background: transparent !important;
-            color: {button_text} !important;
-        }}
-        .st-emotion-cache-1qg05tj .stButton button:hover {{
-            background: transparent !important;
-            color: {button_hover} !important;
-        }}
-        .st-emotion-cache-1dj0hjr {{
-            background-color: {card_bg} !important;
-        }}
-        .st-emotion-cache-1dj0hjr p {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1dj0hjr .stButton button {{
-            background: transparent !important;
-            color: {button_text} !important;
-        }}
-        .st-emotion-cache-1dj0hjr .stButton button:hover {{
-            background: transparent !important;
-            color: {button_hover} !important;
-        }}
-        .st-emotion-cache-1r6slb0 .stButton button {{
-            background: transparent !important;
-            color: {button_text} !important;
-        }}
-        .st-emotion-cache-1r6slb0 .stButton button:hover {{
-            background: transparent !important;
-            color: {button_hover} !important;
-        }}
-        .st-emotion-cache-1r6slb0 p {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1v0mbdj .stButton button {{
-            background: transparent !important;
-            color: {button_text} !important;
-        }}
-        .st-emotion-cache-1v0mbdj .stButton button:hover {{
-            background: transparent !important;
-            color: {button_hover} !important;
-        }}
-        .st-emotion-cache-1v0mbdj p {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1xarl3l {{
-            background-color: {card_bg} !important;
-        }}
-        .st-emotion-cache-1xarl3l .stButton button {{
-            background: transparent !important;
-            color: {button_text} !important;
-        }}
-        .st-emotion-cache-1xarl3l .stButton button:hover {{
-            background: transparent !important;
-            color: {button_hover} !important;
-        }}
-        .st-emotion-cache-1xarl3l p {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1xarl3l label {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1y4p8pa label {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1pk3h9a label {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1dj0hjr label {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1r6slb0 label {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1v0mbdj label {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1m7yq6c label {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1qg05tj label {{
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1xarl3l .stSelectbox select {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1y4p8pa .stSelectbox select {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1pk3h9a .stSelectbox select {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1dj0hjr .stSelectbox select {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1r6slb0 .stSelectbox select {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1v0mbdj .stSelectbox select {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1m7yq6c .stSelectbox select {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        .st-emotion-cache-1qg05tj .stSelectbox select {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        .stSidebar .stSelectbox select {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        .stSidebar .stTextInput input {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        .stSidebar .stDateInput input {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        .stSidebar .stNumberInput input {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        .stSidebar .stTextArea textarea {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-        }}
-        .stSidebar .stFileUploader {{
-            background-color: {input_bg} !important;
-        }}
-        /* Chat message styling */
-        .stChatMessage {{
-            background-color: {card_bg} !important;
-            border: 1px solid {border} !important;
-            border-radius: 12px !important;
-            padding: 12px !important;
-            margin-bottom: 8px !important;
-        }}
-        .stChatMessage.user {{
-            background-color: {chat_user_bg} !important;
-            border-left: 4px solid {button_text} !important;
-        }}
-        .stChatMessage.assistant {{
-            background-color: {chat_assistant_bg} !important;
-            border-left: 4px solid #10b981 !important;
-        }}
-        .stChatMessage .stMarkdown {{
-            color: {text_color} !important;
-        }}
-        .stChatInput {{
-            background-color: {input_bg} !important;
-            border: 1px solid {border} !important;
-            border-radius: 12px !important;
-            padding: 8px !important;
-        }}
-        .stChatInput input {{
-            color: {text_color} !important;
-            background-color: transparent !important;
-        }}
-        /* Suggestion buttons */
-        .suggestion-btn {{
+        ::-webkit-scrollbar-thumb:hover {{
+            background: {accent_hover};
+        }}
+        
+        /* Footer */
+        .pro-footer {{
+            color: {text_secondary} !important;
+            border-top: 1px solid {border} !important;
+            text-align: center !important;
+            padding: 20px 0 10px !important;
+            margin-top: 30px !important;
+        }}
+        
+        /* Print button */
+        .print-btn {{
+            background: {success_color} !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 10px !important;
+            padding: 12px 24px !important;
+            font-size: 16px !important;
+            font-weight: 600 !important;
+            cursor: pointer !important;
+            transition: all 0.3s !important;
+            width: 100% !important;
+        }}
+        .print-btn:hover {{
+            background: #00e676 !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 20px rgba(0, 200, 83, 0.4) !important;
+        }}
+        
+        /* WhatsApp share button */
+        .wa-btn {{
+            background: #25D366 !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 10px !important;
+            padding: 12px 24px !important;
+            font-size: 16px !important;
+            font-weight: 600 !important;
+            cursor: pointer !important;
+            transition: all 0.3s !important;
+            width: 100% !important;
+            text-decoration: none !important;
+            display: inline-block !important;
+            text-align: center !important;
+        }}
+        .wa-btn:hover {{
+            background: #128C7E !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 20px rgba(37, 211, 102, 0.4) !important;
+            color: white !important;
+        }}
+        
+        /* Action box */
+        .action-box {{
+            background: {card_bg};
+            border: 1px solid {border};
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: {card_shadow};
+        }}
+        
+        /* Metrics */
+        .stMetric {{
             background: {card_bg} !important;
             border: 1px solid {border} !important;
-            border-radius: 8px !important;
-            color: {text_color} !important;
-            padding: 8px 12px !important;
-            cursor: pointer !important;
-            font-size: 0.85rem !important;
-            width: 100% !important;
-            text-align: center !important;
-            transition: all 0.2s !important;
+            border-radius: 12px !important;
+            padding: 16px !important;
+            box-shadow: {card_shadow} !important;
         }}
-        .suggestion-btn:hover {{
-            background: {button_text} !important;
-            color: white !important;
-            border-color: {button_text} !important;
-        }}
-        /* Clear Chat button */
-        .clear-chat-btn {{
-            background: transparent !important;
+        .stMetric label {{
             color: {text_secondary} !important;
-            border: 1px solid {border} !important;
-            border-radius: 8px !important;
-            padding: 8px 16px !important;
-            cursor: pointer !important;
-            font-size: 0.9rem !important;
-            transition: all 0.2s !important;
-            width: 100% !important;
         }}
-        .clear-chat-btn:hover {{
-            background: #ef4444 !important;
-            color: white !important;
-            border-color: #ef4444 !important;
+        .stMetric .stMetricValue {{
+            color: {accent_color} !important;
+        }}
+        
+        /* Selectbox dropdown */
+        .stSelectbox select {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+        }}
+        
+        /* Radio buttons */
+        .stRadio label {{
+            color: {text_color} !important;
+        }}
+        .stRadio .st-ae {{
+            color: {accent_color} !important;
         }}
     </style>
     """, unsafe_allow_html=True)
@@ -1118,19 +982,11 @@ def main():
 
     # ---- SIDEBAR ----
     with st.sidebar:
-        # Greeting with flag colors
+        # Greeting
         now = datetime.now()
         hour = now.hour
         if 5 <= hour < 12:
-            if is_flag_time():
-                st.markdown("""
-                🇮🇳 **Good Morning!**
-                <div style="color:#FF9933">🟠 Saffron</div>
-                <div style="color:#000000">⚪ White</div>
-                <div style="color:#138808">🟢 Green</div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown("☀️ **Good Morning!**")
+            st.markdown("☀️ **Good Morning!**")
         elif 12 <= hour < 17:
             st.markdown("🌤️ **Good Afternoon!**")
         elif 17 <= hour < 21:
@@ -1188,7 +1044,7 @@ def main():
                             parse_result = gemini_universal_parser(b64, file_type, uploaded_file.type, update_progress)
 
                         if 'error' in parse_result:
-                            st.error(f"Error: {parse_result['error']}")
+                            st.error(f"❌ Error: {parse_result['error']}")
                         else:
                             st.success(f"✅ Extracted {parse_result['count']} records!")
 
@@ -1202,7 +1058,7 @@ def main():
                                 save_res = save_to_sheet(eq_sheet, parse_result['records'])
 
                                 if 'error' in save_res:
-                                    st.error(f"Save error: {save_res['error']}")
+                                    st.error(f"❌ Save error: {save_res['error']}")
                                 else:
                                     st.success(f"✅ Saved {save_res['saved']} new records!")
 
@@ -1212,25 +1068,25 @@ def main():
                                         st.session_state.last_uploaded_file = uploaded_file.name
                                         st.session_state.last_uploaded_drive_url = drive_res['print_url']
                                         
-                                        # Show print button
+                                        # Print button with improved styling
                                         st.markdown(f'''
-                                        <a href="{drive_res['print_url']}" target="_blank">
-                                            <button style="padding:12px 24px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer; font-size:16px; font-weight:bold; width:100%;">
+                                        <a href="{drive_res['print_url']}" target="_blank" style="text-decoration: none;">
+                                            <button class="print-btn" style="background:#00c853; color:white; border:none; border-radius:10px; padding:12px 24px; font-size:16px; font-weight:600; cursor:pointer; width:100%; transition:all 0.3s;">
                                                 🖨️ Print File (Ctrl+P)
                                             </button>
                                         </a>
                                         ''', unsafe_allow_html=True)
                                     else:
-                                        st.error(f"Drive upload error: {drive_res['error']}")
+                                        st.error(f"❌ Drive upload error: {drive_res['error']}")
 
                                     st.cache_data.clear()
                                     st.session_state.last_refresh = time.time()
                                     time.sleep(0.5)
                                     st.rerun()
                             except Exception as e:
-                                st.error(f"Sheet error: {e}")
+                                st.error(f"❌ Sheet error: {e}")
                 except Exception as e:
-                    st.error(f"Processing error: {e}")
+                    st.error(f"❌ Processing error: {e}")
                 finally:
                     progress_bar.empty()
                     progress_text.empty()
@@ -1323,20 +1179,14 @@ def main():
         view = st.radio("View", ["Data Table", "Dashboard", "💬 Chat with Gemini"])
 
     # ---- MAIN AREA ----
-    st.markdown("<div class='pro-title' style='font-size:28px; font-weight:bold;'>🚂 AI EQMS Hub Pro</div>", unsafe_allow_html=True)
-    st.markdown("<div class='pro-subtitle' style='font-size:16px; color: #6b7280;'>Enterprise Railway EQ Management System with Real-Time Sync</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:28px; font-weight:bold;'>🚂 AI EQMS Hub Pro</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:16px; color: #6b7280;'>Enterprise Railway EQ Management System with Real-Time Sync</div>", unsafe_allow_html=True)
     st.markdown("---")
 
     if view == "💬 Chat with Gemini":
         st.subheader("💬 Chat with TSKEQ Bot")
+        st.markdown("*Ask me anything - railway EQ, general questions, or any topic!*")
 
-        st.markdown("**💡 Suggested Questions:**")
-        cols = st.columns(3)
-        for i, suggestion in enumerate(st.session_state.chat_suggestions):
-            with cols[i % 3]:
-                if st.button(suggestion, key=f"suggestion_{i}", use_container_width=True):
-                    st.session_state.messages.append({"role": "user", "content": suggestion})
-                    st.rerun()
         st.divider()
 
         # Chat messages container
@@ -1350,7 +1200,7 @@ def main():
                     st.markdown(msg["content"])
 
         # Chat input at the bottom
-        if prompt := st.chat_input("Ask a question about EQ, trains, quota, or anything..."):
+        if prompt := st.chat_input("Ask me anything..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"):
                 st.markdown(prompt)
@@ -1543,14 +1393,19 @@ def main():
                                 pnrs = edited_page[edited_page.index.isin(selected_indices)][pnr_col].tolist()
                                 msg += f"\nPNRs: {', '.join(str(p) for p in pnrs[:10])}{'...' if len(pnrs)>10 else ''}"
                             wa_link = f"https://api.whatsapp.com/send?text={msg.replace(' ', '%20')}"
-                            st.markdown(f'<a href="{wa_link}" target="_blank"><button style="padding:10px 20px; background:#25D366; color:white; border:none; border-radius:8px; cursor:pointer;">📱 Share via WhatsApp</button></a>', unsafe_allow_html=True)
+                            st.markdown(f'<a href="{wa_link}" target="_blank" class="wa-btn">📱 Share via WhatsApp</a>', unsafe_allow_html=True)
                     else:
                         st.button("📤 Share Selected", disabled=True, use_container_width=True)
 
                 with b5:
                     if st.session_state.last_uploaded_drive_url:
-                        if st.button("🖨️ Print File", use_container_width=True):
-                            st.markdown(f'<script>window.open("{st.session_state.last_uploaded_drive_url}&print=true", "_blank");</script>', unsafe_allow_html=True)
+                        st.markdown(f'''
+                        <a href="{st.session_state.last_uploaded_drive_url}" target="_blank" style="text-decoration: none;">
+                            <button class="print-btn" style="background:#00c853; color:white; border:none; border-radius:10px; padding:12px 24px; font-size:16px; font-weight:600; cursor:pointer; width:100%; transition:all 0.3s;">
+                                🖨️ Print File (Ctrl+P)
+                            </button>
+                        </a>
+                        ''', unsafe_allow_html=True)
                     else:
                         st.button("🖨️ Print File", disabled=True, use_container_width=True)
 
