@@ -1,5 +1,3 @@
-[file name]: ai_eqms_hub_pro.py
-[file content begin]
 import streamlit as st
 import pandas as pd
 import json
@@ -70,7 +68,7 @@ defaults = {
     'last_uploaded_drive_url': None,
     'last_uploaded_view_url': None,
     'last_uploaded_print_url': None,
-    'last_refresh': now_ist(),  # FIXED: now a datetime object
+    'last_refresh': now_ist(),
     'chat_suggestions': [
         "Show me EQ summary",
         "How many records today?",
@@ -1652,4 +1650,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-[file content end]
