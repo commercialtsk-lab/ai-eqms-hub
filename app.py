@@ -3083,9 +3083,7 @@ def main():
                 api_key = st.secrets.get("REMOVE_BG_API_KEY", "")
                 if not api_key:
                     st.warning("⚠️ REMOVE_BG_API_KEY not set in secrets. Passport photo feature disabled.")
-                    st.info("💡 Add this to .streamlit/secrets.toml:
-
-REMOVE_BG_API_KEY = \"your_key_here\"")
+                    st.info("💡 Add this to .streamlit/secrets.toml:  REMOVE_BG_API_KEY = 'your_key_here'")
                 else:
                     st.success(f"✅ API Key loaded: {api_key[:4]}...{api_key[-4:]}")
                     photo_file = st.file_uploader("Upload Photo", type=["png", "jpg", "jpeg"], key="passport_photo_uploader")
