@@ -83,14 +83,15 @@ defaults = {
         "Show me EQ summary", "How many records today?", "Train wise breakup",
         "Pending EQ requests", "Quota status", "PNR status"
     ],
-    'theme': 'Day', 'custom_bg': '#ffffff', 'custom_text': '#000000',
+    'theme': 'Auto (System)', 'custom_bg': '#ffffff', 'custom_text': '#000000',
     'current_page': 1, 'pnr_val': '', 'train_val': '', 'from_val': None,
     'to_val': None, 'upload_success': False, 'last_upload_time': None,
     'selected_sheet': "EQ", 'view_mode': "📋 Data Table",
     'select_all': False, 'delete_confirm': False,
     'auto_theme_detected': False, 'sidebar_collapsed': False,
     'quick_filter_train': '', 'show_keyboard_help': False, 'print_trigger': False,
-    'sch_start': 0, 'sch_data': None, 'weather_data': None
+    'sch_start': 0, 'sch_data': None, 'weather_data': None,
+    'system_theme': 'Day', 'weather_city': 'Tinsukia'
 }
 
 for key, val in defaults.items():
@@ -949,6 +950,9 @@ def format_schedule_result(data, start=0, chunk=20):
         return "❌ Schedule not found.", None
     if isinstance(data, dict) and data.get('error'):
         return f"❌ {data['error']}", None
+    # Handle case where data is a dict but doesn't have 'stations' key
+    if isinstance(data, dict) and 'stations' not in data:
+        return "❌ Invalid schedule data.", None
     stations = data.get('stations', [])
     total = len(stations)
     end = min(start + chunk, total)
@@ -966,7 +970,7 @@ def format_schedule_result(data, start=0, chunk=20):
     return msg, (start, end, total)
 
 # ------------------------------------------------------------------
-# Theme application (updated for train count cards)
+# Theme application (updated for train count cards - no background on numbers)
 # ------------------------------------------------------------------
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
@@ -986,6 +990,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         button_hover_bg = accent
         button_hover_text = "white"
         button_hover_border = accent
+        number_color = "#0969da"  # Blue for day mode
     elif theme == 'Dark':
         bg = "#0d1117"
         card_bg = "#161b22"
@@ -1003,6 +1008,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         button_hover_bg = accent
         button_hover_text = "white"
         button_hover_border = accent
+        number_color = "#58a6ff"  # Light blue for dark mode
     else:
         bg = custom_bg if custom_bg else "#ffffff"
         card_bg = bg
@@ -1020,6 +1026,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         button_hover_bg = accent
         button_hover_text = "white"
         button_hover_border = accent
+        number_color = accent
 
     css = """
     <style>
@@ -1125,7 +1132,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }
         .train-count-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.12); border-color: """ + accent + """; }
         .train-count-number { 
-            color: """ + accent + """;
+            color: """ + number_color + """;
             font-weight: 800;
             font-size: 1.8rem;
             line-height: 1.2;
@@ -1142,12 +1149,12 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             margin-top: 2px;
         }
         .train-total-card { 
-            background: """ + success + """15;
             border: 2px solid """ + success + """;
             border-radius: 12px;
             padding: 8px 20px;
             min-width: 120px;
             text-align: center;
+            background: transparent;
         }
         .train-total-number { 
             color: """ + success + """;
@@ -1160,6 +1167,28 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             font-size: 0.75rem;
             margin-top: 2px;
         }
+        .weather-card {
+            background: """ + card_bg + """;
+            border: 1px solid """ + border + """;
+            border-radius: 16px;
+            padding: 20px;
+            margin: 10px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .weather-temp {
+            font-size: 3.5rem;
+            font-weight: 700;
+            color: """ + number_color + """;
+        }
+        .weather-desc {
+            font-size: 1.2rem;
+            color: """ + text_color + """;
+        }
+        .weather-detail {
+            font-size: 0.95rem;
+            color: """ + text_secondary + """;
+            padding: 4px 0;
+        }
         .print-only { display: none; }
         @media print {
             @page { margin: 1cm; size: A4 landscape; }
@@ -1168,7 +1197,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             .stSelectbox, .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio,
             .stCheckbox, .stFileUploader, .stCaption, .stImage, .stVideo, .stAudio, .stPlotlyChart,
             .action-box, .pro-footer, .status-pill, .sheet-link-btn, .stChatMessage, .stChatInput,
-            .train-count-container { display: none !important; }
+            .train-count-container, .weather-card { display: none !important; }
             .print-area, .print-area * { visibility: visible !important; color: black !important; background: white !important; }
             .print-area { position: absolute; left: 0; top: 0; width: 100%; }
             .print-only { display: block !important; }
@@ -2200,40 +2229,51 @@ def main():
 
             if 'sch_data' in st.session_state:
                 data = st.session_state.sch_data
-                total = len(data.get('stations', []))
-                chunk = 20
-                start = st.session_state.sch_start
-                end = min(start + chunk, total)
-                if start >= total:
-                    start = max(0, total - chunk)
-                    end = total
-                    st.session_state.sch_start = start
-                msg, _ = format_schedule_result(data, start, chunk)
-                st.markdown(msg)
-                col1, col2, col3 = st.columns([1,2,1])
-                with col1:
-                    if start > 0:
-                        if st.button("◀ Previous", key="sch_prev"):
-                            st.session_state.sch_start = max(0, start - chunk)
-                            st.rerun()
-                with col2:
-                    st.write(f"Showing {start+1}-{end} of {total}")
-                with col3:
-                    if end < total:
-                        if st.button("Next ▶", key="sch_next"):
-                            st.session_state.sch_start = end
-                            st.rerun()
+                # Safely get stations
+                if isinstance(data, dict):
+                    stations = data.get('stations', [])
+                    total = len(stations)
+                    chunk = 20
+                    start = st.session_state.sch_start
+                    end = min(start + chunk, total)
+                    if start >= total and total > 0:
+                        start = max(0, total - chunk)
+                        end = total
+                        st.session_state.sch_start = start
+                    msg, _ = format_schedule_result(data, start, chunk)
+                    st.markdown(msg)
+                    if total > 0:
+                        col1, col2, col3 = st.columns([1,2,1])
+                        with col1:
+                            if start > 0:
+                                if st.button("◀ Previous", key="sch_prev"):
+                                    st.session_state.sch_start = max(0, start - chunk)
+                                    st.rerun()
+                        with col2:
+                            st.write(f"Showing {start+1}-{end} of {total}")
+                        with col3:
+                            if end < total:
+                                if st.button("Next ▶", key="sch_next"):
+                                    st.session_state.sch_start = end
+                                    st.rerun()
+                else:
+                    st.info("No schedule data available.")
 
     # ------------------------------------------------------------------
     # View: Weather
     # ------------------------------------------------------------------
     elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
-        city = st.text_input("Enter City Name", placeholder="e.g., New Delhi, Mumbai, Lucknow", key="weather_city")
         
-        col1, col2 = st.columns(2)
+        # City input with default Tinsukia
+        city = st.text_input("🏙️ Enter City Name", value=st.session_state.weather_city, 
+                            placeholder="e.g., Tinsukia, New Delhi, Mumbai", key="weather_city_input")
+        if city != st.session_state.weather_city:
+            st.session_state.weather_city = city
+        
+        col1, col2, col3 = st.columns([1, 1, 2])
         with col1:
-            if st.button("Get Weather", key="weather_btn", use_container_width=True):
+            if st.button("🌤️ Get Weather", key="weather_btn", use_container_width=True):
                 if city:
                     with st.spinner(f"Fetching weather for {city}..."):
                         data = get_weather(city)
@@ -2245,7 +2285,7 @@ def main():
                 else:
                     st.warning("Please enter a city name.")
         with col2:
-            if st.button("🔄 Refresh Weather", key="refresh_weather", use_container_width=True):
+            if st.button("🔄 Refresh", key="refresh_weather", use_container_width=True):
                 if city:
                     with st.spinner(f"Refreshing weather for {city}..."):
                         data = get_weather(city)
@@ -2260,25 +2300,52 @@ def main():
         # Display weather if data exists
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                st.markdown(f"### 🌍 {data['city']}, {data['country']}")
-                st.markdown(f"**🌡️ Temperature:** {data['temp']}°C (Feels like {data['feels_like']}°C)")
-                st.markdown(f"**🌤️ Weather:** {data['weather'].title()}")
-                st.markdown(f"**💧 Humidity:** {data['humidity']}%")
-                st.markdown(f"**🌬️ Wind Speed:** {data['wind_speed']} m/s")
-                st.markdown(f"**📊 Pressure:** {data['pressure']} hPa")
-                if data.get('sunrise') and data.get('sunrise') != 'N/A':
-                    try:
-                        sunrise = datetime.fromtimestamp(data['sunrise']).strftime('%H:%M')
-                        sunset = datetime.fromtimestamp(data['sunset']).strftime('%H:%M')
-                        st.markdown(f"**🌅 Sunrise:** {sunrise}  |  **🌇 Sunset:** {sunset}")
-                    except:
-                        pass
-            with col2:
-                if data.get('icon'):
-                    icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
-                    st.image(icon_url, caption=data['weather'].title(), width=150)
+            
+            # Beautiful weather card
+            st.markdown(f"""
+            <div class="weather-card">
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+                    <div>
+                        <h2 style="margin: 0; font-size: 1.8rem;">{data['city']}, {data['country']}</h2>
+                        <div class="weather-desc">{data['weather'].title()}</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div class="weather-temp">{data['temp']}°C</div>
+                        <div style="font-size: 0.9rem; color: #656d76;">Feels like {data['feels_like']}°C</div>
+                    </div>
+                </div>
+                <hr style="margin: 12px 0; border-color: #d0d7de;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">
+                    <div class="weather-detail">💧 Humidity: {data['humidity']}%</div>
+                    <div class="weather-detail">🌬️ Wind: {data['wind_speed']} m/s</div>
+                    <div class="weather-detail">📊 Pressure: {data['pressure']} hPa</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            # Show sunrise/sunset if available
+            if data.get('sunrise') and data.get('sunrise') != 'N/A':
+                try:
+                    sunrise = datetime.fromtimestamp(data['sunrise']).strftime('%H:%M')
+                    sunset = datetime.fromtimestamp(data['sunset']).strftime('%H:%M')
+                    st.markdown(f"""
+                    <div style="display: flex; gap: 20px; margin-top: 8px;">
+                        <span>🌅 Sunrise: {sunrise}</span>
+                        <span>🌇 Sunset: {sunset}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                except:
+                    pass
+            
+            # Weather icon
+            if data.get('icon'):
+                icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
+                st.image(icon_url, caption=data['weather'].title(), width=100)
+            
+            st.markdown(f'<div style="font-size: 0.8rem; color: #656d76; margin-top: 10px;">🔄 Updated: {format_datetime()}</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+        elif st.session_state.weather_data and 'error' in st.session_state.weather_data:
+            st.error(st.session_state.weather_data['error'])
 
     # ------------------------------------------------------------------
     # Footer
