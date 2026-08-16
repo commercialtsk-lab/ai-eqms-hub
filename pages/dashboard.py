@@ -98,4 +98,7 @@ def render_dashboard(filtered_df):
         with st.expander("📊 Train-wise EQ Count (Full List)", expanded=False):
             if train_col:
                 train_counts_full = filtered_df[train_col].value_counts().reset_index()
-                train_counts_full.columns = ['Train Number',
+                train_counts_full.columns = ['Train Number', 'EQ Count']
+                st.dataframe(train_counts_full, use_container_width=True, height=400)
+    else:
+        st.info("No data for charts. Adjust filters or choose another sheet.")
