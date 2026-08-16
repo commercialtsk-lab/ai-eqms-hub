@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import json
 import re
@@ -1288,9 +1289,8 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             .stSelectbox, .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio,
             .stCheckbox, .stFileUploader, .stCaption, .stImage, .stVideo, .stAudio, .stPlotlyChart,
             .action-box, .pro-footer, .status-pill, .sheet-link-btn, .stChatMessage, .stChatInput,
-            .train-count-container, .weather-card, .result-box {{ display: none !important; }}
-            .print-area, .print-area * {{ visibility: visible !important; color: black !important; background: white !important; }}
-            .print-area {{ position: absolute; left: 0; top: 0; width: 100%; }}
+            .train-count-container, .weather-card, .result-box, .print-area {{ display: none !important; }}
+            .print-only {{ display: block !important; }}
             .print-only {{ display: block !important; }}
             .print-only h2 {{ color: #000 !important; font-size: 18pt !important; margin-top: 0 !important; }}
             .print-only p {{ color: #333 !important; }}
@@ -1613,19 +1613,18 @@ def main():
         st.markdown("---")
         st.markdown("### 🖨️ Print Options")
         
-        # Reliable print button - opens print dialog instantly
-        print_sidebar_html = """
+        # Reliable print button using components.v1.html for unrestricted JS
+        components.html("""
         <div style="width:100%; margin-top:8px;">
-            <a href="javascript:void(0)" onclick="window.print(); return false;" style="
+            <button onclick="window.parent.print();" style="
                 display: block; width: 100%; padding: 10px 16px;
                 background: #0969da; color: white; text-align: center;
                 border-radius: 8px; text-decoration: none; font-weight: 600;
                 font-size: 0.95rem; border: none; cursor: pointer;
-                box-sizing: border-box;
-            ">🖨️ PRINT Sheet</a>
+                box-sizing: border-box; font-family: inherit;
+            ">🖨️ PRINT Sheet</button>
         </div>
-        """
-        st.markdown(print_sidebar_html, unsafe_allow_html=True)
+        """, height=50)
 
         with st.expander("📤 Upload & Process", expanded=True):
             st.caption("📷 Image • 📄 PDF • 📝 Text • 🎤 Audio")
@@ -2168,19 +2167,18 @@ def main():
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
                 st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
             with a5:
-                # Reliable print button - opens print dialog instantly without rerun
-                print_btn_html = """
+                # Reliable print button using components.v1.html
+                components.html("""
                 <div style="width:100%;">
-                    <a href="javascript:void(0)" onclick="window.print(); return false;" style="
+                    <button onclick="window.parent.print();" style="
                         display: block; width: 100%; padding: 9px 16px;
                         background: #0969da; color: white; text-align: center;
                         border-radius: 8px; text-decoration: none; font-weight: 600;
                         font-size: 1rem; border: none; cursor: pointer;
-                        box-sizing: border-box;
-                    ">🖨️ PRINT</a>
+                        box-sizing: border-box; font-family: inherit;
+                    ">🖨️ PRINT</button>
                 </div>
-                """
-                st.markdown(print_btn_html, unsafe_allow_html=True)
+                """, height=45)
             st.markdown('</div>', unsafe_allow_html=True)
 
             # WhatsApp Image Share
