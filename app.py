@@ -10,7 +10,6 @@ from utils.config import GEMINI_API_KEY, GSPREAD_CREDENTIALS, SHEET_ID
 from utils.helpers import now_ist, format_time, format_date, log_activity
 from utils.theme import apply_theme
 from utils.sheets import SHEET_CONFIG, load_sheet_data_cached
-from utils.ntes_client import NTES_AVAILABLE
 from utils.weather import render_weather_widget
 
 st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="expanded")
@@ -23,17 +22,13 @@ defaults = {
     'messages': [], 'activity_log': [], 'last_uploaded_file': None,
     'last_uploaded_drive_url': None, 'last_uploaded_view_url': None,
     'last_uploaded_print_url': None, 'last_refresh': time.time(),
-    'chat_suggestions': [
-        "Show me EQ summary", "How many records today?", "Train wise breakup",
-        "Pending EQ requests", "Quota status", "PNR status"
-    ],
+    'chat_suggestions': ["Show me EQ summary", "How many records today?", "Train wise breakup"],
     'theme': 'Day', 'custom_bg': '#ffffff', 'custom_text': '#000000',
     'current_page': 1, 'pnr_val': '', 'train_val': '', 'from_val': None,
     'to_val': None, 'upload_success': False, 'last_upload_time': None,
     'selected_sheet': "EQ", 'view_mode': "📋 Data Table",
     'select_all': False, 'delete_confirm': False,
-    'auto_theme_detected': False, 'sidebar_collapsed': False,
-    'quick_filter_train': '', 'show_keyboard_help': False, 'print_trigger': False,
+    'auto_theme_detected': False,
 }
 
 for key, val in defaults.items():
