@@ -3081,33 +3081,62 @@ def main():
                 st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
 
                 api_key = st.secrets.get("REMOVE_BG_API_KEY", "")
+                # Fallback: allow user to paste key directly
                 if not api_key:
-                    st.warning("⚠️ REMOVE_BG_API_KEY not set in secrets. Passport photo feature disabled.")
-                    st.info("💡 Add this to .streamlit/secrets.toml:  REMOVE_BG_API_KEY = 'your_key_here'")
+                    with st.expander("🔑 Enter API Key Manually", expanded=True):
+                        manual_key = st.text_input("Remove.bg API Key", type="password", key="manual_bg_key", placeholder="Paste your remove.bg API key here")
+                        if manual_key:
+                            st.session_state.remove_bg_key = manual_key
+                            st.success("✅ Key saved for this session! Refreshing...")
+                            st.rerun()
+                    if "remove_bg_key" not in st.session_state:
+                        st.warning("⚠️ REMOVE_BG_API_KEY not found in secrets.")
+                        st.info("💡 Either add it to .streamlit/secrets.toml or paste above.")
+                        st.stop()
+                    else:
+                        api_key = st.session_state.remove_bg_key
                 else:
-                    st.success(f"✅ API Key loaded: {api_key[:4]}...{api_key[-4:]}")
-                    photo_file = st.file_uploader("Upload Photo", type=["png", "jpg", "jpeg"], key="passport_photo_uploader")
-                    if photo_file:
-                        st.image(photo_file, caption="Original Photo", width=250)
-                        if st.button("✨ Process Passport Photo", type="primary", use_container_width=True, key="process_passport_btn"):
-                            with st.spinner("Processing... (10-30 seconds)"):
-                                try:
-                                    image_data = photo_file.read()
-                                    result = process_passport_image(image_data)
-                                    if result:
-                                        st.success("✅ Passport Photo Ready!")
-                                        st.image(result, caption="✅ Background removed | Black border | 35x45mm standard", width=300)
-                                        st.download_button(
-                                            "📥 Download Passport Photo",
-                                            data=result,
-                                            file_name=f"passport_{now_ist().strftime('%Y%m%d_%H%M%S')}.png",
-                                            mime="image/png",
-                                            use_container_width=True
-                                        )
-                                    else:
-                                        st.error("❌ Failed to process photo. Please try another image.")
-                                except Exception as e:
-                                    st.error(f"❌ Error: {str(e)[:200]}")
+                    st.success(f"✅ API Key loaded from secrets: {api_key[:4]}...{api_key[-4:]}")
+
+                # Update remove_background to use session state fallback
+                def remove_background(image_data):
+                    key = st.secrets.get("REMOVE_BG_API_KEY", "") or st.session_state.get("remove_bg_key", "")
+                    if not key:
+                        return None
+                    try:
+                        r = requests.post(
+                            "https://api.remove.bg/v1.0/removebg",
+                            files={"image_file": ("image.jpg", image_data, "image/jpeg")},
+                            data={"size": "auto", "format": "png"},
+                            headers={"X-Api-Key": key},
+                            timeout=30
+                        )
+                        return r.content if r.status_code == 200 else None
+                    except Exception:
+                        return None
+
+                photo_file = st.file_uploader("Upload Photo", type=["png", "jpg", "jpeg"], key="passport_photo_uploader")
+                if photo_file:
+                    st.image(photo_file, caption="Original Photo", width=250)
+                    if st.button("✨ Process Passport Photo", type="primary", use_container_width=True, key="process_passport_btn"):
+                        with st.spinner("Processing... (10-30 seconds)"):
+                            try:
+                                image_data = photo_file.read()
+                                result = process_passport_image(image_data)
+                                if result:
+                                    st.success("✅ Passport Photo Ready!")
+                                    st.image(result, caption="✅ Background removed | Black border | 35x45mm standard", width=300)
+                                    st.download_button(
+                                        "📥 Download Passport Photo",
+                                        data=result,
+                                        file_name=f"passport_{now_ist().strftime('%Y%m%d_%H%M%S')}.png",
+                                        mime="image/png",
+                                        use_container_width=True
+                                    )
+                                else:
+                                    st.error("❌ Failed to process photo. Try another image or check API key.")
+                            except Exception as e:
+                                st.error(f"❌ Error: {str(e)[:200]}")
 # ------------------------------------------------------------------
     # View: Weather
     # ------------------------------------------------------------------
