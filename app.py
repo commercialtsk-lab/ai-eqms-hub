@@ -1283,7 +1283,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .print-only {{ display: none; }}
         @media print {{
             @page {{ margin: 1cm; size: A4 landscape; }}
-            body {{ background: white !important; }}
+            body {{ background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
             .no-print, header, footer, .stSidebar, .stButton, .stExpander, .stTabs,
             .stSelectbox, .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio,
             .stCheckbox, .stFileUploader, .stCaption, .stImage, .stVideo, .stAudio, .stPlotlyChart,
@@ -1292,9 +1292,32 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             .print-area, .print-area * {{ visibility: visible !important; color: black !important; background: white !important; }}
             .print-area {{ position: absolute; left: 0; top: 0; width: 100%; }}
             .print-only {{ display: block !important; }}
-            .print-only table {{ width: 100% !important; border-collapse: collapse !important; }}
-            .print-only th, .print-only td {{ border: 1px solid #333 !important; padding: 4px !important; font-size: 10pt !important; }}
-            .print-only th {{ background: #eee !important; }}
+            .print-only h2 {{ color: #000 !important; font-size: 18pt !important; margin-top: 0 !important; }}
+            .print-only p {{ color: #333 !important; }}
+            .print-only table {{ 
+                width: 100% !important; 
+                border-collapse: collapse !important; 
+                font-size: 8pt !important;
+                page-break-inside: auto !important;
+            }}
+            .print-only tr {{ page-break-inside: avoid !important; }}
+            .print-only thead {{ display: table-header-group !important; }}
+            .print-only th {{ 
+                background: #333 !important; 
+                color: white !important; 
+                padding: 5px 6px !important;
+                border: 1px solid #333 !important;
+                font-size: 8pt !important;
+                text-align: center !important;
+            }}
+            .print-only td {{ 
+                border: 1px solid #999 !important; 
+                padding: 3px 5px !important;
+                font-size: 8pt !important;
+                color: #000 !important;
+                word-wrap: break-word !important;
+            }}
+            .print-only tr:nth-child(even) {{ background: #f5f5f5 !important; }}
         }}
         * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
@@ -1403,32 +1426,78 @@ def create_table_image(df, title):
 
 def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     now_str = format_datetime()
-    if not df.empty:
-        cols = list(df.columns)
-        if '_sheet_row' in cols:
-            cols.remove('_sheet_row')
-        cols = cols[:5]
-        table_lines = []
-        header = " | ".join([c[:8] for c in cols])
-        table_lines.append(header)
-        table_lines.append("-" * (len(header) + 4))
-        for _, row in df.head(8).iterrows():
-            row_vals = [str(row.get(c, ""))[:10] for c in cols]
-            table_lines.append(" | ".join(row_vals))
-        if len(df) > 8:
-            table_lines.append(f"... and {len(df)-8} more rows")
-        table_text = "\n".join(table_lines)
+    lines = []
+    lines.append(f"📊 *{sheet_name} Sheet Summary*")
+    lines.append(f"🕐 Generated: {now_str}")
+    lines.append("")
+
+    if selected_count > 0:
+        lines.append(f"✅ *{selected_count} rows selected* out of *{total_rows} total* records.")
+        if pnrs:
+            pnr_list = ", ".join(str(p) for p in pnrs[:5])
+            if len(pnrs) > 5:
+                pnr_list += f" (+{len(pnrs)-5} more)"
+            lines.append(f"🎫 Selected PNRs: {pnr_list}")
     else:
-        table_text = "No data"
-    if selected_count > 0 and pnrs:
-        pnr_text = ", ".join(str(p) for p in pnrs[:10])
-        if len(pnrs) > 10:
-            pnr_text += f" (+{len(pnrs)-10} more)"
-        msg = f"📊 *{sheet_name}* — {selected_count} rows selected\n🕐 {now_str}\n🎫 PNRs: {pnr_text}\n\n```\n{table_text}\n```"
-    else:
-        msg = f"📊 *{sheet_name}* — Total {total_rows} rows\n🕐 {now_str}\n\n```\n{table_text}\n```"
-    msg += f"\n🔗 Sheet: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
-    return msg
+        lines.append(f"📋 Total Records: *{total_rows}*")
+
+    # Train-wise summary
+    train_col = None
+    for c in df.columns:
+        if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
+            train_col = c
+            break
+
+    if train_col and not df.empty:
+        train_counts = df[train_col].value_counts().to_dict()
+        if train_counts:
+            lines.append("")
+            lines.append("🚆 *Train-wise Breakdown:*")
+            for train, count in list(train_counts.items())[:10]:
+                lines.append(f"   • Train *{train}*: {count} request(s)")
+            if len(train_counts) > 10:
+                lines.append(f"   ... and {len(train_counts)-10} more trains")
+
+    # Class summary
+    class_col = next((c for c in df.columns if 'CLASS' in c.upper()), None)
+    if class_col and not df.empty:
+        class_counts = df[class_col].value_counts().to_dict()
+        if class_counts:
+            lines.append("")
+            lines.append("🎫 *Class-wise Breakdown:*")
+            for cls, count in list(class_counts.items())[:5]:
+                lines.append(f"   • {cls}: {count} request(s)")
+
+    # DOJ range
+    doj_col = next((c for c in df.columns if 'DOJ' in c.upper()), None)
+    if doj_col and not df.empty:
+        try:
+            doj_dates = pd.to_datetime(df[doj_col], format='%d-%m-%Y', errors='coerce')
+            if doj_dates.isna().all():
+                doj_dates = pd.to_datetime(df[doj_col], errors='coerce')
+            valid_dates = doj_dates.dropna()
+            if len(valid_dates) > 0:
+                min_doj = valid_dates.min().strftime('%d-%m-%Y')
+                max_doj = valid_dates.max().strftime('%d-%m-%Y')
+                lines.append("")
+                lines.append(f"📅 *Date Range:* {min_doj} to {max_doj}")
+        except:
+            pass
+
+    # Berths
+    berth_col = next((c for c in df.columns if 'BERTH' in c.upper()), None)
+    if berth_col and not df.empty:
+        try:
+            total_berths = pd.to_numeric(df[berth_col], errors='coerce').sum()
+            if total_berths > 0:
+                lines.append(f"🛏️ *Total Berths:* {int(total_berths)}")
+        except:
+            pass
+
+    lines.append("")
+    lines.append(f"🔗 Sheet Link: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit")
+
+    return "\n".join(lines)
 
 def get_pnr_status_url(pnr):
     if not pnr or len(str(pnr)) != 10:
@@ -1544,13 +1613,19 @@ def main():
         st.markdown("---")
         st.markdown("### 🖨️ Print Options")
         
-        # Create a print button using st.button with JavaScript
-        if st.button("🖨️ PRINT Sheet", use_container_width=True, key="print_btn"):
-            st.markdown("""
-            <script>
-            window.print();
-            </script>
-            """, unsafe_allow_html=True)
+        # Reliable print button - opens print dialog instantly
+        print_sidebar_html = """
+        <div style="width:100%; margin-top:8px;">
+            <a href="javascript:void(0)" onclick="window.print(); return false;" style="
+                display: block; width: 100%; padding: 10px 16px;
+                background: #0969da; color: white; text-align: center;
+                border-radius: 8px; text-decoration: none; font-weight: 600;
+                font-size: 0.95rem; border: none; cursor: pointer;
+                box-sizing: border-box;
+            ">🖨️ PRINT Sheet</a>
+        </div>
+        """
+        st.markdown(print_sidebar_html, unsafe_allow_html=True)
 
         with st.expander("📤 Upload & Process", expanded=True):
             st.caption("📷 Image • 📄 PDF • 📝 Text • 🎤 Audio")
@@ -1966,19 +2041,19 @@ def main():
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
 
-            # Static HTML table for printing - with actual data
-            print_cols = [c for c in display_df.columns if c != 'Select']
-            print_df = display_df[print_cols].copy()
-            if not print_df.empty:
-                html_table = print_df.to_html(index=False, border=1, classes='print-table')
+            # Static HTML table for printing - ALL filtered data (not just current page)
+            print_export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
+            if not print_export_df.empty:
+                print_html_table = print_export_df.to_html(index=False, border=1, classes='print-table', escape=False)
             else:
-                html_table = "<p>No data</p>"
-            
+                print_html_table = "<p>No data available</p>"
+
             st.markdown(f"""
             <div class="print-only">
-                <h2 style="text-align:center;">{sheet_choice} Sheet Data</h2>
-                <p style="text-align:center; font-size:12pt;">Generated: {format_datetime()} IST</p>
-                {html_table}
+                <h2 style="text-align:center; margin-bottom:5px;">{sheet_choice} Sheet Report</h2>
+                <p style="text-align:center; font-size:11pt; margin-bottom:15px;">Generated: {format_datetime()} IST | Total Records: {len(filtered_df)}</p>
+                {print_html_table}
+                <p style="text-align:center; font-size:10pt; margin-top:10px;">— End of Report —</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -2093,13 +2168,19 @@ def main():
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
                 st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
             with a5:
-                # Print button in action box
-                if st.button("🖨️ PRINT", use_container_width=True, key="print_action_btn"):
-                    st.markdown("""
-                    <script>
-                    window.print();
-                    </script>
-                    """, unsafe_allow_html=True)
+                # Reliable print button - opens print dialog instantly without rerun
+                print_btn_html = """
+                <div style="width:100%;">
+                    <a href="javascript:void(0)" onclick="window.print(); return false;" style="
+                        display: block; width: 100%; padding: 9px 16px;
+                        background: #0969da; color: white; text-align: center;
+                        border-radius: 8px; text-decoration: none; font-weight: 600;
+                        font-size: 1rem; border: none; cursor: pointer;
+                        box-sizing: border-box;
+                    ">🖨️ PRINT</a>
+                </div>
+                """
+                st.markdown(print_btn_html, unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
             # WhatsApp Image Share
