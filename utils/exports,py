@@ -82,7 +82,6 @@ def create_table_image(df, title):
     plt.close()
     return buf.getvalue()
 
-# ✅ YEH FUNCTION ADD KARO
 def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     now_str = format_datetime()
     if not df.empty:
