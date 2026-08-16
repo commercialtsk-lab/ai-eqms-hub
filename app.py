@@ -21,9 +21,6 @@ import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 from matplotlib.table import Table as MplTable
 import numpy as np
-from PIL import Image
-import hashlib
-import hmac
 
 # ------------------------------------------------------------------
 # NTES client (try to import)
@@ -97,11 +94,7 @@ defaults = {
     'pnr_result': None, 'train_result': None,
     'last_uploaded_drive_id': None,
     'manual_refresh': False,
-    'sheet_print_data': None,
-    'analytics_data': None,
-    'notification': None,
-    'selected_rows': [],
-    'export_format': 'pdf'
+    'sheet_print_data': None
 }
 
 for key, val in defaults.items():
@@ -812,6 +805,112 @@ def safe_list(data, key):
 def safe_str(val, default='N/A'):
     return str(val) if val is not None else default
 
+def format_station_time(time_str):
+    if not time_str or time_str in ['N/A', 'Source', 'Dest']:
+        return time_str
+    time_parts = time_str.split()
+    if len(time_parts) >= 2 and any(m in time_parts[1] for m in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']):
+        return time_parts[0]
+    return time_str
+
+def get_stn_field(station, possible_keys, default=''):
+    if not station or not isinstance(station, dict):
+        return default
+    for key in possible_keys:
+        if key in station:
+            return station[key]
+    lower_map = {k.lower(): v for k, v in station.items()}
+    for key in possible_keys:
+        if key.lower() in lower_map:
+            return lower_map[key.lower()]
+    return default
+
+def normalize_station(s):
+    if not s or not isinstance(s, dict):
+        return {'SC':'N/A','SN':'N/A','STA':'N/A','STD':'N/A','ETA':'','ETD':'','DAY':''}
+    sta = s.get('STA','')
+    std = s.get('STD','')
+    eta = s.get('ETA','')
+    etd = s.get('ETD','')
+    day = s.get('Day', s.get('day', ''))
+    return {
+        'SC': get_stn_field(s, ['SC','StationCode','StnCode','Code','stationCode','stnCode','StnCd'], 'N/A'),
+        'SN': get_stn_field(s, ['SN','StationName','StnName','Name','stationName','stnName'], 'N/A'),
+        'STA': sta if sta else (eta if eta else 'N/A'),
+        'STD': std if std else (etd if etd else 'N/A'),
+        'ETA': eta,
+        'ETD': etd,
+        'DAY': safe_str(day, '')
+    }
+
+def find_station_index(stations, current_code, current_name, pos_str):
+    if not stations:
+        return -1, "none"
+    if current_code:
+        current_code = current_code.upper().strip()
+    if current_name:
+        current_name = current_name.upper().strip()
+    if current_code:
+        for i, s in enumerate(stations):
+            if s.get('SC','').upper().strip() == current_code:
+                return i, "code_exact"
+    if current_code and len(current_code) >= 3:
+        for i, s in enumerate(stations):
+            sc = s.get('SC','').upper().strip()
+            if sc and (current_code in sc or sc in current_code):
+                return i, "code_contains"
+    if current_name:
+        for i, s in enumerate(stations):
+            sn = s.get('SN','').upper().strip()
+            if sn == current_name:
+                return i, "name_exact"
+    if current_name:
+        for i, s in enumerate(stations):
+            sn = s.get('SN','').upper().strip()
+            if sn and (current_name in sn or sn in current_name):
+                return i, "name_contain"
+    if current_name:
+        current_words = set(re.findall(r'[A-Z]{3,}', current_name))
+        for i, s in enumerate(stations):
+            sn = s.get('SN','').upper().strip()
+            if current_words.intersection(set(re.findall(r'[A-Z]{3,}', sn))):
+                return i, "name_word"
+    return -1, "none"
+
+def find_nearest_stoppage(stations, current_code, current_name, pos_str):
+    if not stations:
+        return -1, "none"
+    idx, _ = find_station_index(stations, current_code, current_name, pos_str)
+    if idx >= 0:
+        return idx, "direct"
+    pos_lower = pos_str.lower()
+    if 'between' in pos_lower:
+        match = re.search(r'between\s+([A-Z]+)\s+and\s+([A-Z]+)', pos_str, re.IGNORECASE)
+        if match:
+            next_code = match.group(2).upper()
+            for i, s in enumerate(stations):
+                if s.get('SC','').upper().strip() == next_code:
+                    return i, "between"
+    patterns = [r'after\s+([A-Z]+)\s+before\s+([A-Z]+)', r'from\s+([A-Z]+)\s+to\s+([A-Z]+)']
+    for pattern in patterns:
+        match = re.search(pattern, pos_str, re.IGNORECASE)
+        if match:
+            next_code = match.group(2).upper()
+            for i, s in enumerate(stations):
+                if s.get('SC','').upper().strip() == next_code:
+                    return i, "pattern"
+    return -1, "none"
+
+def get_full_schedule(train_number):
+    try:
+        stations = []
+        for s in safe_list(ntes_client.schedule(train_number), 'stations'):
+            if (s.get('STA') and s.get('STA') != 'N/A') or (s.get('STD') and s.get('STD') != 'N/A') or s.get('STA') == 'Source' or s.get('STD') == 'Dest':
+                stations.append(normalize_station(s))
+        return stations
+    except:
+        return []
+
 def get_pnr_status(pnr):
     if not NTES_AVAILABLE:
         return {"error": "NTES library not installed"}
@@ -862,44 +961,131 @@ def get_live_train_status(train_number, date_str=None):
                 continue
         if not response or not response.get('CPOS'):
             return {"error": "NO_DATA"}
+        
         train_name = safe_str(response.get('TNM'), 'N/A')
         source = safe_str(response.get('SRCN', response.get('DFROM')), 'N/A')
         destination = safe_str(response.get('DSTNN', response.get('DTO')), 'N/A')
+        dest_code = safe_str(response.get('DST'), '')
+        journey_date = safe_str(response.get('STD'), date_str)
         current_pos = safe_str(response.get('CPOS'), 'N/A')
         delay = safe_str(response.get('LDEL'), '0')
-        journey_date = safe_str(response.get('STD'), date_str)
-        pos_lower = str(current_pos).lower()
-        is_completed = any(k in pos_lower for k in ["reached destination", "journey completed", "terminated"])
-        is_not_started = any(k in pos_lower for k in ["not started", "yet to start", "at source"])
+        excpt = safe_str(response.get('EXCP'), '')
+        
+        pos_str = str(current_pos)
+        pos_lower = pos_str.lower()
+        
+        is_completed = any(k in pos_lower for k in ["reached destination", "journey completed", "terminated", "destination reached", "arrived at destination", "train completed", "train reached", "journey ended", "train terminated", "has terminated", "run terminated"])
+        is_not_started = any(k in pos_lower for k in ["not started", "yet to start", "scheduled", "at source", "will start", "starts from", "origin", "before departure"])
+        
+        if not is_completed and destination != 'N/A':
+            dest_upper = destination.upper()
+            if any(w in pos_lower for w in ['arrived', 'reached', 'terminated', 'completed', 'ended']):
+                dest_words = [w for w in dest_upper.split() if len(w) >= 3]
+                for word in dest_words:
+                    if word in pos_str.upper():
+                        is_completed = True
+                        break
+        
+        current_code = None
+        current_name = None
+        m = re.search(r'\(([A-Z]{2,5})\)', pos_str)
+        if m:
+            current_code = m.group(1).upper()
+        if not current_code:
+            for pattern in [r'from\s+([A-Z]{2,5})\b', r'at\s+([A-Z]{2,5})\b', r'(?:departed|arrived|left|reached)\s+(?:from\s+|at\s+)?([A-Z]{2,5})\b']:
+                m = re.search(pattern, pos_str, re.IGNORECASE)
+                if m:
+                    current_code = m.group(1).upper()
+                    break
+        if not current_name:
+            for pattern in [r'(?:from|at|departed|arrived|left|reached)\s+([A-Z][A-Z\s]+?)(?:\s*\(|$)', r'(?:has|is)\s+([A-Z][A-Z\s]+?)\s+(?:station|junction|jn)']:
+                m = re.search(pattern, pos_str, re.IGNORECASE)
+                if m:
+                    current_name = re.sub(r'\s+(JUNCTION|JN|ROAD|RD|CITY|CANTT|NAGAR|NG)$', '', m.group(1).strip().upper())
+                    break
+        
+        live_stations_map = {}
         stations_raw = safe_list(response, 'STNSD')
         if not stations_raw:
             stations_raw = safe_list(response, 'STNS')
-        upcoming = []
-        current_code = None
-        m = re.search(r'\(([A-Z]{2,5})\)', current_pos)
-        if m:
-            current_code = m.group(1).upper()
-        if current_code:
-            for i, s in enumerate(stations_raw):
-                sc = s.get('SC', '').upper() if isinstance(s, dict) else ''
-                if sc == current_code:
-                    upcoming = stations_raw[i+1:i+9]
-                    break
-        if not upcoming:
-            if is_not_started:
-                upcoming = stations_raw[:8]
+        all_live = []
+        for s in stations_raw:
+            ns = normalize_station(s)
+            if ns['SC'] != 'N/A':
+                live_stations_map[ns['SC'].upper()] = ns
+                all_live.append(ns)
+        
+        full_stations = get_full_schedule(train_number)
+        merged_stations = []
+        for s in full_stations:
+            sc = s['SC'].upper()
+            if sc in live_stations_map:
+                live = live_stations_map[sc]
+                merged = s.copy()
+                for k in ['ETA','ETD','DAY','STA','STD']:
+                    if live.get(k):
+                        merged[k] = live[k]
+                merged_stations.append(merged)
             else:
-                upcoming = stations_raw[:8]
+                merged_stations.append(s)
+        
+        upcoming = []
+        mapped_idx = -1
+        is_non_stoppage = False
+        
+        if is_completed:
+            upcoming = []
+        elif is_not_started:
+            upcoming = merged_stations[:8]
+        else:
+            if merged_stations:
+                curr_idx, match_type = find_station_index(merged_stations, current_code, current_name, pos_str)
+                if curr_idx >= 0:
+                    if curr_idx + 1 < len(merged_stations):
+                        upcoming = merged_stations[curr_idx+1:curr_idx+9]
+                    else:
+                        is_completed = True
+                else:
+                    is_non_stoppage = True
+                    mapped_idx, map_type = find_nearest_stoppage(merged_stations, current_code, current_name, pos_str)
+                    if mapped_idx >= 0:
+                        if mapped_idx + 1 < len(merged_stations):
+                            upcoming = merged_stations[mapped_idx+1:mapped_idx+9]
+                        else:
+                            is_completed = True
+                    elif all_live and (current_code or current_name):
+                        live_idx, _ = find_station_index(all_live, current_code, current_name, pos_str)
+                        if live_idx >= 0 and live_idx + 1 < len(all_live):
+                            next_code = all_live[live_idx+1].get('SC', '').upper()
+                            for i, ms in enumerate(merged_stations):
+                                if ms.get('SC','').upper() == next_code:
+                                    upcoming = merged_stations[i:i+8]
+                                    break
+                            if not upcoming:
+                                upcoming = all_live[live_idx+1:live_idx+9]
+                    if not upcoming:
+                        return {"error": "NO_DATA", "message": "Train position unclear for this date"}
+            elif all_live:
+                curr_idx, _ = find_station_index(all_live, current_code, current_name, pos_str)
+                if curr_idx >= 0:
+                    upcoming = all_live[curr_idx+1:curr_idx+9]
+                else:
+                    return {"error": "NO_DATA", "message": "Train position unclear for this date"}
+        
+        if not upcoming and not is_completed and merged_stations:
+            upcoming = merged_stations[:8]
+        
         formatted_stations = []
         for s in upcoming:
             if isinstance(s, dict):
                 formatted_stations.append({
-                    'code': safe_str(s.get('SC', 'N/A')),
-                    'name': safe_str(s.get('SN', 'N/A')),
-                    'arrival': safe_str(s.get('STA', 'N/A')),
-                    'departure': safe_str(s.get('STD', 'N/A')),
-                    'day': safe_str(s.get('Day', ''))
+                    'code': s.get('SC', 'N/A'),
+                    'name': s.get('SN', 'N/A'),
+                    'arrival': format_station_time(s.get('STA', 'N/A')),
+                    'departure': format_station_time(s.get('STD', 'N/A')),
+                    'day': s.get('DAY', '')
                 })
+        
         return {
             "train_number": train_number,
             "train_name": train_name,
@@ -908,12 +1094,18 @@ def get_live_train_status(train_number, date_str=None):
             "destination": destination,
             "journey_date": journey_date,
             "delay": delay,
-            "state": "completed" if is_completed else ("not_started" if is_not_started else "running"),
+            "journey_state": "completed" if is_completed else ("not_started" if is_not_started else "running"),
             "stations": formatted_stations,
-            "last_updated": datetime.now().strftime('%d %b %H:%M:%S')
+            "excpt": excpt,
+            "last_updated": datetime.now().strftime('%d %b %H:%M:%S'),
+            "query_date": date_str,
+            "current_code": current_code,
+            "current_name": current_name,
+            "is_non_stoppage": is_non_stoppage,
+            "mapped_idx": mapped_idx
         }
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": "API_ERROR", "message": str(e)}
 
 def get_train_schedule(train_number):
     if not NTES_AVAILABLE:
@@ -952,6 +1144,7 @@ def format_pnr_result(data):
         if data['error'] == "FLUSHED_PNR":
             return "❌ FLUSHED PNR / PNR NOT YET GENERATED\n\nPlease check the PNR number and try again."
         return f"❌ Error: {data['error']}"
+    
     pnr = data.get('pnr', 'N/A')
     train_no = data.get('train_number', 'N/A')
     train_name = data.get('train_name', 'N/A')
@@ -962,43 +1155,157 @@ def format_pnr_result(data):
     boarding = data.get('boarding_point', 'N/A')
     destination = data.get('destination', 'N/A')
     passengers = data.get('passengers', [])
-    msg = f"**PNR:** {pnr}\n"
-    msg += f"**Train:** {train_no} - {train_name}\n"
-    msg += f"**From:** {boarding} → {destination}\n"
-    msg += f"**Date:** {journey_date}  **Class:** {class_code} ({quota})\n"
-    msg += f"**Chart:** {chart_status}\n\n"
-    if passengers:
-        msg += "**Passengers:**\n"
-        for i, p in enumerate(passengers, 1):
-            msg += f"{i}. Booking: {p['booking_status']}  Current: {p['current_status']}\n"
-    msg += f"\n_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
+    
+    is_cancelled = any('CAN' in str(p.get('current_status', '')).upper() for p in passengers)
+    chart_prepared = "prepared" in str(chart_status).lower()
+    chart_icon = "✅" if chart_prepared else "❌"
+    chart_text = "Chart Prepared" if chart_prepared else "Chart Not Prepared"
+    
+    msg = f"🎟️ PNR: {pnr}\n"
+    msg += f"🚃 Train Number: {train_no}\n"
+    msg += f"🚇 Train Name: {train_name}\n"
+    msg += f"📍 {boarding} ➡️ {destination}\n"
+    msg += f"🗓️ Journey Date: {journey_date}\n"
+    msg += f"😎 Class & Quota: {class_code} ({quota})\n"
+    msg += f"📋 Chart Status: {chart_text} {chart_icon}\n"
+    
+    if not chart_prepared and not is_cancelled:
+        pred = get_confirmation_prediction(passengers, chart_status)
+        if pred is not None:
+            msg += f"🎯 Confirmation: {'🟢' if pred >= 80 else '🟡' if pred >= 50 else '🔴'} {pred}% {'High' if pred >= 80 else 'Medium' if pred >= 50 else 'Low'} Chance\n"
+    
+    msg += "\n👫 Passenger List 👫\n"
+    circles = ["❶", "❷", "❸", "❹", "❺", "❻", "❼", "❽", "❾", "❿"]
+    for i, p in enumerate(passengers, 1):
+        booking = p.get('booking_status', 'N/A')
+        current = p.get('current_status', 'N/A')
+        circle = circles[i-1] if i <= len(circles) else f"{i}️⃣"
+        booking_icon = get_status_icon(booking, chart_status)
+        current_icon = get_status_icon(current, chart_status)
+        note = get_status_note(current, chart_status)
+        msg += f"\n{circle}\nBooking Status: {booking} {booking_icon}\nCurrent Status: {current} {current_icon}\nStatus Note: {note}\n"
+    
+    msg += f"\n\n📌 Last Updated @ {datetime.now().strftime('%d %b %H:%M:%S')}"
     return msg
+
+def get_confirmation_prediction(passengers, chart_status):
+    if "prepared" in str(chart_status).lower() or not passengers:
+        return None
+    confirmed = 0
+    for p in passengers:
+        status = str(p.get('current_status', '')).upper()
+        if 'CNF' in status:
+            confirmed += 1
+        elif 'RAC' in status:
+            confirmed += 0.5
+        elif 'PQWL' in status or 'WL' in status:
+            try:
+                if '/' in status:
+                    confirmed += 0.7 if int(status.split('/')[-1]) <= 3 else 0.4 if int(status.split('/')[-1]) <= 5 else 0.1
+            except:
+                confirmed += 0.2
+    base = (confirmed / len(passengers)) * 100
+    if confirmed / len(passengers) < 0.5:
+        base += 10
+    return min(100, max(0, round(base)))
+
+def get_status_icon(status, chart_status=None):
+    status_upper = str(status).upper()
+    if 'CAN' in status_upper:
+        return "❌"
+    if 'CNF' in status_upper:
+        return "✅"
+    if 'RAC' in status_upper:
+        return "🟡"
+    if 'PQWL' in status_upper or 'WL' in status_upper:
+        return "🔴" if chart_status and "prepared" in str(chart_status).lower() else "⏱️"
+    return "ℹ️"
+
+def get_status_note(status, chart_status):
+    status_upper = str(status).upper()
+    if 'CAN' in status_upper:
+        return "❌ Ticket Cancelled!"
+    if 'CNF' in status_upper:
+        return "✅ Confirmed!"
+    if 'RAC' in status_upper:
+        return "🟡 RAC - May get confirmed" if "prepared" in str(chart_status).lower() else "🟡 RAC - Chance of confirmation"
+    if 'PQWL' in status_upper:
+        if "prepared" in str(chart_status).lower():
+            return "🔴 PQWL - Chart ready, waiting"
+        try:
+            num = int(status.split('/')[-1]) if '/' in status else 0
+        except:
+            num = 0
+        if num <= 3:
+            return "⏱️ PQWL - Good chance!"
+        elif num <= 5:
+            return "⏱️ PQWL - May confirm"
+        return "⏱️ PQWL - Low chance"
+    if 'WL' in status_upper:
+        if "prepared" in str(chart_status).lower():
+            return "🔴 WL - Chart ready, waiting"
+        try:
+            num = int(status.split('/')[-1]) if '/' in status else 0
+        except:
+            num = 0
+        if num <= 5:
+            return "⏱️ WL - Good chance!"
+        elif num <= 10:
+            return "⏱️ WL - May confirm"
+        return "⏱️ WL - Low chance"
+    return "ℹ️ Check status"
 
 def format_live_train_result(data):
     if not data:
-        return "❌ Train not found."
+        return "❌ Train not found. Please check the train number.", None
     if isinstance(data, dict) and data.get('error'):
-        return f"❌ {data['error']}"
+        return f"❌ {data.get('error')}", None
+    
     train_no = data.get('train_number', 'N/A')
-    train_name = data.get('train_name', 'N/A')
-    state = data.get('state', 'running')
-    msg = f"## 🚂 {train_no}\n"
-    msg += f"**{train_name}**\n\n"
-    msg += f"**From:** {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
-    msg += f"**Date:** {data.get('journey_date', 'N/A')}\n"
+    query_date = data.get('query_date', datetime.now().strftime("%d-%b-%Y"))
+    journey_state = data.get('journey_state', 'running')
+    
+    current_offset = 0
+    for offset in range(5):
+        if query_date == get_date_for_offset(offset):
+            current_offset = offset
+            break
+    date_label = get_date_label(current_offset)
+    
+    msg = f"🚂 LIVE TRAIN STATUS - {date_label.upper()}\n\n"
+    msg += f"Train: {data.get('train_name', 'N/A')} ({train_no})\n"
+    msg += f"From: {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
+    msg += f"📅 Journey Date: {data.get('journey_date', 'N/A')}\n"
+    
     delay = data.get('delay', '0')
-    msg += f"**Delay:** {'✅ On Time' if delay == '0' else f'⏰ {delay} mins late'}\n"
-    msg += f"**Current Status:** {data.get('current_station', 'N/A')}\n"
-    if state == "completed":
-        msg += "\n🏁 **JOURNEY COMPLETED**\n"
-    elif state == "not_started":
-        msg += "\n⏳ **JOURNEY NOT STARTED**\n"
+    msg += f"⏰ Delay: {'✅ On Time' if str(delay) == '0' else f'⏰ {delay} mins late'}\n"
+    msg += f"📍 Current Status: {data.get('current_station', 'N/A')}\n"
+    
+    if data.get('excpt'):
+        msg += f"\n⚠️ {data.get('excpt')}\n"
+    
+    if journey_state == "completed":
+        msg += f"\n🏁 *JOURNEY COMPLETED*\n✅ Train has reached its destination.\n"
+    elif journey_state == "not_started":
+        msg += f"\n⏳ *JOURNEY NOT STARTED*\n📌 Train is yet to depart from source.\n"
+        stations = data.get('stations', [])
+        if stations:
+            msg += f"\n📋 Scheduled Stations:\n"
+            for i, s in enumerate(stations[:8], 1):
+                msg += f"   {i}. {s.get('code', 'N/A')} - {s.get('name', 'N/A')}\n      Arr: {s.get('arrival', 'N/A')} | Dep: {s.get('departure', 'N/A')}" + (f" | Day: {s.get('day', '')}" if s.get('day') else "") + "\n"
+        else:
+            msg += "\n📋 No schedule available.\n"
     else:
-        msg += "\n**Upcoming Stations:**\n"
-        for s in data.get('stations', []):
-            msg += f"- {s['code']} - {s['name']}  Arr: {s['arrival']}  Dep: {s['departure']}\n"
-    msg += f"\n_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
-    return msg
+        stations = data.get('stations', [])
+        if stations:
+            msg += "\n📋 Upcoming Stations:\n"
+            for i, s in enumerate(stations, 1):
+                msg += f"   {i}. {s.get('code', 'N/A')} - {s.get('name', 'N/A')}\n      Arr: {s.get('arrival', 'N/A')} | Dep: {s.get('departure', 'N/A')}" + (f" | Day: {s.get('day', '')}" if s.get('day') else "") + "\n"
+        else:
+            msg += "\n📋 No upcoming stations available.\n"
+    
+    msg += f"\n📌 Last Updated @ {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}"
+    return msg, None
 
 def format_schedule_result(data, start=0, chunk=20):
     if not data:
@@ -1007,20 +1314,25 @@ def format_schedule_result(data, start=0, chunk=20):
         return f"❌ {data['error']}", None
     if isinstance(data, dict) and 'stations' not in data:
         return "❌ Invalid schedule data.", None
-    stations = data.get('stations', [])
+    
+    stations = [s for s in data.get('stations', []) if (s.get('arrival') and s.get('arrival') != 'N/A') or (s.get('departure') and s.get('departure') != 'N/A') or s.get('arrival') == 'Source' or s.get('departure') == 'Dest']
     total = len(stations)
     end = min(start + chunk, total)
     if start >= total:
         start = max(0, total - chunk)
         end = total
-    msg = f"**Train:** {data.get('train_number', 'N/A')} - {data.get('train_name', 'N/A')}\n"
-    msg += f"**From:** {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
-    msg += f"**Showing {start+1} to {end} of {total}**\n\n"
+    
+    msg = f"📋 TRAIN SCHEDULE\n\n"
+    msg += f"🚇 {data.get('train_name', 'N/A')} ({data.get('train_number', 'N/A')})\n"
+    msg += f"📍 From: {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
+    msg += f"📌 Showing {start+1}-{end} of {total}\n\n"
+    
     for i in range(start, end):
         s = stations[i]
-        msg += f"{i+1}. **{s['code']}** - {s['name']}\n"
-        msg += f"   Arr: {s['arrival']}  Dep: {s['departure']}  Day: {s['day']}\n\n"
-    msg += f"_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
+        msg += f"{i+1}. {s.get('code', 'N/A')} - {s.get('name', 'N/A')}\n"
+        msg += f"   🕐 Arr: {s.get('arrival', 'N/A')}  |  🕐 Dep: {s.get('departure', 'N/A')}" + (f"  |  Day: {s.get('day', '')}" if s.get('day') and s.get('day') != 'N/A' else "") + "\n\n"
+    
+    msg += f"📌 Last Updated @ {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}"
     return msg, (start, end, total)
 
 # ------------------------------------------------------------------
@@ -1527,10 +1839,13 @@ def main():
             st.session_state.print_trigger = True
             st.rerun()
         
+        # JavaScript to trigger print
         if st.session_state.print_trigger:
             st.markdown("""
             <script>
-            window.print();
+            setTimeout(function() {
+                window.print();
+            }, 500);
             </script>
             """, unsafe_allow_html=True)
             st.session_state.print_trigger = False
@@ -2276,7 +2591,8 @@ def main():
                             if data and isinstance(data, dict) and data.get('error'):
                                 st.error(f"❌ {data['error']}")
                             elif data:
-                                st.markdown(format_live_train_result(data))
+                                response, _ = format_live_train_result(data)
+                                st.markdown(response)
                             else:
                                 st.error("❌ No data available.")
             with col2:
@@ -2288,7 +2604,8 @@ def main():
                             if data and isinstance(data, dict) and data.get('error'):
                                 st.error(f"❌ {data['error']}")
                             elif data:
-                                st.markdown(format_live_train_result(data))
+                                response, _ = format_live_train_result(data)
+                                st.markdown(response)
                             else:
                                 st.error("❌ No data available.")
                     else:
@@ -2335,31 +2652,27 @@ def main():
             if 'sch_data' in st.session_state:
                 data = st.session_state.sch_data
                 if isinstance(data, dict):
-                    stations = data.get('stations', [])
-                    total = len(stations)
-                    chunk = 20
-                    start = st.session_state.sch_start
-                    end = min(start + chunk, total)
-                    if start >= total and total > 0:
-                        start = max(0, total - chunk)
-                        end = total
-                        st.session_state.sch_start = start
-                    msg, _ = format_schedule_result(data, start, chunk)
+                    msg, _ = format_schedule_result(data, st.session_state.sch_start)
                     st.markdown(msg)
-                    if total > 0:
-                        col1, col2, col3 = st.columns([1,2,1])
-                        with col1:
-                            if start > 0:
-                                if st.button("◀ Previous", key="sch_prev"):
-                                    st.session_state.sch_start = max(0, start - chunk)
-                                    st.rerun()
-                        with col2:
-                            st.write(f"Showing {start+1}-{end} of {total}")
-                        with col3:
-                            if end < total:
-                                if st.button("Next ▶", key="sch_next"):
-                                    st.session_state.sch_start = end
-                                    st.rerun()
+                    if data.get('stations'):
+                        total = len([s for s in data.get('stations', []) if (s.get('arrival') and s.get('arrival') != 'N/A') or (s.get('departure') and s.get('departure') != 'N/A') or s.get('arrival') == 'Source' or s.get('departure') == 'Dest'])
+                        chunk = 20
+                        start = st.session_state.sch_start
+                        end = min(start + chunk, total)
+                        if total > 0:
+                            col1, col2, col3 = st.columns([1,2,1])
+                            with col1:
+                                if start > 0:
+                                    if st.button("◀ Previous", key="sch_prev"):
+                                        st.session_state.sch_start = max(0, start - chunk)
+                                        st.rerun()
+                            with col2:
+                                st.write(f"Showing {start+1}-{end} of {total}")
+                            with col3:
+                                if end < total:
+                                    if st.button("Next ▶", key="sch_next"):
+                                        st.session_state.sch_start = end
+                                        st.rerun()
                 else:
                     st.info("No schedule data available.")
 
