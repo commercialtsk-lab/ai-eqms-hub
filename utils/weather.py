@@ -1,213 +1,128 @@
+import requests
 import streamlit as st
-import time
-import pandas as pd
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
-from utils.config import GEMINI_API_KEY, GSPREAD_CREDENTIALS, SHEET_ID
-from utils.helpers import now_ist, format_time, format_date, log_activity, IST
-from utils.theme import apply_theme
-from utils.sheets import SHEET_CONFIG, load_sheet_data_cached
-from utils.ntes_client import NTES_AVAILABLE
+def get_weather(city_name, api_key):
+    """Fetch weather data from OpenWeatherMap API"""
+    if not api_key:
+        return None
+    
+    url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={api_key}&units=metric"
+    
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                'city': data.get('name', city_name),
+                'country': data.get('sys', {}).get('country', ''),
+                'temp': data.get('main', {}).get('temp', 0),
+                'feels_like': data.get('main', {}).get('feels_like', 0),
+                'humidity': data.get('main', {}).get('humidity', 0),
+                'description': data.get('weather', [{}])[0].get('description', ''),
+                'icon': data.get('weather', [{}])[0].get('icon', ''),
+                'wind_speed': data.get('wind', {}).get('speed', 0),
+                'pressure': data.get('main', {}).get('pressure', 0)
+            }
+        else:
+            return None
+    except Exception as e:
+        return None
 
-st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="expanded")
-
-if not GEMINI_API_KEY or not GSPREAD_CREDENTIALS:
-    st.error("❌ Missing credentials! Please check secrets.toml")
-    st.stop()
-
-defaults = {
-    'messages': [], 'activity_log': [], 'last_uploaded_file': None,
-    'last_uploaded_drive_url': None, 'last_uploaded_view_url': None,
-    'last_uploaded_print_url': None, 'last_refresh': time.time(),
-    'chat_suggestions': [
-        "Show me EQ summary", "How many records today?", "Train wise breakup",
-        "Pending EQ requests", "Quota status", "PNR status"
-    ],
-    'theme': 'Day', 'custom_bg': '#ffffff', 'custom_text': '#000000',
-    'current_page': 1, 'pnr_val': '', 'train_val': '', 'from_val': None,
-    'to_val': None, 'upload_success': False, 'last_upload_time': None,
-    'selected_sheet': "EQ", 'view_mode': "📋 Data Table",
-    'select_all': False, 'delete_confirm': False,
-    'auto_theme_detected': False, 'sidebar_collapsed': False,
-    'quick_filter_train': '', 'show_keyboard_help': False, 'print_trigger': False,
-}
-
-for key, val in defaults.items():
-    if key not in st.session_state:
-        st.session_state[key] = val
-
-def main():
-    # Theme
-    theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
-    if not st.session_state.auto_theme_detected:
-        st.session_state.auto_theme_detected = True
-        if st.session_state.theme == 'Day':
-            st.session_state.theme = 'Auto (System)'
-
-    theme_choice = st.sidebar.selectbox("🎨 Theme", theme_options,
-        index=theme_options.index(st.session_state.theme) if st.session_state.theme in theme_options else 0,
-        key="theme_select")
-    if theme_choice != st.session_state.theme:
-        st.session_state.theme = theme_choice
-        st.rerun()
-
-    effective_theme = theme_choice
-    if theme_choice == 'Auto (System)':
-        effective_theme = 'Day'
-        if st.query_params.get('__dark_mode') == '1':
-            effective_theme = 'Dark'
-
-    if effective_theme == 'Custom':
-        custom_bg = st.sidebar.color_picker("Background Color", value=st.session_state.custom_bg, key="custom_bg_picker")
-        custom_text = st.sidebar.color_picker("Text Color", value=st.session_state.custom_text, key="custom_text_picker")
-        if custom_bg != st.session_state.custom_bg or custom_text != st.session_state.custom_text:
-            st.session_state.custom_bg = custom_bg
-            st.session_state.custom_text = custom_text
-            st.rerun()
+def get_weather_emoji(description):
+    """Return emoji for weather condition"""
+    desc = description.lower()
+    if 'clear' in desc or 'sunny' in desc:
+        return '☀️'
+    elif 'cloud' in desc:
+        return '☁️'
+    elif 'rain' in desc or 'drizzle' in desc:
+        return '🌧️'
+    elif 'thunder' in desc:
+        return '⛈️'
+    elif 'snow' in desc:
+        return '❄️'
+    elif 'mist' in desc or 'fog' in desc:
+        return '🌫️'
+    elif 'haze' in desc:
+        return '🌥️'
     else:
-        custom_bg = None
-        custom_text = None
+        return '🌡️'
 
-    apply_theme(effective_theme, custom_bg, custom_text)
-
-    # Sidebar
-    with st.sidebar:
-        st.markdown("""
-        <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8;">
-            <span style="color:#FF9933;">🟠 नमस्ते आपका स्वागत है</span><br>
-            <span style="color:#FFFFFF;">⚪ हम भारत के लोग</span><br>
-            <span style="color:#138808; font-weight:bold;">🟢 जय हिंद</span>
+def render_weather_widget():
+    """Render weather widget in sidebar"""
+    WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", "")
+    
+    st.markdown("---")
+    st.markdown("### 🌤️ Weather")
+    
+    # City input with default
+    default_city = "Tinsukia"
+    if 'weather_city' not in st.session_state:
+        st.session_state.weather_city = default_city
+    
+    # City selection with custom input
+    city_options = ["Tinsukia", "Dibrugarh", "Guwahati", "New Delhi", "Mumbai", "Kolkata", "Chennai", "Bangalore", "Custom..."]
+    
+    selected_option = st.selectbox(
+        "Select City",
+        city_options,
+        index=city_options.index(st.session_state.weather_city) if st.session_state.weather_city in city_options else city_options.index("Custom..."),
+        key="weather_city_select",
+        help="Select a city or choose 'Custom...' to enter your own"
+    )
+    
+    if selected_option == "Custom...":
+        custom_city = st.text_input(
+            "Enter City Name",
+            value="Tinsukia" if st.session_state.weather_city not in city_options else st.session_state.weather_city,
+            key="weather_custom_city",
+            help="Enter any city name (e.g., 'London', 'New York')"
+        )
+        if custom_city:
+            st.session_state.weather_city = custom_city
+    else:
+        st.session_state.weather_city = selected_option
+    
+    if not WEATHER_API_KEY:
+        st.info("🔑 Weather API key not set. Add WEATHER_API_KEY to secrets.toml")
+        st.caption("Get free key from: https://openweathermap.org/api")
+        return
+    
+    if st.button("🔄 Refresh Weather", key="weather_refresh", help="Get latest weather data"):
+        st.rerun()
+    
+    # Fetch weather
+    with st.spinner("Fetching weather..."):
+        weather = get_weather(st.session_state.weather_city, WEATHER_API_KEY)
+    
+    if weather:
+        emoji = get_weather_emoji(weather['description'])
+        
+        # Display weather with emojis
+        st.markdown(f"""
+        <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 15px; margin: 5px 0;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 3rem;">{emoji}</span>
+                <div>
+                    <div style="font-size: 1.8rem; font-weight: 700;">{weather['temp']:.1f}°C</div>
+                    <div style="font-size: 0.9rem; opacity: 0.8;">{weather['description'].title()}</div>
+                </div>
+            </div>
+            <div style="font-size: 1.1rem; font-weight: 600; margin-top: 5px;">
+                📍 {weather['city']}, {weather['country']}
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 8px; font-size: 0.85rem;">
+                <div>🌡️ Feels: {weather['feels_like']:.1f}°C</div>
+                <div>💧 Humidity: {weather['humidity']}%</div>
+                <div>💨 Wind: {weather['wind_speed']:.1f} m/s</div>
+                <div>📊 Pressure: {weather['pressure']} hPa</div>
+            </div>
+            <div style="font-size: 0.7rem; opacity: 0.6; margin-top: 5px;">
+                Last updated: {datetime.now().strftime('%H:%M:%S')}
+            </div>
         </div>
         """, unsafe_allow_html=True)
-        st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
-
-        with st.expander("🔄 Sync & Status", expanded=True):
-            auto_refresh = st.checkbox("Auto Sync (every 10s)", value=True, key="auto_sync_cb")
-            if auto_refresh:
-                elapsed = time.time() - st.session_state.last_refresh
-                if elapsed > 10:
-                    st.session_state.last_refresh = time.time()
-                    st.cache_data.clear()
-                    st.rerun()
-                else:
-                    remaining = 10 - int(elapsed)
-                    st.caption(f"⏳ Next sync in {remaining}s")
-            if st.button("🔄 Sync Now", use_container_width=True, key="sync_now_btn"):
-                st.cache_data.clear()
-                st.session_state.last_refresh = time.time()
-                log_activity("🔄 Manual sync")
-                st.rerun()
-            st.caption(f"Last sync: {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST")
-
-        sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
-        st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
-
-        with st.expander("📑 Sheet & Filters", expanded=True):
-            sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()),
-                index=list(SHEET_CONFIG.keys()).index(st.session_state.selected_sheet)
-                if st.session_state.selected_sheet in SHEET_CONFIG else 0,
-                key="sheet_select")
-            st.session_state.selected_sheet = sheet_choice
-            config = SHEET_CONFIG[sheet_choice]
-
-            pnr_input = st.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
-            if pnr_input != st.session_state.pnr_val:
-                st.session_state.pnr_val = pnr_input
-                st.session_state.current_page = 1
-                st.rerun()
-
-            train_input = st.text_input("Train (partial)", value=st.session_state.train_val, key="train_filter_input")
-            if train_input != st.session_state.train_val:
-                st.session_state.train_val = train_input
-                st.session_state.current_page = 1
-                st.rerun()
-
-            c1, c2 = st.columns(2)
-            with c1:
-                from_input = st.date_input("From DOJ", value=st.session_state.from_val,
-                    key="from_date_input", format="DD-MM-YYYY")
-            with c2:
-                to_input = st.date_input("To DOJ", value=st.session_state.to_val,
-                    key="to_date_input", format="DD-MM-YYYY")
-            if from_input != st.session_state.from_val:
-                st.session_state.from_val = from_input
-                st.session_state.current_page = 1
-                st.rerun()
-            if to_input != st.session_state.to_val:
-                st.session_state.to_val = to_input
-                st.session_state.current_page = 1
-                st.rerun()
-
-        df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
-        filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
-
-        if not filtered_df.empty:
-            pnr_col_idx = config.get("pnr_col")
-            train_col_idx = config.get("train_col")
-            doj_col_idx = config.get("doj_col")
-            if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
-                col_name = filtered_df.columns[pnr_col_idx]
-                filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.pnr_val, case=False, na=False)]
-            if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
-                col_name = filtered_df.columns[train_col_idx]
-                filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
-            if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
-                col_name = filtered_df.columns[doj_col_idx]
-                try:
-                    filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
-                    if filtered_df['_temp'].isna().all():
-                        filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
-                except Exception:
-                    filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
-                if st.session_state.from_val:
-                    filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
-                if st.session_state.to_val:
-                    filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
-                filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
-
-        view = st.radio("View Mode", ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"],
-            index=["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"].index(st.session_state.view_mode)
-            if st.session_state.view_mode in ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"] else 0,
-            key="view_mode_radio")
-        if view != st.session_state.view_mode:
-            st.session_state.view_mode = view
-            st.rerun()
-
-    # Top bar
-    top_c1, top_c2 = st.columns([4, 1])
-    with top_c1:
-        st.markdown("<h1 style='font-size:22px; font-weight:700; margin:0;'>🚂 AI EQMS Hub Pro</h1>", unsafe_allow_html=True)
-    with top_c2:
-        st.markdown(f"<div style='padding-top:6px; text-align:right;'><span class='status-pill status-live'>● Live</span> &nbsp; <span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span></div>", unsafe_allow_html=True)
-
-    st.caption(f"Enterprise Railway EQ Management  •  {format_date()}  •  {format_time()} IST")
-    st.markdown("---")
-
-    # View routing
-    if view == "💬 Chat":
-        from pages.chat import render_chat
-        render_chat()
-    elif view == "📊 Dashboard":
-        from pages.dashboard import render_dashboard
-        render_dashboard(filtered_df)
-    elif view == "🚂 Railway":
-        from pages.railway import render_railway
-        render_railway()
-    elif view == "🌤️ Weather":
-        from pages.weather import render_weather
-        render_weather()
     else:
-        from pages.data_table import render_data_table
-        render_data_table(filtered_df, sheet_choice)
-
-    # Footer
-    st.markdown("""
-    <div class='pro-footer no-print'>
-        🚂 AI EQMS Hub Pro • Created by Sharique<br>
-        © 2026 All Rights Reserved
-    </div>
-    """, unsafe_allow_html=True)
-
-if __name__ == "__main__":
-    main()
+        st.error(f"❌ Could not fetch weather for '{st.session_state.weather_city}'")
+        st.caption("Please check city name or try again later.")
