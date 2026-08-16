@@ -9,6 +9,7 @@ from utils.helpers import now_ist, format_datetime, log_activity, is_expired, co
 from utils.sheets import SHEET_CONFIG, init_sheets, SHEET_ID
 from utils.exports import generate_pdf, create_table_image, build_whatsapp_message, get_pnr_status_url
 
+
 def render_data_table(filtered_df, sheet_choice):
     st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
     
