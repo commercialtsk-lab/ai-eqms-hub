@@ -730,7 +730,7 @@ Previous conversation:
     except Exception as e:
         return f"⚠️ Error: Could not process your request. Please try again later. ({str(e)})"
 
-# ========== THEME (with Custom option) ==========
+# ========== THEME (with persistence) ==========
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
         bg = "#f6f8fa"
@@ -771,7 +771,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         card_bg = bg
         text_color = custom_text if custom_text else "#000000"
         text_secondary = text_color
-        border = "#d0d7de"  # keep neutral
+        border = "#d0d7de"
         input_bg = bg
         accent = "#0969da"
         accent_hover = "#0550ae"
@@ -786,10 +786,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
 
     css = f"""
     <style>
-        .block-container {{
-            padding-top: 0.5rem !important;
-            padding-bottom: 1rem !important;
-        }}
+        .block-container {{ padding-top: 0.5rem !important; padding-bottom: 1rem !important; }}
         .stApp {{ background-color: {bg} !important; }}
         [data-testid="stSidebar"] {{
             background-color: {card_bg} !important;
@@ -818,6 +815,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stMetricValue"],
         .stCaption {{
             color: {text_color} !important;
+            font-size: 1rem !important;
         }}
         .stTextInput input, .stNumberInput input,
         .stDateInput input, .stTextArea textarea,
@@ -826,6 +824,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             color: {text_color} !important;
             border: 1px solid {border} !important;
             border-radius: 8px !important;
+            font-size: 1rem !important;
         }}
         .stButton > button {{
             background-color: {button_bg} !important;
@@ -833,6 +832,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             border: 1px solid {button_border} !important;
             border-radius: 8px !important;
             font-weight: 500 !important;
+            font-size: 0.95rem !important;
             transition: all 0.15s ease !important;
         }}
         .stButton > button:hover {{
@@ -840,10 +840,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             color: {button_hover_text} !important;
             border-color: {button_hover_border} !important;
         }}
-        .stButton > button:disabled {{
-            opacity: 0.45 !important;
-            cursor: not-allowed !important;
-        }}
+        .stButton > button:disabled {{ opacity: 0.45 !important; cursor: not-allowed !important; }}
         .stButton > button[kind="primary"] {{
             background-color: {accent} !important;
             color: white !important;
@@ -877,6 +874,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             background-color: {card_bg} !important;
             color: {text_color} !important;
             border-color: {border} !important;
+            font-size: 0.9rem !important;
         }}
         .stDataFrame th, [data-testid="stDataFrame"] th,
         .stDataEditor th, [data-testid="stDataEditor"] th {{
@@ -891,6 +889,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .streamlit-expanderHeader {{
             color: {text_color} !important;
             font-weight: 600 !important;
+            font-size: 1rem !important;
         }}
         .stChatMessage {{
             background-color: {card_bg} !important;
@@ -995,21 +994,34 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .train-count-box {{
             display: flex;
             flex-wrap: wrap;
-            gap: 6px 14px;
-            padding: 8px 0;
-            font-size: 0.9rem;
+            gap: 8px 12px;
+            padding: 12px 16px;
             background: {card_bg};
-            border-radius: 8px;
+            border-radius: 10px;
             border: 1px solid {border};
-            padding: 10px 14px;
-            margin: 6px 0 12px 0;
+            margin: 8px 0 14px 0;
+            align-items: center;
         }}
         .train-count-item {{
             background: {input_bg};
-            padding: 2px 10px;
-            border-radius: 12px;
+            padding: 4px 14px;
+            border-radius: 20px;
             border: 1px solid {border};
-            font-weight: 500;
+            font-weight: 600;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }}
+        .train-count-total {{
+            font-weight: 700;
+            font-size: 1rem;
+            margin-left: 8px;
+            padding: 4px 14px;
+            background: {accent};
+            color: white;
+            border-radius: 20px;
+        }}
+        .print-table {{
+            display: none;
         }}
         * {{
             transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
@@ -1142,13 +1154,14 @@ def generate_print_html(df, title):
     <head>
         <title>{title} - Print</title>
         <style>
-            body {{ font-family: Arial, sans-serif; padding: 20px; }}
-            h1 {{ color: #333; }}
+            body {{ font-family: Arial, sans-serif; padding: 20px; background: white; }}
+            h1 {{ color: #333; font-size: 20px; }}
             table {{ border-collapse: collapse; width: 100%; font-size: 12px; }}
             th, td {{ border: 1px solid #ccc; padding: 6px 8px; text-align: left; }}
-            th {{ background-color: #4a90d9; color: white; }}
+            th {{ background-color: #4a90d9; color: white; font-weight: bold; }}
             tr:nth-child(even) {{ background-color: #f9f9f9; }}
-            .total {{ margin-top: 20px; font-weight: bold; }}
+            .total {{ margin-top: 20px; font-weight: bold; font-size: 14px; }}
+            .footer {{ margin-top: 30px; color: #666; font-size: 11px; }}
         </style>
     </head>
     <body>
@@ -1170,6 +1183,7 @@ def generate_print_html(df, title):
             </tbody>
         </table>
         <p class="total">Total Rows: {len(df)}</p>
+        <p class="footer">AI EQMS Hub Pro • Generated by TSKEQ Bot</p>
     </body>
     </html>
     """
@@ -1177,7 +1191,7 @@ def generate_print_html(df, title):
 
 # ========== MAIN APP ==========
 def main():
-    # Theme selection
+    # Theme selection with persistence
     theme_options = ['Day', 'Dark', 'Custom']
     theme_choice = st.sidebar.selectbox("🎨 Theme", theme_options, index=theme_options.index(st.session_state.theme))
     if theme_choice != st.session_state.theme:
@@ -1492,14 +1506,14 @@ def main():
     top_c1, top_c2 = st.columns([4, 1])
     with top_c1:
         st.markdown(
-            "<h1 style='font-size:22px; font-weight:700; margin:0;'>🚂 AI EQMS Hub Pro</h1>",
+            "<h1 style='font-size:24px; font-weight:700; margin:0;'>🚂 AI EQMS Hub Pro</h1>",
             unsafe_allow_html=True
         )
     with top_c2:
         st.markdown(
             f"<div style='padding-top:6px; text-align:right;'>"
             f"<span class='status-pill status-live'>● Live</span> &nbsp; "
-            f"<span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span>"
+            f"<span style='font-size:14px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span>"
             f"</div>",
             unsafe_allow_html=True
         )
@@ -1617,7 +1631,7 @@ def main():
 
         # ---------- STATS ROW ----------
         if not filtered_df.empty:
-            col_stats = st.columns(4)  # Four metrics, then train count box separately
+            col_stats = st.columns(4)
             with col_stats[0]:
                 st.metric("Total", len(filtered_df))
             with col_stats[1]:
@@ -1634,13 +1648,21 @@ def main():
                     total_berths = pd.to_numeric(filtered_df[berth_col], errors='coerce').sum()
                 st.metric("Total Berths", int(total_berths) if total_berths else 0)
 
-            # ----- Train count box (right side) -----
+            # ----- Train counts as chip boxes (HAR TRAIN KA ALAG BOX) -----
             if train_col and not filtered_df.empty:
                 train_counts_series = filtered_df[train_col].value_counts()
-                count_items = [f"{train}: {cnt}" for train, cnt in train_counts_series.items()]
-                chips = ''.join([f'<span class="train-count-item">{t}</span>' for t in count_items])
+                # Build chip HTML
+                chips = []
+                for train, count in train_counts_series.items():
+                    chips.append(f'<span class="train-count-item">{train}: {count}</span>')
+                chips_html = "".join(chips)
                 total_eq = len(filtered_df)
-                st.markdown(f'<div class="train-count-box">🚆 Train Counts: {chips} &nbsp;|&nbsp; <strong>Total EQ: {total_eq}</strong></div>', unsafe_allow_html=True)
+                st.markdown(f"""
+                <div class="train-count-box">
+                    🚆 Train Counts: {chips_html}
+                    <span class="train-count-total">Total EQ: {total_eq}</span>
+                </div>
+                """, unsafe_allow_html=True)
             st.markdown("---")
 
         # Refresh button
@@ -1683,7 +1705,7 @@ def main():
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
 
-            # Data editor (still visible on screen)
+            # Data editor
             edited_page = st.data_editor(
                 display_df,
                 use_container_width=True,
@@ -1802,12 +1824,13 @@ def main():
                     st.session_state.delete_confirm = False
 
             with a4:
-                # WhatsApp share: text and image
+                # WhatsApp share: text + image download + PDF download
                 msg = build_whatsapp_message(sheet_choice, len(selected_indices), selected_pnrs, len(filtered_df), filtered_df)
                 encoded = urllib.parse.quote(msg)
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
                 st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
-                # Also provide image download
+                
+                # Image download
                 if not filtered_df.empty:
                     img_bytes = create_table_image(filtered_df, f"{sheet_choice} Table")
                     if img_bytes:
@@ -1819,14 +1842,26 @@ def main():
                             use_container_width=True,
                             help="Download PNG and then share on WhatsApp"
                         )
+                
+                # PDF download
+                try:
+                    export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
+                    pdf_bytes = generate_pdf(export_df, sheet_choice, full=True)
+                    st.download_button(
+                        "📥 Download PDF",
+                        data=pdf_bytes,
+                        file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                except:
+                    pass
 
             with a5:
-                # PRINT – open new tab with clean HTML table and print
+                # PRINT – new tab with clean HTML table and auto print
                 if not filtered_df.empty:
                     html_content = generate_print_html(filtered_df, f"{sheet_choice} Report")
-                    # Encode to base64 for data URI
                     b64_html = base64.b64encode(html_content.encode('utf-8')).decode('utf-8')
-                    # JavaScript to open a new window and print
                     st.markdown(f"""
                     <div style="width:100%;">
                         <button onclick="printTable()" style="
@@ -1848,6 +1883,7 @@ def main():
                         win.document.close();
                         win.onload = function() {{
                             win.print();
+                            win.onafterprint = function() {{ win.close(); }};
                         }};
                     }}
                     </script>
@@ -1903,7 +1939,6 @@ def main():
                 )
 
             with e4:
-                # Copy to clipboard (CSV)
                 csv_full = filtered_df.drop(columns=['_sheet_row'], errors='ignore').to_csv(index=False).encode('utf-8')
                 st.download_button(
                     "📋 Copy CSV",
