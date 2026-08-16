@@ -1,9 +1,8 @@
 import streamlit as st
-from utils.helpers import get_date_label, get_date_for_offset
 from utils.ntes_client import (
-    NTES_AVAILABLE, get_pnr_status, get_live_train_status, 
-    get_train_schedule, format_pnr_result, format_live_train_result,
-    format_schedule_result
+    NTES_AVAILABLE, get_pnr, get_live_train, get_train_schedule,
+    format_pnr, format_live_train, format_train_schedule,
+    get_date_label, get_date_for_offset
 )
 
 def render_railway():
@@ -22,11 +21,11 @@ def render_railway():
                 st.error("Please enter a valid 10-digit PNR.")
             else:
                 with st.spinner("Fetching PNR details..."):
-                    data = get_pnr_status(pnr_input)
+                    data = get_pnr(pnr_input)
                     if data and isinstance(data, dict) and data.get('error'):
                         st.error(f"❌ {data['error']}")
                     elif data:
-                        st.markdown(format_pnr_result(data))
+                        st.markdown(format_pnr(data))
                     else:
                         st.error("❌ PNR not found or flushed.")
 
@@ -46,11 +45,12 @@ def render_railway():
             else:
                 with st.spinner("Fetching live status..."):
                     date_str = get_date_for_offset(offset)
-                    data = get_live_train_status(train_no, date_str)
+                    data = get_live_train(train_no, date_str)
                     if data and isinstance(data, dict) and data.get('error'):
                         st.error(f"❌ {data['error']}")
                     elif data:
-                        st.markdown(format_live_train_result(data))
+                        response, _ = format_live_train(data)
+                        st.markdown(response)
                     else:
                         st.error("❌ No data available.")
 
@@ -83,7 +83,7 @@ def render_railway():
                 start = max(0, total - chunk)
                 end = total
                 st.session_state.sch_start = start
-            msg, _ = format_schedule_result(data, start, chunk)
+            msg, _ = format_train_schedule(data, start)
             st.markdown(msg)
             col1, col2, col3 = st.columns([1,2,1])
             with col1:
