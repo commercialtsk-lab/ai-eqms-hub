@@ -817,7 +817,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .train-total-number { color: """ + success + """; font-weight: 800; font-size: 1.3rem; line-height: 1.2; }
         .train-total-label { color: """ + text_secondary + """; font-size: 0.8rem; margin-top: 2px; }
         @media print {
-            @page { margin: 1cm; }
+            @page { margin: 1cm; size: A4 landscape; }
             body { background: white !important; }
             .no-print, header, footer, .stSidebar, .stButton, .stExpander, .stTabs,
             .stSelectbox, .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio,
@@ -1362,47 +1362,31 @@ def main():
         else:
             st.info("No data for charts. Adjust filters or choose another sheet.")
 
-    else:
+    else:  # Data Table view
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
-        if not filtered_df.empty:
-            stats_left, stats_right = st.columns([3, 2])
-            with stats_left:
-                col_stats = st.columns(4)
-                with col_stats[0]:
-                    st.metric("Total", len(filtered_df))
-                with col_stats[1]:
-                    expired_count = sum(1 for _, r in filtered_df.iterrows() if is_expired(r.get('DOJ', '')))
-                    st.metric("Expired", expired_count, delta=-expired_count if expired_count > 0 else None)
-                with col_stats[2]:
-                    train_col_metric = next((c for c in filtered_df.columns if 'T/N' in str(c).upper()), None)
-                    unique_trains = filtered_df[train_col_metric].nunique() if train_col_metric else 0
-                    st.metric("Unique Trains", unique_trains)
-                with col_stats[3]:
-                    berth_col = next((c for c in filtered_df.columns if 'T/BERTHS' in str(c).upper()), None)
-                    total_berths = 0
-                    if berth_col:
-                        total_berths = pd.to_numeric(filtered_df[berth_col], errors='coerce').sum()
-                    st.metric("Total Berths", int(total_berths) if total_berths else 0)
-            with stats_right:
-                # Placeholder – we moved train counts to below stats
-                st.caption("Train counts shown below")
-            st.markdown("---")
+        # Determine train column and DOJ column for later use
+        train_col_metric = next((c for c in filtered_df.columns if 'T/N' in str(c).upper()), None)
+        doj_col = next((c for c in filtered_df.columns if 'DOJ' in str(c).upper()), None)
 
-            # ---- NEW: Train count summary above the data table ----
-            if train_col_metric and not filtered_df.empty:
+        if not filtered_df.empty:
+            # Show train count summary (Total EQ + each train count)
+            if train_col_metric:
                 train_counts_series = filtered_df[train_col_metric].value_counts()
                 st.markdown("**🚆 Train-wise Count**")
                 cards_html = '<div class="train-count-container">'
+                # Total EQ card
+                total_eq = len(filtered_df)
+                cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {total_eq}</div></div>'
+                # Each train card
                 for train_num, cnt in train_counts_series.items():
                     cards_html += f'<div class="train-count-card"><div class="train-count-number">{train_num}</div><div class="train-count-label">Count</div><div class="train-count-badge">{cnt}</div></div>'
-                # Total unique trains
-                total_unique = len(train_counts_series)
-                total_eq = len(filtered_df)
-                cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {total_eq}</div><div class="train-total-label">Unique: {total_unique}</div></div>'
                 cards_html += '</div>'
                 st.markdown(cards_html, unsafe_allow_html=True)
                 st.markdown("---")
-            # -----------------------------------------
+            else:
+                # Fallback: just total
+                st.metric("Total Records", len(filtered_df))
+                st.markdown("---")
 
         if st.button("🔄 Refresh Data", use_container_width=False, key="refresh_data_btn",
                      help="Manually reload data from Google Sheet"):
@@ -1590,7 +1574,7 @@ def main():
                 else:
                     st.info("Select rows to generate image")
             with wa_col3:
-                # New: Copy image to clipboard
+                # Copy image to clipboard
                 if not filtered_df.empty:
                     img_bytes = create_table_image(filtered_df, f"{sheet_choice} Data")
                     if img_bytes:
@@ -1682,7 +1666,7 @@ def main():
                     if not filtered_df.empty and pnr_col:
                         valid_pnrs = filtered_df[pnr_col].astype(str).str.match(r'\d{10}').sum()
                         st.caption(f"✅ Valid PNRs: {valid_pnrs}")
-                    if not filtered_df.empty and doj_col:
+                    if not filtered_df.empty and doj_col is not None:
                         upcoming = sum(1 for _, r in filtered_df.iterrows() if not is_expired(r.get(doj_col, '')))
                         st.caption(f"📅 Upcoming DOJ: {upcoming}")
                 with feat2:
