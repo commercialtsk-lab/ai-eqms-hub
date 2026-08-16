@@ -30,7 +30,6 @@ def get_weather(city_name, api_key):
         return None
 
 def get_weather_emoji(description):
-    """Return emoji for weather condition"""
     desc = description.lower()
     if 'clear' in desc or 'sunny' in desc:
         return '☀️'
@@ -51,6 +50,7 @@ def get_weather_emoji(description):
 
 def render_weather_widget():
     """Render weather widget in sidebar"""
+    # ✅ FIX: Directly access st.secrets
     try:
         WEATHER_API_KEY = st.secrets["WEATHER_API_KEY"]
     except:
@@ -83,8 +83,10 @@ def render_weather_widget():
     else:
         st.session_state.weather_city = selected_option
     
+    # ✅ Check if API key is set
     if not WEATHER_API_KEY:
-        st.info("🔑 Weather API key not set.")
+        st.info("🔑 Weather API key not set. Add WEATHER_API_KEY to secrets.toml")
+        st.caption("Get free key from: https://openweathermap.org/api")
         return
     
     if st.button("🔄 Refresh Weather", key="weather_refresh"):
@@ -120,3 +122,4 @@ def render_weather_widget():
         """, unsafe_allow_html=True)
     else:
         st.error(f"❌ Could not fetch weather for '{st.session_state.weather_city}'")
+        st.caption("Please check city name or try again later.")
