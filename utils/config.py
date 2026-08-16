@@ -1,11 +1,26 @@
 import streamlit as st
 
+# ============================================
+# API KEYS & CREDENTIALS
+# ============================================
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
 GSPREAD_CREDENTIALS = st.secrets.get("GSPREAD_CREDENTIALS")
 
+# ============================================
+# GOOGLE SHEET & DRIVE IDs
+# ============================================
 SHEET_ID = "1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI"
 DRIVE_FOLDER_ID = "1H1gf8WqfoTYFT_pU9WfIDLrHg-NpuUSI"
 
+# ============================================
+# WEATHER API (Optional)
+# ============================================
+WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", "")  # Agar hai toh
+# WEATHER_API_URL = "https://api.openweathermap.org/data/2.5/weather"
+
+# ============================================
+# STATION MAP
+# ============================================
 STATION_MAP = {
     'NTSK': 'New Tinsukia', 'GHY': 'Guwahati', 'NDLS': 'New Delhi', 'HWH': 'Howrah',
     'PNBE': 'Patna', 'BSB': 'Varanasi', 'CNB': 'Kanpur Central', 'LKO': 'Lucknow',
