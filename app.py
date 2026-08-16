@@ -23,10 +23,19 @@ import matplotlib.pyplot as plt
 # CONFIG
 # ============================================
 from utils.config import GEMINI_API_KEY, GSPREAD_CREDENTIALS, SHEET_ID, DRIVE_FOLDER_ID
-from utils.helpers import now_ist, format_time, format_date, format_datetime, log_activity, clean_pnr, parse_date, is_expired, col_index_to_letter, sanitize_latin
+from utils.helpers import (
+    now_ist, format_time, format_date, format_datetime, 
+    log_activity, clean_pnr, parse_date, is_expired, 
+    col_index_to_letter, sanitize_latin, IST, 
+    get_date_label, get_date_for_offset
+)
 from utils.theme import apply_theme
 from utils.sheets import SHEET_CONFIG, init_sheets, load_sheet_data_cached, save_to_sheet
-from utils.ntes_client import NTES_AVAILABLE, get_pnr_status, get_live_train_status, get_train_schedule, format_pnr_result, format_live_train_result, format_schedule_result
+from utils.ntes_client import (
+    NTES_AVAILABLE, get_pnr_status, get_live_train_status, 
+    get_train_schedule, format_pnr_result, format_live_train_result, 
+    format_schedule_result
+)
 
 st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="expanded")
 
@@ -164,9 +173,6 @@ Previous conversation: """
         return response.text
     except Exception as e:
         return f"⚠️ Error: {str(e)}"
-
-def get_sheet_context():
-    return "EQ Sheet available."
 
 # ============================================
 # EXPORT FUNCTIONS (INLINE)
@@ -387,7 +393,6 @@ def render_railway():
     with tab2:
         st.markdown("### Live Train Status")
         train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train")
-        from utils.helpers import get_date_label, get_date_for_offset
         date_options = [f"{get_date_label(i)} ({get_date_for_offset(i)})" for i in range(5)]
         date_choice = st.selectbox("Select Date", date_options, index=0, key="rail_date")
         offset = 0
@@ -804,9 +809,7 @@ def main():
         sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
 
-        # ============================================
         # UPLOAD & PROCESS SECTION
-        # ============================================
         with st.expander("📤 Upload & Process", expanded=True):
             st.caption("📷 Image • 📄 PDF • 📝 Text • 🎤 Audio")
             mode = st.radio("Type", ["📷 Image / PDF", "📝 Text", "🎤 Voice / Audio"],
