@@ -51,9 +51,9 @@ def get_weather_emoji(description):
 
 def render_weather_widget():
     """Render weather widget in sidebar"""
-    # Try to get API key from secrets
+    # ✅ FIX: Directly read from st.secrets
     try:
-        WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", "")
+        WEATHER_API_KEY = st.secrets["WEATHER_API_KEY"]
     except:
         WEATHER_API_KEY = ""
     
@@ -88,6 +88,7 @@ def render_weather_widget():
     else:
         st.session_state.weather_city = selected_option
     
+    # ✅ Check if API key is set
     if not WEATHER_API_KEY:
         st.info("🔑 Weather API key not set. Add WEATHER_API_KEY to secrets.toml")
         st.caption("Get free key from: https://openweathermap.org/api")
