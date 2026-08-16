@@ -23,7 +23,7 @@ from matplotlib.table import Table as MplTable
 import numpy as np
 
 # ------------------------------------------------------------------
-# NTES client (try to import, show warning if missing)
+# NTES client (try to import)
 # ------------------------------------------------------------------
 try:
     from ntes import NTESClient
@@ -94,24 +94,12 @@ defaults = {
     'pnr_result': None, 'train_result': None,
     'last_uploaded_drive_id': None,
     'manual_refresh': False,
-    'original_file_bytes': None,
-    'original_file_mime': None,
-    'live_sync': False,
-    'last_sheet_sync': None,
+    'sheet_print_data': None
 }
 
 for key, val in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = val
-
-# ------------------------------------------------------------------
-# Flag hours detection (Memory 15)
-# ------------------------------------------------------------------
-def is_flag_hours():
-    now = now_ist()
-    sunrise = now.replace(hour=6, minute=0, second=0, microsecond=0)
-    sunset = now.replace(hour=18, minute=30, second=0, microsecond=0)
-    return sunrise <= now <= sunset
 
 # ------------------------------------------------------------------
 # Date helper functions for Railway tab
@@ -265,8 +253,8 @@ def sanitize_latin(text):
     if not text:
         return ''
     replacements = {
-        '•': '-', '·': '-', '\u2018': "'", '\u2019': "'",
-        '\u201c': '"', '\u201d': '"', '\u2013': '-', '\u2014': '-',
+        '•': '-', '·': '-', '‘': "'", '’': "'",
+        '“': '"', '”': '"', '–': '-', '—': '-',
     }
     for k, v in replacements.items():
         text = text.replace(k, v)
@@ -323,14 +311,13 @@ def load_sheet_data_cached(sheet_name, sheet_id):
             padded_rows.append(padded[:max_cols])
         df = pd.DataFrame(padded_rows, columns=unique_headers)
         df['_sheet_row'] = list(range(start_row, start_row + len(df)))
-        st.session_state.last_sheet_sync = format_datetime()
         return df
     except Exception as e:
         st.error(f"Error loading {sheet_name}: {e}")
         return pd.DataFrame()
 
 # ------------------------------------------------------------------
-# Gemini Universal Parser (from Telegram bot)
+# Gemini Universal Parser (from Telegram bot - EXACT COPY)
 # ------------------------------------------------------------------
 def smart_detect_warrant(text):
     if not text:
@@ -340,7 +327,7 @@ def smart_detect_warrant(text):
         r'IC[-_\s]*(\d{2,4})',
         r'WARRANT\s*NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
         r'WARRANT\s*NUMBER\s*[:#]?\s*([A-Z0-9\-]+)',
-        r'W[/\-]?NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
+        r'W[\/\-]?NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
         r'MP[-_\s]*(\d{2,4})',
         r'MLA[-_\s]*(\d{2,4})'
     ]
@@ -357,23 +344,20 @@ def smart_detect_rail_board(text):
         return {'isRailBoard': False}
     text = str(text).upper()
     clean_text = re.sub(r'\s+', ' ', text).strip()
-
     patterns = [
         r'RAIL\s*BOARD',
-        r'OFFICE\s*OF\s*(?:THE\s*)?HON\'BLE\s*MINISTER\s*RAILWAYS',
+        r'OFFICE\s*OF\s*(?:THE\s*)?HON\'?BLE\s*MINISTER\s*RAILWAYS',
         r'OFFICE\s*OF\s*(?:THE\s*)?HONOURABLE\s*MINISTER\s*RAILWAYS',
-        r'HON\'BLE\s*MINISTER\s*RAILWAYS',
+        r'HON\'?BLE\s*MINISTER\s*RAILWAYS',
         r'HONOURABLE\s*MINISTER\s*RAILWAYS',
         r'MINISTER\s*RAILWAYS',
         r'MINISTRY\s*OF\s*RAILWAYS',
         r'RAIL\s*MANTRI',
         r'RAIL\s*BHAWAN'
     ]
-
     for pattern in patterns:
         if re.search(pattern, clean_text):
             return {'isRailBoard': True}
-
     keywords = ['MINISTER', 'RAILWAYS', 'RAILWAY', 'HONBLE', "HON'BLE", 'RAIL MANTRI', 'OFFICE', 'RAIL', 'BOARD']
     score = 0
     for kw in keywords:
@@ -381,13 +365,11 @@ def smart_detect_rail_board(text):
             score += 1
     if score >= 4:
         return {'isRailBoard': True}
-
     if 'OFFICE' in clean_text and 'MINISTER' in clean_text and ('RAILWAYS' in clean_text or 'RAILWAY' in clean_text):
         office_idx = clean_text.find('OFFICE')
         minister_idx = clean_text.find('MINISTER')
         if office_idx != -1 and minister_idx != -1 and abs(office_idx - minister_idx) < 50:
             return {'isRailBoard': True}
-
     return {'isRailBoard': False}
 
 def smart_detect_diary(text):
@@ -395,9 +377,9 @@ def smart_detect_diary(text):
         return {'diary': '', 'found': False}
     text = str(text).upper()
     patterns = [
-        r'DIARY\s*NO\.?\s*[:#]?\s*([A-Z0-9/\-]+)',
-        r'DIARY\s*NUMBER\s*[:#]?\s*([A-Z0-9/\-]+)',
-        r'D/?NO\.?\s*[:#]?\s*([A-Z0-9/\-]+)'
+        r'DIARY\s*NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)',
+        r'DIARY\s*NUMBER\s*[:#]?\s*([A-Z0-9\/\-]+)',
+        r'D\/?NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)'
     ]
     for pattern in patterns:
         match = re.search(pattern, text)
@@ -444,7 +426,6 @@ def process_extracted_records(records):
         if not pnr or pnr in seen:
             continue
         seen.add(pnr)
-
         full_text = ' '.join([
             str(rec.get('PURPOSE', '')), str(rec.get('ADDRESS', '')),
             str(rec.get('RECOMMENDATION', '')), str(rec.get('DESIGNATION', '')),
@@ -452,46 +433,37 @@ def process_extracted_records(records):
             str(rec.get('PASS_PH', '')), str(rec.get('PHONE_NUBER', '')),
             str(rec.get('WARRANT_NO', '')), str(rec.get('VIP_STATUS', ''))
         ])
-
         zone = str(rec.get('RAILWAY_ZONE', '')).strip()
         pref = str(rec.get('PREFERENCE', 'General')).strip()
         vip = str(rec.get('VIP_STATUS', '')).strip().upper()
         diary_val = str(rec.get('DIARY_NO', '')).strip()
         warrant_val = str(rec.get('WARRANT_NO', '')).strip()
-
         rail_board = smart_detect_rail_board(full_text)
         if rail_board['isRailBoard']:
             zone = 'RAIL BOARD'
             pref = 'RAIL BOARD'
             vip = 'MINISTER'
             diary_val = 'RAIL BOARD'
-
         if not warrant_val:
             warrant = smart_detect_warrant(full_text)
             if warrant['found']:
                 warrant_val = warrant['warrant']
-
         if not diary_val or diary_val == '-' or diary_val == '':
             diary = smart_detect_diary(full_text)
             if diary['found']:
                 diary_val = diary['diary']
-
         if not vip:
             detected_vip = smart_detect_vip(full_text)
             if detected_vip:
                 vip = detected_vip
-
         if smart_detect_lower_seat(full_text) and (pref == 'General' or pref == '' or pref == '-'):
             pref = 'Lower Seat'
-
         if not pref or pref == '' or pref == '-':
             pref = 'General'
-
         doj_raw = str(rec.get('DOJ', '')).strip()
         doj_parsed = parse_date(doj_raw)
         if not doj_parsed or doj_parsed == 'Invalid Date' or doj_parsed == 'NaN-NaN-NaN':
             doj_parsed = ''
-
         clean_record = {
             'PNR': pnr,
             'T_N': str(rec.get('T_N', '')).strip(),
@@ -516,14 +488,12 @@ def process_extracted_records(records):
             'WARRANT_NO': warrant_val
         }
         cleaned.append(clean_record)
-
     if not cleaned:
         return {'error': 'No valid records extracted'}
     return {'records': cleaned, 'count': len(cleaned)}
 
 def gemini_universal_parser(input_data, input_type, mime_type, progress_callback=None):
     url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}'
-
     system_prompt = """You are TSKEQ Bot's AI extraction engine. You are an EXPERT at reading messy, handwritten, torn, or low-quality railway forms.
 
 === YOUR SPECIAL SKILL ===
@@ -591,8 +561,8 @@ Otherwise, leave these fields empty.
 === EXTRACTION RULES ===
 1. PNR: 10 digits only. Remove any extra characters.
 2. Train Number: 3-5 digits. Remove DN/UP suffix.
-3. DOJ: Convert to DD-MM-YYYY. "24/25.06.26" -> "24-06-2026"
-4. Phone: Remove all non-digits, then take the LAST 10 digits. Example: "+919138328565" -> "9138328565"
+3. DOJ: Convert to DD-MM-YYYY. "24/25.06.26" → "24-06-2026"
+4. Phone: Remove all non‑digits, then take the LAST 10 digits. Example: "+919138328565" → "9138328565"
 5. Berths: Number only. Default 1.
 6. Warrant: Look for "IC-240", "MP-123", "WARRANT NO:", "W/No."
 7. Diary: Look for "DIARY NO:", "D/No."
@@ -628,9 +598,7 @@ Return ONLY a valid JSON array. Example with 1 record:
 ]
 
 CRITICAL: Return ONLY the JSON array. No explanations, no extra text. If you can't read something, leave it empty. Better to leave empty than to guess wrong."""
-
     parts = []
-
     if input_type in ['image', 'pdf']:
         mime = mime_type or ("image/jpeg" if input_type == 'image' else "application/pdf")
         parts.append({"inline_data": {"mime_type": mime, "data": input_data}})
@@ -642,31 +610,23 @@ CRITICAL: Return ONLY the JSON array. No explanations, no extra text. If you can
         parts.append({"text": system_prompt + "\n\nINPUT DATA:\n" + input_data})
     else:
         return {'error': 'Unsupported type'}
-
     if progress_callback:
         progress_callback(30, "Sending to Gemini...")
-
     payload = {
         "contents": [{"parts": parts}],
         "generationConfig": {"temperature": 0.4, "maxOutputTokens": 16384}
     }
-
     try:
         headers = {"Content-Type": "application/json"}
         response = requests.post(url, json=payload, headers=headers, timeout=120)
-
         if response.status_code != 200:
             return {'error': f'Gemini API Error: {response.status_code}'}
-
         data = response.json()
         if not data.get('candidates') or not data['candidates'][0].get('content', {}).get('parts'):
             return {'error': 'Empty response from Gemini'}
-
         response_text = data['candidates'][0]['content']['parts'][0]['text']
-
         if progress_callback:
             progress_callback(60, "Parsing Gemini response...")
-
         json_match = re.search(r'\[\s*\{[\s\S]*\}\s*\]', response_text)
         if not json_match:
             json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
@@ -678,43 +638,29 @@ CRITICAL: Return ONLY the JSON array. No explanations, no extra text. If you can
                 return {'error': 'Could not parse Gemini response', 'raw': response_text[:500]}
         else:
             json_str = json_match.group(0)
-
         json_str = json_str.replace('```json', '').replace('```', '').strip()
         json_str = re.sub(r',\s*}', '}', json_str)
-        json_str = re.sub(r',\s*\]', ']', json_str)
+        json_str = re.sub(r',\s*]', ']', json_str)
         json_str = re.sub(r'([a-zA-Z0-9_]+)\s*:', r'"\1":', json_str)
         json_str = json_str.replace("'", '"')
-
         records = json.loads(json_str)
         if isinstance(records, dict):
             records = [records]
-
         if progress_callback:
             progress_callback(90, "Processing records...")
-
         result = process_extracted_records(records)
-
         if progress_callback:
             progress_callback(100, "Complete!")
-
         return result
-
     except Exception as e:
         return {'error': f'Parser Error: {e}'}
 
 # ------------------------------------------------------------------
-# Drive upload and sheet save (FIXED: 403 handling + original file print)
+# Drive upload and sheet save
 # ------------------------------------------------------------------
 def upload_to_drive(file_bytes, filename, mime_type):
     try:
         drive_service = init_drive()
-        # Verify folder access first to catch 403 early
-        try:
-            drive_service.files().get(fileId=DRIVE_FOLDER_ID, fields="id").execute()
-        except Exception as e:
-            if "403" in str(e) or "forbidden" in str(e).lower():
-                return {'success': False, 'error': '403 Forbidden: Service account cannot access Drive folder. Please share the folder with the service account email and grant Editor role.'}
-            raise e
         file_metadata = {'name': filename, 'parents': [DRIVE_FOLDER_ID]}
         media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type, resumable=True)
         file = drive_service.files().create(
@@ -727,8 +673,7 @@ def upload_to_drive(file_bytes, filename, mime_type):
             'url': file.get('webViewLink'), 'size': file.get('size'),
             'view_url': f"https://drive.google.com/file/d/{file_id}/view",
             'print_url': f"https://drive.google.com/file/d/{file_id}/preview",
-            'download_url': f"https://drive.google.com/uc?export=download&id={file_id}",
-            'embed_url': f"https://drive.google.com/file/d/{file_id}/preview?usp=drive_link"
+            'download_url': f"https://drive.google.com/uc?export=download&id={file_id}"
         }
     except Exception as e:
         return {'success': False, 'error': str(e)}
@@ -746,13 +691,11 @@ def save_to_sheet(sheet, records):
         saved = 0
         skipped = 0
         next_sn = len(all_data) - start_row + 2
-
         for rec in records:
             pnr = clean_pnr(rec.get('PNR', ''))
             if not pnr or pnr in existing_pnrs:
                 skipped += 1
                 continue
-
             now = format_datetime()
             row = [
                 next_sn, pnr, rec.get('FROM', ''), rec.get('TO', ''), rec.get('BOARDING', ''),
@@ -767,7 +710,6 @@ def save_to_sheet(sheet, records):
             next_sn += 1
             saved += 1
             time.sleep(0.12)
-
         return {'saved': saved, 'skipped': skipped}
     except Exception as e:
         return {'error': str(e)}
@@ -850,7 +792,7 @@ def get_weather(city_name):
         return {'error': f'Error fetching weather: {str(e)}'}
 
 # ------------------------------------------------------------------
-# NTES-based railway functions (EXACT from Telegram bot)
+# NTES-based railway functions (EXACT COPY from Telegram bot - COMPLETE)
 # ------------------------------------------------------------------
 def safe_list(data, key):
     val = data.get(key) if data else None
@@ -891,11 +833,15 @@ def normalize_station(s):
     eta = s.get('ETA','')
     etd = s.get('ETD','')
     day = s.get('Day', s.get('day', ''))
-    return {'SC': get_stn_field(s, ['SC','StationCode','StnCode','Code','stationCode','stnCode','StnCd'], 'N/A'),
-            'SN': get_stn_field(s, ['SN','StationName','StnName','Name','stationName','stnName'], 'N/A'),
-            'STA': sta if sta else (eta if eta else 'N/A'),
-            'STD': std if std else (etd if etd else 'N/A'),
-            'ETA': eta, 'ETD': etd, 'DAY': safe_str(day, '')}
+    return {
+        'SC': get_stn_field(s, ['SC','StationCode','StnCode','Code','stationCode','stnCode','StnCd'], 'N/A'),
+        'SN': get_stn_field(s, ['SN','StationName','StnName','Name','stationName','stnName'], 'N/A'),
+        'STA': sta if sta else (eta if eta else 'N/A'),
+        'STD': std if std else (etd if etd else 'N/A'),
+        'ETA': eta,
+        'ETD': etd,
+        'DAY': safe_str(day, '')
+    }
 
 def find_station_index(stations, current_code, current_name, pos_str):
     if not stations:
@@ -957,9 +903,11 @@ def find_nearest_stoppage(stations, current_code, current_name, pos_str):
 
 def get_full_schedule(train_number):
     try:
-        return [normalize_station(s) for s in safe_list(ntes_client.schedule(train_number), 'stations')
-                if (s.get('STA') and s.get('STA') != 'N/A') or (s.get('STD') and s.get('STD') != 'N/A')
-                or s.get('STA') == 'Source' or s.get('STD') == 'Dest']
+        stations = []
+        for s in safe_list(ntes_client.schedule(train_number), 'stations'):
+            if (s.get('STA') and s.get('STA') != 'N/A') or (s.get('STD') and s.get('STD') != 'N/A') or s.get('STA') == 'Source' or s.get('STD') == 'Dest':
+                stations.append(normalize_station(s))
+        return stations
     except:
         return []
 
@@ -1013,6 +961,7 @@ def get_live_train_status(train_number, date_str=None):
                 continue
         if not response or not response.get('CPOS'):
             return {"error": "NO_DATA"}
+        
         train_name = safe_str(response.get('TNM'), 'N/A')
         source = safe_str(response.get('SRCN', response.get('DFROM')), 'N/A')
         destination = safe_str(response.get('DSTNN', response.get('DTO')), 'N/A')
@@ -1021,10 +970,13 @@ def get_live_train_status(train_number, date_str=None):
         current_pos = safe_str(response.get('CPOS'), 'N/A')
         delay = safe_str(response.get('LDEL'), '0')
         excpt = safe_str(response.get('EXCP'), '')
+        
         pos_str = str(current_pos)
         pos_lower = pos_str.lower()
+        
         is_completed = any(k in pos_lower for k in ["reached destination", "journey completed", "terminated", "destination reached", "arrived at destination", "train completed", "train reached", "journey ended", "train terminated", "has terminated", "run terminated"])
         is_not_started = any(k in pos_lower for k in ["not started", "yet to start", "scheduled", "at source", "will start", "starts from", "origin", "before departure"])
+        
         if not is_completed and destination != 'N/A':
             dest_upper = destination.upper()
             if any(w in pos_lower for w in ['arrived', 'reached', 'terminated', 'completed', 'ended']):
@@ -1033,6 +985,7 @@ def get_live_train_status(train_number, date_str=None):
                     if word in pos_str.upper():
                         is_completed = True
                         break
+        
         current_code = None
         current_name = None
         m = re.search(r'\(([A-Z]{2,5})\)', pos_str)
@@ -1050,6 +1003,7 @@ def get_live_train_status(train_number, date_str=None):
                 if m:
                     current_name = re.sub(r'\s+(JUNCTION|JN|ROAD|RD|CITY|CANTT|NAGAR|NG)$', '', m.group(1).strip().upper())
                     break
+        
         live_stations_map = {}
         stations_raw = safe_list(response, 'STNSD')
         if not stations_raw:
@@ -1060,6 +1014,7 @@ def get_live_train_status(train_number, date_str=None):
             if ns['SC'] != 'N/A':
                 live_stations_map[ns['SC'].upper()] = ns
                 all_live.append(ns)
+        
         full_stations = get_full_schedule(train_number)
         merged_stations = []
         for s in full_stations:
@@ -1073,9 +1028,11 @@ def get_live_train_status(train_number, date_str=None):
                 merged_stations.append(merged)
             else:
                 merged_stations.append(s)
+        
         upcoming = []
         mapped_idx = -1
         is_non_stoppage = False
+        
         if is_completed:
             upcoming = []
         elif is_not_started:
@@ -1114,8 +1071,21 @@ def get_live_train_status(train_number, date_str=None):
                     upcoming = all_live[curr_idx+1:curr_idx+9]
                 else:
                     return {"error": "NO_DATA", "message": "Train position unclear for this date"}
+        
         if not upcoming and not is_completed and merged_stations:
             upcoming = merged_stations[:8]
+        
+        formatted_stations = []
+        for s in upcoming:
+            if isinstance(s, dict):
+                formatted_stations.append({
+                    'code': s.get('SC', 'N/A'),
+                    'name': s.get('SN', 'N/A'),
+                    'arrival': format_station_time(s.get('STA', 'N/A')),
+                    'departure': format_station_time(s.get('STD', 'N/A')),
+                    'day': s.get('DAY', '')
+                })
+        
         return {
             "train_number": train_number,
             "train_name": train_name,
@@ -1125,7 +1095,7 @@ def get_live_train_status(train_number, date_str=None):
             "journey_date": journey_date,
             "delay": delay,
             "journey_state": "completed" if is_completed else ("not_started" if is_not_started else "running"),
-            "stations": upcoming[:8],
+            "stations": formatted_stations,
             "excpt": excpt,
             "last_updated": datetime.now().strftime('%d %b %H:%M:%S'),
             "query_date": date_str,
@@ -1136,23 +1106,6 @@ def get_live_train_status(train_number, date_str=None):
         }
     except Exception as e:
         return {"error": "API_ERROR", "message": str(e)}
-
-def search_trains(query):
-    if not NTES_AVAILABLE:
-        return None
-    try:
-        response = ntes_client.search(query)
-        if not response or not response.get('trains'):
-            return None
-        trains = [{
-            'train_number': safe_str(t.get('train_number')),
-            'train_name': safe_str(t.get('train_name')),
-            'source': safe_str(t.get('source')),
-            'destination': safe_str(t.get('destination'))
-        } for t in safe_list(response, 'trains')[:15]]
-        return {"query": query, "trains": trains, "last_updated": datetime.now().strftime('%d %b %H:%M:%S')}
-    except:
-        return None
 
 def get_train_schedule(train_number):
     if not NTES_AVAILABLE:
@@ -1183,6 +1136,57 @@ def get_train_schedule(train_number):
         }
     except Exception as e:
         return {"error": str(e)}
+
+def format_pnr_result(data):
+    if not data:
+        return "❌ PNR not found."
+    if isinstance(data, dict) and data.get('error'):
+        if data['error'] == "FLUSHED_PNR":
+            return "❌ FLUSHED PNR / PNR NOT YET GENERATED\n\nPlease check the PNR number and try again."
+        return f"❌ Error: {data['error']}"
+    
+    pnr = data.get('pnr', 'N/A')
+    train_no = data.get('train_number', 'N/A')
+    train_name = data.get('train_name', 'N/A')
+    journey_date = data.get('journey_date', 'N/A')
+    class_code = data.get('class', 'N/A')
+    quota = data.get('quota', 'N/A')
+    chart_status = data.get('chart_status', 'N/A')
+    boarding = data.get('boarding_point', 'N/A')
+    destination = data.get('destination', 'N/A')
+    passengers = data.get('passengers', [])
+    
+    is_cancelled = any('CAN' in str(p.get('current_status', '')).upper() for p in passengers)
+    chart_prepared = "prepared" in str(chart_status).lower()
+    chart_icon = "✅" if chart_prepared else "❌"
+    chart_text = "Chart Prepared" if chart_prepared else "Chart Not Prepared"
+    
+    msg = f"🎟️ PNR: {pnr}\n"
+    msg += f"🚃 Train Number: {train_no}\n"
+    msg += f"🚇 Train Name: {train_name}\n"
+    msg += f"📍 {boarding} ➡️ {destination}\n"
+    msg += f"🗓️ Journey Date: {journey_date}\n"
+    msg += f"😎 Class & Quota: {class_code} ({quota})\n"
+    msg += f"📋 Chart Status: {chart_text} {chart_icon}\n"
+    
+    if not chart_prepared and not is_cancelled:
+        pred = get_confirmation_prediction(passengers, chart_status)
+        if pred is not None:
+            msg += f"🎯 Confirmation: {'🟢' if pred >= 80 else '🟡' if pred >= 50 else '🔴'} {pred}% {'High' if pred >= 80 else 'Medium' if pred >= 50 else 'Low'} Chance\n"
+    
+    msg += "\n👫 Passenger List 👫\n"
+    circles = ["❶", "❷", "❸", "❹", "❺", "❻", "❼", "❽", "❾", "❿"]
+    for i, p in enumerate(passengers, 1):
+        booking = p.get('booking_status', 'N/A')
+        current = p.get('current_status', 'N/A')
+        circle = circles[i-1] if i <= len(circles) else f"{i}️⃣"
+        booking_icon = get_status_icon(booking, chart_status)
+        current_icon = get_status_icon(current, chart_status)
+        note = get_status_note(current, chart_status)
+        msg += f"\n{circle}\nBooking Status: {booking} {booking_icon}\nCurrent Status: {current} {current_icon}\nStatus Note: {note}\n"
+    
+    msg += f"\n\n📌 Last Updated @ {datetime.now().strftime('%d %b %H:%M:%S')}"
+    return msg
 
 def get_confirmation_prediction(passengers, chart_status):
     if "prepared" in str(chart_status).lower() or not passengers:
@@ -1251,65 +1255,35 @@ def get_status_note(status, chart_status):
         return "⏱️ WL - Low chance"
     return "ℹ️ Check status"
 
-# ------------------------------------------------------------------
-# Format functions (EXACT from Telegram bot, adapted for Streamlit markdown)
-# ------------------------------------------------------------------
-def format_pnr_result(data):
-    if data and data.get('error') == "FLUSHED_PNR":
-        return "❌ FLUSHED PNR / PNR NOT YET GENERATED\n\nPlease check the PNR number and try again."
-    if not data:
-        return "❌ PNR not found."
-    pnr = data.get('pnr', 'N/A')
-    train_no = data.get('train_number', 'N/A')
-    train_name = data.get('train_name', 'N/A')
-    journey_date = data.get('journey_date', 'N/A')
-    class_code = data.get('class', 'N/A')
-    quota = data.get('quota', 'N/A')
-    chart_status = data.get('chart_status', 'N/A')
-    boarding = data.get('boarding_point', 'N/A')
-    destination = data.get('destination', 'N/A')
-    passengers = data.get('passengers', [])
-    is_cancelled = any('CAN' in str(p.get('current_status', '')).upper() for p in passengers)
-    chart_prepared = "prepared" in str(chart_status).lower()
-    chart_icon = "✅" if chart_prepared else "❌"
-    chart_text = "Chart Prepared" if chart_prepared else "Chart Not Prepared"
-    msg = f"🎟️ PNR: {pnr}\n🚃 Train Number: {train_no}\n🚇 Train Name: {train_name}\n📍 {boarding} ➡️ {destination}\n🗓️ Journey Date: {journey_date}\n😎 Class & Quota: {class_code} ({quota})\n📋 Chart Status: {chart_text} {chart_icon}\n"
-    if not chart_prepared and not is_cancelled:
-        pred = get_confirmation_prediction(passengers, chart_status)
-        if pred is not None:
-            msg += f"🎯 Confirmation: {'🟢' if pred >= 80 else '🟡' if pred >= 50 else '🔴'} {pred}% {'High' if pred >= 80 else 'Medium' if pred >= 50 else 'Low'} Chance\n"
-    msg += "\n👫 Passenger List 👫\n"
-    circles = ["❶", "❷", "❸", "❹", "❺", "❻", "❼", "❽", "❾", "❿"]
-    for i, p in enumerate(passengers, 1):
-        booking = p.get('booking_status', 'N/A')
-        current = p.get('current_status', 'N/A')
-        circle = circles[i-1] if i <= len(circles) else f"{i}️⃣"
-        booking_icon = get_status_icon(booking, chart_status)
-        current_icon = get_status_icon(current, chart_status)
-        note = get_status_note(current, chart_status)
-        msg += f"\n{circle}\nBooking Status: {booking} {booking_icon}\nCurrent Status: {current} {current_icon}\nStatus Note: {note}\n"
-    msg += f"\n\n📌 Last Updated @ {datetime.now().strftime('%d %b %H:%M:%S')}"
-    return msg
-
 def format_live_train_result(data):
     if not data:
         return "❌ Train not found. Please check the train number.", None
     if isinstance(data, dict) and data.get('error'):
         return f"❌ {data.get('error')}", None
+    
     train_no = data.get('train_number', 'N/A')
     query_date = data.get('query_date', datetime.now().strftime("%d-%b-%Y"))
     journey_state = data.get('journey_state', 'running')
+    
     current_offset = 0
     for offset in range(5):
         if query_date == get_date_for_offset(offset):
             current_offset = offset
             break
     date_label = get_date_label(current_offset)
-    msg = f"🚂 LIVE TRAIN STATUS - {date_label.upper()}\n\nTrain: {data.get('train_name', 'N/A')} ({train_no})\nFrom: {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n📅 Journey Date: {data.get('journey_date', 'N/A')}\n"
+    
+    msg = f"🚂 LIVE TRAIN STATUS - {date_label.upper()}\n\n"
+    msg += f"Train: {data.get('train_name', 'N/A')} ({train_no})\n"
+    msg += f"From: {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
+    msg += f"📅 Journey Date: {data.get('journey_date', 'N/A')}\n"
+    
     delay = data.get('delay', '0')
-    msg += f"⏰ Delay: {'✅ On Time' if str(delay) == '0' else f'⏰ {delay} mins late'}\n📍 Current Status: {data.get('current_station', 'N/A')}\n"
+    msg += f"⏰ Delay: {'✅ On Time' if str(delay) == '0' else f'⏰ {delay} mins late'}\n"
+    msg += f"📍 Current Status: {data.get('current_station', 'N/A')}\n"
+    
     if data.get('excpt'):
         msg += f"\n⚠️ {data.get('excpt')}\n"
+    
     if journey_state == "completed":
         msg += f"\n🏁 *JOURNEY COMPLETED*\n✅ Train has reached its destination.\n"
     elif journey_state == "not_started":
@@ -1318,7 +1292,7 @@ def format_live_train_result(data):
         if stations:
             msg += f"\n📋 Scheduled Stations:\n"
             for i, s in enumerate(stations[:8], 1):
-                msg += f"   {i}. {s.get('SC', 'N/A')} - {s.get('SN', 'N/A')}\n      Arr: {format_station_time(s.get('STA', 'N/A'))} | Dep: {format_station_time(s.get('STD', 'N/A'))}" + (f" | Day: {s.get('DAY', '')}" if s.get('DAY') else "") + "\n"
+                msg += f"   {i}. {s.get('code', 'N/A')} - {s.get('name', 'N/A')}\n      Arr: {s.get('arrival', 'N/A')} | Dep: {s.get('departure', 'N/A')}" + (f" | Day: {s.get('day', '')}" if s.get('day') else "") + "\n"
         else:
             msg += "\n📋 No schedule available.\n"
     else:
@@ -1326,46 +1300,43 @@ def format_live_train_result(data):
         if stations:
             msg += "\n📋 Upcoming Stations:\n"
             for i, s in enumerate(stations, 1):
-                arrival = s.get('ETA', '') or s.get('STA', 'N/A')
-                departure = s.get('ETD', '') or s.get('STD', 'N/A')
-                msg += f"   {i}. {s.get('SC', 'N/A')} - {s.get('SN', 'N/A')}\n      Arr: {format_station_time(arrival)} | Dep: {format_station_time(departure)}" + (f" | Day: {s.get('DAY', '')}" if s.get('DAY') else "") + "\n"
+                msg += f"   {i}. {s.get('code', 'N/A')} - {s.get('name', 'N/A')}\n      Arr: {s.get('arrival', 'N/A')} | Dep: {s.get('departure', 'N/A')}" + (f" | Day: {s.get('day', '')}" if s.get('day') else "") + "\n"
         else:
             msg += "\n📋 No upcoming stations available.\n"
+    
     msg += f"\n📌 Last Updated @ {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}"
-    return msg
+    return msg, None
 
-def format_train_search(data):
-    if not data:
-        return "❌ No trains found. Please try again."
-    msg = f"🔍 TRAIN SEARCH RESULTS\n📋 Query: {data.get('query', 'N/A')}\n\n"
-    for t in data.get('trains', [])[:10]:
-        msg += f"🚂 {t.get('train_number', 'N/A')}\n   Train: {t.get('train_name', 'N/A')}\n   Route: {t.get('source', 'N/A')} → {t.get('destination', 'N/A')}\n\n"
-    msg += f"📌 Last Updated @ {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}"
-    return msg
-
-def format_schedule_result(data, chunk_start=0):
+def format_schedule_result(data, start=0, chunk=20):
     if not data:
         return "❌ Schedule not found.", None
     if isinstance(data, dict) and data.get('error'):
         return f"❌ {data['error']}", None
-    stations = [s for s in data.get('stations', [])
-                if (s.get('arrival') and s.get('arrival') != 'N/A')
-                or (s.get('departure') and s.get('departure') != 'N/A')
-                or s.get('arrival') == 'Source'
-                or s.get('departure') == 'Dest']
+    if isinstance(data, dict) and 'stations' not in data:
+        return "❌ Invalid schedule data.", None
+    
+    stations = data.get('stations', [])
     total = len(stations)
-    CHUNK_SIZE = 20
-    start = chunk_start
-    end = min(start + CHUNK_SIZE, total)
-    msg = f"📋 TRAIN SCHEDULE\n\n🚇 {data.get('train_name', 'N/A')} ({data.get('train_number', 'N/A')})\n📍 From: {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n📌 Showing {start+1}-{end} of {total}\n\n"
+    end = min(start + chunk, total)
+    if start >= total:
+        start = max(0, total - chunk)
+        end = total
+    
+    msg = f"📋 TRAIN SCHEDULE\n\n"
+    msg += f"🚇 {data.get('train_name', 'N/A')} ({data.get('train_number', 'N/A')})\n"
+    msg += f"📍 From: {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
+    msg += f"📌 Showing {start+1}-{end} of {total}\n\n"
+    
     for i in range(start, end):
         s = stations[i]
-        msg += f"{i+1}. {s.get('code', 'N/A')} - {s.get('name', 'N/A')}\n   🕐 Arr: {s.get('arrival', 'N/A')}  |  🕐 Dep: {s.get('departure', 'N/A')}" + (f"  |  Day: {s.get('day', '')}" if s.get('day') and s.get('day') != 'N/A' else "") + "\n\n"
+        msg += f"{i+1}. {s.get('code', 'N/A')} - {s.get('name', 'N/A')}\n"
+        msg += f"   🕐 Arr: {s.get('arrival', 'N/A')}  |  🕐 Dep: {s.get('departure', 'N/A')}" + (f"  |  Day: {s.get('day', '')}" if s.get('day') and s.get('day') != 'N/A' else "") + "\n\n"
+    
     msg += f"📌 Last Updated @ {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}"
     return msg, (start, end, total)
 
 # ------------------------------------------------------------------
-# Theme application (FIXED: Auto theme uses IST hour, middle alignment added)
+# Theme application with Auto (System) detection
 # ------------------------------------------------------------------
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
@@ -1486,8 +1457,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             border-color: {border} !important;
         }}
         .stDataFrame th, .stDataEditor th {{ border-bottom: 2px solid {border} !important; font-weight: 600 !important; }}
-        .stDataFrame td, .stDataEditor td {{ text-align: center !important; vertical-align: middle !important; }}
-        .stDataFrame th, .stDataEditor th {{ text-align: center !important; vertical-align: middle !important; }}
         .stExpander {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 8px !important; }}
         .streamlit-expanderHeader {{ color: {text_color} !important; font-weight: 600 !important; }}
         .stChatMessage {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important; }}
@@ -1611,75 +1580,41 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             .stSelectbox, .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio,
             .stCheckbox, .stFileUploader, .stCaption, .stImage, .stVideo, .stAudio, .stPlotlyChart,
             .action-box, .pro-footer, .status-pill, .sheet-link-btn, .stChatMessage, .stChatInput,
-            .train-count-container, .weather-card, .result-box, .marquee-container {{ display: none !important; }}
-            .print-only {{ display: block !important; visibility: visible !important; }}
-            .print-only table {{ width: 100% !important; border-collapse: collapse !important; font-size: 9pt !important; }}
-            .print-only th, .print-only td {{ border: 1px solid #333 !important; padding: 4px !important; font-size: 9pt !important; color: #000 !important; background: #fff !important; text-align: center !important; vertical-align: middle !important; }}
-            .print-only th {{ background: #eee !important; font-weight: bold !important; }}
-            .print-only tr:nth-child(even) td {{ background: #f9f9f9 !important; }}
+            .train-count-container, .weather-card, .result-box {{ display: none !important; }}
+            .print-area, .print-area * {{ visibility: visible !important; color: black !important; background: white !important; }}
+            .print-area {{ position: absolute; left: 0; top: 0; width: 100%; }}
+            .print-only {{ display: block !important; }}
+            .print-only table {{ width: 100% !important; border-collapse: collapse !important; }}
+            .print-only th, .print-only td {{ border: 1px solid #333 !important; padding: 4px !important; font-size: 10pt !important; }}
+            .print-only th {{ background: #eee !important; }}
         }}
         * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
+        .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
+        .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------
-# Marquee / Crawling ticker for EQ data
-# ------------------------------------------------------------------
-def render_eq_marquee(df):
-    if df.empty or len(df) == 0:
-        return ""
-    pnr_col = next((c for c in df.columns if 'PNR' in str(c).upper()), None)
-    train_col = next((c for c in df.columns if 'T/N' in str(c).upper() or 'T_N' in str(c).upper() or 'TRAIN' in str(c).upper()), None)
-    from_col = next((c for c in df.columns if 'FROM' in str(c).upper()), None)
-    to_col = next((c for c in df.columns if 'TO' in str(c).upper() and 'BOARDING' not in str(c).upper() and 'FROM' not in str(c).upper()), None)
-    class_col = next((c for c in df.columns if 'CLASS' in str(c).upper()), None)
-    name_col = next((c for c in df.columns if 'PASS_NAME' in str(c).upper() or 'PASS NAME' in str(c).upper()), None)
-    rec_col = next((c for c in df.columns if 'RECOMMENDATION' in str(c).upper()), None)
-
-    items = []
-    for _, row in df.head(25).iterrows():
-        parts = []
-        if pnr_col and row.get(pnr_col):
-            parts.append(f"🎫 PNR:{row.get(pnr_col,'')}")
-        if train_col and row.get(train_col):
-            parts.append(f"🚂 Train:{row.get(train_col,'')}")
-        if from_col and row.get(from_col):
-            parts.append(f"📍 From:{row.get(from_col,'')}")
-        if to_col and row.get(to_col):
-            parts.append(f"📍 To:{row.get(to_col,'')}")
-        if class_col and row.get(class_col):
-            parts.append(f"🎓 Class:{row.get(class_col,'')}")
-        if name_col and row.get(name_col):
-            parts.append(f"👤 Name:{row.get(name_col,'')}")
-        if rec_col and row.get(rec_col):
-            parts.append(f"📝 Rec:{row.get(rec_col,'')}")
-        if parts:
-            items.append(" | ".join(parts))
-
-    if not items:
-        return ""
-
-    text = "  ⭐  ".join(items)
-    return f"""
-    <div class="marquee-container no-print" style="overflow: hidden; white-space: nowrap; background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); 
-         padding: 10px 0; border-radius: 8px; margin-bottom: 12px; border: 1px solid #d0d7de;">
-        <div style="display: inline-block; padding-left: 100%; animation: marqueeScroll 35s linear infinite; color: #000; font-weight: 700; font-size: 1rem;">
-            {text}
-        </div>
-    </div>
-    <style>
-    @keyframes marqueeScroll {{
-        0% {{ transform: translateX(0); }}
-        100% {{ transform: translateX(-100%); }}
-    }}
-    </style>
-    """
-
-# ------------------------------------------------------------------
 # PDF, image, WhatsApp helpers
 # ------------------------------------------------------------------
 def generate_pdf(df, title, full=True):
+    if df.empty:
+        pdf = FPDF('L', 'mm', 'A4')
+        pdf.add_page()
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(0, 10, f"AI EQMS Hub Pro - {title}", ln=True, align='C')
+        pdf.set_font("Arial", '', 12)
+        pdf.cell(0, 10, f"Generated: {format_datetime()} IST", ln=True, align='C')
+        pdf.cell(0, 10, "No data available for this sheet.", ln=True, align='C')
+        output = pdf.output(dest='S')
+        if isinstance(output, bytearray):
+            return bytes(output)
+        elif isinstance(output, str):
+            return output.encode('latin-1')
+        else:
+            return output
+    
     pdf = FPDF('L', 'mm', 'A4')
     pdf.add_page()
     pdf.set_font("Arial", 'B', 12)
@@ -1690,15 +1625,13 @@ def generate_pdf(df, title, full=True):
     cols = list(df.columns)
     if '_sheet_row' in cols:
         cols.remove('_sheet_row')
-    if 'Select' in cols:
-        cols.remove('Select')
     if len(cols) > 15:
         cols = cols[:15]
     col_width = min(25, 277 / max(len(cols), 1))
     pdf.set_font("Arial", 'B', 7)
     for c in cols:
         safe_c = sanitize_latin(str(c)[:15])
-        pdf.cell(col_width, 6, safe_c, border=1, align='C')
+        pdf.cell(col_width, 6, safe_c, border=1)
     pdf.ln()
     pdf.set_font("Arial", '', 6)
     max_rows = len(df) if full else min(120, len(df))
@@ -1706,14 +1639,14 @@ def generate_pdf(df, title, full=True):
         for c in cols:
             val = str(row.get(c, ""))[:20]
             safe_val = sanitize_latin(val)
-            pdf.cell(col_width, 5, safe_val, border=1, align='C')
+            pdf.cell(col_width, 5, safe_val, border=1)
         pdf.ln()
         if pdf.get_y() > 185:
             pdf.add_page()
             pdf.set_font("Arial", 'B', 7)
             for c in cols:
                 safe_c = sanitize_latin(str(c)[:15])
-                pdf.cell(col_width, 6, safe_c, border=1, align='C')
+                pdf.cell(col_width, 6, safe_c, border=1)
             pdf.ln()
             pdf.set_font("Arial", '', 6)
     output = pdf.output(dest='S')
@@ -1730,8 +1663,6 @@ def create_table_image(df, title):
     cols = list(df.columns)
     if '_sheet_row' in cols:
         cols.remove('_sheet_row')
-    if 'Select' in cols:
-        cols.remove('Select')
     if len(cols) > 10:
         cols = cols[:10]
     data = df[cols].head(50).values
@@ -1768,8 +1699,6 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
         cols = list(df.columns)
         if '_sheet_row' in cols:
             cols.remove('_sheet_row')
-        if 'Select' in cols:
-            cols.remove('Select')
         cols = cols[:5]
         table_lines = []
         header = " | ".join([c[:8] for c in cols])
@@ -1802,7 +1731,27 @@ def get_pnr_status_url(pnr):
 # Main function
 # ------------------------------------------------------------------
 def main():
-    # Theme selection (FIXED: Auto uses IST hour)
+    # Detect system theme using JavaScript
+    st.markdown("""
+    <script>
+    (function() {
+        const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const currentTheme = isDark ? 'Dark' : 'Day';
+        const url = new URL(window.location);
+        url.searchParams.set('__system_theme', currentTheme);
+        if (!url.searchParams.has('__system_theme_set')) {
+            url.searchParams.set('__system_theme_set', '1');
+            window.location.href = url.toString();
+        }
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+
+    # Get system theme from query params
+    system_theme = st.query_params.get('__system_theme', 'Day')
+    st.session_state.system_theme = system_theme
+
+    # Theme selection
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
     if not st.session_state.auto_theme_detected:
         st.session_state.auto_theme_detected = True
@@ -1816,10 +1765,10 @@ def main():
         st.session_state.theme = theme_choice
         st.rerun()
 
+    # Determine effective theme
     effective_theme = theme_choice
     if theme_choice == 'Auto (System)':
-        hour = now_ist().hour
-        effective_theme = 'Dark' if (hour < 6 or hour >= 19) else 'Day'
+        effective_theme = st.session_state.system_theme if st.session_state.system_theme in ['Day', 'Dark'] else 'Day'
 
     if effective_theme == 'Custom':
         custom_bg = st.sidebar.color_picker("Background Color", value=st.session_state.custom_bg, key="custom_bg_picker")
@@ -1834,59 +1783,24 @@ def main():
 
     apply_theme(effective_theme, custom_bg, custom_text)
 
-    # Auto-refresh for bidirectional sync feel (every 60s)
-    st.components.v1.html("""
-    <script>
-    (function(){
-        if(!window._eqmsAutoRefresh){
-            window._eqmsAutoRefresh = true;
-            setInterval(function(){
-                window.location.reload();
-            }, 60000);
-        }
-    })();
-    </script>
-    """, height=0)
-
     # Sidebar
     with st.sidebar:
-        # FIXED: Flag colors only during flag hours (Memory 15)
-        if is_flag_hours():
-            st.markdown("""
-            <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8;">
-                <span style="color:#FF9933;">🟠 नमस्ते आपका स्वागत है</span><br>
-                <span style="color:#FFFFFF;">⚪ हम भारत के लोग</span><br>
-                <span style="color:#138808; font-weight:bold;">🟢 जय हिंद</span>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown("""
-            <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8; color: inherit;">
-                🙏 नमस्ते आपका स्वागत है<br>
-                🇮🇳 हम भारत के लोग<br>
-                🫡 जय हिंद
-            </div>
-            """, unsafe_allow_html=True)
-
+        st.markdown("""
+        <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8;">
+            <span style="color:#FF9933;">🟠 नमस्ते आपका स्वागत है</span><br>
+            <span style="color:#FFFFFF;">⚪ हम भारत के लोग</span><br>
+            <span style="color:#138808; font-weight:bold;">🟢 जय हिंद</span>
+        </div>
+        """, unsafe_allow_html=True)
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
-
-        # Sync status indicator
-        sync_status = f"🟢 Live" if st.session_state.last_sheet_sync else "🟡 Waiting"
-        st.caption(f"📡 Sheet Sync: {sync_status} | {st.session_state.last_sheet_sync or '—'}")
-
-        # Live sync toggle
-        live_sync = st.toggle("🔄 Auto Sync (60s)", value=st.session_state.live_sync, key="live_sync_toggle")
-        if live_sync != st.session_state.live_sync:
-            st.session_state.live_sync = live_sync
-            st.rerun()
 
         # Weather widget in sidebar
         with st.expander("🌤️ Weather", expanded=True):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city")
             if city != st.session_state.weather_city:
                 st.session_state.weather_city = city
-
+            
             if st.button("🌤️ Get Weather", key="sidebar_weather_btn", use_container_width=True):
                 if city:
                     with st.spinner(f"Fetching..."):
@@ -1896,7 +1810,7 @@ def main():
                             st.rerun()
                         else:
                             st.error(data.get('error', 'Error'))
-
+            
             if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
                 data = st.session_state.weather_data
                 st.markdown(f"""
@@ -1915,28 +1829,30 @@ def main():
                 st.rerun()
             st.caption(f"Last sync: {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST")
 
-        # Print Sheet button in sidebar
-        st.markdown("---")
-        st.markdown("### 🖨️ Print Sheet")
-        st.caption("Current sheet data ko print karein")
-        print_key = 'print_b64_' + sheet_choice
-        if print_key in st.session_state and st.session_state[print_key]:
-            print_js = f"""
-            <div style="width:100%;">
-                <button onclick="var w=window.open();w.document.write(atob('{st.session_state[print_key]}'));w.document.close();" style="
-                    background: linear-gradient(135deg, #7c3aed, #6d28d9);
-                    color: white; border: none; border-radius: 8px;
-                    padding: 10px 16px; width: 100%; font-weight: 600;
-                    cursor: pointer; font-size: 0.95rem;
-                " title="Print the current sheet view">🖨️ PRINT Sheet</button>
-            </div>
-            """
-            st.components.v1.html(print_js, height=45)
-        else:
-            st.info("📋 Data load hone ke baad print available hoga")
-
         sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
+
+        # PRINT SHEET button in sidebar - using direct JavaScript to trigger print
+        st.markdown("---")
+        st.markdown("### 🖨️ Print Options")
+        st.markdown("""
+        <div style="margin: 10px 0;">
+            <button onclick="window.print()" style="
+                background: linear-gradient(135deg, #7c3aed, #6d28d9);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 12px 20px;
+                width: 100%;
+                font-weight: 600;
+                cursor: pointer;
+                font-size: 1rem;
+                transition: all 0.3s ease;
+            " onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                🖨️ PRINT Sheet (Ctrl+P)
+            </button>
+        </div>
+        """, unsafe_allow_html=True)
 
         with st.expander("📤 Upload & Process", expanded=True):
             st.caption("📷 Image • 📄 PDF • 📝 Text • 🎤 Audio")
@@ -2021,8 +1937,6 @@ def main():
                                             st.session_state.last_uploaded_view_url = drive_res.get('view_url')
                                             st.session_state.last_uploaded_print_url = drive_res.get('print_url')
                                             st.session_state.last_uploaded_drive_id = drive_res.get('id')
-                                            st.session_state.original_file_bytes = fbytes
-                                            st.session_state.original_file_mime = mime
                                             st.session_state.upload_success = True
                                             st.session_state.last_upload_time = format_time()
                                             log_activity(f"✅ {fname} → {save_res['saved']} records")
@@ -2047,7 +1961,6 @@ def main():
                         prog.empty()
                         status.empty()
 
-        # FIXED: Original file print/view/download options
         if st.session_state.upload_success and st.session_state.last_uploaded_file:
             with st.expander("📄 Last Uploaded File", expanded=True):
                 st.markdown(f"""
@@ -2056,7 +1969,7 @@ def main():
                     <div class="file-card-meta">Uploaded at {st.session_state.get('last_upload_time', '—')} IST</div>
                 </div>
                 """, unsafe_allow_html=True)
-                c1, c2, c3, c4 = st.columns(4)
+                c1, c2, c3 = st.columns(3)
                 with c1:
                     if st.session_state.last_uploaded_view_url:
                         st.link_button("👁️ View", st.session_state.last_uploaded_view_url, use_container_width=True)
@@ -2066,26 +1979,12 @@ def main():
                 with c3:
                     if st.session_state.last_uploaded_drive_id:
                         st.link_button("📥 Download", f"https://drive.google.com/uc?export=download&id={st.session_state.last_uploaded_drive_id}", use_container_width=True)
-                with c4:
-                    if st.session_state.last_uploaded_print_url:
-                        st.components.v1.html(f"""
-                        <div style="width:100%;">
-                            <button onclick="window.open('{st.session_state.last_uploaded_print_url}', '_blank')" style="
-                                background: linear-gradient(135deg, #7c3aed, #6d28d9);
-                                color: white; border: none; border-radius: 8px;
-                                padding: 9px 16px; width: 100%; font-weight: 600;
-                                cursor: pointer; font-size: 0.9rem;
-                            ">🖨️ Open & Print</button>
-                        </div>
-                        """, height=50)
                 if st.button("🗑️ Clear History", use_container_width=True, key="clear_history_btn"):
                     st.session_state.last_uploaded_file = None
                     st.session_state.last_uploaded_drive_url = None
                     st.session_state.last_uploaded_view_url = None
                     st.session_state.last_uploaded_print_url = None
                     st.session_state.last_uploaded_drive_id = None
-                    st.session_state.original_file_bytes = None
-                    st.session_state.original_file_mime = None
                     st.session_state.upload_success = False
                     st.rerun()
 
@@ -2109,47 +2008,48 @@ def main():
             st.cache_data.clear()
             st.rerun()
 
-        # Filters
-        st.markdown("### 🔍 Filters")
-        config = SHEET_CONFIG[sheet_choice]
-        pnr_col_idx = config.get("pnr_col")
-        train_col_idx = config.get("train_col")
-        doj_col_idx = config.get("doj_col")
+        # Filters (skip for NOTE sheet)
+        if sheet_choice != "NOTE":
+            st.markdown("### 🔍 Filters")
+            config = SHEET_CONFIG[sheet_choice]
+            pnr_col_idx = config.get("pnr_col")
+            train_col_idx = config.get("train_col")
+            doj_col_idx = config.get("doj_col")
 
-        pnr_input = st.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
-        if pnr_input != st.session_state.pnr_val:
-            st.session_state.pnr_val = pnr_input
-            st.session_state.current_page = 1
-            st.rerun()
+            pnr_input = st.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
+            if pnr_input != st.session_state.pnr_val:
+                st.session_state.pnr_val = pnr_input
+                st.session_state.current_page = 1
+                st.rerun()
 
-        train_input = st.text_input("Train (partial)", value=st.session_state.train_val, key="train_filter_input")
-        if train_input != st.session_state.train_val:
-            st.session_state.train_val = train_input
-            st.session_state.current_page = 1
-            st.rerun()
+            train_input = st.text_input("Train (partial)", value=st.session_state.train_val, key="train_filter_input")
+            if train_input != st.session_state.train_val:
+                st.session_state.train_val = train_input
+                st.session_state.current_page = 1
+                st.rerun()
 
-        c1, c2 = st.columns(2)
-        with c1:
-            from_input = st.date_input("From DOJ", value=st.session_state.from_val,
-                key="from_date_input", format="DD-MM-YYYY")
-        with c2:
-            to_input = st.date_input("To DOJ", value=st.session_state.to_val,
-                key="to_date_input", format="DD-MM-YYYY")
-        if from_input != st.session_state.from_val:
-            st.session_state.from_val = from_input
-            st.session_state.current_page = 1
-            st.rerun()
-        if to_input != st.session_state.to_val:
-            st.session_state.to_val = to_input
-            st.session_state.current_page = 1
-            st.rerun()
+            c1, c2 = st.columns(2)
+            with c1:
+                from_input = st.date_input("From DOJ", value=st.session_state.from_val,
+                    key="from_date_input", format="DD-MM-YYYY")
+            with c2:
+                to_input = st.date_input("To DOJ", value=st.session_state.to_val,
+                    key="to_date_input", format="DD-MM-YYYY")
+            if from_input != st.session_state.from_val:
+                st.session_state.from_val = from_input
+                st.session_state.current_page = 1
+                st.rerun()
+            if to_input != st.session_state.to_val:
+                st.session_state.to_val = to_input
+                st.session_state.current_page = 1
+                st.rerun()
 
     # Load data for selected sheet
     df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
     filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
 
-    # Apply filters
-    if not filtered_df.empty:
+    # Apply filters (skip for NOTE sheet)
+    if not filtered_df.empty and sheet_choice != "NOTE":
         config = SHEET_CONFIG[sheet_choice]
         pnr_col_idx = config.get("pnr_col")
         train_col_idx = config.get("train_col")
@@ -2184,6 +2084,15 @@ def main():
         st.session_state.view_mode = view
         st.rerun()
 
+    # Top bar with crawling text (marquee)
+    st.markdown("""
+    <div style="background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); padding: 8px 0; border-radius: 4px; margin-bottom: 10px; overflow: hidden;">
+        <marquee behavior="scroll" direction="left" scrollamount="4" style="color: #1f2328; font-weight: 600; font-size: 16px; padding: 4px 0;">
+            🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save
+        </marquee>
+    </div>
+    """, unsafe_allow_html=True)
+
     # Top bar
     top_c1, top_c2 = st.columns([4, 1])
     with top_c1:
@@ -2193,12 +2102,6 @@ def main():
 
     st.caption(f"Enterprise Railway EQ Management  •  {format_date()}  •  {format_time()} IST")
     st.markdown("---")
-
-    # Marquee / Crawling ticker (EQ data scrolls left to right)
-    if view == "📋 Data Table" and sheet_choice == "EQ" and not filtered_df.empty:
-        marquee_html = render_eq_marquee(filtered_df)
-        if marquee_html:
-            st.markdown(marquee_html, unsafe_allow_html=True)
 
     # ------------------------------------------------------------------
     # View: Chat
@@ -2310,22 +2213,24 @@ def main():
             if 'DOJ' in c.upper():
                 doj_col = c
 
-        if sheet_choice != "NOTE":
-            if not filtered_df.empty:
-                if train_col_metric:
-                    train_counts_series = filtered_df[train_col_metric].value_counts()
-                    st.markdown("**🚆 Train-wise Count**")
-                    cards_html = '<div class="train-count-container">'
-                    total_eq = len(filtered_df)
-                    cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {total_eq}</div></div>'
-                    for train_num, cnt in train_counts_series.items():
-                        cards_html += f'<div class="train-count-card"><div class="train-count-number">{train_num}</div><div class="train-count-badge">{cnt}</div></div>'
-                    cards_html += '</div>'
-                    st.markdown(cards_html, unsafe_allow_html=True)
-                    st.markdown("---")
-                else:
-                    st.metric("Total Records", len(filtered_df))
-                    st.markdown("---")
+        # Show train count summary (skip for NOTE sheet)
+        if not filtered_df.empty and sheet_choice != "NOTE":
+            if train_col_metric:
+                train_counts_series = filtered_df[train_col_metric].value_counts()
+                st.markdown("**🚆 Train-wise Count**")
+                cards_html = '<div class="train-count-container">'
+                total_eq = len(filtered_df)
+                cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {total_eq}</div></div>'
+                for train_num, cnt in train_counts_series.items():
+                    cards_html += f'<div class="train-count-card"><div class="train-count-number">{train_num}</div><div class="train-count-badge">{cnt}</div></div>'
+                cards_html += '</div>'
+                st.markdown(cards_html, unsafe_allow_html=True)
+                st.markdown("---")
+            else:
+                st.metric("Total Records", len(filtered_df))
+                st.markdown("---")
+        elif sheet_choice == "NOTE":
+            st.info("📋 NOTE sheet - No count displayed")
 
         if st.button("🔄 Refresh Data", use_container_width=False, key="refresh_data_btn"):
             st.cache_data.clear()
@@ -2363,51 +2268,27 @@ def main():
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
 
-            # FIX: Print table uses ALL filtered data (not just current page)
-            print_df_full = filtered_df.copy()
-            if '_sheet_row' in print_df_full.columns:
-                print_df_full = print_df_full.drop(columns=['_sheet_row'])
-            if 'Select' in print_df_full.columns:
-                print_df_full = print_df_full.drop(columns=['Select'])
-
-            # Generate print HTML for JS popup
-            if not print_df_full.empty:
-                html_table = print_df_full.to_html(index=False, border=1, classes='print-table', justify='center')
+            # Static HTML table for printing - with actual data
+            print_cols = [c for c in display_df.columns if c != 'Select']
+            print_df = display_df[print_cols].copy()
+            if not print_df.empty:
+                html_table = print_df.to_html(index=False, border=1, classes='print-table')
             else:
                 html_table = "<p>No data</p>"
-
-            print_html = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>{sheet_choice} Sheet - AI EQMS Hub Pro</title>
-                <style>
-                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
-                    h2 {{ text-align: center; margin-bottom: 5px; }}
-                    .meta {{ text-align: center; font-size: 10pt; color: #666; margin-bottom: 15px; }}
-                    table {{ width: 100%; border-collapse: collapse; font-size: 9pt; }}
-                    th, td {{ border: 1px solid #333; padding: 5px; text-align: center; vertical-align: middle; }}
-                    th {{ background: #f0f0f0; font-weight: bold; }}
-                    tr:nth-child(even) {{ background: #f9f9f9; }}
-                    .footer {{ text-align: center; font-size: 9pt; color: #666; margin-top: 15px; }}
-                    @media print {{ body {{ margin: 0; }} }}
-                </style>
-            </head>
-            <body>
-                <h2>{sheet_choice} Sheet Data</h2>
-                <div class="meta">Total Rows: {len(print_df_full)} | Generated: {format_datetime()} IST</div>
+            
+            st.markdown(f"""
+            <div class="print-only">
+                <h2 style="text-align:center;">{sheet_choice} Sheet Data</h2>
+                <p style="text-align:center; font-size:12pt;">Generated: {format_datetime()} IST</p>
                 {html_table}
-                <div class="footer">AI EQMS Hub Pro • {format_date()}</div>
-                <script>window.onload = function(){{ setTimeout(function(){{ window.print(); }}, 500); }};</script>
-            </body>
-            </html>
-            """
-            print_b64 = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
-            st.session_state['print_b64_' + sheet_choice] = print_b64
+            </div>
+            """, unsafe_allow_html=True)
 
+            st.markdown('<div class="print-area">', unsafe_allow_html=True)
             edited_page = st.data_editor(display_df, use_container_width=True, height=400,
                 column_config={"Select": st.column_config.CheckboxColumn("Select", width="small")},
                 key=f"editor_{sheet_choice}_{st.session_state.current_page}_{page_size}")
+            st.markdown('</div>', unsafe_allow_html=True)
 
             select_all = st.checkbox("Select All on Page", value=st.session_state.select_all, key="select_all_cb")
             if select_all != st.session_state.select_all:
@@ -2430,7 +2311,7 @@ def main():
 
             st.markdown('<div class="action-box no-print">', unsafe_allow_html=True)
             st.markdown("**⚡ Quick Actions**")
-            a1, a2, a3, a4 = st.columns(4)
+            a1, a2, a3, a4, a5 = st.columns(5)
             with a1:
                 if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn"):
                     try:
@@ -2513,6 +2394,20 @@ def main():
                 encoded = urllib.parse.quote(msg)
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
                 st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
+            with a5:
+                st.markdown("""
+                <button onclick="window.print()" style="
+                    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    padding: 9px 16px;
+                    width: 100%;
+                    font-weight: 600;
+                    cursor: pointer;
+                    font-size: 1rem;
+                ">🖨️ PRINT</button>
+                """, unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
             # WhatsApp Image Share
@@ -2645,7 +2540,7 @@ def main():
             st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------------------------------------------------------
-    # View: Railway Features (EXACT bot formatting)
+    # View: Railway Features (EXACT from Telegram bot - COMPLETE)
     # ------------------------------------------------------------------
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real‑time Info")
@@ -2653,24 +2548,9 @@ def main():
             st.error("❌ 'ntes-client' library not installed. Please run: `pip install ntes-client`")
             st.stop()
 
-        # Debug: Show NTES client status
-        with st.expander("🔧 NTES Debug Info", expanded=False):
-            st.caption("Agar data nahi a raha, yahan check karein")
-            try:
-                test_train = st.text_input("Test Train Number", value="12309", key="ntes_test_train")
-                if st.button("Test NTES Connection", key="ntes_test_btn"):
-                    with st.spinner("Testing..."):
-                        try:
-                            test_resp = ntes_client.schedule(test_train)
-                            st.json(test_resp if test_resp else {"status": "No response"})
-                        except Exception as e:
-                            st.error(f"NTES Error: {str(e)}")
-            except Exception as e:
-                st.error(f"Debug init error: {e}")
-
         tab1, tab2, tab3 = st.tabs(["🔍 PNR Status", "🚂 Live Train", "📋 Train Schedule"])
 
-        # PNR Tab
+        # PNR Tab - EXACT from Telegram bot
         with tab1:
             st.markdown("### PNR Status Check")
             pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr")
@@ -2683,9 +2563,7 @@ def main():
                         with st.spinner("Fetching PNR details..."):
                             data = get_pnr_status(pnr_input)
                             if data and isinstance(data, dict) and data.get('error'):
-                                st.error(f"❌ Error: {data.get('error')}")
-                                with st.expander("🔍 Raw Response"):
-                                    st.json(data)
+                                st.error(f"❌ {data['error']}")
                             elif data:
                                 st.markdown(format_pnr_result(data))
                             else:
@@ -2696,9 +2574,7 @@ def main():
                         with st.spinner("Refreshing PNR..."):
                             data = get_pnr_status(pnr_input)
                             if data and isinstance(data, dict) and data.get('error'):
-                                st.error(f"❌ Error: {data.get('error')}")
-                                with st.expander("🔍 Raw Response"):
-                                    st.json(data)
+                                st.error(f"❌ {data['error']}")
                             elif data:
                                 st.markdown(format_pnr_result(data))
                             else:
@@ -2706,7 +2582,7 @@ def main():
                     else:
                         st.warning("Please enter a valid PNR first.")
 
-        # Live Train Tab
+        # Live Train Tab - EXACT from Telegram bot
         with tab2:
             st.markdown("### Live Train Status")
             train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train")
@@ -2727,13 +2603,12 @@ def main():
                             date_str = get_date_for_offset(offset)
                             data = get_live_train_status(train_no, date_str)
                             if data and isinstance(data, dict) and data.get('error'):
-                                st.error(f"❌ Error: {data.get('error')} | Message: {data.get('message', 'N/A')}")
-                                with st.expander("🔍 Raw Response"):
-                                    st.json(data)
+                                st.error(f"❌ {data['error']}")
                             elif data:
-                                st.markdown(format_live_train_result(data))
+                                response, _ = format_live_train_result(data)
+                                st.markdown(response)
                             else:
-                                st.error("❌ No data available from NTES.")
+                                st.error("❌ No data available.")
             with col2:
                 if st.button("🔄 Refresh Live Status", key="refresh_live", use_container_width=True):
                     if train_no and train_no.isdigit() and (3 <= len(train_no) <= 5):
@@ -2741,17 +2616,16 @@ def main():
                             date_str = get_date_for_offset(offset)
                             data = get_live_train_status(train_no, date_str)
                             if data and isinstance(data, dict) and data.get('error'):
-                                st.error(f"❌ Error: {data.get('error')} | Message: {data.get('message', 'N/A')}")
-                                with st.expander("🔍 Raw Response"):
-                                    st.json(data)
+                                st.error(f"❌ {data['error']}")
                             elif data:
-                                st.markdown(format_live_train_result(data))
+                                response, _ = format_live_train_result(data)
+                                st.markdown(response)
                             else:
-                                st.error("❌ No data available from NTES.")
+                                st.error("❌ No data available.")
                     else:
                         st.warning("Please enter a valid train number first.")
 
-        # Schedule Tab
+        # Schedule Tab - EXACT from Telegram bot
         with tab3:
             st.markdown("### Train Schedule / Route")
             train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch")
@@ -2766,9 +2640,7 @@ def main():
                         with st.spinner("Fetching schedule..."):
                             data = get_train_schedule(train_no_sch)
                             if data and isinstance(data, dict) and data.get('error'):
-                                st.error(f"❌ Error: {data.get('error')}")
-                                with st.expander("🔍 Raw Response"):
-                                    st.json(data)
+                                st.error(f"❌ {data['error']}")
                             elif data:
                                 st.session_state.sch_data = data
                                 st.session_state.sch_start = 0
@@ -2781,9 +2653,7 @@ def main():
                         with st.spinner("Refreshing schedule..."):
                             data = get_train_schedule(train_no_sch)
                             if data and isinstance(data, dict) and data.get('error'):
-                                st.error(f"❌ Error: {data.get('error')}")
-                                with st.expander("🔍 Raw Response"):
-                                    st.json(data)
+                                st.error(f"❌ {data['error']}")
                             elif data:
                                 st.session_state.sch_data = data
                                 st.session_state.sch_start = 0
@@ -2793,35 +2663,28 @@ def main():
                     else:
                         st.warning("Please enter a valid train number first.")
 
-            if 'sch_data' in st.session_state and st.session_state.sch_data:
+            if 'sch_data' in st.session_state:
                 data = st.session_state.sch_data
                 if isinstance(data, dict):
-                    stations = data.get('stations', [])
-                    total = len(stations)
-                    chunk = 20
-                    start = st.session_state.sch_start
-                    end = min(start + chunk, total)
-                    if start >= total and total > 0:
-                        start = max(0, total - chunk)
-                        end = total
-                        st.session_state.sch_start = start
-                    msg, nav_info = format_schedule_result(data, start)
+                    msg, pagination = format_schedule_result(data, st.session_state.sch_start)
                     st.markdown(msg)
-                    if total > 0 and nav_info:
-                        start, end, total = nav_info
-                        col1, col2, col3 = st.columns([1,2,1])
-                        with col1:
-                            if start > 0:
-                                if st.button("◀ Previous", key="sch_prev"):
-                                    st.session_state.sch_start = max(0, start - chunk)
-                                    st.rerun()
-                        with col2:
-                            st.write(f"Showing {start+1}-{end} of {total}")
-                        with col3:
-                            if end < total:
-                                if st.button("Next ▶", key="sch_next"):
-                                    st.session_state.sch_start = end
-                                    st.rerun()
+                    if pagination:
+                        start, end, total = pagination
+                        chunk = 20
+                        if total > 0:
+                            col1, col2, col3 = st.columns([1,2,1])
+                            with col1:
+                                if start > 0:
+                                    if st.button("◀ Previous", key="sch_prev"):
+                                        st.session_state.sch_start = max(0, start - chunk)
+                                        st.rerun()
+                            with col2:
+                                st.write(f"Showing {start+1}-{end} of {total}")
+                            with col3:
+                                if end < total:
+                                    if st.button("Next ▶", key="sch_next"):
+                                        st.session_state.sch_start = end
+                                        st.rerun()
                 else:
                     st.info("No schedule data available.")
 
@@ -2830,12 +2693,12 @@ def main():
     # ------------------------------------------------------------------
     elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
-
+        
         city = st.text_input("🏙️ Enter City Name", value=st.session_state.weather_city, 
                             placeholder="e.g., Tinsukia, New Delhi, Mumbai", key="weather_city_input")
         if city != st.session_state.weather_city:
             st.session_state.weather_city = city
-
+        
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🌤️ Get Weather", key="weather_btn", use_container_width=True):
@@ -2861,10 +2724,10 @@ def main():
                             st.error(data.get('error', 'Error fetching weather'))
                 else:
                     st.warning("Please enter a city name.")
-
+        
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
-
+            
             st.markdown(f"""
             <div class="weather-card">
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;">
@@ -2884,7 +2747,7 @@ def main():
                     <div class="weather-detail">📊 Pressure: {data['pressure']} hPa</div>
                 </div>
             """, unsafe_allow_html=True)
-
+            
             if data.get('sunrise') and data.get('sunrise') != 'N/A':
                 try:
                     sunrise = datetime.fromtimestamp(data['sunrise']).strftime('%H:%M')
@@ -2897,14 +2760,14 @@ def main():
                     """, unsafe_allow_html=True)
                 except:
                     pass
-
+            
             if data.get('icon'):
                 icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
                 st.image(icon_url, caption=data['weather'].title(), width=100)
-
+            
             st.markdown(f'<div style="font-size: 0.8rem; color: #656d76; margin-top: 10px;">🔄 Updated: {format_datetime()}</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
-
+            
         elif st.session_state.weather_data and 'error' in st.session_state.weather_data:
             st.error(st.session_state.weather_data['error'])
 
