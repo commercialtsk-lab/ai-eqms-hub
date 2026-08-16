@@ -111,6 +111,7 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     msg += f"\n🔗 Sheet: https://docs.google.com/spreadsheets/d/1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI/edit"
     return msg
 
+# ✅ YEH FUNCTION ADD KARO - MISSING THA
 def get_pnr_status_url(pnr):
     if not pnr or len(str(pnr)) != 10:
         return None
