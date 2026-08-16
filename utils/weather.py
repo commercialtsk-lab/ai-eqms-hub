@@ -46,8 +46,7 @@ def render_weather_widget():
     if 'weather_city' not in st.session_state:
         st.session_state.weather_city = "Tinsukia"
     
-    city = st.selectbox("Select City", ["Tinsukia", "Dibrugarh", "Guwahati", "Delhi", "Mumbai", "Custom..."],
-        index=0, key="weather_city_select")
+    city = st.selectbox("Select City", ["Tinsukia", "Dibrugarh", "Guwahati", "Delhi", "Mumbai", "Custom..."], index=0, key="weather_city_select")
     
     if city == "Custom...":
         city = st.text_input("Enter City", value=st.session_state.weather_city, key="weather_custom")
@@ -57,19 +56,19 @@ def render_weather_widget():
         st.session_state.weather_city = city
     
     if not WEATHER_API_KEY:
-        st.info("🔑 Weather API key not set.")
+        st.info("🔑 Weather API key not set. Add WEATHER_API_KEY to secrets.toml")
         return
     
     if st.button("🔄 Refresh", key="weather_refresh"):
         st.rerun()
     
-    with st.spinner("..."):
+    with st.spinner("Fetching weather..."):
         w = get_weather(st.session_state.weather_city, WEATHER_API_KEY)
     
     if w:
         emoji = get_weather_emoji(w['description'])
         st.markdown(f"""
-        <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:15px;">
+        <div style="background:rgba(255,255,255,0.05);border-radius:12px;padding:15px;margin:5px 0;">
             <div style="display:flex;align-items:center;gap:10px;">
                 <span style="font-size:3rem;">{emoji}</span>
                 <div>
@@ -88,4 +87,4 @@ def render_weather_widget():
         </div>
         """, unsafe_allow_html=True)
     else:
-        st.error(f"❌ No weather for '{st.session_state.weather_city}'")
+        st.error(f"❌ Could not fetch weather for '{st.session_state.weather_city}'")
