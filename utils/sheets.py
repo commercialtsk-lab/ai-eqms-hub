@@ -1,18 +1,14 @@
 import streamlit as st
 import pandas as pd
-import time
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from utils.config import GSPREAD_CREDENTIALS, SHEET_ID
-from utils.helpers import clean_pnr, format_datetime
 
 SHEET_CONFIG = {
     "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "doj_col": 7},
     "DATA": {"start_row": 3, "pnr_col": 1, "train_col": 5, "doj_col": 7},
     "FINAL": {"start_row": 6, "pnr_col": 7, "train_col": 1, "doj_col": 12},
     "DATA2": {"start_row": 4, "pnr_col": 7, "train_col": 1, "doj_col": 12},
-    "EMAIL_DATA": {"start_row": 2, "pnr_col": 7, "train_col": 8, "doj_col": 11},
-    "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "doj_col": None}
 }
 
 @st.cache_resource
@@ -56,39 +52,3 @@ def load_sheet_data_cached(sheet_name, sheet_id):
     except Exception as e:
         st.error(f"Error loading {sheet_name}: {e}")
         return pd.DataFrame()
-
-def save_to_sheet(sheet, records):
-    try:
-        all_data = sheet.get_all_values()
-        existing_pnrs = []
-        start_row = 5
-        for row in all_data[start_row-1:]:
-            if row and len(row) > 1:
-                pnr = clean_pnr(row[1])
-                if pnr:
-                    existing_pnrs.append(pnr)
-        saved = 0
-        skipped = 0
-        next_sn = len(all_data) - start_row + 2
-        for rec in records:
-            pnr = clean_pnr(rec.get('PNR', ''))
-            if not pnr or pnr in existing_pnrs:
-                skipped += 1
-                continue
-            now = format_datetime()
-            row = [
-                next_sn, pnr, rec.get('FROM', ''), rec.get('TO', ''), rec.get('BOARDING', ''),
-                rec.get('T_N', ''), rec.get('CLASS', ''), rec.get('DOJ', ''), rec.get('PASS_NAME', ''),
-                rec.get('PASS_PH', ''), rec.get('T_BERTHS', 1), rec.get('PURPOSE', ''), rec.get('ADDRESS', ''),
-                rec.get('DIARY_NO', ''), rec.get('RECOMMENDATION', ''), rec.get('DESIGNATION', ''),
-                rec.get('PHONE_NUBER', ''), rec.get('VIP_STATUS', ''), rec.get('WARRANT_NO', ''),
-                now, rec.get('APPLICATION_DATE', ''), rec.get('RAILWAY_ZONE', ''), rec.get('PREFERENCE', 'General')
-            ]
-            sheet.append_row(row)
-            existing_pnrs.append(pnr)
-            next_sn += 1
-            saved += 1
-            time.sleep(0.12)
-        return {'saved': saved, 'skipped': skipped}
-    except Exception as e:
-        return {'error': str(e)}
