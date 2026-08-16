@@ -144,12 +144,3 @@ def get_pnr_status_url(pnr):
     if not pnr or len(str(pnr)) != 10:
         return None
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
-
-
-def get_pnr_status(pnr):
-    """Get PNR status from NTES - uses ntes_client from ntes_client.py"""
-    try:
-        from utils.ntes_client import get_pnr_status as ntes_pnr
-        return ntes_pnr(pnr)
-    except ImportError:
-        return {"error": "NTES library not available"}
