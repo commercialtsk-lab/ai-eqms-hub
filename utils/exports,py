@@ -5,6 +5,8 @@ from fpdf import FPDF
 from utils.helpers import sanitize_latin, format_datetime
 
 def generate_pdf(df, title, full=True):
+    if df.empty:
+        return None
     pdf = FPDF('L', 'mm', 'A4')
     pdf.add_page()
     pdf.set_font("Arial", 'B', 12)
