@@ -39,13 +39,5 @@ def render_dashboard(filtered_df):
         fig_bar = px.bar(train_counts.head(15), x='Train', y='Count', title="Top 15 Trains by EQ Count", color='Count', color_continuous_scale='Blues')
         fig_bar.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_bar, use_container_width=True)
-        
-        class_col = next((c for c in filtered_df.columns if 'CLASS' in c.upper()), None)
-        if class_col:
-            class_counts = filtered_df[class_col].value_counts().reset_index()
-            class_counts.columns = ['Class', 'Count']
-            fig_pie = px.pie(class_counts, names='Class', values='Count', title="Class Distribution", hole=0.4)
-            fig_pie.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig_pie, use_container_width=True)
     else:
         st.info("No data for charts.")
