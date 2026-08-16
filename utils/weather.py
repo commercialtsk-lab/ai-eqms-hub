@@ -35,11 +35,6 @@ def get_weather_emoji(desc):
     return '🌡️'
 
 def render_weather_widget():
-    try:
-        WEATHER_API_KEY = st.secrets["WEATHER_API_KEY"]
-    except:
-        WEATHER_API_KEY = ""
-    
     st.markdown("---")
     st.markdown("### 🌤️ Weather")
     
@@ -55,8 +50,14 @@ def render_weather_widget():
     else:
         st.session_state.weather_city = city
     
+    # ✅ DIRECTLY GET WEATHER API KEY FROM SECRETS
+    try:
+        WEATHER_API_KEY = st.secrets["WEATHER_API_KEY"]
+    except:
+        WEATHER_API_KEY = ""
+    
     if not WEATHER_API_KEY:
-        st.info("🔑 Weather API key not set. Add WEATHER_API_KEY to secrets.toml")
+        st.info("🔑 Weather API key not set. Please add WEATHER_API_KEY to secrets.")
         return
     
     if st.button("🔄 Refresh", key="weather_refresh"):
@@ -88,3 +89,4 @@ def render_weather_widget():
         """, unsafe_allow_html=True)
     else:
         st.error(f"❌ Could not fetch weather for '{st.session_state.weather_city}'")
+        st.caption("Please check city name or try again later.")
