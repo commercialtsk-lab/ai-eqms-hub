@@ -56,7 +56,7 @@ def render_weather_widget():
         st.session_state.weather_city = city
     
     if not WEATHER_API_KEY:
-        st.info("🔑 Weather API key not set.")
+        st.info("🔑 Weather API key not set. Add WEATHER_API_KEY to secrets.toml")
         return
     
     if st.button("🔄 Refresh", key="weather_refresh"):
