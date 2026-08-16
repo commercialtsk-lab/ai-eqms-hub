@@ -815,12 +815,6 @@ def get_live_train_status(train_number, date_str=None):
         pos_lower = str(current_pos).lower()
         is_completed = any(k in pos_lower for k in ["reached destination", "journey completed", "terminated", "destination reached", "arrived at destination", "train completed", "train reached", "journey ended", "train terminated", "has terminated", "run terminated"])
         is_not_started = any(k in pos_lower for k in ["not started", "yet to start", "scheduled", "at source", "will start", "starts from", "origin", "before departure"])
-        if not is_completed and destination != 'N/A':
-            dest_upper = destination.upper()
-            if any(w in pos_lower for w in ['arrived', 'reached', 'terminated', 'completed', 'ended']):
-                dest_words = [w for w in dest_upper.split() if len(w) >= 3]
-                for word in dest_words:
-                    if word in pos_str.upper(): is_completed = True; break
         stations_raw = safe_list(response, 'STNSD')
         if not stations_raw:
             stations_raw = safe_list(response, 'STNS')
@@ -1541,7 +1535,8 @@ def main():
         st.markdown("---")
 
         # Sheet selection in sidebar
-        sheet_choice = st.selectbox("📑 Select Sheet", list(SHEET_CONFIG.keys()),
+        st.markdown("### 📑 Sheet Selection")
+        sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()),
             index=list(SHEET_CONFIG.keys()).index(st.session_state.selected_sheet)
             if st.session_state.selected_sheet in SHEET_CONFIG else 0,
             key="sheet_select")
@@ -1552,12 +1547,12 @@ def main():
             st.rerun()
 
         # Filters - apply to selected sheet
+        st.markdown("### 🔍 Filters")
         config = SHEET_CONFIG[sheet_choice]
         pnr_col_idx = config.get("pnr_col")
         train_col_idx = config.get("train_col")
         doj_col_idx = config.get("doj_col")
 
-        st.markdown("### 🔍 Filters")
         pnr_input = st.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
         if pnr_input != st.session_state.pnr_val:
             st.session_state.pnr_val = pnr_input
@@ -1617,7 +1612,7 @@ def main():
                 filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
             filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
 
-    # View mode selection (in main area)
+    # View mode selection (in main area) - Horizontal radio for better UX
     view = st.radio("View Mode", ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"],
         index=["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"].index(st.session_state.view_mode)
         if st.session_state.view_mode in ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"] else 0,
@@ -2096,26 +2091,33 @@ def main():
         with tab1:
             st.markdown("### PNR Status Check")
             pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr")
-            if st.button("Check PNR", key="pnr_check", use_container_width=True):
-                if not pnr_input or len(pnr_input) != 10 or not pnr_input.isdigit():
-                    st.error("Please enter a valid 10-digit PNR.")
-                else:
-                    with st.spinner("Fetching PNR details..."):
-                        data = get_pnr_status(pnr_input)
-                        if data and isinstance(data, dict) and data.get('error'):
-                            st.error(f"❌ {data['error']}")
-                        elif data:
-                            st.markdown(format_pnr_result(data))
-                            # Refresh button
-                            if st.button("🔄 Refresh PNR", key="refresh_pnr", use_container_width=True):
-                                with st.spinner("Refreshing PNR..."):
-                                    data = get_pnr_status(pnr_input)
-                                    if data and isinstance(data, dict) and data.get('error'):
-                                        st.error(f"❌ {data['error']}")
-                                    elif data:
-                                        st.markdown(format_pnr_result(data))
-                        else:
-                            st.error("❌ PNR not found or flushed.")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Check PNR", key="pnr_check", use_container_width=True):
+                    if not pnr_input or len(pnr_input) != 10 or not pnr_input.isdigit():
+                        st.error("Please enter a valid 10-digit PNR.")
+                    else:
+                        with st.spinner("Fetching PNR details..."):
+                            data = get_pnr_status(pnr_input)
+                            if data and isinstance(data, dict) and data.get('error'):
+                                st.error(f"❌ {data['error']}")
+                            elif data:
+                                st.markdown(format_pnr_result(data))
+                            else:
+                                st.error("❌ PNR not found or flushed.")
+            with col2:
+                if st.button("🔄 Refresh PNR", key="refresh_pnr", use_container_width=True):
+                    if pnr_input and len(pnr_input) == 10 and pnr_input.isdigit():
+                        with st.spinner("Refreshing PNR..."):
+                            data = get_pnr_status(pnr_input)
+                            if data and isinstance(data, dict) and data.get('error'):
+                                st.error(f"❌ {data['error']}")
+                            elif data:
+                                st.markdown(format_pnr_result(data))
+                            else:
+                                st.error("❌ PNR not found or flushed.")
+                    else:
+                        st.warning("Please enter a valid PNR first.")
 
         # ---------- Live Train Tab ----------
         with tab2:
@@ -2128,27 +2130,35 @@ def main():
                 if get_date_label(i) in date_choice:
                     offset = i
                     break
-            if st.button("Get Live Status", key="train_live", use_container_width=True):
-                if not train_no or not train_no.isdigit() or not (3 <= len(train_no) <= 5):
-                    st.error("Please enter a valid train number (3-5 digits).")
-                else:
-                    with st.spinner("Fetching live status..."):
-                        date_str = get_date_for_offset(offset)
-                        data = get_live_train_status(train_no, date_str)
-                        if data and isinstance(data, dict) and data.get('error'):
-                            st.error(f"❌ {data['error']}")
-                        elif data:
-                            st.markdown(format_live_train_result(data))
-                            # Refresh button
-                            if st.button("🔄 Refresh Live Status", key="refresh_live", use_container_width=True):
-                                with st.spinner("Refreshing live status..."):
-                                    data = get_live_train_status(train_no, date_str)
-                                    if data and isinstance(data, dict) and data.get('error'):
-                                        st.error(f"❌ {data['error']}")
-                                    elif data:
-                                        st.markdown(format_live_train_result(data))
-                        else:
-                            st.error("❌ No data available.")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Get Live Status", key="train_live", use_container_width=True):
+                    if not train_no or not train_no.isdigit() or not (3 <= len(train_no) <= 5):
+                        st.error("Please enter a valid train number (3-5 digits).")
+                    else:
+                        with st.spinner("Fetching live status..."):
+                            date_str = get_date_for_offset(offset)
+                            data = get_live_train_status(train_no, date_str)
+                            if data and isinstance(data, dict) and data.get('error'):
+                                st.error(f"❌ {data['error']}")
+                            elif data:
+                                st.markdown(format_live_train_result(data))
+                            else:
+                                st.error("❌ No data available.")
+            with col2:
+                if st.button("🔄 Refresh Live Status", key="refresh_live", use_container_width=True):
+                    if train_no and train_no.isdigit() and (3 <= len(train_no) <= 5):
+                        with st.spinner("Refreshing live status..."):
+                            date_str = get_date_for_offset(offset)
+                            data = get_live_train_status(train_no, date_str)
+                            if data and isinstance(data, dict) and data.get('error'):
+                                st.error(f"❌ {data['error']}")
+                            elif data:
+                                st.markdown(format_live_train_result(data))
+                            else:
+                                st.error("❌ No data available.")
+                    else:
+                        st.warning("Please enter a valid train number first.")
 
         # ---------- Schedule Tab ----------
         with tab3:
@@ -2156,20 +2166,38 @@ def main():
             train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch")
             if 'sch_start' not in st.session_state:
                 st.session_state.sch_start = 0
-            if st.button("Get Schedule", key="train_sch", use_container_width=True):
-                if not train_no_sch or not train_no_sch.isdigit() or not (3 <= len(train_no_sch) <= 5):
-                    st.error("Please enter a valid train number.")
-                else:
-                    with st.spinner("Fetching schedule..."):
-                        data = get_train_schedule(train_no_sch)
-                        if data and isinstance(data, dict) and data.get('error'):
-                            st.error(f"❌ {data['error']}")
-                        elif data:
-                            st.session_state.sch_data = data
-                            st.session_state.sch_start = 0
-                            st.rerun()
-                        else:
-                            st.error("❌ Schedule not found.")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Get Schedule", key="train_sch", use_container_width=True):
+                    if not train_no_sch or not train_no_sch.isdigit() or not (3 <= len(train_no_sch) <= 5):
+                        st.error("Please enter a valid train number.")
+                    else:
+                        with st.spinner("Fetching schedule..."):
+                            data = get_train_schedule(train_no_sch)
+                            if data and isinstance(data, dict) and data.get('error'):
+                                st.error(f"❌ {data['error']}")
+                            elif data:
+                                st.session_state.sch_data = data
+                                st.session_state.sch_start = 0
+                                st.rerun()
+                            else:
+                                st.error("❌ Schedule not found.")
+            with col2:
+                if st.button("🔄 Refresh Schedule", key="refresh_sch", use_container_width=True):
+                    if train_no_sch and train_no_sch.isdigit() and (3 <= len(train_no_sch) <= 5):
+                        with st.spinner("Refreshing schedule..."):
+                            data = get_train_schedule(train_no_sch)
+                            if data and isinstance(data, dict) and data.get('error'):
+                                st.error(f"❌ {data['error']}")
+                            elif data:
+                                st.session_state.sch_data = data
+                                st.session_state.sch_start = 0
+                                st.rerun()
+                            else:
+                                st.error("❌ Schedule not found.")
+                    else:
+                        st.warning("Please enter a valid train number first.")
+
             if 'sch_data' in st.session_state:
                 data = st.session_state.sch_data
                 total = len(data.get('stations', []))
@@ -2203,16 +2231,31 @@ def main():
         st.subheader("🌤️ Weather Information")
         city = st.text_input("Enter City Name", placeholder="e.g., New Delhi, Mumbai, Lucknow", key="weather_city")
         
-        if st.button("Get Weather", key="weather_btn", use_container_width=True):
-            if city:
-                with st.spinner(f"Fetching weather for {city}..."):
-                    data = get_weather(city)
-                    if data and 'error' not in data:
-                        st.session_state.weather_data = data
-                    else:
-                        st.error(data.get('error', 'Error fetching weather'))
-            else:
-                st.warning("Please enter a city name.")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Get Weather", key="weather_btn", use_container_width=True):
+                if city:
+                    with st.spinner(f"Fetching weather for {city}..."):
+                        data = get_weather(city)
+                        if data and 'error' not in data:
+                            st.session_state.weather_data = data
+                            st.rerun()
+                        else:
+                            st.error(data.get('error', 'Error fetching weather'))
+                else:
+                    st.warning("Please enter a city name.")
+        with col2:
+            if st.button("🔄 Refresh Weather", key="refresh_weather", use_container_width=True):
+                if city:
+                    with st.spinner(f"Refreshing weather for {city}..."):
+                        data = get_weather(city)
+                        if data and 'error' not in data:
+                            st.session_state.weather_data = data
+                            st.rerun()
+                        else:
+                            st.error(data.get('error', 'Error fetching weather'))
+                else:
+                    st.warning("Please enter a city name.")
         
         # Display weather if data exists
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
@@ -2236,16 +2279,6 @@ def main():
                 if data.get('icon'):
                     icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
                     st.image(icon_url, caption=data['weather'].title(), width=150)
-            
-            # Refresh button
-            if st.button("🔄 Refresh Weather", key="refresh_weather", use_container_width=True):
-                with st.spinner(f"Refreshing weather for {city}..."):
-                    data = get_weather(city)
-                    if data and 'error' not in data:
-                        st.session_state.weather_data = data
-                        st.rerun()
-                    else:
-                        st.error(data.get('error', 'Error fetching weather'))
 
     # ------------------------------------------------------------------
     # Footer
