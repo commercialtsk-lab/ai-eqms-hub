@@ -4,7 +4,6 @@ import pandas as pd
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-# ⚠️ IMPORTANT: IST define karo
 IST = ZoneInfo("Asia/Kolkata")
 
 from utils.config import GEMINI_API_KEY, GSPREAD_CREDENTIALS, SHEET_ID
@@ -12,6 +11,7 @@ from utils.helpers import now_ist, format_time, format_date, log_activity
 from utils.theme import apply_theme
 from utils.sheets import SHEET_CONFIG, load_sheet_data_cached
 from utils.ntes_client import NTES_AVAILABLE
+from utils.weather import render_weather_widget
 
 st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="expanded")
 
@@ -174,6 +174,11 @@ def main():
         if view != st.session_state.view_mode:
             st.session_state.view_mode = view
             st.rerun()
+
+        # ================================================================
+        # 🌤️ WEATHER WIDGET - Sidebar mein
+        # ================================================================
+        render_weather_widget()
 
     top_c1, top_c2 = st.columns([4, 1])
     with top_c1:
