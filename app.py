@@ -1427,21 +1427,29 @@ def create_table_image(df, title):
 def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     now_str = format_datetime()
     lines = []
-    lines.append(f"📊 *{sheet_name} Sheet Summary*")
+
+    # Header
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append(f"📊 *{sheet_name} SHEET REPORT*")
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append(f"🕐 Generated: {now_str}")
     lines.append("")
 
+    # Overview
+    lines.append("📋 *OVERVIEW:*")
     if selected_count > 0:
-        lines.append(f"✅ *{selected_count} rows selected* out of *{total_rows} total* records.")
+        lines.append(f"   • Selected Records: *{selected_count}*")
+        lines.append(f"   • Total Records in Sheet: *{total_rows}*")
         if pnrs:
-            pnr_list = ", ".join(str(p) for p in pnrs[:5])
-            if len(pnrs) > 5:
-                pnr_list += f" (+{len(pnrs)-5} more)"
-            lines.append(f"🎫 Selected PNRs: {pnr_list}")
+            pnr_list = ", ".join(str(p) for p in pnrs[:8])
+            if len(pnrs) > 8:
+                pnr_list += f" (+{len(pnrs)-8} more)"
+            lines.append(f"   • Selected PNRs: {pnr_list}")
     else:
-        lines.append(f"📋 Total Records: *{total_rows}*")
+        lines.append(f"   • Total Records: *{total_rows}*")
+    lines.append("")
 
-    # Train-wise summary
+    # Train-wise detailed breakdown
     train_col = None
     for c in df.columns:
         if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
@@ -1451,22 +1459,48 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     if train_col and not df.empty:
         train_counts = df[train_col].value_counts().to_dict()
         if train_counts:
+            lines.append("🚆 *TRAIN-WISE BREAKDOWN:*")
+            # Sort by count descending
+            sorted_trains = sorted(train_counts.items(), key=lambda x: x[1], reverse=True)
+            for i, (train, count) in enumerate(sorted_trains[:15], 1):
+                # Get berth count for this train
+                train_mask = df[train_col].astype(str) == str(train)
+                train_df = df[train_mask]
+                berth_col = next((c for c in df.columns if 'BERTH' in c.upper()), None)
+                berth_count = 0
+                if berth_col:
+                    try:
+                        berth_count = int(pd.to_numeric(train_df[berth_col], errors='coerce').sum())
+                    except:
+                        pass
+                berth_str = f" ({berth_count} berths)" if berth_count > 0 else ""
+                lines.append(f"   {i}. Train *{train}* → {count} request{berth_str}")
+            if len(sorted_trains) > 15:
+                lines.append(f"   ... and {len(sorted_trains)-15} more trains")
             lines.append("")
-            lines.append("🚆 *Train-wise Breakdown:*")
-            for train, count in list(train_counts.items())[:10]:
-                lines.append(f"   • Train *{train}*: {count} request(s)")
-            if len(train_counts) > 10:
-                lines.append(f"   ... and {len(train_counts)-10} more trains")
 
-    # Class summary
+    # Class-wise breakdown
     class_col = next((c for c in df.columns if 'CLASS' in c.upper()), None)
     if class_col and not df.empty:
         class_counts = df[class_col].value_counts().to_dict()
         if class_counts:
+            lines.append("🎫 *CLASS-WISE BREAKDOWN:*")
+            sorted_classes = sorted(class_counts.items(), key=lambda x: x[1], reverse=True)
+            for cls, count in sorted_classes:
+                lines.append(f"   • {cls}: *{count}* request(s)")
             lines.append("")
-            lines.append("🎫 *Class-wise Breakdown:*")
-            for cls, count in list(class_counts.items())[:5]:
-                lines.append(f"   • {cls}: {count} request(s)")
+
+    # VIP/Status breakdown
+    vip_col = next((c for c in df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
+    if vip_col and not df.empty:
+        vip_counts = df[vip_col].value_counts().to_dict()
+        # Filter out empty values
+        vip_counts = {k: v for k, v in vip_counts.items() if str(k).strip()}
+        if vip_counts:
+            lines.append("⭐ *VIP / PRIORITY BREAKDOWN:*")
+            for status, count in list(vip_counts.items())[:8]:
+                lines.append(f"   • {status}: *{count}* request(s)")
+            lines.append("")
 
     # DOJ range
     doj_col = next((c for c in df.columns if 'DOJ' in c.upper()), None)
@@ -1479,23 +1513,55 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
             if len(valid_dates) > 0:
                 min_doj = valid_dates.min().strftime('%d-%m-%Y')
                 max_doj = valid_dates.max().strftime('%d-%m-%Y')
+                today_str = now_ist().strftime('%d-%m-%Y')
+                lines.append("📅 *DATE INFORMATION:*")
+                lines.append(f"   • Date Range: {min_doj} to {max_doj}")
+                lines.append(f"   • Today's Date: {today_str}")
+                # Count upcoming vs expired
+                upcoming = sum(1 for d in valid_dates if d >= pd.Timestamp(now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)))
+                expired = len(valid_dates) - upcoming
+                lines.append(f"   • Upcoming Journeys: *{upcoming}*")
+                if expired > 0:
+                    lines.append(f"   • Past Journeys: {expired}")
                 lines.append("")
-                lines.append(f"📅 *Date Range:* {min_doj} to {max_doj}")
         except:
             pass
 
-    # Berths
+    # Route / From-To summary
+    from_col = next((c for c in df.columns if c.upper() == 'FROM'), None)
+    to_col = next((c for c in df.columns if c.upper() == 'TO'), None)
+    if from_col and to_col and not df.empty:
+        try:
+            route_counts = df.groupby([from_col, to_col]).size().to_dict()
+            if route_counts:
+                lines.append("🛤️ *TOP ROUTES:*")
+                sorted_routes = sorted(route_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+                for i, ((frm, to), count) in enumerate(sorted_routes, 1):
+                    lines.append(f"   {i}. {frm} → {to}: *{count}* request(s)")
+                lines.append("")
+        except:
+            pass
+
+    # Total berths
     berth_col = next((c for c in df.columns if 'BERTH' in c.upper()), None)
     if berth_col and not df.empty:
         try:
             total_berths = pd.to_numeric(df[berth_col], errors='coerce').sum()
             if total_berths > 0:
-                lines.append(f"🛏️ *Total Berths:* {int(total_berths)}")
+                lines.append("🛏️ *BERTH SUMMARY:*")
+                lines.append(f"   • Total Berths Required: *{int(total_berths)}*")
+                avg_berths = total_berths / len(df) if len(df) > 0 else 0
+                lines.append(f"   • Average per Record: {avg_berths:.1f}")
+                lines.append("")
         except:
             pass
 
-    lines.append("")
-    lines.append(f"🔗 Sheet Link: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit")
+    # Footer
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append(f"🔗 *Sheet Link:*")
+    lines.append(f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit")
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("📱 Sent via AI EQMS Hub Pro")
 
     return "\n".join(lines)
 
@@ -1616,7 +1682,44 @@ def main():
         # Reliable print button using components.v1.html for unrestricted JS
         components.html("""
         <div style="width:100%; margin-top:8px;">
-            <button onclick="window.parent.print();" style="
+            <button onclick="
+                (function(){
+                    var el = window.parent.document.querySelector('.print-only');
+                    if (!el) { alert('No data to print. Please load a sheet first.'); return; }
+                    var content = el.innerHTML;
+                    var iframe = window.parent.document.createElement('iframe');
+                    iframe.style.position = 'fixed';
+                    iframe.style.top = '-9999px';
+                    iframe.style.left = '-9999px';
+                    iframe.style.width = '0';
+                    iframe.style.height = '0';
+                    iframe.style.border = 'none';
+                    window.parent.document.body.appendChild(iframe);
+                    var doc = iframe.contentWindow.document;
+                    doc.open();
+                    doc.write('<html><head><title>Sheet Print</title>');
+                    doc.write('<style>');
+                    doc.write('@page { margin: 1cm; size: A4 landscape; }');
+                    doc.write('body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background: white; }');
+                    doc.write('h2 { text-align: center; font-size: 18pt; margin-bottom: 5px; color: #000; }');
+                    doc.write('p.meta { text-align: center; font-size: 10pt; margin-bottom: 15px; color: #333; }');
+                    doc.write('table { width: 100%; border-collapse: collapse; font-size: 7.5pt; page-break-inside: auto; }');
+                    doc.write('tr { page-break-inside: avoid; }');
+                    doc.write('thead { display: table-header-group; }');
+                    doc.write('th { background: #333 !important; color: white !important; padding: 4px 5px; border: 1px solid #333; text-align: center; font-weight: bold; }');
+                    doc.write('td { border: 1px solid #999; padding: 3px 4px; text-align: center; color: #000; word-wrap: break-word; }');
+                    doc.write('tr:nth-child(even) { background: #f5f5f5 !important; }');
+                    doc.write('</style></head><body>');
+                    doc.write(content);
+                    doc.write('</body></html>');
+                    doc.close();
+                    setTimeout(function(){
+                        iframe.contentWindow.focus();
+                        iframe.contentWindow.print();
+                        setTimeout(function(){ window.parent.document.body.removeChild(iframe); }, 2000);
+                    }, 300);
+                })();
+            " style="
                 display: block; width: 100%; padding: 10px 16px;
                 background: #0969da; color: white; text-align: center;
                 border-radius: 8px; text-decoration: none; font-weight: 600;
@@ -2167,10 +2270,47 @@ def main():
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
                 st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
             with a5:
-                # Reliable print button using components.v1.html
+                # Reliable print button using iframe approach - prints only sheet data
                 components.html("""
                 <div style="width:100%;">
-                    <button onclick="window.parent.print();" style="
+                    <button onclick="
+                        (function(){
+                            var el = window.parent.document.querySelector('.print-only');
+                            if (!el) { alert('No data to print. Please load a sheet first.'); return; }
+                            var content = el.innerHTML;
+                            var iframe = window.parent.document.createElement('iframe');
+                            iframe.style.position = 'fixed';
+                            iframe.style.top = '-9999px';
+                            iframe.style.left = '-9999px';
+                            iframe.style.width = '0';
+                            iframe.style.height = '0';
+                            iframe.style.border = 'none';
+                            window.parent.document.body.appendChild(iframe);
+                            var doc = iframe.contentWindow.document;
+                            doc.open();
+                            doc.write('<html><head><title>Sheet Print</title>');
+                            doc.write('<style>');
+                            doc.write('@page { margin: 1cm; size: A4 landscape; }');
+                            doc.write('body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background: white; }');
+                            doc.write('h2 { text-align: center; font-size: 18pt; margin-bottom: 5px; color: #000; }');
+                            doc.write('p.meta { text-align: center; font-size: 10pt; margin-bottom: 15px; color: #333; }');
+                            doc.write('table { width: 100%; border-collapse: collapse; font-size: 7.5pt; page-break-inside: auto; }');
+                            doc.write('tr { page-break-inside: avoid; }');
+                            doc.write('thead { display: table-header-group; }');
+                            doc.write('th { background: #333 !important; color: white !important; padding: 4px 5px; border: 1px solid #333; text-align: center; font-weight: bold; }');
+                            doc.write('td { border: 1px solid #999; padding: 3px 4px; text-align: center; color: #000; word-wrap: break-word; }');
+                            doc.write('tr:nth-child(even) { background: #f5f5f5 !important; }');
+                            doc.write('</style></head><body>');
+                            doc.write(content);
+                            doc.write('</body></html>');
+                            doc.close();
+                            setTimeout(function(){
+                                iframe.contentWindow.focus();
+                                iframe.contentWindow.print();
+                                setTimeout(function(){ window.parent.document.body.removeChild(iframe); }, 2000);
+                            }, 300);
+                        })();
+                    " style="
                         display: block; width: 100%; padding: 9px 16px;
                         background: #0969da; color: white; text-align: center;
                         border-radius: 8px; text-decoration: none; font-weight: 600;
