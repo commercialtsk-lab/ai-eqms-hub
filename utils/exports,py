@@ -5,7 +5,6 @@ from fpdf import FPDF
 from utils.helpers import sanitize_latin, format_datetime
 
 def generate_pdf(df, title, full=True):
-    """Generate PDF from dataframe"""
     pdf = FPDF('L', 'mm', 'A4')
     pdf.add_page()
     pdf.set_font("Arial", 'B', 12)
@@ -54,9 +53,7 @@ def generate_pdf(df, title, full=True):
     else:
         return output
 
-
 def create_table_image(df, title):
-    """Create image of table for WhatsApp sharing"""
     if df.empty:
         return None
     
@@ -100,9 +97,7 @@ def create_table_image(df, title):
     plt.close()
     return buf.getvalue()
 
-
 def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
-    """Build WhatsApp message with table data"""
     now_str = format_datetime()
     
     if not df.empty:
@@ -138,16 +133,12 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     msg += f"\n🔗 Sheet: https://docs.google.com/spreadsheets/d/1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI/edit"
     return msg
 
-
 def get_pnr_status_url(pnr):
-    """Generate PNR status URL"""
     if not pnr or len(str(pnr)) != 10:
         return None
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
 
-
 def get_pnr_status(pnr):
-    """Get PNR status from NTES"""
     try:
         from utils.ntes_client import get_pnr_status as ntes_pnr
         return ntes_pnr(pnr)
