@@ -67,7 +67,6 @@ GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
 GSPREAD_CREDENTIALS = st.secrets.get("GSPREAD_CREDENTIALS")
 WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", "7fff411d9ecb183d6053870fc40823c9")
 DRIVE_FOLDER_ID = "1H1gf8WqfoTYFT_pU9WfIDLrHg-NpuUSI"
-REMOVE_BG_API_KEY = st.secrets.get("REMOVE_BG_API_KEY", "")
 SHEET_ID = "1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI"
 
 if not GEMINI_API_KEY or not GSPREAD_CREDENTIALS:
@@ -1402,14 +1401,15 @@ def format_schedule_result(data, start=0, chunk=20):
 # Passport Photo Processing
 # ------------------------------------------------------------------
 def remove_background(image_data):
-    if not REMOVE_BG_API_KEY:
+    key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
+    if not key:
         return None
     try:
         r = requests.post(
             "https://api.remove.bg/v1.0/removebg",
             files={"image_file": ("image.jpg", image_data, "image/jpeg")},
             data={"size": "auto", "format": "png"},
-            headers={"X-Api-Key": REMOVE_BG_API_KEY},
+            headers={"X-Api-Key": key},
             timeout=30
         )
         return r.content if r.status_code == 200 else None
@@ -3080,40 +3080,16 @@ def main():
                 st.markdown("### 📸 Passport Photo Maker")
                 st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
 
-                api_key = st.secrets.get("REMOVE_BG_API_KEY", "")
-                # Fallback: allow user to paste key directly
-                if not api_key:
-                    with st.expander("🔑 Enter API Key Manually", expanded=True):
-                        manual_key = st.text_input("Remove.bg API Key", type="password", key="manual_bg_key", placeholder="Paste your remove.bg API key here")
-                        if manual_key:
-                            st.session_state.remove_bg_key = manual_key
-                            st.success("✅ Key saved for this session! Refreshing...")
-                            st.rerun()
-                    if "remove_bg_key" not in st.session_state:
-                        st.warning("⚠️ REMOVE_BG_API_KEY not found in secrets.")
-                        st.info("💡 Either add it to .streamlit/secrets.toml or paste above.")
-                        st.stop()
-                    else:
-                        api_key = st.session_state.remove_bg_key
-                else:
-                    st.success(f"✅ API Key loaded from secrets: {api_key[:4]}...{api_key[-4:]}")
+                # Read API key fresh from secrets (with strip to handle whitespace)
+                api_key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
 
-                # Update remove_background to use session state fallback
-                def remove_background(image_data):
-                    key = st.secrets.get("REMOVE_BG_API_KEY", "") or st.session_state.get("remove_bg_key", "")
-                    if not key:
-                        return None
-                    try:
-                        r = requests.post(
-                            "https://api.remove.bg/v1.0/removebg",
-                            files={"image_file": ("image.jpg", image_data, "image/jpeg")},
-                            data={"size": "auto", "format": "png"},
-                            headers={"X-Api-Key": key},
-                            timeout=30
-                        )
-                        return r.content if r.status_code == 200 else None
-                    except Exception:
-                        return None
+                # Debug: show key status (masked)
+                if api_key:
+                    st.success(f"✅ API Key loaded from secrets: {api_key[:4]}...{api_key[-4:]}")
+                else:
+                    st.error("❌ REMOVE_BG_API_KEY not found in secrets.")
+                    st.info("💡 Add this to .streamlit/secrets.toml: REMOVE_BG_API_KEY = 'your_key'")
+                    st.stop()
 
                 photo_file = st.file_uploader("Upload Photo", type=["png", "jpg", "jpeg"], key="passport_photo_uploader")
                 if photo_file:
@@ -3134,7 +3110,7 @@ def main():
                                         use_container_width=True
                                     )
                                 else:
-                                    st.error("❌ Failed to process photo. Try another image or check API key.")
+                                    st.error("❌ Failed to process photo. The remove.bg API may have rejected the image. Try another photo.")
                             except Exception as e:
                                 st.error(f"❌ Error: {str(e)[:200]}")
 # ------------------------------------------------------------------
