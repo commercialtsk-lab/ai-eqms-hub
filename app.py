@@ -94,7 +94,7 @@ def main():
                 else:
                     remaining = 10 - int(elapsed)
                     st.caption(f"⏳ Next sync in {remaining}s")
-            if st.button("🔄 Sync Now", use_container_width=True, key="sync_now_btn", help="Force refresh data from Google Sheets"):
+            if st.button("🔄 Sync Now", use_container_width=True, key="sync_now_btn"):
                 st.cache_data.clear()
                 st.session_state.last_refresh = time.time()
                 log_activity("🔄 Manual sync")
@@ -175,9 +175,6 @@ def main():
             st.session_state.view_mode = view
             st.rerun()
 
-        # ================================================================
-        # 🌤️ WEATHER WIDGET - Sidebar mein
-        # ================================================================
         render_weather_widget()
 
     top_c1, top_c2 = st.columns([4, 1])
