@@ -64,13 +64,12 @@ def format_datetime(dt=None):
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
 GSPREAD_CREDENTIALS = st.secrets.get("GSPREAD_CREDENTIALS")
 WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", "7fff411d9ecb183d6053870fc40823c9")
+DRIVE_FOLDER_ID = "1H1gf8WqfoTYFT_pU9WfIDLrHg-NpuUSI"
+SHEET_ID = "1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI"
 
 if not GEMINI_API_KEY or not GSPREAD_CREDENTIALS:
     st.error("❌ Missing credentials! Please check secrets.toml")
     st.stop()
-
-SHEET_ID = "1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI"
-DRIVE_FOLDER_ID = "1H1gf8WqfoTYFT_pU9WfIDLrHg-NpuUSI"
 
 # ------------------------------------------------------------------
 # Session state defaults
@@ -91,7 +90,9 @@ defaults = {
     'auto_theme_detected': False, 'sidebar_collapsed': False,
     'quick_filter_train': '', 'show_keyboard_help': False, 'print_trigger': False,
     'sch_start': 0, 'sch_data': None, 'weather_data': None,
-    'system_theme': 'Day', 'weather_city': 'Tinsukia'
+    'system_theme': 'Day', 'weather_city': 'Tinsukia',
+    'pnr_result': None, 'train_result': None,
+    'last_uploaded_drive_id': None
 }
 
 for key, val in defaults.items():
@@ -111,7 +112,7 @@ def get_date_for_offset(offset):
     return (datetime.now() - timedelta(days=offset)).strftime("%d-%b-%Y")
 
 # ------------------------------------------------------------------
-# Station map (unchanged)
+# Station map
 # ------------------------------------------------------------------
 STATION_MAP = {
     'NTSK': 'New Tinsukia', 'GHY': 'Guwahati', 'NDLS': 'New Delhi', 'HWH': 'Howrah',
@@ -161,7 +162,7 @@ STATION_MAP = {
 }
 
 # ------------------------------------------------------------------
-# Cached resources (Gemini, Sheets, Drive)
+# Cached resources
 # ------------------------------------------------------------------
 @st.cache_resource
 def init_gemini():
@@ -183,7 +184,7 @@ def init_drive():
     return build('drive', 'v3', credentials=creds)
 
 # ------------------------------------------------------------------
-# Helper functions (unchanged)
+# Helper functions
 # ------------------------------------------------------------------
 def clean_pnr(pnr):
     if not pnr:
@@ -221,17 +222,6 @@ def get_station(code):
     code = str(code).upper().strip()
     return f"{code} ({STATION_MAP[code]})" if code in STATION_MAP else code
 
-def extract_hyperlink_url(cell_value):
-    if not cell_value:
-        return None
-    val = str(cell_value)
-    match = re.search(r'HYPERLINK\("([^"]+)"', val, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    if val.startswith('http'):
-        return val
-    return None
-
 def is_expired(doj_str):
     if not doj_str:
         return False
@@ -251,24 +241,6 @@ def col_index_to_letter(idx):
         idx, remainder = divmod(idx - 1, 26)
         result = chr(65 + remainder) + result
     return result
-
-def get_sunset_time():
-    month = now_ist().month
-    if month in [5, 6, 7]:
-        return 18, 45
-    elif month in [11, 12, 1]:
-        return 17, 15
-    elif month in [2, 3, 10]:
-        return 18, 0
-    else:
-        return 18, 30
-
-def is_flag_time():
-    now = now_ist()
-    sunset_h, sunset_m = get_sunset_time()
-    start = now.replace(hour=6, minute=0, second=0, microsecond=0)
-    end = now.replace(hour=sunset_h, minute=sunset_m, second=0, microsecond=0)
-    return start <= now <= end
 
 def log_activity(action: str):
     st.session_state.activity_log.append({'timestamp': format_time(), 'action': action})
@@ -298,7 +270,7 @@ SHEET_CONFIG = {
     "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "doj_col": None}
 }
 
-@st.cache_data(ttl=10, show_spinner=False)
+@st.cache_data(ttl=5, show_spinner=False)
 def load_sheet_data_cached(sheet_name, sheet_id):
     try:
         gc = init_sheets()
@@ -335,215 +307,8 @@ def load_sheet_data_cached(sheet_name, sheet_id):
         return pd.DataFrame()
 
 # ------------------------------------------------------------------
-# Gemini parser (unchanged)
+# Gemini Universal Parser (from Telegram bot)
 # ------------------------------------------------------------------
-def gemini_universal_parser(input_data, input_type, mime_type, progress_callback=None):
-    url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}'
-    system_prompt = """You are TSKEQ Bot's AI extraction engine. You are an EXPERT at reading messy, handwritten, torn, or low-quality railway forms.
-
-=== FIELDS TO EXTRACT (21 fields) ===
-PNR, T_N (Train Number), CLASS, DOJ (DD-MM-YYYY), FROM, TO, BOARDING, PASS_NAME, PASS_PH (10 digits), T_BERTHS, PURPOSE, ADDRESS, DIARY_NO, RECOMMENDATION, DESIGNATION, VIP_STATUS, APPLICATION_DATE, RAILWAY_ZONE, PREFERENCE, PHONE_NUBER, WARRANT_NO
-
-=== SPECIAL RULES ===
-1. DIARY_NO: Look for "No." or "Diary No." pattern. Preserve as-is. Do NOT overwrite with RAIL BOARD unless explicitly stated.
-2. PREFERENCE: If you see "Lower Berth", "Lower Seat", "Coupe", set PREFERENCE = "Lower Seat".
-3. RAIL BOARD: If you see "Office of the Hon'ble Minister Railways", set DIARY_NO="RAIL BOARD", RAILWAY_ZONE="RAIL BOARD".
-4. DOJ: If you see "24/25.06.26", return the FIRST date: "24-06-2026".
-5. Multiple entries: If a table has multiple rows, extract ALL valid entries.
-
-=== OUTPUT FORMAT ===
-Return ONLY a valid JSON array. No explanations.
-[
-  {
-    "PNR": "6307598699",
-    "T_N": "20503",
-    "CLASS": "1A",
-    "DOJ": "12-08-2026",
-    "FROM": "HJP",
-    "TO": "LKO",
-    "BOARDING": "",
-    "PASS_NAME": "INDU DUBEY",
-    "PASS_PH": "9771425900",
-    "T_BERTHS": 1,
-    "PURPOSE": "",
-    "ADDRESS": "",
-    "DIARY_NO": "ECR/CRM/PCCM Cell/EQ/01/2026",
-    "RECOMMENDATION": "MRITYUNJAY KUMAR",
-    "DESIGNATION": "Secy to PCCM",
-    "VIP_STATUS": "",
-    "APPLICATION_DATE": "10-08-2026",
-    "RAILWAY_ZONE": "ECR",
-    "PREFERENCE": "Lower Seat",
-    "PHONE_NUBER": "9771425962",
-    "WARRANT_NO": ""
-  }
-]
-CRITICAL: Return ONLY the JSON array.
-"""
-    parts = []
-    if input_type in ['image', 'pdf']:
-        mime = mime_type or ("image/jpeg" if input_type == 'image' else "application/pdf")
-        parts.append({"inline_data": {"mime_type": mime, "data": input_data}})
-        parts.append({"text": system_prompt})
-    elif input_type == 'audio':
-        parts.append({"inline_data": {"mime_type": mime_type or "audio/ogg", "data": input_data}})
-        parts.append({"text": system_prompt})
-    elif input_type == 'text':
-        parts.append({"text": system_prompt + "\n\nINPUT DATA:\n" + input_data})
-    else:
-        return {'error': 'Unsupported type'}
-    if progress_callback:
-        progress_callback(30, "Sending to Gemini...")
-    payload = {
-        "contents": [{"parts": parts}],
-        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 16384}
-    }
-    try:
-        headers = {"Content-Type": "application/json"}
-        response = requests.post(url, json=payload, headers=headers, timeout=120)
-        if response.status_code != 200:
-            return {'error': f'Gemini API Error: {response.status_code}'}
-        data = response.json()
-        if not data.get('candidates') or not data['candidates'][0].get('content', {}).get('parts'):
-            return {'error': 'Empty response from Gemini'}
-        response_text = data['candidates'][0]['content']['parts'][0]['text']
-        if progress_callback:
-            progress_callback(60, "Parsing Gemini response...")
-        json_match = re.search(r'\[\s*\{[\s\S]*\}\s*\]', response_text)
-        if not json_match:
-            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                if progress_callback:
-                    progress_callback(80, "Using fallback extraction...")
-                return extract_data_manually(response_text, input_data)
-        else:
-            json_str = json_match.group(0)
-        json_str = json_str.replace('```json', '').replace('```', '').strip()
-        json_str = re.sub(r',\s*}', '}', json_str)
-        json_str = re.sub(r',\s*]', ']', json_str)
-        json_str = re.sub(r'([a-zA-Z0-9_]+)\s*:', r'"\1":', json_str)
-        json_str = json_str.replace("'", '"')
-        records = json.loads(json_str)
-        if isinstance(records, dict):
-            records = [records]
-        if progress_callback:
-            progress_callback(90, "Processing records...")
-        result = process_extracted_records(records)
-        if progress_callback:
-            progress_callback(100, "Complete!")
-        return result
-    except Exception as e:
-        return {'error': f'Parser Error: {e}', 'raw': response_text[:500] if 'response_text' in locals() else ''}
-
-def extract_data_manually(response_text, input_data):
-    records = []
-    text = response_text + ' ' + str(input_data or '')
-    text = re.sub(r'\s+', ' ', text).strip()
-    pnr_matches = re.findall(r'\b\d{10}\b', text)
-    if not pnr_matches:
-        return {'error': 'No PNR found'}
-    train_matches = re.findall(r'\b\d{3,5}\b', text)
-    trains = [t for t in train_matches if len(t) != 10]
-    date_matches = re.findall(r'\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4}', text)
-    station_matches = re.findall(r'\b[A-Z]{3,4}\b', text)
-    name_matches = re.findall(r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*', text)
-    names = [n for n in name_matches if 3 < len(n) < 40]
-    phone_matches = re.findall(r'\b\d{10}\b', text)
-    diary_match = re.search(r'No\.?\s*[:#]?\s*([A-Z0-9\/\-]+)', text.upper())
-    diary = diary_match.group(1).strip() if diary_match else ''
-    app_date = ''
-    date_pattern = r'Dated\s*[:#]?\s*(\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4})'
-    date_match = re.search(date_pattern, text, re.IGNORECASE)
-    if date_match:
-        app_date = date_match.group(1)
-    lower_seat = any(kw in text.upper() for kw in ['LOWER BERTH', 'COUPE', 'WOMAN', 'LOWER SEAT'])
-    is_rail_board = smart_detect_rail_board(text)['isRailBoard']
-    max_records = max(len(pnr_matches), len(trains), len(date_matches), len(station_matches), len(names))
-    if max_records == 0:
-        return {'error': 'No data extracted'}
-    for i in range(min(max_records, 5)):
-        rec = {
-            'PNR': pnr_matches[i] if i < len(pnr_matches) else '',
-            'T_N': trains[i] if i < len(trains) else '',
-            'CLASS': '',
-            'DOJ': parse_date(date_matches[i]) if i < len(date_matches) else '',
-            'FROM': station_matches[i] if i < len(station_matches) else '',
-            'TO': station_matches[i+1] if i+1 < len(station_matches) else '',
-            'BOARDING': '',
-            'PASS_NAME': names[i] if i < len(names) else '',
-            'PASS_PH': phone_matches[i] if i < len(phone_matches) else '',
-            'T_BERTHS': 1,
-            'PURPOSE': '',
-            'ADDRESS': '',
-            'DIARY_NO': diary if diary else ('RAIL BOARD' if is_rail_board else ''),
-            'RECOMMENDATION': '',
-            'DESIGNATION': '',
-            'VIP_STATUS': 'MINISTER' if is_rail_board else '',
-            'APPLICATION_DATE': parse_date(app_date) if app_date else '',
-            'RAILWAY_ZONE': 'RAIL BOARD' if is_rail_board else '',
-            'PREFERENCE': 'Lower Seat' if lower_seat else ('RAIL BOARD' if is_rail_board else 'General'),
-            'PHONE_NUBER': '',
-            'WARRANT_NO': ''
-        }
-        if rec['PNR']:
-            records.append(rec)
-    return process_extracted_records(records)
-
-def process_extracted_records(records):
-    cleaned = []
-    seen = set()
-    for rec in records:
-        pnr = clean_pnr(rec.get('PNR', ''))
-        if not pnr or pnr in seen:
-            continue
-        seen.add(pnr)
-        full_text = ' '.join([
-            str(rec.get('PURPOSE', '')), str(rec.get('ADDRESS', '')),
-            str(rec.get('RECOMMENDATION', '')), str(rec.get('DESIGNATION', '')),
-            str(rec.get('DIARY_NO', '')), str(rec.get('PASS_NAME', '')),
-            str(rec.get('PASS_PH', '')), str(rec.get('PHONE_NUBER', ''))
-        ])
-        rail_board = smart_detect_rail_board(full_text)
-        if rail_board['isRailBoard']:
-            rec['DIARY_NO'] = 'RAIL BOARD'
-            rec['RAILWAY_ZONE'] = 'RAIL BOARD'
-            rec['PREFERENCE'] = 'RAIL BOARD'
-            rec['VIP_STATUS'] = 'MINISTER'
-        if not rec.get('WARRANT_NO'):
-            warrant = smart_detect_warrant(full_text)
-            if warrant['found']:
-                rec['WARRANT_NO'] = warrant['warrant']
-        if not rec.get('DIARY_NO') or rec['DIARY_NO'] == '-':
-            diary = smart_detect_diary(full_text)
-            if diary['found']:
-                rec['DIARY_NO'] = diary['diary']
-        if not rec.get('VIP_STATUS'):
-            vip = smart_detect_vip(full_text)
-            if vip:
-                rec['VIP_STATUS'] = vip
-        if rec.get('PREFERENCE') == 'General' or not rec.get('PREFERENCE'):
-            if smart_detect_lower_seat(full_text):
-                rec['PREFERENCE'] = 'Lower Seat'
-        if rec.get('PASS_PH'):
-            rec['PASS_PH'] = clean_phone(rec['PASS_PH'])
-        if rec.get('PHONE_NUBER'):
-            rec['PHONE_NUBER'] = clean_phone(rec['PHONE_NUBER'])
-        if rec.get('DOJ'):
-            rec['DOJ'] = parse_date(rec['DOJ'])
-        if rec.get('APPLICATION_DATE'):
-            rec['APPLICATION_DATE'] = parse_date(rec['APPLICATION_DATE'])
-        if rec.get('T_N'):
-            rec['T_N'] = re.sub(r'\s*(DN|UP)$', '', str(rec['T_N'])).strip()
-        rec.setdefault('PREFERENCE', 'General')
-        rec.setdefault('T_BERTHS', 1)
-        rec.setdefault('CLASS', '')
-        cleaned.append(rec)
-    if not cleaned:
-        return {'error': 'No valid records extracted'}
-    return {'records': cleaned, 'count': len(cleaned)}
-
 def smart_detect_warrant(text):
     if not text:
         return {'warrant': '', 'found': False}
@@ -551,6 +316,8 @@ def smart_detect_warrant(text):
     patterns = [
         r'IC[-_\s]*(\d{2,4})',
         r'WARRANT\s*NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
+        r'WARRANT\s*NUMBER\s*[:#]?\s*([A-Z0-9\-]+)',
+        r'W[\/\-]?NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
         r'MP[-_\s]*(\d{2,4})',
         r'MLA[-_\s]*(\d{2,4})'
     ]
@@ -566,17 +333,49 @@ def smart_detect_rail_board(text):
     if not text:
         return {'isRailBoard': False}
     text = str(text).upper()
-    patterns = [r'RAIL\s*BOARD', r'MINISTER\s*RAILWAYS', r'RAIL\s*MANTRI', r'RAIL\s*BHAWAN']
+    clean_text = re.sub(r'\s+', ' ', text).strip()
+    
+    patterns = [
+        r'RAIL\s*BOARD',
+        r'OFFICE\s*OF\s*(?:THE\s*)?HON\'?BLE\s*MINISTER\s*RAILWAYS',
+        r'OFFICE\s*OF\s*(?:THE\s*)?HONOURABLE\s*MINISTER\s*RAILWAYS',
+        r'HON\'?BLE\s*MINISTER\s*RAILWAYS',
+        r'HONOURABLE\s*MINISTER\s*RAILWAYS',
+        r'MINISTER\s*RAILWAYS',
+        r'MINISTRY\s*OF\s*RAILWAYS',
+        r'RAIL\s*MANTRI',
+        r'RAIL\s*BHAWAN'
+    ]
+    
     for pattern in patterns:
-        if re.search(pattern, text):
+        if re.search(pattern, clean_text):
             return {'isRailBoard': True}
+    
+    keywords = ['MINISTER', 'RAILWAYS', 'RAILWAY', 'HONBLE', "HON'BLE", 'RAIL MANTRI', 'OFFICE', 'RAIL', 'BOARD']
+    score = 0
+    for kw in keywords:
+        if kw in clean_text:
+            score += 1
+    if score >= 4:
+        return {'isRailBoard': True}
+    
+    if 'OFFICE' in clean_text and 'MINISTER' in clean_text and ('RAILWAYS' in clean_text or 'RAILWAY' in clean_text):
+        office_idx = clean_text.find('OFFICE')
+        minister_idx = clean_text.find('MINISTER')
+        if office_idx != -1 and minister_idx != -1 and abs(office_idx - minister_idx) < 50:
+            return {'isRailBoard': True}
+    
     return {'isRailBoard': False}
 
 def smart_detect_diary(text):
     if not text:
         return {'diary': '', 'found': False}
     text = str(text).upper()
-    patterns = [r'DIARY\s*NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)', r'NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)']
+    patterns = [
+        r'DIARY\s*NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)',
+        r'DIARY\s*NUMBER\s*[:#]?\s*([A-Z0-9\/\-]+)',
+        r'D\/?NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)'
+    ]
     for pattern in patterns:
         match = re.search(pattern, text)
         if match:
@@ -597,17 +396,291 @@ def smart_detect_vip(text):
         return 'MP'
     if re.search(r'\bMLA\b', text):
         return 'MLA'
+    if 'OSD' in text:
+        return 'OSD'
+    if 'PMO' in text:
+        return 'PMO'
+    if 'VVIP' in text:
+        return 'VVIP'
+    if 'VIP' in text:
+        return 'VIP'
     return ''
 
 def smart_detect_lower_seat(text):
     if not text:
         return False
     text = str(text).upper()
-    keywords = ['LOWER BERTH', 'COUPE', 'WOMAN', 'LOWER SEAT', 'AGE+', 'MEDICAL', 'HANDICAP', 'SR CITIZEN']
+    keywords = ['AGE+', 'AGE +', 'MEDICAL', 'HANDICAP', 'SR CITIZEN', 'SENIOR', 'DISABLED']
     return any(kw in text for kw in keywords)
 
+def process_extracted_records(records):
+    cleaned = []
+    seen = set()
+    for rec in records:
+        pnr = clean_pnr(rec.get('PNR', ''))
+        if not pnr or pnr in seen:
+            continue
+        seen.add(pnr)
+        
+        full_text = ' '.join([
+            str(rec.get('PURPOSE', '')), str(rec.get('ADDRESS', '')),
+            str(rec.get('RECOMMENDATION', '')), str(rec.get('DESIGNATION', '')),
+            str(rec.get('DIARY_NO', '')), str(rec.get('PASS_NAME', '')),
+            str(rec.get('PASS_PH', '')), str(rec.get('PHONE_NUBER', '')),
+            str(rec.get('WARRANT_NO', '')), str(rec.get('VIP_STATUS', ''))
+        ])
+        
+        zone = str(rec.get('RAILWAY_ZONE', '')).strip()
+        pref = str(rec.get('PREFERENCE', 'General')).strip()
+        vip = str(rec.get('VIP_STATUS', '')).strip().upper()
+        diary_val = str(rec.get('DIARY_NO', '')).strip()
+        warrant_val = str(rec.get('WARRANT_NO', '')).strip()
+        
+        rail_board = smart_detect_rail_board(full_text)
+        if rail_board['isRailBoard']:
+            zone = 'RAIL BOARD'
+            pref = 'RAIL BOARD'
+            vip = 'MINISTER'
+            diary_val = 'RAIL BOARD'
+        
+        if not warrant_val:
+            warrant = smart_detect_warrant(full_text)
+            if warrant['found']:
+                warrant_val = warrant['warrant']
+        
+        if not diary_val or diary_val == '-' or diary_val == '':
+            diary = smart_detect_diary(full_text)
+            if diary['found']:
+                diary_val = diary['diary']
+        
+        if not vip:
+            detected_vip = smart_detect_vip(full_text)
+            if detected_vip:
+                vip = detected_vip
+        
+        if smart_detect_lower_seat(full_text) and (pref == 'General' or pref == '' or pref == '-'):
+            pref = 'Lower Seat'
+        
+        if not pref or pref == '' or pref == '-':
+            pref = 'General'
+        
+        doj_raw = str(rec.get('DOJ', '')).strip()
+        doj_parsed = parse_date(doj_raw)
+        if not doj_parsed or doj_parsed == 'Invalid Date' or doj_parsed == 'NaN-NaN-NaN':
+            doj_parsed = ''
+        
+        clean_record = {
+            'PNR': pnr,
+            'T_N': str(rec.get('T_N', '')).strip(),
+            'CLASS': str(rec.get('CLASS', '')).strip().upper(),
+            'DOJ': doj_parsed,
+            'FROM': str(rec.get('FROM', '')).strip().upper(),
+            'TO': str(rec.get('TO', '')).strip().upper(),
+            'BOARDING': str(rec.get('BOARDING', '')).strip().upper(),
+            'PASS_NAME': str(rec.get('PASS_NAME', '')).strip(),
+            'PASS_PH': clean_phone(str(rec.get('PASS_PH', ''))),
+            'T_BERTHS': int(rec.get('T_BERTHS', 1)) if str(rec.get('T_BERTHS', '')).isdigit() else 1,
+            'PURPOSE': str(rec.get('PURPOSE', '')).strip(),
+            'ADDRESS': str(rec.get('ADDRESS', '')).strip(),
+            'DIARY_NO': diary_val,
+            'RECOMMENDATION': str(rec.get('RECOMMENDATION', '')).strip(),
+            'DESIGNATION': str(rec.get('DESIGNATION', '')).strip(),
+            'VIP_STATUS': vip,
+            'APPLICATION_DATE': parse_date(str(rec.get('APPLICATION_DATE', ''))),
+            'RAILWAY_ZONE': zone,
+            'PREFERENCE': pref,
+            'PHONE_NUBER': clean_phone(str(rec.get('PHONE_NUBER', ''))),
+            'WARRANT_NO': warrant_val
+        }
+        cleaned.append(clean_record)
+    
+    if not cleaned:
+        return {'error': 'No valid records extracted'}
+    return {'records': cleaned, 'count': len(cleaned)}
+
+def gemini_universal_parser(input_data, input_type, mime_type, progress_callback=None):
+    url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}'
+    
+    system_prompt = """You are TSKEQ Bot's AI extraction engine. You are an EXPERT at reading messy, handwritten, torn, or low-quality railway forms.
+
+=== YOUR SPECIAL SKILL ===
+You can read ANY handwriting - no matter how messy, scribbled, or torn the paper is.
+You understand Indian railway form formats perfectly.
+
+=== WHAT YOU ARE READING ===
+This is a railway EQ (Emergency Quota) application form. It contains passenger details for train reservation.
+
+=== FIELDS TO EXTRACT (21 fields) ===
+1. PNR - 10 digit number (look for 10 digits)
+2. T_N (Train Number) - 3 to 5 digits
+3. CLASS - SL, 2A, 3A, CC, 1A, 2S, etc.
+4. DOJ (Date of Journey) - Convert to DD-MM-YYYY
+5. FROM - Station code (3-4 capital letters)
+6. TO - Station code (3-4 capital letters)
+7. BOARDING - Station code (optional)
+8. PASS_NAME - Passenger full name
+9. PASS_PH - 10 digit phone number
+10. T_BERTHS - Number of berths (default 1)
+11. PURPOSE - Purpose of travel
+12. ADDRESS - Full address
+13. DIARY_NO - Diary number
+14. RECOMMENDATION - Recommender's name/designation
+15. DESIGNATION - Designation of recommender
+16. VIP_STATUS - MP, MLA, MR, MINISTER, VIP, VVIP
+17. APPLICATION_DATE - Date of application
+18. RAILWAY_ZONE - Zone (NFR, NR, ER, etc.)
+19. PREFERENCE - General, MP, MLA, MR, etc.
+20. PHONE_NUBER - Recommender's phone
+21. WARRANT_NO - Warrant number (IC-240, MP-123, etc.)
+
+=== HANDWRITTEN IMAGE TIPS ===
+1. If you see scribbled text, try to recognize patterns:
+   - 10 digits together = PNR
+   - 3-5 digits = Train number
+   - 3-4 capital letters = Station code
+   - 10 digits with +91 = Phone number
+   - Names are usually in capital letters
+   - Dates are in DD/MM/YYYY or DD-MM-YYYY format
+
+2. For messy handwriting:
+   - Look at the context of the form
+   - Each field has a label next to it
+   - Use the label to understand what the value is
+   - If a value is unreadable, leave it empty
+
+3. Common patterns to recognize:
+   - "PNR:" or "PNR No." followed by 10 digits
+   - "Train:" or "T/N:" followed by 3-5 digits
+   - "From:" or "F:" followed by station code
+   - "To:" or "T:" followed by station code
+   - "Date:" or "DOJ:" followed by date
+   - "Name:" or "Passenger:" followed by name
+   - "Phone:" or "Mob:" followed by 10 digits
+
+=== RAIL BOARD RULE ===
+ONLY set DIARY_NO="RAIL BOARD", RAILWAY_ZONE="RAIL BOARD", PREFERENCE="RAIL BOARD", VIP_STATUS="MINISTER" if you see:
+- "OFFICE OF THE HON'BLE MINISTER RAILWAYS" OR
+- "MINISTER RAILWAYS" OR
+- "RAIL MANTRI" OR
+- "RAIL BHAWAN"
+Otherwise, leave these fields empty.
+
+=== EXTRACTION RULES ===
+1. PNR: 10 digits only. Remove any extra characters.
+2. Train Number: 3-5 digits. Remove DN/UP suffix.
+3. DOJ: Convert to DD-MM-YYYY. "24/25.06.26" → "24-06-2026"
+4. Phone: Remove all non‑digits, then take the LAST 10 digits. Example: "+919138328565" → "9138328565"
+5. Berths: Number only. Default 1.
+6. Warrant: Look for "IC-240", "MP-123", "WARRANT NO:", "W/No."
+7. Diary: Look for "DIARY NO:", "D/No."
+8. VIP: Check for MP, MLA, MR, MINISTER, VIP, VVIP
+9. Lower Seat: If you see "MEDICAL", "HANDICAP", "SR CITIZEN", "AGE+", set PREFERENCE = "Lower Seat"
+
+=== OUTPUT FORMAT ===
+Return ONLY a valid JSON array. Example with 1 record:
+[
+  {
+    "PNR": "9085176759",
+    "T_N": "15909",
+    "CLASS": "SL",
+    "DOJ": "28-06-2026",
+    "FROM": "NTSK",
+    "TO": "DLI",
+    "BOARDING": "",
+    "PASS_NAME": "SHARIQUE",
+    "PASS_PH": "9876543210",
+    "T_BERTHS": 1,
+    "PURPOSE": "",
+    "ADDRESS": "",
+    "DIARY_NO": "",
+    "RECOMMENDATION": "",
+    "DESIGNATION": "",
+    "VIP_STATUS": "",
+    "APPLICATION_DATE": "",
+    "RAILWAY_ZONE": "",
+    "PREFERENCE": "General",
+    "PHONE_NUBER": "",
+    "WARRANT_NO": ""
+  }
+]
+
+CRITICAL: Return ONLY the JSON array. No explanations, no extra text. If you can't read something, leave it empty. Better to leave empty than to guess wrong."""
+    
+    parts = []
+    
+    if input_type in ['image', 'pdf']:
+        mime = mime_type or ("image/jpeg" if input_type == 'image' else "application/pdf")
+        parts.append({"inline_data": {"mime_type": mime, "data": input_data}})
+        parts.append({"text": system_prompt})
+    elif input_type == 'audio':
+        parts.append({"inline_data": {"mime_type": mime_type or "audio/ogg", "data": input_data}})
+        parts.append({"text": system_prompt})
+    elif input_type == 'text':
+        parts.append({"text": system_prompt + "\n\nINPUT DATA:\n" + input_data})
+    else:
+        return {'error': 'Unsupported type'}
+    
+    if progress_callback:
+        progress_callback(30, "Sending to Gemini...")
+    
+    payload = {
+        "contents": [{"parts": parts}],
+        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 16384}
+    }
+    
+    try:
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, json=payload, headers=headers, timeout=120)
+        
+        if response.status_code != 200:
+            return {'error': f'Gemini API Error: {response.status_code}'}
+        
+        data = response.json()
+        if not data.get('candidates') or not data['candidates'][0].get('content', {}).get('parts'):
+            return {'error': 'Empty response from Gemini'}
+        
+        response_text = data['candidates'][0]['content']['parts'][0]['text']
+        
+        if progress_callback:
+            progress_callback(60, "Parsing Gemini response...")
+        
+        json_match = re.search(r'\[\s*\{[\s\S]*\}\s*\]', response_text)
+        if not json_match:
+            json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                if progress_callback:
+                    progress_callback(80, "Using fallback extraction...")
+                return {'error': 'Could not parse Gemini response', 'raw': response_text[:500]}
+        else:
+            json_str = json_match.group(0)
+        
+        json_str = json_str.replace('```json', '').replace('```', '').strip()
+        json_str = re.sub(r',\s*}', '}', json_str)
+        json_str = re.sub(r',\s*]', ']', json_str)
+        json_str = re.sub(r'([a-zA-Z0-9_]+)\s*:', r'"\1":', json_str)
+        json_str = json_str.replace("'", '"')
+        
+        records = json.loads(json_str)
+        if isinstance(records, dict):
+            records = [records]
+        
+        if progress_callback:
+            progress_callback(90, "Processing records...")
+        
+        result = process_extracted_records(records)
+        
+        if progress_callback:
+            progress_callback(100, "Complete!")
+        
+        return result
+        
+    except Exception as e:
+        return {'error': f'Parser Error: {e}'}
+
 # ------------------------------------------------------------------
-# Drive upload, sheet save, etc. (unchanged)
+# Drive upload and sheet save
 # ------------------------------------------------------------------
 def upload_to_drive(file_bytes, filename, mime_type):
     try:
@@ -642,11 +715,13 @@ def save_to_sheet(sheet, records):
         saved = 0
         skipped = 0
         next_sn = len(all_data) - start_row + 2
+        
         for rec in records:
             pnr = clean_pnr(rec.get('PNR', ''))
             if not pnr or pnr in existing_pnrs:
                 skipped += 1
                 continue
+            
             now = format_datetime()
             row = [
                 next_sn, pnr, rec.get('FROM', ''), rec.get('TO', ''), rec.get('BOARDING', ''),
@@ -661,6 +736,7 @@ def save_to_sheet(sheet, records):
             next_sn += 1
             saved += 1
             time.sleep(0.12)
+        
         return {'saved': saved, 'skipped': skipped}
     except Exception as e:
         return {'error': str(e)}
@@ -716,7 +792,6 @@ Previous conversation:
 # Weather API function
 # ------------------------------------------------------------------
 def get_weather(city_name):
-    """Fetch weather data for a given city using OpenWeatherMap API"""
     if not city_name:
         return {'error': 'Please enter a city name'}
     try:
@@ -744,7 +819,7 @@ def get_weather(city_name):
         return {'error': f'Error fetching weather: {str(e)}'}
 
 # ------------------------------------------------------------------
-# NTES-based railway functions (adapted from telegram bot)
+# NTES-based railway functions
 # ------------------------------------------------------------------
 def safe_list(data, key):
     val = data.get(key) if data else None
@@ -814,8 +889,8 @@ def get_live_train_status(train_number, date_str=None):
         delay = safe_str(response.get('LDEL'), '0')
         journey_date = safe_str(response.get('STD'), date_str)
         pos_lower = str(current_pos).lower()
-        is_completed = any(k in pos_lower for k in ["reached destination", "journey completed", "terminated", "destination reached", "arrived at destination", "train completed", "train reached", "journey ended", "train terminated", "has terminated", "run terminated"])
-        is_not_started = any(k in pos_lower for k in ["not started", "yet to start", "scheduled", "at source", "will start", "starts from", "origin", "before departure"])
+        is_completed = any(k in pos_lower for k in ["reached destination", "journey completed", "terminated"])
+        is_not_started = any(k in pos_lower for k in ["not started", "yet to start", "at source"])
         stations_raw = safe_list(response, 'STNSD')
         if not stations_raw:
             stations_raw = safe_list(response, 'STNS')
@@ -950,7 +1025,6 @@ def format_schedule_result(data, start=0, chunk=20):
         return "❌ Schedule not found.", None
     if isinstance(data, dict) and data.get('error'):
         return f"❌ {data['error']}", None
-    # Handle case where data is a dict but doesn't have 'stations' key
     if isinstance(data, dict) and 'stations' not in data:
         return "❌ Invalid schedule data.", None
     stations = data.get('stations', [])
@@ -970,7 +1044,7 @@ def format_schedule_result(data, start=0, chunk=20):
     return msg, (start, end, total)
 
 # ------------------------------------------------------------------
-# Theme application (updated for train count cards - no background on numbers)
+# Theme application
 # ------------------------------------------------------------------
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
@@ -990,7 +1064,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         button_hover_bg = accent
         button_hover_text = "white"
         button_hover_border = accent
-        number_color = "#0969da"  # Blue for day mode
+        number_color = "#0969da"
     elif theme == 'Dark':
         bg = "#0d1117"
         card_bg = "#161b22"
@@ -1008,7 +1082,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         button_hover_bg = accent
         button_hover_text = "white"
         button_hover_border = accent
-        number_color = "#58a6ff"  # Light blue for dark mode
+        number_color = "#58a6ff"
     else:
         bg = custom_bg if custom_bg else "#ffffff"
         card_bg = bg
@@ -1028,100 +1102,100 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         button_hover_border = accent
         number_color = accent
 
-    css = """
+    css = f"""
     <style>
-        .block-container { padding-top: 0.5rem !important; padding-bottom: 1rem !important; }
-        .stApp { background-color: """ + bg + """ !important; }
-        [data-testid="stSidebar"] { background-color: """ + card_bg + """ !important; border-right: 1px solid """ + border + """ !important; }
+        .block-container {{ padding-top: 0.5rem !important; padding-bottom: 1rem !important; }}
+        .stApp {{ background-color: {bg} !important; }}
+        [data-testid="stSidebar"] {{ background-color: {card_bg} !important; border-right: 1px solid {border} !important; }}
         [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown div,
         [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
         [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] .stDateInput label,
         [data-testid="stSidebar"] .stNumberInput label, [data-testid="stSidebar"] .stTextArea label,
-        [data-testid="stSidebar"] .stRadio label, [data-testid="stSidebar"] .stCheckbox label {
-            color: """ + text_color + """ !important;
-        }
-        header[data-testid="stHeader"] { background-color: """ + card_bg + """ !important; border-bottom: 1px solid """ + border + """ !important; }
+        [data-testid="stSidebar"] .stRadio label, [data-testid="stSidebar"] .stCheckbox label {{
+            color: {text_color} !important;
+        }}
+        header[data-testid="stHeader"] {{ background-color: {card_bg} !important; border-bottom: 1px solid {border} !important; }}
         h1, h2, h3, h4, h5, h6, .stMarkdown p, .stMarkdown div, .stMarkdown span,
         .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
-        [data-testid="stMetricLabel"], [data-testid="stMetricValue"], .stCaption {
-            color: """ + text_color + """ !important;
-        }
+        [data-testid="stMetricLabel"], [data-testid="stMetricValue"], .stCaption {{
+            color: {text_color} !important;
+        }}
         .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea,
-        .stSelectbox > div > div > div {
-            background-color: """ + input_bg + """ !important;
-            color: """ + text_color + """ !important;
-            border: 1px solid """ + border + """ !important;
+        .stSelectbox > div > div > div {{
+            background-color: {input_bg} !important;
+            color: {text_color} !important;
+            border: 1px solid {border} !important;
             border-radius: 8px !important;
-        }
-        .stButton > button {
-            background-color: """ + button_bg + """ !important;
-            color: """ + button_text + """ !important;
-            border: 1px solid """ + button_border + """ !important;
+        }}
+        .stButton > button {{
+            background-color: {button_bg} !important;
+            color: {button_text} !important;
+            border: 1px solid {button_border} !important;
             border-radius: 8px !important;
             font-weight: 500 !important;
             transition: all 0.15s ease !important;
-        }
-        .stButton > button:hover {
-            background-color: """ + button_hover_bg + """ !important;
-            color: """ + button_hover_text + """ !important;
-            border-color: """ + button_hover_border + """ !important;
-        }
-        .stButton > button:disabled { opacity: 0.45 !important; cursor: not-allowed !important; }
-        .stButton > button[kind="primary"] {
-            background-color: """ + accent + """ !important;
+        }}
+        .stButton > button:hover {{
+            background-color: {button_hover_bg} !important;
+            color: {button_hover_text} !important;
+            border-color: {button_hover_border} !important;
+        }}
+        .stButton > button:disabled {{ opacity: 0.45 !important; cursor: not-allowed !important; }}
+        .stButton > button[kind="primary"] {{
+            background-color: {accent} !important;
             color: white !important;
-            border-color: """ + accent + """ !important;
-        }
-        .stButton > button[kind="primary"]:hover {
-            background-color: """ + accent_hover + """ !important;
-            border-color: """ + accent_hover + """ !important;
-        }
-        .stFileUploader {
-            background-color: """ + input_bg + """ !important;
-            border: 2px dashed """ + border + """ !important;
+            border-color: {accent} !important;
+        }}
+        .stButton > button[kind="primary"]:hover {{
+            background-color: {accent_hover} !important;
+            border-color: {accent_hover} !important;
+        }}
+        .stFileUploader {{
+            background-color: {input_bg} !important;
+            border: 2px dashed {border} !important;
             border-radius: 12px !important; padding: 16px !important;
-        }
-        .stFileUploader:hover { border-color: """ + accent + """ !important; }
-        .stFileUploader label { color: """ + text_secondary + """ !important; }
+        }}
+        .stFileUploader:hover {{ border-color: {accent} !important; }}
+        .stFileUploader label {{ color: {text_secondary} !important; }}
         .stDataFrame, [data-testid="stDataFrame"], .stDataEditor, [data-testid="stDataEditor"],
         .stDataFrame table, .stDataEditor table, .stDataFrame th, .stDataEditor th,
-        .stDataFrame td, .stDataEditor td, .stDataEditor input, .stDataEditor textarea {
-            background-color: """ + card_bg + """ !important;
-            color: """ + text_color + """ !important;
-            border-color: """ + border + """ !important;
-        }
-        .stDataFrame th, .stDataEditor th { border-bottom: 2px solid """ + border + """ !important; font-weight: 600 !important; }
-        .stExpander { background-color: """ + card_bg + """ !important; border: 1px solid """ + border + """ !important; border-radius: 8px !important; }
-        .streamlit-expanderHeader { color: """ + text_color + """ !important; font-weight: 600 !important; }
-        .stChatMessage { background-color: """ + card_bg + """ !important; border: 1px solid """ + border + """ !important; border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important; }
-        .stChatInput { background-color: """ + input_bg + """ !important; border: 1px solid """ + border + """ !important; border-radius: 12px !important; }
-        .stChatInput input { color: """ + text_color + """ !important; }
-        [data-testid="stMetric"] { background-color: """ + card_bg + """ !important; border: 1px solid """ + border + """ !important; border-radius: 10px !important; padding: 14px !important; }
-        .stTabs [data-baseweb="tab-list"] { background-color: """ + card_bg + """ !important; border-bottom: 1px solid """ + border + """ !important; }
-        .stTabs [data-baseweb="tab"] { color: """ + text_secondary + """ !important; }
-        .stTabs [data-baseweb="tab-highlight"] { background-color: """ + accent + """ !important; }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: """ + bg + """; }
-        ::-webkit-scrollbar-thumb { background: """ + border + """; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: """ + accent + """; }
-        .action-box { background: """ + card_bg + """; border: 1px solid """ + border + """; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
-        .file-card { background: """ + card_bg + """; border: 1px solid """ + border + """; border-radius: 12px; padding: 14px; margin: 10px 0; }
-        .file-card-title { color: """ + text_color + """; font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }
-        .file-card-meta { color: """ + text_secondary + """; font-size: 0.8rem; margin-bottom: 10px; }
-        .pro-footer { color: """ + text_secondary + """ !important; border-top: 1px solid """ + border + """ !important; text-align: center !important; padding: 18px 0 8px !important; margin-top: 28px !important; font-size: 0.85rem !important; }
-        .sheet-link-btn {
+        .stDataFrame td, .stDataEditor td, .stDataEditor input, .stDataEditor textarea {{
+            background-color: {card_bg} !important;
+            color: {text_color} !important;
+            border-color: {border} !important;
+        }}
+        .stDataFrame th, .stDataEditor th {{ border-bottom: 2px solid {border} !important; font-weight: 600 !important; }}
+        .stExpander {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 8px !important; }}
+        .streamlit-expanderHeader {{ color: {text_color} !important; font-weight: 600 !important; }}
+        .stChatMessage {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important; }}
+        .stChatInput {{ background-color: {input_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; }}
+        .stChatInput input {{ color: {text_color} !important; }}
+        [data-testid="stMetric"] {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 10px !important; padding: 14px !important; }}
+        .stTabs [data-baseweb="tab-list"] {{ background-color: {card_bg} !important; border-bottom: 1px solid {border} !important; }}
+        .stTabs [data-baseweb="tab"] {{ color: {text_secondary} !important; }}
+        .stTabs [data-baseweb="tab-highlight"] {{ background-color: {accent} !important; }}
+        ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
+        ::-webkit-scrollbar-track {{ background: {bg}; }}
+        ::-webkit-scrollbar-thumb {{ background: {border}; border-radius: 10px; }}
+        ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
+        .action-box {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 18px; margin-bottom: 16px; }}
+        .file-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 14px; margin: 10px 0; }}
+        .file-card-title {{ color: {text_color}; font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }}
+        .file-card-meta {{ color: {text_secondary}; font-size: 0.8rem; margin-bottom: 10px; }}
+        .pro-footer {{ color: {text_secondary} !important; border-top: 1px solid {border} !important; text-align: center !important; padding: 18px 0 8px !important; margin-top: 28px !important; font-size: 0.85rem !important; }}
+        .sheet-link-btn {{
             display: inline-block !important; padding: 9px 16px !important;
-            background: """ + button_bg + """ !important; color: """ + accent + """ !important;
-            border: 1px solid """ + button_border + """ !important; border-radius: 8px !important;
+            background: {button_bg} !important; color: {accent} !important;
+            border: 1px solid {button_border} !important; border-radius: 8px !important;
             text-decoration: none !important; text-align: center !important; width: 100% !important;
             transition: all 0.15s !important; font-weight: 500 !important; font-size: 0.9rem !important;
-        }
-        .sheet-link-btn:hover { background: """ + accent + """ !important; color: white !important; border-color: """ + accent + """ !important; }
-        .status-pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 500; }
-        .status-live { background: rgba(63, 185, 80, 0.15); color: """ + success + """; border: 1px solid """ + success + """; }
-        .train-count-container { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; margin: 10px 0; }
-        .train-count-card {
-            border: 1px solid """ + border + """;
+        }}
+        .sheet-link-btn:hover {{ background: {accent} !important; color: white !important; border-color: {accent} !important; }}
+        .status-pill {{ display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 500; }}
+        .status-live {{ background: rgba(63, 185, 80, 0.15); color: {success}; border: 1px solid {success}; }}
+        .train-count-container {{ display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; margin: 10px 0; }}
+        .train-count-card {{
+            border: 1px solid {border};
             border-radius: 10px;
             padding: 8px 16px;
             min-width: 80px;
@@ -1129,89 +1203,106 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             transition: transform 0.15s ease, box-shadow 0.15s ease;
             background: transparent;
-        }
-        .train-count-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.12); border-color: """ + accent + """; }
-        .train-count-number { 
-            color: """ + number_color + """;
+        }}
+        .train-count-card:hover {{ transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.12); border-color: {accent}; }}
+        .train-count-number {{ 
+            color: {number_color};
             font-weight: 800;
             font-size: 1.8rem;
             line-height: 1.2;
             letter-spacing: -0.5px;
-        }
-        .train-count-badge { 
+        }}
+        .train-count-badge {{ 
             display: inline-block;
-            background: """ + accent + """;
+            background: {accent};
             color: white;
             font-size: 0.9rem;
             font-weight: 700;
             padding: 2px 10px;
             border-radius: 20px;
             margin-top: 2px;
-        }
-        .train-total-card { 
-            border: 2px solid """ + success + """;
+        }}
+        .train-total-card {{ 
+            border: 2px solid {success};
             border-radius: 12px;
             padding: 8px 20px;
             min-width: 120px;
             text-align: center;
             background: transparent;
-        }
-        .train-total-number { 
-            color: """ + success + """;
+        }}
+        .train-total-number {{ 
+            color: {success};
             font-weight: 800;
             font-size: 1.5rem;
             line-height: 1.2;
-        }
-        .train-total-label { 
-            color: """ + text_secondary + """;
+        }}
+        .train-total-label {{ 
+            color: {text_secondary};
             font-size: 0.75rem;
             margin-top: 2px;
-        }
-        .weather-card {
-            background: """ + card_bg + """;
-            border: 1px solid """ + border + """;
+        }}
+        .weather-card {{
+            background: {card_bg};
+            border: 1px solid {border};
             border-radius: 16px;
             padding: 20px;
             margin: 10px 0;
             box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-        }
-        .weather-temp {
+        }}
+        .weather-temp {{
             font-size: 3.5rem;
             font-weight: 700;
-            color: """ + number_color + """;
-        }
-        .weather-desc {
+            color: {number_color};
+        }}
+        .weather-desc {{
             font-size: 1.2rem;
-            color: """ + text_color + """;
-        }
-        .weather-detail {
+            color: {text_color};
+        }}
+        .weather-detail {{
             font-size: 0.95rem;
-            color: """ + text_secondary + """;
+            color: {text_secondary};
             padding: 4px 0;
-        }
-        .print-only { display: none; }
-        @media print {
-            @page { margin: 1cm; size: A4 landscape; }
-            body { background: white !important; }
+        }}
+        .result-box {{
+            background: {card_bg};
+            border: 2px solid {accent};
+            border-radius: 12px;
+            padding: 20px;
+            margin: 15px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }}
+        .result-box pre {{
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: inherit;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin: 0;
+            color: {text_color};
+        }}
+        .print-only {{ display: none; }}
+        @media print {{
+            @page {{ margin: 1cm; size: A4 landscape; }}
+            body {{ background: white !important; }}
             .no-print, header, footer, .stSidebar, .stButton, .stExpander, .stTabs,
             .stSelectbox, .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio,
             .stCheckbox, .stFileUploader, .stCaption, .stImage, .stVideo, .stAudio, .stPlotlyChart,
             .action-box, .pro-footer, .status-pill, .sheet-link-btn, .stChatMessage, .stChatInput,
-            .train-count-container, .weather-card { display: none !important; }
-            .print-area, .print-area * { visibility: visible !important; color: black !important; background: white !important; }
-            .print-area { position: absolute; left: 0; top: 0; width: 100%; }
-            .print-only { display: block !important; }
-            .print-only table { width: 100% !important; border-collapse: collapse !important; }
-            .print-only th, .print-only td { border: 1px solid #333 !important; padding: 4px !important; font-size: 10pt !important; }
-            .print-only th { background: #eee !important; }
-        }
-        * { transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }
+            .train-count-container, .weather-card, .result-box {{ display: none !important; }}
+            .print-area, .print-area * {{ visibility: visible !important; color: black !important; background: white !important; }}
+            .print-area {{ position: absolute; left: 0; top: 0; width: 100%; }}
+            .print-only {{ display: block !important; }}
+            .print-only table {{ width: 100% !important; border-collapse: collapse !important; }}
+            .print-only th, .print-only td {{ border: 1px solid #333 !important; padding: 4px !important; font-size: 10pt !important; }}
+            .print-only th {{ background: #eee !important; }}
+        }}
+        * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
 
 # ------------------------------------------------------------------
-# PDF, image, WhatsApp helpers (unchanged)
+# PDF, image, WhatsApp helpers
 # ------------------------------------------------------------------
 def generate_pdf(df, title, full=True):
     pdf = FPDF('L', 'mm', 'A4')
@@ -1330,18 +1421,11 @@ def get_pnr_status_url(pnr):
 # Main function
 # ------------------------------------------------------------------
 def main():
+    # Auto refresh meta tag
     st.markdown("""
-    <script>
-    (function() {
-        const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (isDark && !window.__themeDetected) {
-            window.__themeDetected = true;
-            localStorage.setItem('eqms_theme_preference', 'Dark');
-        }
-    })();
-    </script>
+    <meta http-equiv="refresh" content="5">
     """, unsafe_allow_html=True)
-
+    
     # Theme selection
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
     if not st.session_state.auto_theme_detected:
@@ -1359,20 +1443,6 @@ def main():
     effective_theme = theme_choice
     if theme_choice == 'Auto (System)':
         effective_theme = 'Day'
-        st.markdown("""
-        <script>
-        (function() {
-            const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            if (isDark) {
-                const url = new URL(window.location);
-                url.searchParams.set('__dark_mode', '1');
-                if (!url.searchParams.has('__dark_mode')) {
-                    window.location.href = url.toString();
-                }
-            }
-        })();
-        </script>
-        """, unsafe_allow_html=True)
         if st.query_params.get('__dark_mode') == '1':
             effective_theme = 'Dark'
 
@@ -1401,18 +1471,44 @@ def main():
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
+        # Weather widget in sidebar
+        with st.expander("🌤️ Weather", expanded=True):
+            city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city")
+            if city != st.session_state.weather_city:
+                st.session_state.weather_city = city
+            
+            if st.button("🌤️ Get Weather", key="sidebar_weather_btn", use_container_width=True):
+                if city:
+                    with st.spinner(f"Fetching..."):
+                        data = get_weather(city)
+                        if data and 'error' not in data:
+                            st.session_state.weather_data = data
+                            st.rerun()
+                        else:
+                            st.error(data.get('error', 'Error'))
+            
+            if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
+                data = st.session_state.weather_data
+                st.markdown(f"""
+                <div style="text-align:center; padding: 5px 0;">
+                    <div style="font-size:1.5rem; font-weight:700;">{data['temp']}°C</div>
+                    <div>{data['weather'].title()}</div>
+                    <div style="font-size:0.8rem; color:#656d76;">💧 {data['humidity']}%  🌬️ {data['wind_speed']} m/s</div>
+                </div>
+                """, unsafe_allow_html=True)
+
         with st.expander("🔄 Sync & Status", expanded=True):
-            auto_refresh = st.checkbox("Auto Sync (every 10s)", value=True, key="auto_sync_cb")
+            auto_refresh = st.checkbox("Auto Sync (every 5s)", value=True, key="auto_sync_cb")
             if auto_refresh:
                 elapsed = time.time() - st.session_state.last_refresh
-                if elapsed > 10:
+                if elapsed > 5:
                     st.session_state.last_refresh = time.time()
                     st.cache_data.clear()
                     st.rerun()
                 else:
-                    remaining = 10 - int(elapsed)
+                    remaining = 5 - int(elapsed)
                     st.caption(f"⏳ Next sync in {remaining}s")
-            if st.button("🔄 Sync Now", use_container_width=True, key="sync_now_btn", help="Force refresh data from Google Sheets"):
+            if st.button("🔄 Sync Now", use_container_width=True, key="sync_now_btn"):
                 st.cache_data.clear()
                 st.session_state.last_refresh = time.time()
                 log_activity("🔄 Manual sync")
@@ -1448,8 +1544,7 @@ def main():
                 elif uploaded:
                     st.audio(uploaded, format='audio/mp3')
 
-            if st.button("🚀 Process & Save", type="primary", use_container_width=True, key="process_save_btn",
-                         help="Extract data from file/text and save to Google Sheet"):
+            if st.button("🚀 Process & Save", type="primary", use_container_width=True, key="process_save_btn"):
                 if mode == "📝 Text" and not text_data.strip():
                     st.warning("Text daalein")
                 elif mode != "📝 Text" and not uploaded and not audio_data:
@@ -1505,6 +1600,7 @@ def main():
                                             st.session_state.last_uploaded_drive_url = drive_res.get('url')
                                             st.session_state.last_uploaded_view_url = drive_res.get('view_url')
                                             st.session_state.last_uploaded_print_url = drive_res.get('print_url')
+                                            st.session_state.last_uploaded_drive_id = drive_res.get('id')
                                             st.session_state.upload_success = True
                                             st.session_state.last_upload_time = format_time()
                                             log_activity(f"✅ {fname} → {save_res['saved']} records")
@@ -1537,21 +1633,22 @@ def main():
                     <div class="file-card-meta">Uploaded at {st.session_state.get('last_upload_time', '—')} IST</div>
                 </div>
                 """, unsafe_allow_html=True)
-                c1, c2 = st.columns(2)
+                c1, c2, c3 = st.columns(3)
                 with c1:
                     if st.session_state.last_uploaded_view_url:
-                        st.link_button("👁️ View", st.session_state.last_uploaded_view_url, use_container_width=True,
-                                       help="Open file in Google Drive viewer")
+                        st.link_button("👁️ View", st.session_state.last_uploaded_view_url, use_container_width=True)
                 with c2:
                     if st.session_state.last_uploaded_print_url:
-                        st.link_button("🖨️ Print File (Drive)", st.session_state.last_uploaded_print_url, use_container_width=True,
-                                       help="Open file in Drive print preview")
-                if st.button("🗑️ Clear History", use_container_width=True, key="clear_history_btn",
-                             help="Remove last uploaded file reference from session"):
+                        st.link_button("🖨️ Print File", st.session_state.last_uploaded_print_url, use_container_width=True)
+                with c3:
+                    if st.session_state.last_uploaded_drive_id:
+                        st.link_button("📥 Download", f"https://drive.google.com/uc?export=download&id={st.session_state.last_uploaded_drive_id}", use_container_width=True)
+                if st.button("🗑️ Clear History", use_container_width=True, key="clear_history_btn"):
                     st.session_state.last_uploaded_file = None
                     st.session_state.last_uploaded_drive_url = None
                     st.session_state.last_uploaded_view_url = None
                     st.session_state.last_uploaded_print_url = None
+                    st.session_state.last_uploaded_drive_id = None
                     st.session_state.upload_success = False
                     st.rerun()
 
@@ -1575,7 +1672,7 @@ def main():
             st.cache_data.clear()
             st.rerun()
 
-        # Filters - apply to selected sheet
+        # Filters
         st.markdown("### 🔍 Filters")
         config = SHEET_CONFIG[sheet_choice]
         pnr_col_idx = config.get("pnr_col")
@@ -1614,7 +1711,7 @@ def main():
     df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
     filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
 
-    # Apply filters to the selected sheet's data
+    # Apply filters
     if not filtered_df.empty:
         config = SHEET_CONFIG[sheet_choice]
         pnr_col_idx = config.get("pnr_col")
@@ -1641,7 +1738,7 @@ def main():
                 filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
             filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
 
-    # View mode selection (in main area) - Horizontal radio for better UX
+    # View mode selection
     view = st.radio("View Mode", ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"],
         index=["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"].index(st.session_state.view_mode)
         if st.session_state.view_mode in ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"] else 0,
@@ -1683,15 +1780,13 @@ def main():
         sugg_cols = st.columns(3)
         for i, suggestion in enumerate(st.session_state.chat_suggestions):
             with sugg_cols[i % 3]:
-                if st.button(suggestion, key=f"sugg_{i}", use_container_width=True,
-                             help=f"Ask: {suggestion}"):
+                if st.button(suggestion, key=f"sugg_{i}", use_container_width=True):
                     st.session_state.messages.append({"role": "user", "content": suggestion})
                     with st.spinner("Thinking..."):
                         response = chat_with_gemini(suggestion, st.session_state.messages)
                         st.session_state.messages.append({"role": "assistant", "content": response})
                     st.rerun()
-        if st.button("🗑️ Clear Chat", use_container_width=True, key="clear_chat_btn",
-                     help="Clear all chat history"):
+        if st.button("🗑️ Clear Chat", use_container_width=True, key="clear_chat_btn"):
             st.session_state.messages = []
             st.rerun()
 
@@ -1700,7 +1795,6 @@ def main():
     # ------------------------------------------------------------------
     elif view == "📊 Dashboard":
         st.subheader(f"📊 Analytics Dashboard — {sheet_choice}")
-        # Find train column for this sheet
         train_col = None
         for c in filtered_df.columns:
             if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
@@ -1761,11 +1855,10 @@ def main():
             st.info("No data for charts. Adjust filters or choose another sheet.")
 
     # ------------------------------------------------------------------
-    # View: Data Table (with print fix and train count)
+    # View: Data Table
     # ------------------------------------------------------------------
     elif view == "📋 Data Table":
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
-        # Determine train column and DOJ column for this sheet
         train_col_metric = None
         doj_col = None
         for c in filtered_df.columns:
@@ -1775,7 +1868,6 @@ def main():
                 doj_col = c
 
         if not filtered_df.empty:
-            # Show train count summary - NO background color on numbers, just plain
             if train_col_metric:
                 train_counts_series = filtered_df[train_col_metric].value_counts()
                 st.markdown("**🚆 Train-wise Count**")
@@ -1791,8 +1883,7 @@ def main():
                 st.metric("Total Records", len(filtered_df))
                 st.markdown("---")
 
-        if st.button("🔄 Refresh Data", use_container_width=False, key="refresh_data_btn",
-                     help="Manually reload data from Google Sheet"):
+        if st.button("🔄 Refresh Data", use_container_width=False, key="refresh_data_btn"):
             st.cache_data.clear()
             st.session_state.last_refresh = time.time()
             log_activity("🔄 Manual refresh from main")
@@ -1810,15 +1901,13 @@ def main():
 
             nav1, nav2, nav3 = st.columns([1, 2, 1])
             with nav1:
-                if st.button("◀ Previous", use_container_width=True, disabled=st.session_state.current_page <= 1, key="prev_page_btn",
-                             help="Go to previous page"):
+                if st.button("◀ Previous", use_container_width=True, disabled=st.session_state.current_page <= 1, key="prev_page_btn"):
                     st.session_state.current_page -= 1
                     st.rerun()
             with nav2:
                 st.markdown(f"<div style='text-align:center; padding-top:6px;'><b>Page {st.session_state.current_page} of {total_pages}</b></div>", unsafe_allow_html=True)
             with nav3:
-                if st.button("Next ▶", use_container_width=True, disabled=st.session_state.current_page >= total_pages, key="next_page_btn",
-                             help="Go to next page"):
+                if st.button("Next ▶", use_container_width=True, disabled=st.session_state.current_page >= total_pages, key="next_page_btn"):
                     st.session_state.current_page += 1
                     st.rerun()
 
@@ -1830,7 +1919,7 @@ def main():
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
 
-            # ----- Static HTML table for printing (hidden on screen) -----
+            # Static HTML table for printing
             print_cols = [c for c in display_df.columns if c != 'Select']
             print_df = display_df[print_cols].copy()
             if not print_df.empty:
@@ -1874,8 +1963,7 @@ def main():
             st.markdown("**⚡ Quick Actions**")
             a1, a2, a3, a4, a5 = st.columns(5)
             with a1:
-                if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn",
-                             help="Save all changes made in the table back to Google Sheet"):
+                if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn"):
                     try:
                         gc = init_sheets()
                         sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
@@ -1904,8 +1992,7 @@ def main():
                             st.error(f"Save error: {e}")
                         log_activity(f"❌ Save: {str(e)[:40]}")
             with a2:
-                if st.button("➕ Add Row", use_container_width=True, key="add_row_btn",
-                             help="Append a new blank row at the end of the sheet"):
+                if st.button("➕ Add Row", use_container_width=True, key="add_row_btn"):
                     try:
                         gc = init_sheets()
                         sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
@@ -1928,8 +2015,7 @@ def main():
                         log_activity(f"❌ Add: {str(e)[:40]}")
             with a3:
                 if selected_sheet_rows:
-                    if st.button("🗑️ Delete", use_container_width=True, key="delete_btn",
-                                 help="Delete selected rows from the sheet (click twice to confirm)"):
+                    if st.button("🗑️ Delete", use_container_width=True, key="delete_btn"):
                         if not st.session_state.delete_confirm:
                             st.session_state.delete_confirm = True
                             st.warning("Confirm delete by clicking again.")
@@ -1957,8 +2043,7 @@ def main():
                 msg = build_whatsapp_message(sheet_choice, len(selected_indices), selected_pnrs, len(filtered_df), filtered_df)
                 encoded = urllib.parse.quote(msg)
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
-                st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True,
-                               help="Share table summary as text via WhatsApp")
+                st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
             with a5:
                 st.components.v1.html("""
                 <div style="width:100%;">
@@ -1972,6 +2057,7 @@ def main():
                 """, height=50)
             st.markdown('</div>', unsafe_allow_html=True)
 
+            # WhatsApp Image Share
             st.markdown('<div class="no-print">', unsafe_allow_html=True)
             st.markdown("**📱 WhatsApp Image Share**")
             wa_col1, wa_col2, wa_col3 = st.columns(3)
@@ -1981,16 +2067,14 @@ def main():
                     if img_bytes:
                         st.download_button("🖼️ Download Table Image", data=img_bytes,
                             file_name=f"{sheet_choice}_table.png", mime="image/png",
-                            use_container_width=True, key="wa_img_download",
-                            help="Download image of the full table for sharing")
+                            use_container_width=True, key="wa_img_download")
             with wa_col2:
                 if selected_indices and not filtered_df.empty:
                     sel_img_bytes = create_table_image(filtered_df.iloc[selected_indices], f"{sheet_choice} Selected")
                     if sel_img_bytes:
                         st.download_button("🖼️ Download Selected Image", data=sel_img_bytes,
                             file_name=f"{sheet_choice}_selected.png", mime="image/png",
-                            use_container_width=True, key="wa_sel_img_download",
-                            help="Download image of selected rows only")
+                            use_container_width=True, key="wa_sel_img_download")
                 else:
                     st.info("Select rows to generate image")
             with wa_col3:
@@ -2004,7 +2088,7 @@ def main():
                                 background: #25D366; color: white; border: none; border-radius: 8px;
                                 padding: 9px 16px; width: 100%; font-weight: 600;
                                 cursor: pointer; font-size: 1rem;
-                            " title="Copy table image to clipboard for WhatsApp">📋 Copy Sheet Image</button>
+                            ">📋 Copy Sheet Image</button>
                             <script>
                             function copyImageToClipboard() {{
                                 var imgData = "{img_b64}";
@@ -2030,6 +2114,7 @@ def main():
                     st.info("No data to copy")
             st.markdown('</div>', unsafe_allow_html=True)
 
+            # Export
             st.markdown('<div class="no-print">', unsafe_allow_html=True)
             st.markdown("**📄 Export**")
             e1, e2, e3, e4 = st.columns(4)
@@ -2039,8 +2124,7 @@ def main():
                     pdf_bytes = generate_pdf(export_df, sheet_choice, full=True)
                     st.download_button("📥 PDF (All)", data=pdf_bytes,
                         file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.pdf",
-                        mime="application/pdf", use_container_width=True, key="pdf_all_download",
-                        help="Download all rows as PDF")
+                        mime="application/pdf", use_container_width=True, key="pdf_all_download")
                 except Exception as e:
                     st.warning(f"PDF error: {e}")
             with e2:
@@ -2051,8 +2135,7 @@ def main():
                 csv_sel = export_sel.to_csv(index=False).encode('utf-8')
                 st.download_button("📥 CSV (Selected)" if selected_indices else "📥 CSV (All)", data=csv_sel,
                     file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}_selected.csv",
-                    mime="text/csv", use_container_width=True, key="csv_download",
-                    help="Download as CSV")
+                    mime="text/csv", use_container_width=True, key="csv_download")
             with e3:
                 export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
                 excel_buffer = io.BytesIO()
@@ -2062,15 +2145,14 @@ def main():
                 st.download_button("📥 Excel", data=excel_data,
                     file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True, key="excel_download",
-                    help="Download as Excel file")
+                    use_container_width=True, key="excel_download")
             with e4:
                 csv_full = filtered_df.drop(columns=['_sheet_row'], errors='ignore').to_csv(index=False).encode('utf-8')
                 st.download_button("📋 Copy CSV", data=csv_full, file_name="table.csv",
-                    mime="text/csv", use_container_width=True, key="copy_csv_download",
-                    help="Download full CSV")
+                    mime="text/csv", use_container_width=True, key="copy_csv_download")
             st.markdown('</div>', unsafe_allow_html=True)
 
+            # Extra Features
             st.markdown('<div class="no-print">', unsafe_allow_html=True)
             with st.expander("🔧 Extra Features", expanded=False):
                 feat1, feat2 = st.columns(2)
@@ -2079,8 +2161,7 @@ def main():
                     pnr_check = st.text_input("Enter PNR", max_chars=10, key="pnr_status_input")
                     if pnr_check and len(pnr_check) == 10:
                         pnr_url = get_pnr_status_url(pnr_check)
-                        st.link_button("🔍 Check PNR Status", pnr_url, use_container_width=True,
-                                       help="Open ConfirmTkt PNR status page")
+                        st.link_button("🔍 Check PNR Status", pnr_url, use_container_width=True)
                     st.markdown("**📊 Quick Stats**")
                     if not filtered_df.empty and pnr_col:
                         valid_pnrs = filtered_df[pnr_col].astype(str).str.match(r'\d{10}').sum()
@@ -2106,7 +2187,7 @@ def main():
             st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------------------------------------------------------
-    # View: Railway Features (PNR, Live Train, Schedule)
+    # View: Railway Features
     # ------------------------------------------------------------------
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real‑time Info")
@@ -2116,7 +2197,7 @@ def main():
 
         tab1, tab2, tab3 = st.tabs(["🔍 PNR Status", "🚂 Live Train", "📋 Train Schedule"])
 
-        # ---------- PNR Tab ----------
+        # PNR Tab
         with tab1:
             st.markdown("### PNR Status Check")
             pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr")
@@ -2148,7 +2229,7 @@ def main():
                     else:
                         st.warning("Please enter a valid PNR first.")
 
-        # ---------- Live Train Tab ----------
+        # Live Train Tab
         with tab2:
             st.markdown("### Live Train Status")
             train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train")
@@ -2189,7 +2270,7 @@ def main():
                     else:
                         st.warning("Please enter a valid train number first.")
 
-        # ---------- Schedule Tab ----------
+        # Schedule Tab
         with tab3:
             st.markdown("### Train Schedule / Route")
             train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch")
@@ -2229,7 +2310,6 @@ def main():
 
             if 'sch_data' in st.session_state:
                 data = st.session_state.sch_data
-                # Safely get stations
                 if isinstance(data, dict):
                     stations = data.get('stations', [])
                     total = len(stations)
@@ -2265,13 +2345,12 @@ def main():
     elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
         
-        # City input with default Tinsukia
         city = st.text_input("🏙️ Enter City Name", value=st.session_state.weather_city, 
                             placeholder="e.g., Tinsukia, New Delhi, Mumbai", key="weather_city_input")
         if city != st.session_state.weather_city:
             st.session_state.weather_city = city
         
-        col1, col2, col3 = st.columns([1, 1, 2])
+        col1, col2 = st.columns(2)
         with col1:
             if st.button("🌤️ Get Weather", key="weather_btn", use_container_width=True):
                 if city:
@@ -2297,11 +2376,9 @@ def main():
                 else:
                     st.warning("Please enter a city name.")
         
-        # Display weather if data exists
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
             
-            # Beautiful weather card
             st.markdown(f"""
             <div class="weather-card">
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;">
@@ -2322,7 +2399,6 @@ def main():
                 </div>
             """, unsafe_allow_html=True)
             
-            # Show sunrise/sunset if available
             if data.get('sunrise') and data.get('sunrise') != 'N/A':
                 try:
                     sunrise = datetime.fromtimestamp(data['sunrise']).strftime('%H:%M')
@@ -2336,7 +2412,6 @@ def main():
                 except:
                     pass
             
-            # Weather icon
             if data.get('icon'):
                 icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
                 st.image(icon_url, caption=data['weather'].title(), width=100)
