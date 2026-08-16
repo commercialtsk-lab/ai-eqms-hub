@@ -926,12 +926,12 @@ def get_pnr_status(pnr):
     try:
         response = ntes_client.pnr_status(pnr)
         if not response:
-            return None
+            return {"error": "NO_DATA", "message": "Empty response from NTES server"}
         err_msg = response.get('errorMessage', '')
         if err_msg and 'FLUSHED' in str(err_msg).upper():
             return {"error": "FLUSHED_PNR"}
         if not response.get('pnrNumber'):
-            return None
+            return {"error": "NO_DATA", "message": "Invalid PNR or server error"}
         passengers = []
         for p in safe_list(response, 'passengerList'):
             passengers.append({
@@ -950,8 +950,15 @@ def get_pnr_status(pnr):
             "destination": safe_str(response.get('destinationStation')),
             "passengers": passengers
         }
+    except requests.exceptions.ConnectTimeout:
+        return {"error": "TIMEOUT", "message": "NTES server is not responding. Indian Railways server may be down or blocking requests. Please try again later."}
+    except requests.exceptions.ConnectionError:
+        return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server. Check your internet connection or try using a VPN."}
     except Exception as e:
-        return {"error": str(e)}
+        err_str = str(e)
+        if "timeout" in err_str.lower() or "connection" in err_str.lower():
+            return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}. The Indian Railways server may be temporarily unavailable."}
+        return {"error": "API_ERROR", "message": err_str[:200]}
 
 def get_confirmation_prediction(passengers, chart_status):
     if "prepared" in str(chart_status).lower() or not passengers:
@@ -1213,8 +1220,15 @@ def get_live_train_status(train_number, date_str=None):
             "is_non_stoppage": is_non_stoppage,
             "mapped_idx": mapped_idx
         }
+    except requests.exceptions.ConnectTimeout:
+        return {"error": "TIMEOUT", "message": "NTES server is not responding. Indian Railways server may be down or blocking requests. Please try again later."}
+    except requests.exceptions.ConnectionError:
+        return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server. Check your internet connection or try using a VPN."}
     except Exception as e:
-        return {"error": "API_ERROR", "message": str(e)}
+        err_str = str(e)
+        if "timeout" in err_str.lower() or "connection" in err_str.lower():
+            return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}. The Indian Railways server may be temporarily unavailable."}
+        return {"error": "API_ERROR", "message": err_str[:200]}
 
 def format_live_train_result(data):
     if not data:
@@ -1294,8 +1308,15 @@ def search_trains(query):
                 'destination': safe_str(t.get('destination'))
             })
         return {"query": query, "trains": trains, "last_updated": datetime.now().strftime('%d %b %H:%M:%S')}
+    except requests.exceptions.ConnectTimeout:
+        return {"error": "TIMEOUT", "message": "NTES server is not responding."}
+    except requests.exceptions.ConnectionError:
+        return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server."}
     except Exception as e:
-        return {"error": str(e)}
+        err_str = str(e)
+        if "timeout" in err_str.lower() or "connection" in err_str.lower():
+            return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}"}
+        return {"error": "API_ERROR", "message": err_str[:200]}
 
 def format_train_search(data):
     if not data:
@@ -1337,8 +1358,15 @@ def get_train_schedule(train_number):
             "stations": stations,
             "last_updated": datetime.now().strftime('%d %b %H:%M:%S')
         }
+    except requests.exceptions.ConnectTimeout:
+        return {"error": "TIMEOUT", "message": "NTES server is not responding."}
+    except requests.exceptions.ConnectionError:
+        return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server."}
     except Exception as e:
-        return {"error": f"API Error: {str(e)}"}
+        err_str = str(e)
+        if "timeout" in err_str.lower() or "connection" in err_str.lower():
+            return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}"}
+        return {"error": "API_ERROR", "message": err_str[:200]}
 
 def format_schedule_result(data, start=0, chunk=20):
     if not data:
@@ -3052,9 +3080,14 @@ def main():
                 st.markdown("### 📸 Passport Photo Maker")
                 st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
 
-                if not REMOVE_BG_API_KEY:
+                api_key = st.secrets.get("REMOVE_BG_API_KEY", "")
+                if not api_key:
                     st.warning("⚠️ REMOVE_BG_API_KEY not set in secrets. Passport photo feature disabled.")
+                    st.info("💡 Add this to .streamlit/secrets.toml:
+
+REMOVE_BG_API_KEY = \"your_key_here\"")
                 else:
+                    st.success(f"✅ API Key loaded: {api_key[:4]}...{api_key[-4:]}")
                     photo_file = st.file_uploader("Upload Photo", type=["png", "jpg", "jpeg"], key="passport_photo_uploader")
                     if photo_file:
                         st.image(photo_file, caption="Original Photo", width=250)
