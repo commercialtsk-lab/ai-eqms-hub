@@ -8,6 +8,7 @@ import io
 from utils.helpers import now_ist, format_datetime, log_activity, is_expired, col_index_to_letter
 from utils.sheets import SHEET_CONFIG, init_sheets, SHEET_ID
 from utils.exports import generate_pdf, create_table_image, build_whatsapp_message, get_pnr_status_url
+
 def render_data_table(filtered_df, sheet_choice):
     st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
     
@@ -62,6 +63,7 @@ def render_data_table(filtered_df, sheet_choice):
     display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
     display_df.insert(0, "Select", False)
 
+    # ----- PRINT: Show actual data on print -----
     print_cols = [c for c in display_df.columns if c != 'Select']
     print_df = display_df[print_cols].copy()
     
@@ -87,6 +89,7 @@ def render_data_table(filtered_df, sheet_choice):
             <p style="text-align:center; font-size:9pt;">Generated: {format_datetime()} IST</p>
         </div>
         """, unsafe_allow_html=True)
+    # -----------------------------------------
 
     st.markdown('<div class="print-area no-print">', unsafe_allow_html=True)
     edited_page = st.data_editor(display_df, use_container_width=True, height=400,
@@ -209,6 +212,7 @@ def render_data_table(filtered_df, sheet_choice):
         """, height=0)
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # ----- WhatsApp Image Share -----
     st.markdown('<div class="no-print">', unsafe_allow_html=True)
     st.markdown("**📱 WhatsApp Image Share**")
     wa_col1, wa_col2, wa_col3 = st.columns(3)
@@ -258,6 +262,7 @@ def render_data_table(filtered_df, sheet_choice):
                 """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # ----- Export -----
     st.markdown('<div class="no-print">', unsafe_allow_html=True)
     st.markdown("**📄 Export**")
     e1, e2, e3, e4 = st.columns(4)
@@ -295,6 +300,7 @@ def render_data_table(filtered_df, sheet_choice):
             mime="text/csv", use_container_width=True, key="copy_csv_download")
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # ----- Extra Features -----
     st.markdown('<div class="no-print">', unsafe_allow_html=True)
     with st.expander("🔧 Extra Features", expanded=False):
         feat1, feat2 = st.columns(2)
