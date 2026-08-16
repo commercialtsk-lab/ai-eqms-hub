@@ -1062,7 +1062,7 @@ def format_pnr_result(data):
         note = get_status_note(current, chart_status)
         msg += f"\n{circle}\nBooking Status: {booking} {booking_icon}\nCurrent Status: {current} {current_icon}\nStatus Note: {note}\n"
 
-    msg += f"\n\n📌 Last Updated @ {datetime.now().strftime('%d %b %H:%M:%S')}"
+    msg += f"\n\n📌 Last Updated @ {now_ist().strftime('%d %b %H:%M:%S')}"
     return msg
 
 def get_live_train_status(train_number, date_str=None):
@@ -2883,6 +2883,7 @@ def main():
                                         st.error(f"❌ {data['error']}")
                                 elif data:
                                     st.session_state.pnr_result = data
+                                    st.rerun()
                                 else:
                                     st.error("❌ PNR not found or flushed.")
                 with c2:
@@ -2894,6 +2895,7 @@ def main():
                                     st.error(f"❌ {data['error']}")
                                 elif data:
                                     st.session_state.pnr_result = data
+                                    st.rerun()
                                 else:
                                     st.error("❌ PNR not found or flushed.")
                         else:
@@ -2929,6 +2931,7 @@ def main():
                                     st.error(f"❌ {data['error']}: {data.get('message', '')}")
                                 elif data:
                                     st.session_state.train_result = data
+                                    st.rerun()
                                 else:
                                     st.error("❌ No data available.")
                 with c2:
@@ -2941,6 +2944,7 @@ def main():
                                     st.error(f"❌ {data['error']}: {data.get('message', '')}")
                                 elif data:
                                     st.session_state.train_result = data
+                                    st.rerun()
                                 else:
                                     st.error("❌ No data available.")
                         else:
@@ -2967,6 +2971,7 @@ def main():
                                 st.error(f"❌ {data['error']}")
                             elif data:
                                 st.session_state.search_result = data
+                                st.rerun()
                             else:
                                 st.error("❌ No trains found.")
 
@@ -2995,6 +3000,7 @@ def main():
                                 elif data:
                                     st.session_state.sch_data = data
                                     st.session_state.sch_start = 0
+                                    st.rerun()
                                 else:
                                     st.error("❌ Schedule not found.")
                 with c2:
@@ -3007,6 +3013,7 @@ def main():
                                 elif data:
                                     st.session_state.sch_data = data
                                     st.session_state.sch_start = 0
+                                    st.rerun()
                                 else:
                                     st.error("❌ Schedule not found.")
                         else:
