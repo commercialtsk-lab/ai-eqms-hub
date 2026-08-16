@@ -23,7 +23,7 @@ from matplotlib.table import Table as MplTable
 import numpy as np
 
 # ------------------------------------------------------------------
-# NTES client (try to import, show warning if missing)
+# NTES client (try to import)
 # ------------------------------------------------------------------
 try:
     from ntes import NTESClient
@@ -93,7 +93,8 @@ defaults = {
     'system_theme': 'Day', 'weather_city': 'Tinsukia',
     'pnr_result': None, 'train_result': None,
     'last_uploaded_drive_id': None,
-    'manual_refresh': False
+    'manual_refresh': False,
+    'sheet_print_data': None
 }
 
 for key, val in defaults.items():
@@ -252,8 +253,8 @@ def sanitize_latin(text):
     if not text:
         return ''
     replacements = {
-        '•': '-', '·': '-', '\u2018': "'", '\u2019': "'",
-        '\u201c': '"', '\u201d': '"', '\u2013': '-', '\u2014': '-',
+        '•': '-', '·': '-', '‘': "'", '’': "'",
+        '“': '"', '”': '"', '–': '-', '—': '-',
     }
     for k, v in replacements.items():
         text = text.replace(k, v)
@@ -279,7 +280,7 @@ SHEET_CONFIG = {
     "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "doj_col": None, "headings": []}
 }
 
-@st.cache_data(ttl=30, show_spinner=False)
+@st.cache_data(ttl=10, show_spinner=False)
 def load_sheet_data_cached(sheet_name, sheet_id):
     try:
         gc = init_sheets()
@@ -316,7 +317,7 @@ def load_sheet_data_cached(sheet_name, sheet_id):
         return pd.DataFrame()
 
 # ------------------------------------------------------------------
-# Gemini Universal Parser (from Telegram bot)
+# Gemini Universal Parser (from Telegram bot - EXACT COPY)
 # ------------------------------------------------------------------
 def smart_detect_warrant(text):
     if not text:
@@ -326,7 +327,7 @@ def smart_detect_warrant(text):
         r'IC[-_\s]*(\d{2,4})',
         r'WARRANT\s*NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
         r'WARRANT\s*NUMBER\s*[:#]?\s*([A-Z0-9\-]+)',
-        r'W[/\-]?NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
+        r'W[\/\-]?NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
         r'MP[-_\s]*(\d{2,4})',
         r'MLA[-_\s]*(\d{2,4})'
     ]
@@ -343,23 +344,20 @@ def smart_detect_rail_board(text):
         return {'isRailBoard': False}
     text = str(text).upper()
     clean_text = re.sub(r'\s+', ' ', text).strip()
-
     patterns = [
         r'RAIL\s*BOARD',
-        r'OFFICE\s*OF\s*(?:THE\s*)?HON\'BLE\s*MINISTER\s*RAILWAYS',
+        r'OFFICE\s*OF\s*(?:THE\s*)?HON\'?BLE\s*MINISTER\s*RAILWAYS',
         r'OFFICE\s*OF\s*(?:THE\s*)?HONOURABLE\s*MINISTER\s*RAILWAYS',
-        r'HON\'BLE\s*MINISTER\s*RAILWAYS',
+        r'HON\'?BLE\s*MINISTER\s*RAILWAYS',
         r'HONOURABLE\s*MINISTER\s*RAILWAYS',
         r'MINISTER\s*RAILWAYS',
         r'MINISTRY\s*OF\s*RAILWAYS',
         r'RAIL\s*MANTRI',
         r'RAIL\s*BHAWAN'
     ]
-
     for pattern in patterns:
         if re.search(pattern, clean_text):
             return {'isRailBoard': True}
-
     keywords = ['MINISTER', 'RAILWAYS', 'RAILWAY', 'HONBLE', "HON'BLE", 'RAIL MANTRI', 'OFFICE', 'RAIL', 'BOARD']
     score = 0
     for kw in keywords:
@@ -367,13 +365,11 @@ def smart_detect_rail_board(text):
             score += 1
     if score >= 4:
         return {'isRailBoard': True}
-
     if 'OFFICE' in clean_text and 'MINISTER' in clean_text and ('RAILWAYS' in clean_text or 'RAILWAY' in clean_text):
         office_idx = clean_text.find('OFFICE')
         minister_idx = clean_text.find('MINISTER')
         if office_idx != -1 and minister_idx != -1 and abs(office_idx - minister_idx) < 50:
             return {'isRailBoard': True}
-
     return {'isRailBoard': False}
 
 def smart_detect_diary(text):
@@ -381,9 +377,9 @@ def smart_detect_diary(text):
         return {'diary': '', 'found': False}
     text = str(text).upper()
     patterns = [
-        r'DIARY\s*NO\.?\s*[:#]?\s*([A-Z0-9/\-]+)',
-        r'DIARY\s*NUMBER\s*[:#]?\s*([A-Z0-9/\-]+)',
-        r'D/?NO\.?\s*[:#]?\s*([A-Z0-9/\-]+)'
+        r'DIARY\s*NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)',
+        r'DIARY\s*NUMBER\s*[:#]?\s*([A-Z0-9\/\-]+)',
+        r'D\/?NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)'
     ]
     for pattern in patterns:
         match = re.search(pattern, text)
@@ -430,7 +426,6 @@ def process_extracted_records(records):
         if not pnr or pnr in seen:
             continue
         seen.add(pnr)
-
         full_text = ' '.join([
             str(rec.get('PURPOSE', '')), str(rec.get('ADDRESS', '')),
             str(rec.get('RECOMMENDATION', '')), str(rec.get('DESIGNATION', '')),
@@ -438,46 +433,37 @@ def process_extracted_records(records):
             str(rec.get('PASS_PH', '')), str(rec.get('PHONE_NUBER', '')),
             str(rec.get('WARRANT_NO', '')), str(rec.get('VIP_STATUS', ''))
         ])
-
         zone = str(rec.get('RAILWAY_ZONE', '')).strip()
         pref = str(rec.get('PREFERENCE', 'General')).strip()
         vip = str(rec.get('VIP_STATUS', '')).strip().upper()
         diary_val = str(rec.get('DIARY_NO', '')).strip()
         warrant_val = str(rec.get('WARRANT_NO', '')).strip()
-
         rail_board = smart_detect_rail_board(full_text)
         if rail_board['isRailBoard']:
             zone = 'RAIL BOARD'
             pref = 'RAIL BOARD'
             vip = 'MINISTER'
             diary_val = 'RAIL BOARD'
-
         if not warrant_val:
             warrant = smart_detect_warrant(full_text)
             if warrant['found']:
                 warrant_val = warrant['warrant']
-
         if not diary_val or diary_val == '-' or diary_val == '':
             diary = smart_detect_diary(full_text)
             if diary['found']:
                 diary_val = diary['diary']
-
         if not vip:
             detected_vip = smart_detect_vip(full_text)
             if detected_vip:
                 vip = detected_vip
-
         if smart_detect_lower_seat(full_text) and (pref == 'General' or pref == '' or pref == '-'):
             pref = 'Lower Seat'
-
         if not pref or pref == '' or pref == '-':
             pref = 'General'
-
         doj_raw = str(rec.get('DOJ', '')).strip()
         doj_parsed = parse_date(doj_raw)
         if not doj_parsed or doj_parsed == 'Invalid Date' or doj_parsed == 'NaN-NaN-NaN':
             doj_parsed = ''
-
         clean_record = {
             'PNR': pnr,
             'T_N': str(rec.get('T_N', '')).strip(),
@@ -502,14 +488,12 @@ def process_extracted_records(records):
             'WARRANT_NO': warrant_val
         }
         cleaned.append(clean_record)
-
     if not cleaned:
         return {'error': 'No valid records extracted'}
     return {'records': cleaned, 'count': len(cleaned)}
 
 def gemini_universal_parser(input_data, input_type, mime_type, progress_callback=None):
     url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}'
-
     system_prompt = """You are TSKEQ Bot's AI extraction engine. You are an EXPERT at reading messy, handwritten, torn, or low-quality railway forms.
 
 === YOUR SPECIAL SKILL ===
@@ -577,8 +561,8 @@ Otherwise, leave these fields empty.
 === EXTRACTION RULES ===
 1. PNR: 10 digits only. Remove any extra characters.
 2. Train Number: 3-5 digits. Remove DN/UP suffix.
-3. DOJ: Convert to DD-MM-YYYY. "24/25.06.26" -> "24-06-2026"
-4. Phone: Remove all non-digits, then take the LAST 10 digits. Example: "+919138328565" -> "9138328565"
+3. DOJ: Convert to DD-MM-YYYY. "24/25.06.26" → "24-06-2026"
+4. Phone: Remove all non‑digits, then take the LAST 10 digits. Example: "+919138328565" → "9138328565"
 5. Berths: Number only. Default 1.
 6. Warrant: Look for "IC-240", "MP-123", "WARRANT NO:", "W/No."
 7. Diary: Look for "DIARY NO:", "D/No."
@@ -614,9 +598,7 @@ Return ONLY a valid JSON array. Example with 1 record:
 ]
 
 CRITICAL: Return ONLY the JSON array. No explanations, no extra text. If you can't read something, leave it empty. Better to leave empty than to guess wrong."""
-
     parts = []
-
     if input_type in ['image', 'pdf']:
         mime = mime_type or ("image/jpeg" if input_type == 'image' else "application/pdf")
         parts.append({"inline_data": {"mime_type": mime, "data": input_data}})
@@ -628,31 +610,23 @@ CRITICAL: Return ONLY the JSON array. No explanations, no extra text. If you can
         parts.append({"text": system_prompt + "\n\nINPUT DATA:\n" + input_data})
     else:
         return {'error': 'Unsupported type'}
-
     if progress_callback:
         progress_callback(30, "Sending to Gemini...")
-
     payload = {
         "contents": [{"parts": parts}],
         "generationConfig": {"temperature": 0.4, "maxOutputTokens": 16384}
     }
-
     try:
         headers = {"Content-Type": "application/json"}
         response = requests.post(url, json=payload, headers=headers, timeout=120)
-
         if response.status_code != 200:
             return {'error': f'Gemini API Error: {response.status_code}'}
-
         data = response.json()
         if not data.get('candidates') or not data['candidates'][0].get('content', {}).get('parts'):
             return {'error': 'Empty response from Gemini'}
-
         response_text = data['candidates'][0]['content']['parts'][0]['text']
-
         if progress_callback:
             progress_callback(60, "Parsing Gemini response...")
-
         json_match = re.search(r'\[\s*\{[\s\S]*\}\s*\]', response_text)
         if not json_match:
             json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
@@ -664,27 +638,20 @@ CRITICAL: Return ONLY the JSON array. No explanations, no extra text. If you can
                 return {'error': 'Could not parse Gemini response', 'raw': response_text[:500]}
         else:
             json_str = json_match.group(0)
-
         json_str = json_str.replace('```json', '').replace('```', '').strip()
         json_str = re.sub(r',\s*}', '}', json_str)
         json_str = re.sub(r',\s*]', ']', json_str)
-        json_str = re.sub(r'([a-zA-Z0-9_]+)\s*:', r'"":', json_str)
+        json_str = re.sub(r'([a-zA-Z0-9_]+)\s*:', r'"\1":', json_str)
         json_str = json_str.replace("'", '"')
-
         records = json.loads(json_str)
         if isinstance(records, dict):
             records = [records]
-
         if progress_callback:
             progress_callback(90, "Processing records...")
-
         result = process_extracted_records(records)
-
         if progress_callback:
             progress_callback(100, "Complete!")
-
         return result
-
     except Exception as e:
         return {'error': f'Parser Error: {e}'}
 
@@ -724,13 +691,11 @@ def save_to_sheet(sheet, records):
         saved = 0
         skipped = 0
         next_sn = len(all_data) - start_row + 2
-
         for rec in records:
             pnr = clean_pnr(rec.get('PNR', ''))
             if not pnr or pnr in existing_pnrs:
                 skipped += 1
                 continue
-
             now = format_datetime()
             row = [
                 next_sn, pnr, rec.get('FROM', ''), rec.get('TO', ''), rec.get('BOARDING', ''),
@@ -745,7 +710,6 @@ def save_to_sheet(sheet, records):
             next_sn += 1
             saved += 1
             time.sleep(0.12)
-
         return {'saved': saved, 'skipped': skipped}
     except Exception as e:
         return {'error': str(e)}
@@ -828,7 +792,7 @@ def get_weather(city_name):
         return {'error': f'Error fetching weather: {str(e)}'}
 
 # ------------------------------------------------------------------
-# NTES-based railway functions
+# NTES-based railway functions (EXACT COPY from Telegram bot)
 # ------------------------------------------------------------------
 def safe_list(data, key):
     val = data.get(key) if data else None
@@ -1053,7 +1017,7 @@ def format_schedule_result(data, start=0, chunk=20):
     return msg, (start, end, total)
 
 # ------------------------------------------------------------------
-# Theme application
+# Theme application with Auto (System) detection
 # ------------------------------------------------------------------
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
@@ -1298,13 +1262,16 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             .stCheckbox, .stFileUploader, .stCaption, .stImage, .stVideo, .stAudio, .stPlotlyChart,
             .action-box, .pro-footer, .status-pill, .sheet-link-btn, .stChatMessage, .stChatInput,
             .train-count-container, .weather-card, .result-box {{ display: none !important; }}
-            .print-only {{ display: block !important; visibility: visible !important; }}
-            .print-only table {{ width: 100% !important; border-collapse: collapse !important; font-size: 9pt !important; }}
-            .print-only th, .print-only td {{ border: 1px solid #333 !important; padding: 4px !important; font-size: 9pt !important; color: #000 !important; background: #fff !important; }}
-            .print-only th {{ background: #eee !important; font-weight: bold !important; }}
-            .print-only tr:nth-child(even) td {{ background: #f9f9f9 !important; }}
+            .print-area, .print-area * {{ visibility: visible !important; color: black !important; background: white !important; }}
+            .print-area {{ position: absolute; left: 0; top: 0; width: 100%; }}
+            .print-only {{ display: block !important; }}
+            .print-only table {{ width: 100% !important; border-collapse: collapse !important; }}
+            .print-only th, .print-only td {{ border: 1px solid #333 !important; padding: 4px !important; font-size: 10pt !important; }}
+            .print-only th {{ background: #eee !important; }}
         }}
         * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
+        .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
+        .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -1313,6 +1280,22 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
 # PDF, image, WhatsApp helpers
 # ------------------------------------------------------------------
 def generate_pdf(df, title, full=True):
+    if df.empty:
+        pdf = FPDF('L', 'mm', 'A4')
+        pdf.add_page()
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(0, 10, f"AI EQMS Hub Pro - {title}", ln=True, align='C')
+        pdf.set_font("Arial", '', 12)
+        pdf.cell(0, 10, f"Generated: {format_datetime()} IST", ln=True, align='C')
+        pdf.cell(0, 10, "No data available for this sheet.", ln=True, align='C')
+        output = pdf.output(dest='S')
+        if isinstance(output, bytearray):
+            return bytes(output)
+        elif isinstance(output, str):
+            return output.encode('latin-1')
+        else:
+            return output
+    
     pdf = FPDF('L', 'mm', 'A4')
     pdf.add_page()
     pdf.set_font("Arial", 'B', 12)
@@ -1370,7 +1353,7 @@ def create_table_image(df, title):
     fig_width = max(10, 1.5 * n_cols)
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     ax.axis('off')
-    table = ax.table(cellText=data, colLabels=cols, loc='center', cellLoc='left')
+    table = ax.table(cellText=data, colLabels=cols, loc='center', cellLoc='center')
     table.auto_set_font_size(False)
     table.set_fontsize(9)
     table.scale(1, 1.6)
@@ -1429,6 +1412,26 @@ def get_pnr_status_url(pnr):
 # Main function
 # ------------------------------------------------------------------
 def main():
+    # Detect system theme using JavaScript
+    st.markdown("""
+    <script>
+    (function() {
+        const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const currentTheme = isDark ? 'Dark' : 'Day';
+        const url = new URL(window.location);
+        url.searchParams.set('__system_theme', currentTheme);
+        if (!url.searchParams.has('__system_theme_set')) {
+            url.searchParams.set('__system_theme_set', '1');
+            window.location.href = url.toString();
+        }
+    })();
+    </script>
+    """, unsafe_allow_html=True)
+
+    # Get system theme from query params
+    system_theme = st.query_params.get('__system_theme', 'Day')
+    st.session_state.system_theme = system_theme
+
     # Theme selection
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
     if not st.session_state.auto_theme_detected:
@@ -1443,11 +1446,10 @@ def main():
         st.session_state.theme = theme_choice
         st.rerun()
 
+    # Determine effective theme
     effective_theme = theme_choice
     if theme_choice == 'Auto (System)':
-        effective_theme = 'Day'
-        if st.query_params.get('__dark_mode') == '1':
-            effective_theme = 'Dark'
+        effective_theme = st.session_state.system_theme if st.session_state.system_theme in ['Day', 'Dark'] else 'Day'
 
     if effective_theme == 'Custom':
         custom_bg = st.sidebar.color_picker("Background Color", value=st.session_state.custom_bg, key="custom_bg_picker")
@@ -1461,23 +1463,6 @@ def main():
         custom_text = None
 
     apply_theme(effective_theme, custom_bg, custom_text)
-
-    # Auto theme detection via JavaScript (only when Auto is selected)
-    if theme_choice == 'Auto (System)':
-        st.components.v1.html("""
-        <script>
-        (function() {
-            const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            const url = new URL(window.location.href);
-            const current = url.searchParams.get('__dark_mode');
-            const desired = isDark ? '1' : '0';
-            if (current !== desired) {
-                url.searchParams.set('__dark_mode', desired);
-                window.location.replace(url.toString());
-            }
-        })();
-        </script>
-        """, height=0)
 
     # Sidebar
     with st.sidebar:
@@ -1496,7 +1481,7 @@ def main():
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city")
             if city != st.session_state.weather_city:
                 st.session_state.weather_city = city
-
+            
             if st.button("🌤️ Get Weather", key="sidebar_weather_btn", use_container_width=True):
                 if city:
                     with st.spinner(f"Fetching..."):
@@ -1506,7 +1491,7 @@ def main():
                             st.rerun()
                         else:
                             st.error(data.get('error', 'Error'))
-
+            
             if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
                 data = st.session_state.weather_data
                 st.markdown(f"""
@@ -1527,6 +1512,21 @@ def main():
 
         sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
+
+        # PRINT SHEET button in sidebar
+        st.markdown("---")
+        st.markdown("### 🖨️ Print Options")
+        if st.button("🖨️ PRINT Sheet", use_container_width=True, key="print_sheet_btn"):
+            st.session_state.print_trigger = True
+            st.rerun()
+        
+        if st.session_state.print_trigger:
+            st.markdown("""
+            <script>
+            window.print();
+            </script>
+            """, unsafe_allow_html=True)
+            st.session_state.print_trigger = False
 
         with st.expander("📤 Upload & Process", expanded=True):
             st.caption("📷 Image • 📄 PDF • 📝 Text • 🎤 Audio")
@@ -1682,47 +1682,48 @@ def main():
             st.cache_data.clear()
             st.rerun()
 
-        # Filters
-        st.markdown("### 🔍 Filters")
-        config = SHEET_CONFIG[sheet_choice]
-        pnr_col_idx = config.get("pnr_col")
-        train_col_idx = config.get("train_col")
-        doj_col_idx = config.get("doj_col")
+        # Filters (skip for NOTE sheet)
+        if sheet_choice != "NOTE":
+            st.markdown("### 🔍 Filters")
+            config = SHEET_CONFIG[sheet_choice]
+            pnr_col_idx = config.get("pnr_col")
+            train_col_idx = config.get("train_col")
+            doj_col_idx = config.get("doj_col")
 
-        pnr_input = st.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
-        if pnr_input != st.session_state.pnr_val:
-            st.session_state.pnr_val = pnr_input
-            st.session_state.current_page = 1
-            st.rerun()
+            pnr_input = st.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
+            if pnr_input != st.session_state.pnr_val:
+                st.session_state.pnr_val = pnr_input
+                st.session_state.current_page = 1
+                st.rerun()
 
-        train_input = st.text_input("Train (partial)", value=st.session_state.train_val, key="train_filter_input")
-        if train_input != st.session_state.train_val:
-            st.session_state.train_val = train_input
-            st.session_state.current_page = 1
-            st.rerun()
+            train_input = st.text_input("Train (partial)", value=st.session_state.train_val, key="train_filter_input")
+            if train_input != st.session_state.train_val:
+                st.session_state.train_val = train_input
+                st.session_state.current_page = 1
+                st.rerun()
 
-        c1, c2 = st.columns(2)
-        with c1:
-            from_input = st.date_input("From DOJ", value=st.session_state.from_val,
-                key="from_date_input", format="DD-MM-YYYY")
-        with c2:
-            to_input = st.date_input("To DOJ", value=st.session_state.to_val,
-                key="to_date_input", format="DD-MM-YYYY")
-        if from_input != st.session_state.from_val:
-            st.session_state.from_val = from_input
-            st.session_state.current_page = 1
-            st.rerun()
-        if to_input != st.session_state.to_val:
-            st.session_state.to_val = to_input
-            st.session_state.current_page = 1
-            st.rerun()
+            c1, c2 = st.columns(2)
+            with c1:
+                from_input = st.date_input("From DOJ", value=st.session_state.from_val,
+                    key="from_date_input", format="DD-MM-YYYY")
+            with c2:
+                to_input = st.date_input("To DOJ", value=st.session_state.to_val,
+                    key="to_date_input", format="DD-MM-YYYY")
+            if from_input != st.session_state.from_val:
+                st.session_state.from_val = from_input
+                st.session_state.current_page = 1
+                st.rerun()
+            if to_input != st.session_state.to_val:
+                st.session_state.to_val = to_input
+                st.session_state.current_page = 1
+                st.rerun()
 
     # Load data for selected sheet
     df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
     filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
 
-    # Apply filters
-    if not filtered_df.empty:
+    # Apply filters (skip for NOTE sheet)
+    if not filtered_df.empty and sheet_choice != "NOTE":
         config = SHEET_CONFIG[sheet_choice]
         pnr_col_idx = config.get("pnr_col")
         train_col_idx = config.get("train_col")
@@ -1756,6 +1757,15 @@ def main():
     if view != st.session_state.view_mode:
         st.session_state.view_mode = view
         st.rerun()
+
+    # Top bar with crawling text (marquee)
+    st.markdown("""
+    <div style="background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); padding: 8px 0; border-radius: 4px; margin-bottom: 10px; overflow: hidden;">
+        <marquee behavior="scroll" direction="left" scrollamount="4" style="color: #1f2328; font-weight: 600; font-size: 16px; padding: 4px 0;">
+            🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save
+        </marquee>
+    </div>
+    """, unsafe_allow_html=True)
 
     # Top bar
     top_c1, top_c2 = st.columns([4, 1])
@@ -1877,23 +1887,24 @@ def main():
             if 'DOJ' in c.upper():
                 doj_col = c
 
-        # FIX 2: NOTE sheet me koi count nahi ayega
-        if sheet_choice != "NOTE":
-            if not filtered_df.empty:
-                if train_col_metric:
-                    train_counts_series = filtered_df[train_col_metric].value_counts()
-                    st.markdown("**🚆 Train-wise Count**")
-                    cards_html = '<div class="train-count-container">'
-                    total_eq = len(filtered_df)
-                    cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {total_eq}</div></div>'
-                    for train_num, cnt in train_counts_series.items():
-                        cards_html += f'<div class="train-count-card"><div class="train-count-number">{train_num}</div><div class="train-count-badge">{cnt}</div></div>'
-                    cards_html += '</div>'
-                    st.markdown(cards_html, unsafe_allow_html=True)
-                    st.markdown("---")
-                else:
-                    st.metric("Total Records", len(filtered_df))
-                    st.markdown("---")
+        # Show train count summary (skip for NOTE sheet)
+        if not filtered_df.empty and sheet_choice != "NOTE":
+            if train_col_metric:
+                train_counts_series = filtered_df[train_col_metric].value_counts()
+                st.markdown("**🚆 Train-wise Count**")
+                cards_html = '<div class="train-count-container">'
+                total_eq = len(filtered_df)
+                cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {total_eq}</div></div>'
+                for train_num, cnt in train_counts_series.items():
+                    cards_html += f'<div class="train-count-card"><div class="train-count-number">{train_num}</div><div class="train-count-badge">{cnt}</div></div>'
+                cards_html += '</div>'
+                st.markdown(cards_html, unsafe_allow_html=True)
+                st.markdown("---")
+            else:
+                st.metric("Total Records", len(filtered_df))
+                st.markdown("---")
+        elif sheet_choice == "NOTE":
+            st.info("📋 NOTE sheet - No count displayed")
 
         if st.button("🔄 Refresh Data", use_container_width=False, key="refresh_data_btn"):
             st.cache_data.clear()
@@ -1931,30 +1942,27 @@ def main():
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
 
-            # FIX 3: Print table uses ALL filtered data (not just current page)
-            print_df_full = filtered_df.copy()
-            if '_sheet_row' in print_df_full.columns:
-                print_df_full = print_df_full.drop(columns=['_sheet_row'])
-            if 'Select' in print_df_full.columns:
-                print_df_full = print_df_full.drop(columns=['Select'])
-
-            if not print_df_full.empty:
-                html_table = print_df_full.to_html(index=False, border=1, classes='print-table')
+            # Static HTML table for printing - with actual data
+            print_cols = [c for c in display_df.columns if c != 'Select']
+            print_df = display_df[print_cols].copy()
+            if not print_df.empty:
+                html_table = print_df.to_html(index=False, border=1, classes='print-table')
             else:
                 html_table = "<p>No data</p>"
-
+            
             st.markdown(f"""
             <div class="print-only">
-                <h2 style="text-align:center; margin-bottom:10px;">{sheet_choice} Sheet Data</h2>
-                <p style="text-align:center; font-size:10pt; margin-bottom:15px;">Total Rows: {len(print_df_full)} | Generated: {format_datetime()} IST</p>
+                <h2 style="text-align:center;">{sheet_choice} Sheet Data</h2>
+                <p style="text-align:center; font-size:12pt;">Generated: {format_datetime()} IST</p>
                 {html_table}
-                <p style="text-align:center; font-size:9pt; margin-top:15px; color:#666;">AI EQMS Hub Pro • {format_date()}</p>
             </div>
             """, unsafe_allow_html=True)
 
+            st.markdown('<div class="print-area">', unsafe_allow_html=True)
             edited_page = st.data_editor(display_df, use_container_width=True, height=400,
                 column_config={"Select": st.column_config.CheckboxColumn("Select", width="small")},
                 key=f"editor_{sheet_choice}_{st.session_state.current_page}_{page_size}")
+            st.markdown('</div>', unsafe_allow_html=True)
 
             select_all = st.checkbox("Select All on Page", value=st.session_state.select_all, key="select_all_cb")
             if select_all != st.session_state.select_all:
@@ -2061,16 +2069,9 @@ def main():
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
                 st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
             with a5:
-                st.components.v1.html("""
-                <div style="width:100%;">
-                    <button onclick="window.print();" style="
-                        background: linear-gradient(135deg, #7c3aed, #6d28d9);
-                        color: white; border: none; border-radius: 8px;
-                        padding: 9px 16px; width: 100%; font-weight: 600;
-                        cursor: pointer; font-size: 1rem;
-                    " title="Print the current sheet view">🖨️ PRINT Sheet</button>
-                </div>
-                """, height=50)
+                st.button("🖨️ PRINT", use_container_width=True, key="print_btn_fast"):
+                    st.session_state.print_trigger = True
+                    st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
             # WhatsApp Image Share
@@ -2203,7 +2204,7 @@ def main():
             st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------------------------------------------------------
-    # View: Railway Features
+    # View: Railway Features (EXACT from Telegram bot)
     # ------------------------------------------------------------------
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real‑time Info")
@@ -2213,7 +2214,7 @@ def main():
 
         tab1, tab2, tab3 = st.tabs(["🔍 PNR Status", "🚂 Live Train", "📋 Train Schedule"])
 
-        # PNR Tab
+        # PNR Tab - EXACT from Telegram bot
         with tab1:
             st.markdown("### PNR Status Check")
             pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr")
@@ -2245,7 +2246,7 @@ def main():
                     else:
                         st.warning("Please enter a valid PNR first.")
 
-        # Live Train Tab
+        # Live Train Tab - EXACT from Telegram bot
         with tab2:
             st.markdown("### Live Train Status")
             train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train")
@@ -2286,7 +2287,7 @@ def main():
                     else:
                         st.warning("Please enter a valid train number first.")
 
-        # Schedule Tab
+        # Schedule Tab - EXACT from Telegram bot
         with tab3:
             st.markdown("### Train Schedule / Route")
             train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch")
@@ -2360,12 +2361,12 @@ def main():
     # ------------------------------------------------------------------
     elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
-
+        
         city = st.text_input("🏙️ Enter City Name", value=st.session_state.weather_city, 
                             placeholder="e.g., Tinsukia, New Delhi, Mumbai", key="weather_city_input")
         if city != st.session_state.weather_city:
             st.session_state.weather_city = city
-
+        
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🌤️ Get Weather", key="weather_btn", use_container_width=True):
@@ -2391,10 +2392,10 @@ def main():
                             st.error(data.get('error', 'Error fetching weather'))
                 else:
                     st.warning("Please enter a city name.")
-
+        
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
-
+            
             st.markdown(f"""
             <div class="weather-card">
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;">
@@ -2414,7 +2415,7 @@ def main():
                     <div class="weather-detail">📊 Pressure: {data['pressure']} hPa</div>
                 </div>
             """, unsafe_allow_html=True)
-
+            
             if data.get('sunrise') and data.get('sunrise') != 'N/A':
                 try:
                     sunrise = datetime.fromtimestamp(data['sunrise']).strftime('%H:%M')
@@ -2427,14 +2428,14 @@ def main():
                     """, unsafe_allow_html=True)
                 except:
                     pass
-
+            
             if data.get('icon'):
                 icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
                 st.image(icon_url, caption=data['weather'].title(), width=100)
-
+            
             st.markdown(f'<div style="font-size: 0.8rem; color: #656d76; margin-top: 10px;">🔄 Updated: {format_datetime()}</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
-
+            
         elif st.session_state.weather_data and 'error' in st.session_state.weather_data:
             st.error(st.session_state.weather_data['error'])
 
