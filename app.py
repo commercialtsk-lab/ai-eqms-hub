@@ -3,6 +3,10 @@ import time
 import pandas as pd
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+# ⚠️ IMPORTANT: IST define karo
+IST = ZoneInfo("Asia/Kolkata")
+
 from utils.config import GEMINI_API_KEY, GSPREAD_CREDENTIALS, SHEET_ID
 from utils.helpers import now_ist, format_time, format_date, log_activity
 from utils.theme import apply_theme
