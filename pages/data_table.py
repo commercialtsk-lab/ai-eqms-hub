@@ -3,133 +3,9 @@ import pandas as pd
 import math
 import time
 import urllib.parse
-import io
-import base64
-import matplotlib.pyplot as plt
-from fpdf import FPDF
-from utils.helpers import now_ist, format_datetime, log_activity, is_expired, col_index_to_letter, sanitize_latin
+from utils.helpers import now_ist, format_datetime, log_activity, is_expired, col_index_to_letter
 from utils.sheets import SHEET_CONFIG, init_sheets, SHEET_ID
-
-# ============================================
-# EXPORT FUNCTIONS (Inline - No External Import)
-# ============================================
-
-def generate_pdf(df, title, full=True):
-    pdf = FPDF('L', 'mm', 'A4')
-    pdf.add_page()
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(0, 8, f"AI EQMS Hub Pro - {title}", ln=True, align='C')
-    pdf.set_font("Arial", '', 8)
-    pdf.cell(0, 6, f"Generated: {format_datetime()} IST | Rows: {len(df)}", ln=True, align='C')
-    pdf.ln(3)
-    cols = list(df.columns)
-    if '_sheet_row' in cols:
-        cols.remove('_sheet_row')
-    if len(cols) > 15:
-        cols = cols[:15]
-    col_width = min(25, 277 / max(len(cols), 1))
-    pdf.set_font("Arial", 'B', 7)
-    for c in cols:
-        safe_c = sanitize_latin(str(c)[:15])
-        pdf.cell(col_width, 6, safe_c, border=1)
-    pdf.ln()
-    pdf.set_font("Arial", '', 6)
-    max_rows = len(df) if full else min(120, len(df))
-    for idx, row in df.head(max_rows).iterrows():
-        for c in cols:
-            val = str(row.get(c, ""))[:20]
-            safe_val = sanitize_latin(val)
-            pdf.cell(col_width, 5, safe_val, border=1)
-        pdf.ln()
-        if pdf.get_y() > 185:
-            pdf.add_page()
-            pdf.set_font("Arial", 'B', 7)
-            for c in cols:
-                safe_c = sanitize_latin(str(c)[:15])
-                pdf.cell(col_width, 6, safe_c, border=1)
-            pdf.ln()
-            pdf.set_font("Arial", '', 6)
-    output = pdf.output(dest='S')
-    if isinstance(output, bytearray):
-        return bytes(output)
-    elif isinstance(output, str):
-        return output.encode('latin-1')
-    else:
-        return output
-
-def create_table_image(df, title):
-    if df.empty:
-        return None
-    cols = list(df.columns)
-    if '_sheet_row' in cols:
-        cols.remove('_sheet_row')
-    if len(cols) > 10:
-        cols = cols[:10]
-    data = df[cols].head(50).values
-    n_rows = min(len(df), 50)
-    n_cols = len(cols)
-    fig_height = max(3, 0.5 + 0.45 * n_rows)
-    fig_width = max(10, 1.5 * n_cols)
-    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
-    ax.axis('off')
-    table = ax.table(cellText=data, colLabels=cols, loc='center', cellLoc='left')
-    table.auto_set_font_size(False)
-    table.set_fontsize(9)
-    table.scale(1, 1.6)
-    for (i, j), cell in table.get_celld().items():
-        if i == 0:
-            cell.set_facecolor('#4a90d9')
-            cell.set_text_props(color='white', weight='bold', fontsize=10)
-        else:
-            cell.set_facecolor('#f0f4fa' if i % 2 == 0 else 'white')
-            cell.set_text_props(color='#1f2328', fontsize=9)
-        cell.set_edgecolor('#cccccc')
-        cell.set_height(0.04)
-    plt.title(title, fontsize=14, weight='bold', pad=20, color='#1f2328')
-    plt.tight_layout()
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight', facecolor='white')
-    buf.seek(0)
-    plt.close()
-    return buf.getvalue()
-
-def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
-    now_str = format_datetime()
-    if not df.empty:
-        cols = list(df.columns)
-        if '_sheet_row' in cols:
-            cols.remove('_sheet_row')
-        cols = cols[:5]
-        table_lines = []
-        header = " | ".join([c[:8] for c in cols])
-        table_lines.append(header)
-        table_lines.append("-" * (len(header) + 4))
-        for _, row in df.head(8).iterrows():
-            row_vals = [str(row.get(c, ""))[:10] for c in cols]
-            table_lines.append(" | ".join(row_vals))
-        if len(df) > 8:
-            table_lines.append(f"... and {len(df)-8} more rows")
-        table_text = "\n".join(table_lines)
-    else:
-        table_text = "No data"
-    if selected_count > 0 and pnrs:
-        pnr_text = ", ".join(str(p) for p in pnrs[:10])
-        if len(pnrs) > 10:
-            pnr_text += f" (+{len(pnrs)-10} more)"
-        msg = f"📊 *{sheet_name}* — {selected_count} rows selected\n🕐 {now_str}\n🎫 PNRs: {pnr_text}\n\n```\n{table_text}\n```"
-    else:
-        msg = f"📊 *{sheet_name}* — Total {total_rows} rows\n🕐 {now_str}\n\n```\n{table_text}\n```"
-    msg += f"\n🔗 Sheet: https://docs.google.com/spreadsheets/d/1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI/edit"
-    return msg
-
-def get_pnr_status_url(pnr):
-    if not pnr or len(str(pnr)) != 10:
-        return None
-    return f"https://www.confirmtkt.com/pnr-status/{pnr}"
-
-# ============================================
-# MAIN RENDER FUNCTION
-# ============================================
+from utils.exports import generate_pdf, create_table_image, build_whatsapp_message, get_pnr_status_url
 
 def render_data_table(filtered_df, sheet_choice):
     st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
@@ -167,13 +43,13 @@ def render_data_table(filtered_df, sheet_choice):
 
     nav1, nav2, nav3 = st.columns([1, 2, 1])
     with nav1:
-        if st.button("◀ Previous", use_container_width=True, disabled=st.session_state.current_page <= 1, key="prev_page_btn"):
+        if st.button("◀ Previous", use_container_width=True, disabled=st.session_state.current_page <= 1, key="prev_page_btn", help="Go to previous page"):
             st.session_state.current_page -= 1
             st.rerun()
     with nav2:
         st.markdown(f"<div style='text-align:center; padding-top:6px;'><b>Page {st.session_state.current_page} of {total_pages}</b></div>", unsafe_allow_html=True)
     with nav3:
-        if st.button("Next ▶", use_container_width=True, disabled=st.session_state.current_page >= total_pages, key="next_page_btn"):
+        if st.button("Next ▶", use_container_width=True, disabled=st.session_state.current_page >= total_pages, key="next_page_btn", help="Go to next page"):
             st.session_state.current_page += 1
             st.rerun()
 
@@ -185,21 +61,35 @@ def render_data_table(filtered_df, sheet_choice):
     display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
     display_df.insert(0, "Select", False)
 
+    # ----- PRINT: Show actual data on print -----
     print_cols = [c for c in display_df.columns if c != 'Select']
     print_df = display_df[print_cols].copy()
-    if not print_df.empty:
-        html_table = print_df.to_html(index=False, border=1, classes='print-table')
-    else:
-        html_table = "<p>No data</p>"
-    st.markdown(f"""
-    <div class="print-only">
-        <h3 style="text-align:center;">{sheet_choice} Data</h3>
-        {html_table}
-        <p style="text-align:center; font-size:10pt;">Generated: {format_datetime()} IST</p>
-    </div>
+    
+    st.markdown("""
+    <style>
+        .print-table { display: none; }
+        @media print {
+            .print-table { display: block !important; }
+            .print-table table { width: 100% !important; border-collapse: collapse !important; }
+            .print-table th, .print-table td { border: 1px solid #333 !important; padding: 4px !important; font-size: 10pt !important; }
+            .print-table th { background: #eee !important; }
+            .no-print { display: none !important; }
+            .stDataFrame { display: none !important; }
+        }
+    </style>
     """, unsafe_allow_html=True)
+    
+    if not print_df.empty:
+        st.markdown(f"""
+        <div class="print-table">
+            <h2 style="text-align:center;">{sheet_choice} Data</h2>
+            {print_df.to_html(index=False, border=1)}
+            <p style="text-align:center; font-size:9pt;">Generated: {format_datetime()} IST</p>
+        </div>
+        """, unsafe_allow_html=True)
+    # -----------------------------------------
 
-    st.markdown('<div class="print-area">', unsafe_allow_html=True)
+    st.markdown('<div class="print-area no-print">', unsafe_allow_html=True)
     edited_page = st.data_editor(display_df, use_container_width=True, height=400,
         column_config={"Select": st.column_config.CheckboxColumn("Select", width="small")},
         key=f"editor_{sheet_choice}_{st.session_state.current_page}_{page_size}")
@@ -228,7 +118,7 @@ def render_data_table(filtered_df, sheet_choice):
     st.markdown("**⚡ Quick Actions**")
     a1, a2, a3, a4, a5 = st.columns(5)
     with a1:
-        if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn"):
+        if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn", help="Save all changes to Google Sheet"):
             try:
                 gc = init_sheets()
                 sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
@@ -256,7 +146,7 @@ def render_data_table(filtered_df, sheet_choice):
                 else:
                     st.error(f"Save error: {e}")
     with a2:
-        if st.button("➕ Add Row", use_container_width=True, key="add_row_btn"):
+        if st.button("➕ Add Row", use_container_width=True, key="add_row_btn", help="Add a new blank row"):
             try:
                 gc = init_sheets()
                 sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
@@ -278,7 +168,7 @@ def render_data_table(filtered_df, sheet_choice):
                 st.error(f"Add error: {e}")
     with a3:
         if selected_sheet_rows:
-            if st.button("🗑️ Delete", use_container_width=True, key="delete_btn"):
+            if st.button("🗑️ Delete", use_container_width=True, key="delete_btn", help="Delete selected rows (click twice to confirm)"):
                 if not st.session_state.delete_confirm:
                     st.session_state.delete_confirm = True
                     st.warning("Confirm delete by clicking again.")
@@ -305,16 +195,146 @@ def render_data_table(filtered_df, sheet_choice):
         msg = build_whatsapp_message(sheet_choice, len(selected_indices), selected_pnrs, len(filtered_df), filtered_df)
         encoded = urllib.parse.quote(msg)
         wa_url = f"https://api.whatsapp.com/send?text={encoded}"
-        st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
+        st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True, help="Share table summary via WhatsApp")
     with a5:
+        st.button("🖨️ PRINT SHEET", use_container_width=True, key="print_btn", help="Print the current sheet data")
         st.components.v1.html("""
-        <div style="width:100%;">
-            <button onclick="window.print();" style="
-                background: linear-gradient(135deg, #7c3aed, #6d28d9);
-                color: white; border: none; border-radius: 8px;
-                padding: 9px 16px; width: 100%; font-weight: 600;
-                cursor: pointer; font-size: 1rem;
-            ">🖨️ PRINT Sheet</button>
-        </div>
-        """, height=50)
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const btn = document.querySelector('button[data-testid="baseButton-secondary"][kind="secondary"]');
+                if (btn && btn.innerText.includes('PRINT SHEET')) {
+                    btn.onclick = function() { window.print(); };
+                }
+            });
+        </script>
+        """, height=0)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ----- WhatsApp Image Share -----
+    st.markdown('<div class="no-print">', unsafe_allow_html=True)
+    st.markdown("**📱 WhatsApp Image Share**")
+    wa_col1, wa_col2, wa_col3 = st.columns(3)
+    with wa_col1:
+        if not filtered_df.empty:
+            img_bytes = create_table_image(filtered_df, f"{sheet_choice} Data")
+            if img_bytes:
+                st.download_button("🖼️ Download Table Image", data=img_bytes,
+                    file_name=f"{sheet_choice}_table.png", mime="image/png",
+                    use_container_width=True, key="wa_img_download",
+                    help="Download image of the full table")
+    with wa_col2:
+        if selected_indices and not filtered_df.empty:
+            sel_img_bytes = create_table_image(filtered_df.iloc[selected_indices], f"{sheet_choice} Selected")
+            if sel_img_bytes:
+                st.download_button("🖼️ Download Selected Image", data=sel_img_bytes,
+                    file_name=f"{sheet_choice}_selected.png", mime="image/png",
+                    use_container_width=True, key="wa_sel_img_download",
+                    help="Download image of selected rows")
+        else:
+            st.info("Select rows to generate image")
+    with wa_col3:
+        if not filtered_df.empty:
+            img_bytes = create_table_image(filtered_df, f"{sheet_choice} Data")
+            if img_bytes:
+                img_b64 = base64.b64encode(img_bytes).decode()
+                st.markdown(f"""
+                <button onclick="copyImageToClipboard()" style="
+                    background: #25D366; color: white; border: none; border-radius: 8px;
+                    padding: 9px 16px; width: 100%; font-weight: 600;
+                    cursor: pointer; font-size: 1rem;
+                ">📋 Copy Sheet Image</button>
+                <script>
+                function copyImageToClipboard() {{
+                    var imgData = "{img_b64}";
+                    fetch('data:image/png;base64,' + imgData)
+                        .then(res => res.blob())
+                        .then(blob => {{
+                            navigator.clipboard.write([
+                                new ClipboardItem({{ 'image/png': blob }})
+                            ]).then(() => {{
+                                alert('Image copied to clipboard! Paste it into WhatsApp.');
+                            }}).catch(() => {{
+                                alert('Failed to copy. Please use download instead.');
+                            }});
+                        }});
+                }}
+                </script>
+                """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ----- Export -----
+    st.markdown('<div class="no-print">', unsafe_allow_html=True)
+    st.markdown("**📄 Export**")
+    e1, e2, e3, e4 = st.columns(4)
+    with e1:
+        try:
+            export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
+            pdf_bytes = generate_pdf(export_df, sheet_choice, full=True)
+            st.download_button("📥 PDF (All)", data=pdf_bytes,
+                file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.pdf",
+                mime="application/pdf", use_container_width=True, key="pdf_all_download",
+                help="Download all rows as PDF")
+        except Exception as e:
+            st.warning(f"PDF error: {e}")
+    with e2:
+        if selected_indices:
+            export_sel = filtered_df.iloc[selected_indices].drop(columns=['_sheet_row'], errors='ignore')
+        else:
+            export_sel = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
+        csv_sel = export_sel.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 CSV (Selected)" if selected_indices else "📥 CSV (All)", data=csv_sel,
+            file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}_selected.csv",
+            mime="text/csv", use_container_width=True, key="csv_download",
+            help="Download as CSV")
+    with e3:
+        export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+            export_df.to_excel(writer, sheet_name=sheet_choice, index=False)
+        excel_data = excel_buffer.getvalue()
+        st.download_button("📥 Excel", data=excel_data,
+            file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True, key="excel_download",
+            help="Download as Excel file")
+    with e4:
+        csv_full = filtered_df.drop(columns=['_sheet_row'], errors='ignore').to_csv(index=False).encode('utf-8')
+        st.download_button("📋 Copy CSV", data=csv_full, file_name="table.csv",
+            mime="text/csv", use_container_width=True, key="copy_csv_download",
+            help="Download full CSV")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ----- Extra Features -----
+    st.markdown('<div class="no-print">', unsafe_allow_html=True)
+    with st.expander("🔧 Extra Features", expanded=False):
+        feat1, feat2 = st.columns(2)
+        with feat1:
+            st.markdown("**🎫 PNR Status Check**")
+            pnr_check = st.text_input("Enter PNR", max_chars=10, key="pnr_status_input")
+            if pnr_check and len(pnr_check) == 10:
+                pnr_url = get_pnr_status_url(pnr_check)
+                st.link_button("🔍 Check PNR Status", pnr_url, use_container_width=True,
+                               help="Open ConfirmTkt PNR status page")
+            st.markdown("**📊 Quick Stats**")
+            if not filtered_df.empty and pnr_col:
+                valid_pnrs = filtered_df[pnr_col].astype(str).str.match(r'\d{10}').sum()
+                st.caption(f"✅ Valid PNRs: {valid_pnrs}")
+            if not filtered_df.empty and doj_col is not None:
+                upcoming = sum(1 for _, r in filtered_df.iterrows() if not is_expired(r.get(doj_col, '')))
+                st.caption(f"📅 Upcoming DOJ: {upcoming}")
+        with feat2:
+            st.markdown("**🚆 Train Analysis**")
+            if train_col_metric and not filtered_df.empty:
+                most_common = filtered_df[train_col_metric].mode()
+                if not most_common.empty:
+                    st.caption(f"🔥 Most frequent train: {most_common.iloc[0]}")
+                if pnr_col:
+                    dupes = filtered_df[pnr_col].value_counts()
+                    dupes = dupes[dupes > 1]
+                    if not dupes.empty:
+                        st.warning(f"⚠️ {len(dupes)} duplicate PNR(s) found!")
+                    else:
+                        st.success("✅ No duplicate PNRs")
+            st.markdown("**⌨️ Shortcuts**")
+            st.caption("Ctrl+R: Refresh | Ctrl+P: Print | Auto-sync: ON")
     st.markdown('</div>', unsafe_allow_html=True)
