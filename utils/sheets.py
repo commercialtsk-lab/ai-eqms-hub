@@ -56,3 +56,39 @@ def load_sheet_data_cached(sheet_name, sheet_id):
     except Exception as e:
         st.error(f"Error loading {sheet_name}: {e}")
         return pd.DataFrame()
+
+def save_to_sheet(sheet, records):
+    try:
+        all_data = sheet.get_all_values()
+        existing_pnrs = []
+        start_row = 5
+        for row in all_data[start_row-1:]:
+            if row and len(row) > 1:
+                pnr = clean_pnr(row[1])
+                if pnr:
+                    existing_pnrs.append(pnr)
+        saved = 0
+        skipped = 0
+        next_sn = len(all_data) - start_row + 2
+        for rec in records:
+            pnr = clean_pnr(rec.get('PNR', ''))
+            if not pnr or pnr in existing_pnrs:
+                skipped += 1
+                continue
+            now = format_datetime()
+            row = [
+                next_sn, pnr, rec.get('FROM', ''), rec.get('TO', ''), rec.get('BOARDING', ''),
+                rec.get('T_N', ''), rec.get('CLASS', ''), rec.get('DOJ', ''), rec.get('PASS_NAME', ''),
+                rec.get('PASS_PH', ''), rec.get('T_BERTHS', 1), rec.get('PURPOSE', ''), rec.get('ADDRESS', ''),
+                rec.get('DIARY_NO', ''), rec.get('RECOMMENDATION', ''), rec.get('DESIGNATION', ''),
+                rec.get('PHONE_NUBER', ''), rec.get('VIP_STATUS', ''), rec.get('WARRANT_NO', ''),
+                now, rec.get('APPLICATION_DATE', ''), rec.get('RAILWAY_ZONE', ''), rec.get('PREFERENCE', 'General')
+            ]
+            sheet.append_row(row)
+            existing_pnrs.append(pnr)
+            next_sn += 1
+            saved += 1
+            time.sleep(0.12)
+        return {'saved': saved, 'skipped': skipped}
+    except Exception as e:
+        return {'error': str(e)}
