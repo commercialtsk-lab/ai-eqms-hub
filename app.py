@@ -1919,16 +1919,21 @@ def main():
         st.markdown("---")
         st.markdown("### 🖨️ Print Sheet")
         st.caption("Current sheet data ko print karein")
-        st.components.v1.html("""
-        <div style="width:100%;">
-            <button onclick="window.print();" style="
-                background: linear-gradient(135deg, #7c3aed, #6d28d9);
-                color: white; border: none; border-radius: 8px;
-                padding: 10px 16px; width: 100%; font-weight: 600;
-                cursor: pointer; font-size: 0.95rem;
-            " title="Print the current sheet view">🖨️ PRINT Sheet</button>
-        </div>
-        """, height=45)
+        print_key = 'print_b64_' + sheet_choice
+        if print_key in st.session_state and st.session_state[print_key]:
+            print_js = f"""
+            <div style="width:100%;">
+                <button onclick="var w=window.open();w.document.write(atob('{st.session_state[print_key]}'));w.document.close();" style="
+                    background: linear-gradient(135deg, #7c3aed, #6d28d9);
+                    color: white; border: none; border-radius: 8px;
+                    padding: 10px 16px; width: 100%; font-weight: 600;
+                    cursor: pointer; font-size: 0.95rem;
+                " title="Print the current sheet view">🖨️ PRINT Sheet</button>
+            </div>
+            """
+            st.components.v1.html(print_js, height=45)
+        else:
+            st.info("📋 Data load hone ke baad print available hoga")
 
         sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
@@ -2365,19 +2370,40 @@ def main():
             if 'Select' in print_df_full.columns:
                 print_df_full = print_df_full.drop(columns=['Select'])
 
+            # Generate print HTML for JS popup
             if not print_df_full.empty:
                 html_table = print_df_full.to_html(index=False, border=1, classes='print-table', justify='center')
             else:
                 html_table = "<p>No data</p>"
 
-            st.markdown(f"""
-            <div class="print-only">
-                <h2 style="text-align:center; margin-bottom:10px;">{sheet_choice} Sheet Data</h2>
-                <p style="text-align:center; font-size:10pt; margin-bottom:15px;">Total Rows: {len(print_df_full)} | Generated: {format_datetime()} IST</p>
+            print_html = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>{sheet_choice} Sheet - AI EQMS Hub Pro</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                    h2 {{ text-align: center; margin-bottom: 5px; }}
+                    .meta {{ text-align: center; font-size: 10pt; color: #666; margin-bottom: 15px; }}
+                    table {{ width: 100%; border-collapse: collapse; font-size: 9pt; }}
+                    th, td {{ border: 1px solid #333; padding: 5px; text-align: center; vertical-align: middle; }}
+                    th {{ background: #f0f0f0; font-weight: bold; }}
+                    tr:nth-child(even) {{ background: #f9f9f9; }}
+                    .footer {{ text-align: center; font-size: 9pt; color: #666; margin-top: 15px; }}
+                    @media print {{ body {{ margin: 0; }} }}
+                </style>
+            </head>
+            <body>
+                <h2>{sheet_choice} Sheet Data</h2>
+                <div class="meta">Total Rows: {len(print_df_full)} | Generated: {format_datetime()} IST</div>
                 {html_table}
-                <p style="text-align:center; font-size:9pt; margin-top:15px; color:#666;">AI EQMS Hub Pro • {format_date()}</p>
-            </div>
-            """, unsafe_allow_html=True)
+                <div class="footer">AI EQMS Hub Pro • {format_date()}</div>
+                <script>window.onload = function(){{ setTimeout(function(){{ window.print(); }}, 500); }};</script>
+            </body>
+            </html>
+            """
+            print_b64 = base64.b64encode(print_html.encode('utf-8')).decode('utf-8')
+            st.session_state['print_b64_' + sheet_choice] = print_b64
 
             edited_page = st.data_editor(display_df, use_container_width=True, height=400,
                 column_config={"Select": st.column_config.CheckboxColumn("Select", width="small")},
@@ -2627,6 +2653,21 @@ def main():
             st.error("❌ 'ntes-client' library not installed. Please run: `pip install ntes-client`")
             st.stop()
 
+        # Debug: Show NTES client status
+        with st.expander("🔧 NTES Debug Info", expanded=False):
+            st.caption("Agar data nahi a raha, yahan check karein")
+            try:
+                test_train = st.text_input("Test Train Number", value="12309", key="ntes_test_train")
+                if st.button("Test NTES Connection", key="ntes_test_btn"):
+                    with st.spinner("Testing..."):
+                        try:
+                            test_resp = ntes_client.schedule(test_train)
+                            st.json(test_resp if test_resp else {"status": "No response"})
+                        except Exception as e:
+                            st.error(f"NTES Error: {str(e)}")
+            except Exception as e:
+                st.error(f"Debug init error: {e}")
+
         tab1, tab2, tab3 = st.tabs(["🔍 PNR Status", "🚂 Live Train", "📋 Train Schedule"])
 
         # PNR Tab
@@ -2642,7 +2683,9 @@ def main():
                         with st.spinner("Fetching PNR details..."):
                             data = get_pnr_status(pnr_input)
                             if data and isinstance(data, dict) and data.get('error'):
-                                st.error(f"❌ {data['error']}")
+                                st.error(f"❌ Error: {data.get('error')}")
+                                with st.expander("🔍 Raw Response"):
+                                    st.json(data)
                             elif data:
                                 st.markdown(format_pnr_result(data))
                             else:
@@ -2653,7 +2696,9 @@ def main():
                         with st.spinner("Refreshing PNR..."):
                             data = get_pnr_status(pnr_input)
                             if data and isinstance(data, dict) and data.get('error'):
-                                st.error(f"❌ {data['error']}")
+                                st.error(f"❌ Error: {data.get('error')}")
+                                with st.expander("🔍 Raw Response"):
+                                    st.json(data)
                             elif data:
                                 st.markdown(format_pnr_result(data))
                             else:
@@ -2682,11 +2727,13 @@ def main():
                             date_str = get_date_for_offset(offset)
                             data = get_live_train_status(train_no, date_str)
                             if data and isinstance(data, dict) and data.get('error'):
-                                st.error(f"❌ {data['error']}")
+                                st.error(f"❌ Error: {data.get('error')} | Message: {data.get('message', 'N/A')}")
+                                with st.expander("🔍 Raw Response"):
+                                    st.json(data)
                             elif data:
                                 st.markdown(format_live_train_result(data))
                             else:
-                                st.error("❌ No data available.")
+                                st.error("❌ No data available from NTES.")
             with col2:
                 if st.button("🔄 Refresh Live Status", key="refresh_live", use_container_width=True):
                     if train_no and train_no.isdigit() and (3 <= len(train_no) <= 5):
@@ -2694,11 +2741,13 @@ def main():
                             date_str = get_date_for_offset(offset)
                             data = get_live_train_status(train_no, date_str)
                             if data and isinstance(data, dict) and data.get('error'):
-                                st.error(f"❌ {data['error']}")
+                                st.error(f"❌ Error: {data.get('error')} | Message: {data.get('message', 'N/A')}")
+                                with st.expander("🔍 Raw Response"):
+                                    st.json(data)
                             elif data:
                                 st.markdown(format_live_train_result(data))
                             else:
-                                st.error("❌ No data available.")
+                                st.error("❌ No data available from NTES.")
                     else:
                         st.warning("Please enter a valid train number first.")
 
@@ -2717,7 +2766,9 @@ def main():
                         with st.spinner("Fetching schedule..."):
                             data = get_train_schedule(train_no_sch)
                             if data and isinstance(data, dict) and data.get('error'):
-                                st.error(f"❌ {data['error']}")
+                                st.error(f"❌ Error: {data.get('error')}")
+                                with st.expander("🔍 Raw Response"):
+                                    st.json(data)
                             elif data:
                                 st.session_state.sch_data = data
                                 st.session_state.sch_start = 0
@@ -2730,7 +2781,9 @@ def main():
                         with st.spinner("Refreshing schedule..."):
                             data = get_train_schedule(train_no_sch)
                             if data and isinstance(data, dict) and data.get('error'):
-                                st.error(f"❌ {data['error']}")
+                                st.error(f"❌ Error: {data.get('error')}")
+                                with st.expander("🔍 Raw Response"):
+                                    st.json(data)
                             elif data:
                                 st.session_state.sch_data = data
                                 st.session_state.sch_start = 0
