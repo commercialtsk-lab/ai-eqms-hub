@@ -92,7 +92,8 @@ defaults = {
     'sch_start': 0, 'sch_data': None, 'weather_data': None,
     'system_theme': 'Day', 'weather_city': 'Tinsukia',
     'pnr_result': None, 'train_result': None,
-    'last_uploaded_drive_id': None
+    'last_uploaded_drive_id': None,
+    'manual_refresh': False
 }
 
 for key, val in defaults.items():
@@ -261,16 +262,24 @@ def sanitize_latin(text):
 # ------------------------------------------------------------------
 # Sheet configuration and loading
 # ------------------------------------------------------------------
+EQ_HEADINGS = [
+    'S/N', 'PNR', 'FROM', 'TO', 'BOARDING', 'T/N', 'CLASS', 'DOJ',
+    'PASS NAME', 'PASS PH', 'T/BERTHS', 'PURPOSE', 'ADDRESS',
+    'DIARY NO', 'RECOMMENDATION', 'DESIGNATION', 'PHONE NUBER',
+    'MP/MLA/MR/MINISTER/VIP/VVIP', 'WARRANT NUMBER', 'PROCEESING DATE+TIME',
+    'APPLICATION DATE', 'RAILWAY/ZONE/DIVISION', 'PREFERENCE'
+]
+
 SHEET_CONFIG = {
-    "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "doj_col": 7},
-    "DATA": {"start_row": 3, "pnr_col": 1, "train_col": 5, "doj_col": 7},
-    "FINAL": {"start_row": 6, "pnr_col": 7, "train_col": 1, "doj_col": 12},
-    "DATA2": {"start_row": 4, "pnr_col": 7, "train_col": 1, "doj_col": 12},
-    "EMAIL_DATA": {"start_row": 2, "pnr_col": 7, "train_col": 8, "doj_col": 11},
-    "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "doj_col": None}
+    "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "doj_col": 7, "headings": EQ_HEADINGS},
+    "DATA": {"start_row": 4, "pnr_col": 1, "train_col": 5, "doj_col": 7, "headings": EQ_HEADINGS},
+    "FINAL": {"start_row": 6, "pnr_col": 7, "train_col": 1, "doj_col": 12, "headings": EQ_HEADINGS},
+    "DATA2": {"start_row": 4, "pnr_col": 7, "train_col": 1, "doj_col": 12, "headings": EQ_HEADINGS},
+    "EMAIL_DATA": {"start_row": 2, "pnr_col": 7, "train_col": 8, "doj_col": 11, "headings": EQ_HEADINGS},
+    "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "doj_col": None, "headings": []}
 }
 
-@st.cache_data(ttl=5, show_spinner=False)
+@st.cache_data(ttl=30, show_spinner=False)
 def load_sheet_data_cached(sheet_name, sheet_id):
     try:
         gc = init_sheets()
@@ -1421,11 +1430,6 @@ def get_pnr_status_url(pnr):
 # Main function
 # ------------------------------------------------------------------
 def main():
-    # Auto refresh meta tag
-    st.markdown("""
-    <meta http-equiv="refresh" content="5">
-    """, unsafe_allow_html=True)
-    
     # Theme selection
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
     if not st.session_state.auto_theme_detected:
@@ -1498,16 +1502,7 @@ def main():
                 """, unsafe_allow_html=True)
 
         with st.expander("🔄 Sync & Status", expanded=True):
-            auto_refresh = st.checkbox("Auto Sync (every 5s)", value=True, key="auto_sync_cb")
-            if auto_refresh:
-                elapsed = time.time() - st.session_state.last_refresh
-                if elapsed > 5:
-                    st.session_state.last_refresh = time.time()
-                    st.cache_data.clear()
-                    st.rerun()
-                else:
-                    remaining = 5 - int(elapsed)
-                    st.caption(f"⏳ Next sync in {remaining}s")
+            # Manual refresh only - no auto refresh
             if st.button("🔄 Sync Now", use_container_width=True, key="sync_now_btn"):
                 st.cache_data.clear()
                 st.session_state.last_refresh = time.time()
@@ -2183,7 +2178,7 @@ def main():
                             else:
                                 st.success("✅ No duplicate PNRs")
                     st.markdown("**⌨️ Shortcuts**")
-                    st.caption("Ctrl+R: Refresh | Ctrl+P: Print | Auto-sync: ON")
+                    st.caption("Ctrl+R: Refresh | Ctrl+P: Print")
             st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------------------------------------------------------
