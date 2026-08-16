@@ -6,7 +6,7 @@ from utils.config import WEATHER_API_KEY, WEATHER_BASE_URL
 
 def get_weather(city_name):
     """Get current weather for a city using OpenWeatherMap API"""
-    if not WEATHER_API_KEY:
+    if not WEATHER_API_KEY: 
         return {"error": "Weather API key not configured"}
     
     try:
