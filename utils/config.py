@@ -5,6 +5,7 @@ import streamlit as st
 # ============================================
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
 GSPREAD_CREDENTIALS = st.secrets.get("GSPREAD_CREDENTIALS")
+WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", "")  # <-- New weather API key
 
 # ============================================
 # GOOGLE SHEET & DRIVE IDs
@@ -13,10 +14,9 @@ SHEET_ID = "1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI"
 DRIVE_FOLDER_ID = "1H1gf8WqfoTYFT_pU9WfIDLrHg-NpuUSI"
 
 # ============================================
-# WEATHER API (Optional)
+# WEATHER API CONFIGURATION
 # ============================================
-WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", "")  # Agar hai toh
-# WEATHER_API_URL = "https://api.openweathermap.org/data/2.5/weather"
+WEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5/weather"
 
 # ============================================
 # STATION MAP
