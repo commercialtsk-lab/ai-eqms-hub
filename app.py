@@ -192,8 +192,7 @@ def init_sheets():
 @st.cache_resource
 def init_drive():
     creds_dict = dict(GSPREAD_CREDENTIALS)
-    creds_dict["private_key"] = creds_dict["private_key"].replace("\n", "
-")
+    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
     scopes = ['https://www.googleapis.com/auth/drive.file']
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scopes)
     return build('drive', 'v3', credentials=creds)
