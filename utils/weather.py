@@ -51,7 +51,6 @@ def get_weather_emoji(description):
 
 def render_weather_widget():
     """Render weather widget in sidebar"""
-    # ✅ FIX: Directly read from st.secrets
     try:
         WEATHER_API_KEY = st.secrets["WEATHER_API_KEY"]
     except:
@@ -60,51 +59,42 @@ def render_weather_widget():
     st.markdown("---")
     st.markdown("### 🌤️ Weather")
     
-    # City input with default
     default_city = "Tinsukia"
     if 'weather_city' not in st.session_state:
         st.session_state.weather_city = default_city
     
-    # City selection with custom input
     city_options = ["Tinsukia", "Dibrugarh", "Guwahati", "New Delhi", "Mumbai", "Kolkata", "Chennai", "Bangalore", "Custom..."]
     
     selected_option = st.selectbox(
         "Select City",
         city_options,
         index=city_options.index(st.session_state.weather_city) if st.session_state.weather_city in city_options else city_options.index("Custom..."),
-        key="weather_city_select",
-        help="Select a city or choose 'Custom...' to enter your own"
+        key="weather_city_select"
     )
     
     if selected_option == "Custom...":
         custom_city = st.text_input(
             "Enter City Name",
             value="Tinsukia" if st.session_state.weather_city not in city_options else st.session_state.weather_city,
-            key="weather_custom_city",
-            help="Enter any city name (e.g., 'London', 'New York')"
+            key="weather_custom_city"
         )
         if custom_city:
             st.session_state.weather_city = custom_city
     else:
         st.session_state.weather_city = selected_option
     
-    # ✅ Check if API key is set
     if not WEATHER_API_KEY:
-        st.info("🔑 Weather API key not set. Add WEATHER_API_KEY to secrets.toml")
-        st.caption("Get free key from: https://openweathermap.org/api")
+        st.info("🔑 Weather API key not set.")
         return
     
-    if st.button("🔄 Refresh Weather", key="weather_refresh", help="Get latest weather data"):
+    if st.button("🔄 Refresh Weather", key="weather_refresh"):
         st.rerun()
     
-    # Fetch weather
     with st.spinner("Fetching weather..."):
         weather = get_weather(st.session_state.weather_city, WEATHER_API_KEY)
     
     if weather:
         emoji = get_weather_emoji(weather['description'])
-        
-        # Display weather with emojis
         st.markdown(f"""
         <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 15px; margin: 5px 0;">
             <div style="display: flex; align-items: center; gap: 10px;">
@@ -130,4 +120,3 @@ def render_weather_widget():
         """, unsafe_allow_html=True)
     else:
         st.error(f"❌ Could not fetch weather for '{st.session_state.weather_city}'")
-        st.caption("Please check city name or try again later.")
