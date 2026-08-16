@@ -138,10 +138,27 @@ def get_pnr_status_url(pnr):
         return None
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
 
-# ✅ YEH FUNCTION ADD KARO - MISSING THA
+# ✅ YEH FUNCTION ADD KARO - YAHI MISSING THA
 def get_pnr_status(pnr):
+    """Get PNR status from NTES - returns mock data if NTES not available"""
     try:
         from utils.ntes_client import get_pnr_status as ntes_pnr
         return ntes_pnr(pnr)
-    except:
-        return {"error": "NTES not available"}
+    except ImportError:
+        # Return mock data if NTES not available
+        return {
+            "pnr": pnr,
+            "train_number": "N/A",
+            "train_name": "N/A",
+            "journey_date": "N/A",
+            "class": "N/A",
+            "quota": "N/A",
+            "chart_status": "Not Prepared",
+            "boarding_point": "N/A",
+            "destination": "N/A",
+            "passengers": [
+                {"booking_status": "N/A", "current_status": "N/A"}
+            ]
+        }
+    except Exception as e:
+        return {"error": str(e)}
