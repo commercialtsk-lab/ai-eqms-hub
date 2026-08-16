@@ -45,13 +45,13 @@ def render_data_table(filtered_df, sheet_choice):
 
     nav1, nav2, nav3 = st.columns([1, 2, 1])
     with nav1:
-        if st.button("◀ Previous", use_container_width=True, disabled=st.session_state.current_page <= 1, key="prev_page_btn", help="Go to previous page"):
+        if st.button("◀ Previous", use_container_width=True, disabled=st.session_state.current_page <= 1, key="prev_page_btn"):
             st.session_state.current_page -= 1
             st.rerun()
     with nav2:
         st.markdown(f"<div style='text-align:center; padding-top:6px;'><b>Page {st.session_state.current_page} of {total_pages}</b></div>", unsafe_allow_html=True)
     with nav3:
-        if st.button("Next ▶", use_container_width=True, disabled=st.session_state.current_page >= total_pages, key="next_page_btn", help="Go to next page"):
+        if st.button("Next ▶", use_container_width=True, disabled=st.session_state.current_page >= total_pages, key="next_page_btn"):
             st.session_state.current_page += 1
             st.rerun()
 
@@ -63,7 +63,6 @@ def render_data_table(filtered_df, sheet_choice):
     display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
     display_df.insert(0, "Select", False)
 
-    # ----- PRINT: Show actual data on print -----
     print_cols = [c for c in display_df.columns if c != 'Select']
     print_df = display_df[print_cols].copy()
     
@@ -89,7 +88,6 @@ def render_data_table(filtered_df, sheet_choice):
             <p style="text-align:center; font-size:9pt;">Generated: {format_datetime()} IST</p>
         </div>
         """, unsafe_allow_html=True)
-    # -----------------------------------------
 
     st.markdown('<div class="print-area no-print">', unsafe_allow_html=True)
     edited_page = st.data_editor(display_df, use_container_width=True, height=400,
@@ -120,7 +118,7 @@ def render_data_table(filtered_df, sheet_choice):
     st.markdown("**⚡ Quick Actions**")
     a1, a2, a3, a4, a5 = st.columns(5)
     with a1:
-        if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn", help="Save all changes to Google Sheet"):
+        if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn"):
             try:
                 gc = init_sheets()
                 sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
@@ -148,7 +146,7 @@ def render_data_table(filtered_df, sheet_choice):
                 else:
                     st.error(f"Save error: {e}")
     with a2:
-        if st.button("➕ Add Row", use_container_width=True, key="add_row_btn", help="Add a new blank row"):
+        if st.button("➕ Add Row", use_container_width=True, key="add_row_btn"):
             try:
                 gc = init_sheets()
                 sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
@@ -170,7 +168,7 @@ def render_data_table(filtered_df, sheet_choice):
                 st.error(f"Add error: {e}")
     with a3:
         if selected_sheet_rows:
-            if st.button("🗑️ Delete", use_container_width=True, key="delete_btn", help="Delete selected rows (click twice to confirm)"):
+            if st.button("🗑️ Delete", use_container_width=True, key="delete_btn"):
                 if not st.session_state.delete_confirm:
                     st.session_state.delete_confirm = True
                     st.warning("Confirm delete by clicking again.")
@@ -197,9 +195,9 @@ def render_data_table(filtered_df, sheet_choice):
         msg = build_whatsapp_message(sheet_choice, len(selected_indices), selected_pnrs, len(filtered_df), filtered_df)
         encoded = urllib.parse.quote(msg)
         wa_url = f"https://api.whatsapp.com/send?text={encoded}"
-        st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True, help="Share table summary via WhatsApp")
+        st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
     with a5:
-        st.button("🖨️ PRINT SHEET", use_container_width=True, key="print_btn", help="Print the current sheet data")
+        st.button("🖨️ PRINT SHEET", use_container_width=True, key="print_btn")
         st.components.v1.html("""
         <script>
             document.addEventListener('DOMContentLoaded', function() {
@@ -212,7 +210,6 @@ def render_data_table(filtered_df, sheet_choice):
         """, height=0)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ----- WhatsApp Image Share -----
     st.markdown('<div class="no-print">', unsafe_allow_html=True)
     st.markdown("**📱 WhatsApp Image Share**")
     wa_col1, wa_col2, wa_col3 = st.columns(3)
@@ -222,16 +219,14 @@ def render_data_table(filtered_df, sheet_choice):
             if img_bytes:
                 st.download_button("🖼️ Download Table Image", data=img_bytes,
                     file_name=f"{sheet_choice}_table.png", mime="image/png",
-                    use_container_width=True, key="wa_img_download",
-                    help="Download image of the full table")
+                    use_container_width=True, key="wa_img_download")
     with wa_col2:
         if selected_indices and not filtered_df.empty:
             sel_img_bytes = create_table_image(filtered_df.iloc[selected_indices], f"{sheet_choice} Selected")
             if sel_img_bytes:
                 st.download_button("🖼️ Download Selected Image", data=sel_img_bytes,
                     file_name=f"{sheet_choice}_selected.png", mime="image/png",
-                    use_container_width=True, key="wa_sel_img_download",
-                    help="Download image of selected rows")
+                    use_container_width=True, key="wa_sel_img_download")
         else:
             st.info("Select rows to generate image")
     with wa_col3:
@@ -264,7 +259,6 @@ def render_data_table(filtered_df, sheet_choice):
                 """, unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ----- Export -----
     st.markdown('<div class="no-print">', unsafe_allow_html=True)
     st.markdown("**📄 Export**")
     e1, e2, e3, e4 = st.columns(4)
@@ -274,8 +268,7 @@ def render_data_table(filtered_df, sheet_choice):
             pdf_bytes = generate_pdf(export_df, sheet_choice, full=True)
             st.download_button("📥 PDF (All)", data=pdf_bytes,
                 file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.pdf",
-                mime="application/pdf", use_container_width=True, key="pdf_all_download",
-                help="Download all rows as PDF")
+                mime="application/pdf", use_container_width=True, key="pdf_all_download")
         except Exception as e:
             st.warning(f"PDF error: {e}")
     with e2:
@@ -286,8 +279,7 @@ def render_data_table(filtered_df, sheet_choice):
         csv_sel = export_sel.to_csv(index=False).encode('utf-8')
         st.download_button("📥 CSV (Selected)" if selected_indices else "📥 CSV (All)", data=csv_sel,
             file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}_selected.csv",
-            mime="text/csv", use_container_width=True, key="csv_download",
-            help="Download as CSV")
+            mime="text/csv", use_container_width=True, key="csv_download")
     with e3:
         export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
         excel_buffer = io.BytesIO()
@@ -297,16 +289,13 @@ def render_data_table(filtered_df, sheet_choice):
         st.download_button("📥 Excel", data=excel_data,
             file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True, key="excel_download",
-            help="Download as Excel file")
+            use_container_width=True, key="excel_download")
     with e4:
         csv_full = filtered_df.drop(columns=['_sheet_row'], errors='ignore').to_csv(index=False).encode('utf-8')
         st.download_button("📋 Copy CSV", data=csv_full, file_name="table.csv",
-            mime="text/csv", use_container_width=True, key="copy_csv_download",
-            help="Download full CSV")
+            mime="text/csv", use_container_width=True, key="copy_csv_download")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ----- Extra Features -----
     st.markdown('<div class="no-print">', unsafe_allow_html=True)
     with st.expander("🔧 Extra Features", expanded=False):
         feat1, feat2 = st.columns(2)
@@ -315,8 +304,7 @@ def render_data_table(filtered_df, sheet_choice):
             pnr_check = st.text_input("Enter PNR", max_chars=10, key="pnr_status_input")
             if pnr_check and len(pnr_check) == 10:
                 pnr_url = get_pnr_status_url(pnr_check)
-                st.link_button("🔍 Check PNR Status", pnr_url, use_container_width=True,
-                               help="Open ConfirmTkt PNR status page")
+                st.link_button("🔍 Check PNR Status", pnr_url, use_container_width=True)
             st.markdown("**📊 Quick Stats**")
             if not filtered_df.empty and pnr_col:
                 valid_pnrs = filtered_df[pnr_col].astype(str).str.match(r'\d{10}').sum()
