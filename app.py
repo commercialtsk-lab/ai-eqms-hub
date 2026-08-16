@@ -816,6 +816,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .train-total-card { background: """ + success + """20; border: 2px solid """ + success + """; border-radius: 12px; padding: 8px 18px; min-width: 100px; text-align: center; }
         .train-total-number { color: """ + success + """; font-weight: 800; font-size: 1.3rem; line-height: 1.2; }
         .train-total-label { color: """ + text_secondary + """; font-size: 0.8rem; margin-top: 2px; }
+        .print-only { display: none; }
         @media print {
             @page { margin: 1cm; size: A4 landscape; }
             body { background: white !important; }
@@ -826,9 +827,10 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             .train-count-container { display: none !important; }
             .print-area, .print-area * { visibility: visible !important; color: black !important; background: white !important; }
             .print-area { position: absolute; left: 0; top: 0; width: 100%; }
-            table { width: 100% !important; border-collapse: collapse !important; }
-            th, td { border: 1px solid #333 !important; padding: 4px !important; font-size: 10pt !important; }
-            th { background: #eee !important; }
+            .print-only { display: block !important; }
+            .print-only table { width: 100% !important; border-collapse: collapse !important; }
+            .print-only th, .print-only td { border: 1px solid #333 !important; padding: 4px !important; font-size: 10pt !important; }
+            .print-only th { background: #eee !important; }
         }
         * { transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }
     </style>
@@ -1245,7 +1247,7 @@ def main():
 
         train_col = None
         for c in filtered_df.columns:
-            if 'T/N' in c.upper() or 'TRAIN' in c.upper():
+            if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
                 train_col = c
                 break
         if train_col and not filtered_df.empty:
@@ -1364,27 +1366,29 @@ def main():
 
     else:  # Data Table view
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
-        # Determine train column and DOJ column for later use
-        train_col_metric = next((c for c in filtered_df.columns if 'T/N' in str(c).upper()), None)
-        doj_col = next((c for c in filtered_df.columns if 'DOJ' in str(c).upper()), None)
+        # Determine train column and DOJ column
+        train_col_metric = None
+        doj_col = None
+        for c in filtered_df.columns:
+            if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
+                train_col_metric = c
+            if 'DOJ' in c.upper():
+                doj_col = c
 
         if not filtered_df.empty:
-            # Show train count summary (Total EQ + each train count)
+            # Show train count summary
             if train_col_metric:
                 train_counts_series = filtered_df[train_col_metric].value_counts()
                 st.markdown("**🚆 Train-wise Count**")
                 cards_html = '<div class="train-count-container">'
-                # Total EQ card
                 total_eq = len(filtered_df)
                 cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {total_eq}</div></div>'
-                # Each train card
                 for train_num, cnt in train_counts_series.items():
                     cards_html += f'<div class="train-count-card"><div class="train-count-number">{train_num}</div><div class="train-count-label">Count</div><div class="train-count-badge">{cnt}</div></div>'
                 cards_html += '</div>'
                 st.markdown(cards_html, unsafe_allow_html=True)
                 st.markdown("---")
             else:
-                # Fallback: just total
                 st.metric("Total Records", len(filtered_df))
                 st.markdown("---")
 
@@ -1426,6 +1430,23 @@ def main():
             sheet_rows = page_df['_sheet_row'].tolist() if '_sheet_row' in page_df.columns else []
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
+
+            # ----- Static HTML table for printing (hidden on screen) -----
+            print_cols = [c for c in display_df.columns if c != 'Select']
+            print_df = display_df[print_cols].copy()
+            # Convert to HTML table with basic styling
+            if not print_df.empty:
+                html_table = print_df.to_html(index=False, border=1, classes='print-table')
+            else:
+                html_table = "<p>No data</p>"
+            st.markdown(f"""
+            <div class="print-only">
+                <h3 style="text-align:center;">{sheet_choice} Data</h3>
+                {html_table}
+                <p style="text-align:center; font-size:10pt;">Generated: {format_datetime()} IST</p>
+            </div>
+            """, unsafe_allow_html=True)
+            # ---------------------------------
 
             st.markdown('<div class="print-area">', unsafe_allow_html=True)
             edited_page = st.data_editor(display_df, use_container_width=True, height=400,
@@ -1585,7 +1606,7 @@ def main():
                                 background: #25D366; color: white; border: none; border-radius: 8px;
                                 padding: 9px 16px; width: 100%; font-weight: 600;
                                 cursor: pointer; font-size: 1rem;
-                            ">📋 Copy Sheet Image</button>
+                            " title="Copy table image to clipboard for WhatsApp">📋 Copy Sheet Image</button>
                             <script>
                             function copyImageToClipboard() {{
                                 var imgData = "{img_b64}";
