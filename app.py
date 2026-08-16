@@ -1011,16 +1011,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             border: 1px solid {border};
             font-weight: 500;
         }}
-        @media print {{
-            body * {{ visibility: hidden; }}
-            .print-content, .print-content * {{ visibility: visible !important; }}
-            .print-content {{ position: absolute; left: 0; top: 0; width: 100%; }}
-            .stApp, header, footer, .stSidebar, .stButton, .stExpander, .stTabs, .stSelectbox,
-            .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio, .stCheckbox,
-            .stFileUploader, .stMarkdown, .stCaption, .stImage, .stVideo, .stAudio,
-            .stPlotlyChart, .action-box, .pro-footer, .top-bar, .status-pill, .sheet-link-btn,
-            .stDataEditor *:not(.print-content *) {{ display: none !important; }}
-        }}
         * {{
             transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
         }}
@@ -1138,6 +1128,52 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
         msg = f"📊 *{sheet_name}* — Total {total_rows} rows\n🕐 {now_str}\n\n```\n{table_text}\n```"
     msg += f"\n🔗 Sheet: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
     return msg
+
+# ========== FUNCTION TO GENERATE HTML TABLE FOR PRINT ==========
+def generate_print_html(df, title):
+    if df.empty:
+        return "<p>No data</p>"
+    cols = list(df.columns)
+    if '_sheet_row' in cols:
+        cols.remove('_sheet_row')
+    # Build HTML table
+    html = f"""
+    <html>
+    <head>
+        <title>{title} - Print</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; padding: 20px; }}
+            h1 {{ color: #333; }}
+            table {{ border-collapse: collapse; width: 100%; font-size: 12px; }}
+            th, td {{ border: 1px solid #ccc; padding: 6px 8px; text-align: left; }}
+            th {{ background-color: #4a90d9; color: white; }}
+            tr:nth-child(even) {{ background-color: #f9f9f9; }}
+            .total {{ margin-top: 20px; font-weight: bold; }}
+        </style>
+    </head>
+    <body>
+        <h1>{title}</h1>
+        <p>Generated: {format_datetime()} IST | Rows: {len(df)}</p>
+        <table>
+            <thead><tr>
+    """
+    for c in cols:
+        html += f"<th>{c}</th>"
+    html += "</tr></thead><tbody>"
+    for _, row in df.iterrows():
+        html += "<tr>"
+        for c in cols:
+            val = str(row.get(c, ""))
+            html += f"<td>{val}</td>"
+        html += "</tr>"
+    html += f"""
+            </tbody>
+        </table>
+        <p class="total">Total Rows: {len(df)}</p>
+    </body>
+    </html>
+    """
+    return html
 
 # ========== MAIN APP ==========
 def main():
@@ -1603,7 +1639,8 @@ def main():
                 train_counts_series = filtered_df[train_col].value_counts()
                 count_items = [f"{train}: {cnt}" for train, cnt in train_counts_series.items()]
                 chips = ''.join([f'<span class="train-count-item">{t}</span>' for t in count_items])
-                st.markdown(f'<div class="train-count-box">🚆 Train Counts: {chips}</div>', unsafe_allow_html=True)
+                total_eq = len(filtered_df)
+                st.markdown(f'<div class="train-count-box">🚆 Train Counts: {chips} &nbsp;|&nbsp; <strong>Total EQ: {total_eq}</strong></div>', unsafe_allow_html=True)
             st.markdown("---")
 
         # Refresh button
@@ -1646,8 +1683,7 @@ def main():
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
 
-            # Wrap the data editor in a div with class "print-content"
-            st.markdown('<div class="print-content">', unsafe_allow_html=True)
+            # Data editor (still visible on screen)
             edited_page = st.data_editor(
                 display_df,
                 use_container_width=True,
@@ -1657,7 +1693,6 @@ def main():
                 },
                 key=f"editor_{sheet_choice}_{st.session_state.current_page}"
             )
-            st.markdown('</div>', unsafe_allow_html=True)
 
             select_all = st.checkbox("Select All", value=st.session_state.select_all, key="select_all_checkbox")
             if select_all != st.session_state.select_all:
@@ -1786,22 +1821,39 @@ def main():
                         )
 
             with a5:
-                # PRINT – using reliable JavaScript trigger
-                st.components.v1.html("""
-                <div style="width:100%;">
-                    <button onclick="window.print();" style="
-                        background: linear-gradient(135deg, #7c3aed, #6d28d9);
-                        color: white;
-                        border: none;
-                        border-radius: 8px;
-                        padding: 9px 16px;
-                        width: 100%;
-                        font-weight: 600;
-                        cursor: pointer;
-                        font-size: 1rem;
-                    ">🖨️ PRINT</button>
-                </div>
-                """, height=50)
+                # PRINT – open new tab with clean HTML table and print
+                if not filtered_df.empty:
+                    html_content = generate_print_html(filtered_df, f"{sheet_choice} Report")
+                    # Encode to base64 for data URI
+                    b64_html = base64.b64encode(html_content.encode('utf-8')).decode('utf-8')
+                    # JavaScript to open a new window and print
+                    st.markdown(f"""
+                    <div style="width:100%;">
+                        <button onclick="printTable()" style="
+                            background: linear-gradient(135deg, #7c3aed, #6d28d9);
+                            color: white;
+                            border: none;
+                            border-radius: 8px;
+                            padding: 9px 16px;
+                            width: 100%;
+                            font-weight: 600;
+                            cursor: pointer;
+                            font-size: 1rem;
+                        ">🖨️ PRINT</button>
+                    </div>
+                    <script>
+                    function printTable() {{
+                        var win = window.open('', '_blank');
+                        win.document.write(atob('{b64_html}'));
+                        win.document.close();
+                        win.onload = function() {{
+                            win.print();
+                        }};
+                    }}
+                    </script>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.button("🖨️ PRINT", disabled=True, use_container_width=True)
 
             st.markdown('</div>', unsafe_allow_html=True)
 
