@@ -803,7 +803,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .sheet-link-btn:hover { background: """ + accent + """ !important; color: white !important; border-color: """ + accent + """ !important; }
         .status-pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 500; }
         .status-live { background: rgba(63, 185, 80, 0.15); color: """ + success + """; border: 1px solid """ + success + """; }
-        .train-count-container { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin: 10px 0; }
+        .train-count-container { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; margin: 10px 0; }
         .train-count-card {
             background: """ + card_bg + """; border: 1px solid """ + border + """; border-radius: 10px;
             padding: 8px 14px; min-width: 80px; text-align: center;
@@ -813,6 +813,9 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .train-count-number { color: """ + accent + """; font-weight: 700; font-size: 1.1rem; line-height: 1.2; }
         .train-count-label { color: """ + text_secondary + """; font-size: 0.75rem; margin-top: 2px; }
         .train-count-badge { display: inline-block; background: """ + accent + """; color: white; font-size: 0.7rem; font-weight: 600; padding: 1px 6px; border-radius: 10px; margin-top: 3px; }
+        .train-total-card { background: """ + success + """20; border: 2px solid """ + success + """; border-radius: 12px; padding: 8px 18px; min-width: 100px; text-align: center; }
+        .train-total-number { color: """ + success + """; font-weight: 800; font-size: 1.3rem; line-height: 1.2; }
+        .train-total-label { color: """ + text_secondary + """; font-size: 0.8rem; margin-top: 2px; }
         @media print {
             @page { margin: 1cm; }
             body { background: white !important; }
@@ -1025,7 +1028,7 @@ def main():
                 else:
                     remaining = 10 - int(elapsed)
                     st.caption(f"⏳ Next sync in {remaining}s")
-            if st.button("🔄 Sync Now", use_container_width=True, key="sync_now_btn"):
+            if st.button("🔄 Sync Now", use_container_width=True, key="sync_now_btn", help="Force refresh data from Google Sheets"):
                 st.cache_data.clear()
                 st.session_state.last_refresh = time.time()
                 log_activity("🔄 Manual sync")
@@ -1061,7 +1064,8 @@ def main():
                 elif uploaded:
                     st.audio(uploaded, format='audio/mp3')
 
-            if st.button("🚀 Process & Save", type="primary", use_container_width=True, key="process_save_btn"):
+            if st.button("🚀 Process & Save", type="primary", use_container_width=True, key="process_save_btn",
+                         help="Extract data from file/text and save to Google Sheet"):
                 if mode == "📝 Text" and not text_data.strip():
                     st.warning("Text daalein")
                 elif mode != "📝 Text" and not uploaded and not audio_data:
@@ -1152,11 +1156,14 @@ def main():
                 c1, c2 = st.columns(2)
                 with c1:
                     if st.session_state.last_uploaded_view_url:
-                        st.link_button("👁️ View", st.session_state.last_uploaded_view_url, use_container_width=True)
+                        st.link_button("👁️ View", st.session_state.last_uploaded_view_url, use_container_width=True,
+                                       help="Open file in Google Drive viewer")
                 with c2:
                     if st.session_state.last_uploaded_print_url:
-                        st.link_button("🖨️ Print File (Drive)", st.session_state.last_uploaded_print_url, use_container_width=True)
-                if st.button("🗑️ Clear History", use_container_width=True, key="clear_history_btn"):
+                        st.link_button("🖨️ Print File (Drive)", st.session_state.last_uploaded_print_url, use_container_width=True,
+                                       help="Open file in Drive print preview")
+                if st.button("🗑️ Clear History", use_container_width=True, key="clear_history_btn",
+                             help="Remove last uploaded file reference from session"):
                     st.session_state.last_uploaded_file = None
                     st.session_state.last_uploaded_drive_url = None
                     st.session_state.last_uploaded_view_url = None
@@ -1288,13 +1295,15 @@ def main():
         sugg_cols = st.columns(3)
         for i, suggestion in enumerate(st.session_state.chat_suggestions):
             with sugg_cols[i % 3]:
-                if st.button(suggestion, key=f"sugg_{i}", use_container_width=True):
+                if st.button(suggestion, key=f"sugg_{i}", use_container_width=True,
+                             help=f"Ask: {suggestion}"):
                     st.session_state.messages.append({"role": "user", "content": suggestion})
                     with st.spinner("Thinking..."):
                         response = chat_with_gemini(suggestion, st.session_state.messages)
                         st.session_state.messages.append({"role": "assistant", "content": response})
                     st.rerun()
-        if st.button("🗑️ Clear Chat", use_container_width=True, key="clear_chat_btn"):
+        if st.button("🗑️ Clear Chat", use_container_width=True, key="clear_chat_btn",
+                     help="Clear all chat history"):
             st.session_state.messages = []
             st.rerun()
 
@@ -1375,16 +1384,28 @@ def main():
                         total_berths = pd.to_numeric(filtered_df[berth_col], errors='coerce').sum()
                     st.metric("Total Berths", int(total_berths) if total_berths else 0)
             with stats_right:
-                if train_col_metric and not filtered_df.empty:
-                    train_counts_series = filtered_df[train_col_metric].value_counts()
-                    cards_html = '<div class="train-count-container">'
-                    for train_num, cnt in train_counts_series.items():
-                        cards_html += f'<div class="train-count-card"><div class="train-count-number">{train_num}</div><div class="train-count-label">Count</div><div class="train-count-badge">{cnt}</div></div>'
-                    cards_html += '</div>'
-                    st.markdown(cards_html, unsafe_allow_html=True)
+                # Placeholder – we moved train counts to below stats
+                st.caption("Train counts shown below")
             st.markdown("---")
 
-        if st.button("🔄 Refresh Data", use_container_width=False, key="refresh_data_btn"):
+            # ---- NEW: Train count summary above the data table ----
+            if train_col_metric and not filtered_df.empty:
+                train_counts_series = filtered_df[train_col_metric].value_counts()
+                st.markdown("**🚆 Train-wise Count**")
+                cards_html = '<div class="train-count-container">'
+                for train_num, cnt in train_counts_series.items():
+                    cards_html += f'<div class="train-count-card"><div class="train-count-number">{train_num}</div><div class="train-count-label">Count</div><div class="train-count-badge">{cnt}</div></div>'
+                # Total unique trains
+                total_unique = len(train_counts_series)
+                total_eq = len(filtered_df)
+                cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {total_eq}</div><div class="train-total-label">Unique: {total_unique}</div></div>'
+                cards_html += '</div>'
+                st.markdown(cards_html, unsafe_allow_html=True)
+                st.markdown("---")
+            # -----------------------------------------
+
+        if st.button("🔄 Refresh Data", use_container_width=False, key="refresh_data_btn",
+                     help="Manually reload data from Google Sheet"):
             st.cache_data.clear()
             st.session_state.last_refresh = time.time()
             log_activity("🔄 Manual refresh from main")
@@ -1402,13 +1423,15 @@ def main():
 
             nav1, nav2, nav3 = st.columns([1, 2, 1])
             with nav1:
-                if st.button("◀ Previous", use_container_width=True, disabled=st.session_state.current_page <= 1, key="prev_page_btn"):
+                if st.button("◀ Previous", use_container_width=True, disabled=st.session_state.current_page <= 1, key="prev_page_btn",
+                             help="Go to previous page"):
                     st.session_state.current_page -= 1
                     st.rerun()
             with nav2:
                 st.markdown(f"<div style='text-align:center; padding-top:6px;'><b>Page {st.session_state.current_page} of {total_pages}</b></div>", unsafe_allow_html=True)
             with nav3:
-                if st.button("Next ▶", use_container_width=True, disabled=st.session_state.current_page >= total_pages, key="next_page_btn"):
+                if st.button("Next ▶", use_container_width=True, disabled=st.session_state.current_page >= total_pages, key="next_page_btn",
+                             help="Go to next page"):
                     st.session_state.current_page += 1
                     st.rerun()
 
@@ -1449,7 +1472,8 @@ def main():
             st.markdown("**⚡ Quick Actions**")
             a1, a2, a3, a4, a5 = st.columns(5)
             with a1:
-                if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn"):
+                if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn",
+                             help="Save all changes made in the table back to Google Sheet"):
                     try:
                         gc = init_sheets()
                         sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
@@ -1478,7 +1502,8 @@ def main():
                             st.error(f"Save error: {e}")
                         log_activity(f"❌ Save: {str(e)[:40]}")
             with a2:
-                if st.button("➕ Add Row", use_container_width=True, key="add_row_btn"):
+                if st.button("➕ Add Row", use_container_width=True, key="add_row_btn",
+                             help="Append a new blank row at the end of the sheet"):
                     try:
                         gc = init_sheets()
                         sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
@@ -1499,7 +1524,8 @@ def main():
                         log_activity(f"❌ Add: {str(e)[:40]}")
             with a3:
                 if selected_sheet_rows:
-                    if st.button("🗑️ Delete", use_container_width=True, key="delete_btn"):
+                    if st.button("🗑️ Delete", use_container_width=True, key="delete_btn",
+                                 help="Delete selected rows from the sheet (click twice to confirm)"):
                         if not st.session_state.delete_confirm:
                             st.session_state.delete_confirm = True
                             st.warning("Confirm delete by clicking again.")
@@ -1527,7 +1553,8 @@ def main():
                 msg = build_whatsapp_message(sheet_choice, len(selected_indices), selected_pnrs, len(filtered_df), filtered_df)
                 encoded = urllib.parse.quote(msg)
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
-                st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
+                st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True,
+                               help="Share table summary as text via WhatsApp")
             with a5:
                 st.components.v1.html("""
                 <div style="width:100%;">
@@ -1536,30 +1563,68 @@ def main():
                         color: white; border: none; border-radius: 8px;
                         padding: 9px 16px; width: 100%; font-weight: 600;
                         cursor: pointer; font-size: 1rem;
-                    ">🖨️ PRINT Sheet</button>
+                    " title="Print the current sheet view">🖨️ PRINT Sheet</button>
                 </div>
                 """, height=50)
             st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="no-print">', unsafe_allow_html=True)
             st.markdown("**📱 WhatsApp Image Share**")
-            wa_col1, wa_col2 = st.columns(2)
+            wa_col1, wa_col2, wa_col3 = st.columns(3)
             with wa_col1:
                 if not filtered_df.empty:
                     img_bytes = create_table_image(filtered_df, f"{sheet_choice} Data")
                     if img_bytes:
-                        st.download_button("🖼️ Download Table Image (for WhatsApp)", data=img_bytes,
+                        st.download_button("🖼️ Download Table Image", data=img_bytes,
                             file_name=f"{sheet_choice}_table.png", mime="image/png",
-                            use_container_width=True, key="wa_img_download")
+                            use_container_width=True, key="wa_img_download",
+                            help="Download image of the full table for sharing")
             with wa_col2:
                 if selected_indices and not filtered_df.empty:
                     sel_img_bytes = create_table_image(filtered_df.iloc[selected_indices], f"{sheet_choice} Selected")
                     if sel_img_bytes:
                         st.download_button("🖼️ Download Selected Image", data=sel_img_bytes,
                             file_name=f"{sheet_choice}_selected.png", mime="image/png",
-                            use_container_width=True, key="wa_sel_img_download")
+                            use_container_width=True, key="wa_sel_img_download",
+                            help="Download image of selected rows only")
                 else:
                     st.info("Select rows to generate image")
+            with wa_col3:
+                # New: Copy image to clipboard
+                if not filtered_df.empty:
+                    img_bytes = create_table_image(filtered_df, f"{sheet_choice} Data")
+                    if img_bytes:
+                        img_b64 = base64.b64encode(img_bytes).decode()
+                        copy_js = f"""
+                        <div style="width:100%;">
+                            <button onclick="copyImageToClipboard()" style="
+                                background: #25D366; color: white; border: none; border-radius: 8px;
+                                padding: 9px 16px; width: 100%; font-weight: 600;
+                                cursor: pointer; font-size: 1rem;
+                            ">📋 Copy Sheet Image</button>
+                            <script>
+                            function copyImageToClipboard() {{
+                                var imgData = "{img_b64}";
+                                fetch('data:image/png;base64,' + imgData)
+                                    .then(res => res.blob())
+                                    .then(blob => {{
+                                        navigator.clipboard.write([
+                                            new ClipboardItem({{ 'image/png': blob }})
+                                        ]).then(() => {{
+                                            alert('Image copied to clipboard! Paste it into WhatsApp.');
+                                        }}).catch(() => {{
+                                            alert('Failed to copy. Please use download instead.');
+                                        }});
+                                    }});
+                            }}
+                            </script>
+                        </div>
+                        """
+                        st.components.v1.html(copy_js, height=50)
+                    else:
+                        st.info("Image generation failed")
+                else:
+                    st.info("No data to copy")
             st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="no-print">', unsafe_allow_html=True)
@@ -1571,7 +1636,8 @@ def main():
                     pdf_bytes = generate_pdf(export_df, sheet_choice, full=True)
                     st.download_button("📥 PDF (All)", data=pdf_bytes,
                         file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.pdf",
-                        mime="application/pdf", use_container_width=True, key="pdf_all_download")
+                        mime="application/pdf", use_container_width=True, key="pdf_all_download",
+                        help="Download all rows as PDF")
                 except Exception as e:
                     st.warning(f"PDF error: {e}")
             with e2:
@@ -1582,7 +1648,8 @@ def main():
                 csv_sel = export_sel.to_csv(index=False).encode('utf-8')
                 st.download_button("📥 CSV (Selected)" if selected_indices else "📥 CSV (All)", data=csv_sel,
                     file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}_selected.csv",
-                    mime="text/csv", use_container_width=True, key="csv_download")
+                    mime="text/csv", use_container_width=True, key="csv_download",
+                    help="Download as CSV")
             with e3:
                 export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
                 excel_buffer = io.BytesIO()
@@ -1592,11 +1659,13 @@ def main():
                 st.download_button("📥 Excel", data=excel_data,
                     file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True, key="excel_download")
+                    use_container_width=True, key="excel_download",
+                    help="Download as Excel file")
             with e4:
                 csv_full = filtered_df.drop(columns=['_sheet_row'], errors='ignore').to_csv(index=False).encode('utf-8')
                 st.download_button("📋 Copy CSV", data=csv_full, file_name="table.csv",
-                    mime="text/csv", use_container_width=True, key="copy_csv_download")
+                    mime="text/csv", use_container_width=True, key="copy_csv_download",
+                    help="Download full CSV")
             st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="no-print">', unsafe_allow_html=True)
@@ -1607,7 +1676,8 @@ def main():
                     pnr_check = st.text_input("Enter PNR", max_chars=10, key="pnr_status_input")
                     if pnr_check and len(pnr_check) == 10:
                         pnr_url = get_pnr_status_url(pnr_check)
-                        st.link_button("🔍 Check PNR Status", pnr_url, use_container_width=True)
+                        st.link_button("🔍 Check PNR Status", pnr_url, use_container_width=True,
+                                       help="Open ConfirmTkt PNR status page")
                     st.markdown("**📊 Quick Stats**")
                     if not filtered_df.empty and pnr_col:
                         valid_pnrs = filtered_df[pnr_col].astype(str).str.match(r'\d{10}').sum()
