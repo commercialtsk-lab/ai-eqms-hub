@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -1402,6 +1403,8 @@ def format_schedule_result(data, start=0, chunk=20):
 # ------------------------------------------------------------------
 def remove_background(image_data):
     key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
+    if not key:
+        key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
     if not key:
         return None
     try:
@@ -3080,16 +3083,81 @@ def main():
                 st.markdown("### 📸 Passport Photo Maker")
                 st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
 
-                # Read API key fresh from secrets (with strip to handle whitespace)
-                api_key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
+                # Try multiple sources to get the API key
+                def get_bg_api_key():
+                    sources = []
+                    # Source 1: Streamlit secrets
+                    key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
+                    if key:
+                        sources.append("st.secrets")
+                        return key, sources
+                    # Source 2: Environment variable
+                    key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
+                    if key:
+                        sources.append("os.environ")
+                        return key, sources
+                    # Source 3: Direct file read
+                    try:
+                        if os.path.exists(".streamlit/secrets.toml"):
+                            with open(".streamlit/secrets.toml", "r") as f:
+                                content = f.read()
+                                for line in content.split("\n"):
+                                    if "REMOVE_BG_API_KEY" in line and "=" in line:
+                                        key = line.split("=")[1].strip().strip('"').strip("'")
+                                        if key:
+                                            sources.append("file")
+                                            return key, sources
+                    except Exception:
+                        pass
+                    return "", sources
 
-                # Debug: show key status (masked)
-                if api_key:
-                    st.success(f"✅ API Key loaded from secrets: {api_key[:4]}...{api_key[-4:]}")
+                api_key, found_sources = get_bg_api_key()
+
+                # Debug expander
+                with st.expander("🔍 Debug API Key Status"):
+                    st.write(f"**Sources checked:** st.secrets, os.environ, .streamlit/secrets.toml")
+                    st.write(f"**Found in:** {', '.join(found_sources) if found_sources else 'None'}")
+                    st.write(f"**Key length:** {len(api_key)} chars")
+                    if api_key:
+                        st.write(f"**Key preview:** {api_key[:4]}...{api_key[-4:]}")
+                    else:
+                        st.write("**Key value:** EMPTY")
+                    # Show env var names (not values)
+                    env_keys = [k for k in os.environ.keys() if 'REMOVE' in k.upper() or 'BG' in k.upper() or 'API' in k.upper()]
+                    st.write(f"**Matching env vars:** {env_keys if env_keys else 'None found'}")
+                    secret_keys = list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else []
+                    st.write(f"**Secret keys available:** {secret_keys if secret_keys else 'None found'}")
+
+                if not api_key:
+                    st.error("❌ REMOVE_BG_API_KEY not found in any source.")
+                    st.info("💡 Add it to Streamlit Cloud secrets OR paste below:")
+                    manual_key = st.text_input("Paste Remove.bg API Key", type="password", key="manual_bg_key")
+                    if manual_key:
+                        api_key = manual_key.strip()
+                        st.success("✅ Key entered manually. Processing enabled for this session.")
+                    else:
+                        st.stop()
                 else:
-                    st.error("❌ REMOVE_BG_API_KEY not found in secrets.")
-                    st.info("💡 Add this to .streamlit/secrets.toml: REMOVE_BG_API_KEY = 'your_key'")
-                    st.stop()
+                    st.success(f"✅ API Key loaded from {', '.join(found_sources)}: {api_key[:4]}...{api_key[-4:]}")
+
+                # Update remove_background to use the found key
+                def remove_background(image_data):
+                    key, _ = get_bg_api_key()
+                    if not key:
+                        key = str(st.session_state.get("manual_bg_key", "")).strip()
+                    if not key:
+                        return None
+                    try:
+                        r = requests.post(
+                            "https://api.remove.bg/v1.0/removebg",
+                            files={"image_file": ("image.jpg", image_data, "image/jpeg")},
+                            data={"size": "auto", "format": "png"},
+                            headers={"X-Api-Key": key},
+                            timeout=30
+                        )
+                        return r.content if r.status_code == 200 else None
+                    except Exception:
+                        return None
 
                 photo_file = st.file_uploader("Upload Photo", type=["png", "jpg", "jpeg"], key="passport_photo_uploader")
                 if photo_file:
