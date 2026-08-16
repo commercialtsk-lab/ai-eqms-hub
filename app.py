@@ -8,7 +8,7 @@ import time
 import math
 import requests
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import google.generativeai as genai
 import gspread
@@ -22,6 +22,20 @@ import matplotlib.pyplot as plt
 from matplotlib.table import Table as MplTable
 import numpy as np
 
+# ------------------------------------------------------------------
+# NTES client (try to import, show warning if missing)
+# ------------------------------------------------------------------
+try:
+    from ntes import NTESClient
+    ntes_client = NTESClient()
+    NTES_AVAILABLE = True
+except ImportError:
+    NTES_AVAILABLE = False
+    st.warning("⚠️ 'ntes-client' not installed. Railway features will be disabled. Run: pip install ntes-client")
+
+# ------------------------------------------------------------------
+# Streamlit page config
+# ------------------------------------------------------------------
 st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="expanded")
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -44,6 +58,9 @@ def format_datetime(dt=None):
         dt = now_ist()
     return dt.strftime("%d-%m-%Y %H:%M:%S")
 
+# ------------------------------------------------------------------
+# Secrets and credentials
+# ------------------------------------------------------------------
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
 GSPREAD_CREDENTIALS = st.secrets.get("GSPREAD_CREDENTIALS")
 
@@ -54,6 +71,9 @@ if not GEMINI_API_KEY or not GSPREAD_CREDENTIALS:
 SHEET_ID = "1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI"
 DRIVE_FOLDER_ID = "1H1gf8WqfoTYFT_pU9WfIDLrHg-NpuUSI"
 
+# ------------------------------------------------------------------
+# Session state defaults
+# ------------------------------------------------------------------
 defaults = {
     'messages': [], 'activity_log': [], 'last_uploaded_file': None,
     'last_uploaded_drive_url': None, 'last_uploaded_view_url': None,
@@ -75,6 +95,9 @@ for key, val in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
+# ------------------------------------------------------------------
+# Station map (unchanged)
+# ------------------------------------------------------------------
 STATION_MAP = {
     'NTSK': 'New Tinsukia', 'GHY': 'Guwahati', 'NDLS': 'New Delhi', 'HWH': 'Howrah',
     'PNBE': 'Patna', 'BSB': 'Varanasi', 'CNB': 'Kanpur Central', 'LKO': 'Lucknow',
@@ -122,6 +145,9 @@ STATION_MAP = {
     'AGC': 'Agra Cantt', 'KOJ': 'Kokrajhar'
 }
 
+# ------------------------------------------------------------------
+# Cached resources (Gemini, Sheets, Drive)
+# ------------------------------------------------------------------
 @st.cache_resource
 def init_gemini():
     genai.configure(api_key=GEMINI_API_KEY)
@@ -141,6 +167,9 @@ def init_drive():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scopes)
     return build('drive', 'v3', credentials=creds)
 
+# ------------------------------------------------------------------
+# Helper functions (unchanged)
+# ------------------------------------------------------------------
 def clean_pnr(pnr):
     if not pnr:
         return ''
@@ -242,6 +271,9 @@ def sanitize_latin(text):
         text = text.replace(k, v)
     return text.encode('latin-1', 'ignore').decode('latin-1')
 
+# ------------------------------------------------------------------
+# Sheet configuration and loading (unchanged)
+# ------------------------------------------------------------------
 SHEET_CONFIG = {
     "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "doj_col": 7},
     "DATA": {"start_row": 3, "pnr_col": 1, "train_col": 5, "doj_col": 7},
@@ -287,6 +319,9 @@ def load_sheet_data_cached(sheet_name, sheet_id):
         st.error(f"Error loading {sheet_name}: {e}")
         return pd.DataFrame()
 
+# ------------------------------------------------------------------
+# Gemini parser (unchanged)
+# ------------------------------------------------------------------
 def gemini_universal_parser(input_data, input_type, mime_type, progress_callback=None):
     url = f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}'
     system_prompt = """You are TSKEQ Bot's AI extraction engine. You are an EXPERT at reading messy, handwritten, torn, or low-quality railway forms.
@@ -556,6 +591,9 @@ def smart_detect_lower_seat(text):
     keywords = ['LOWER BERTH', 'COUPE', 'WOMAN', 'LOWER SEAT', 'AGE+', 'MEDICAL', 'HANDICAP', 'SR CITIZEN']
     return any(kw in text for kw in keywords)
 
+# ------------------------------------------------------------------
+# Drive upload, sheet save, etc. (unchanged)
+# ------------------------------------------------------------------
 def upload_to_drive(file_bytes, filename, mime_type):
     try:
         drive_service = init_drive()
@@ -659,6 +697,9 @@ Previous conversation:
     except Exception as e:
         return f"⚠️ Error: Could not process your request. Please try again later. ({str(e)})"
 
+# ------------------------------------------------------------------
+# Theme application (unchanged)
+# ------------------------------------------------------------------
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
         bg = "#f6f8fa"
@@ -837,6 +878,9 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
     """
     st.markdown(css, unsafe_allow_html=True)
 
+# ------------------------------------------------------------------
+# PDF, image, WhatsApp helpers (unchanged)
+# ------------------------------------------------------------------
 def generate_pdf(df, title, full=True):
     pdf = FPDF('L', 'mm', 'A4')
     pdf.add_page()
@@ -922,22 +966,26 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
         cols = list(df.columns)
         if '_sheet_row' in cols:
             cols.remove('_sheet_row')
-        cols = cols[:7]
+        # Limit to 5 columns for mobile readability, use short headers
+        cols = cols[:5]
+        # Build a compact table with smaller font (using Markdown code block with small font)
         table_lines = []
-        table_lines.append(" | ".join(cols))
-        table_lines.append("-" * 40)
-        for _, row in df.head(5).iterrows():
-            row_vals = [str(row.get(c, ""))[:12] for c in cols]
+        # Create header line
+        header = " | ".join([c[:8] for c in cols])  # shorten headers
+        table_lines.append(header)
+        table_lines.append("-" * (len(header) + 4))
+        for _, row in df.head(8).iterrows():
+            row_vals = [str(row.get(c, ""))[:10] for c in cols]  # shorten values
             table_lines.append(" | ".join(row_vals))
-        if len(df) > 5:
-            table_lines.append(f"... and {len(df)-5} more rows")
+        if len(df) > 8:
+            table_lines.append(f"... and {len(df)-8} more rows")
         table_text = "\n".join(table_lines)
     else:
         table_text = "No data"
     if selected_count > 0 and pnrs:
-        pnr_text = ", ".join(str(p) for p in pnrs[:15])
-        if len(pnrs) > 15:
-            pnr_text += f" (+{len(pnrs)-15} more)"
+        pnr_text = ", ".join(str(p) for p in pnrs[:10])
+        if len(pnrs) > 10:
+            pnr_text += f" (+{len(pnrs)-10} more)"
         msg = f"📊 *{sheet_name}* — {selected_count} rows selected\n🕐 {now_str}\n🎫 PNRs: {pnr_text}\n\n```\n{table_text}\n```"
     else:
         msg = f"📊 *{sheet_name}* — Total {total_rows} rows\n🕐 {now_str}\n\n```\n{table_text}\n```"
@@ -949,6 +997,241 @@ def get_pnr_status_url(pnr):
         return None
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
 
+# ------------------------------------------------------------------
+# NEW: NTES-based railway functions (adapted from telegram bot)
+# ------------------------------------------------------------------
+def safe_list(data, key):
+    val = data.get(key) if data else None
+    if val is None:
+        return []
+    if isinstance(val, list):
+        return val
+    return [val]
+
+def safe_str(val, default='N/A'):
+    return str(val) if val is not None else default
+
+def get_pnr_status(pnr):
+    if not NTES_AVAILABLE:
+        return {"error": "NTES library not installed"}
+    try:
+        response = ntes_client.pnr_status(pnr)
+        if not response:
+            return None
+        err_msg = response.get('errorMessage', '')
+        if err_msg and 'FLUSHED' in str(err_msg).upper():
+            return {"error": "FLUSHED_PNR"}
+        if not response.get('pnrNumber'):
+            return None
+        passengers = []
+        for p in safe_list(response, 'passengerList'):
+            passengers.append({
+                'booking_status': safe_str(p.get('bookingStatusDetails'), 'N/A'),
+                'current_status': safe_str(p.get('currentStatusDetails'), 'N/A')
+            })
+        return {
+            "pnr": safe_str(response.get('pnrNumber')),
+            "train_number": safe_str(response.get('trainNumber')),
+            "train_name": safe_str(response.get('trainName')),
+            "journey_date": safe_str(response.get('dateOfJourney')),
+            "class": safe_str(response.get('journeyClass')),
+            "quota": safe_str(response.get('quota')),
+            "chart_status": safe_str(response.get('chartStatus'), 'Not Prepared'),
+            "boarding_point": safe_str(response.get('boardingPoint')),
+            "destination": safe_str(response.get('destinationStation')),
+            "passengers": passengers
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+def get_live_train_status(train_number, date_str=None):
+    if not NTES_AVAILABLE:
+        return {"error": "NTES library not installed"}
+    try:
+        if date_str is None:
+            date_str = datetime.now().strftime("%d-%b-%Y")
+        # Try multiple date formats
+        date_formats = [date_str, date_str.replace('-', ' '), date_str.replace('-', '/')]
+        response = None
+        for fmt in date_formats:
+            try:
+                response = ntes_client.live_status(train_number, fmt)
+                if response and response.get('CPOS'):
+                    break
+            except:
+                continue
+        if not response or not response.get('CPOS'):
+            return {"error": "NO_DATA"}
+        # Simplify response – we just need basic info
+        train_name = safe_str(response.get('TNM'), 'N/A')
+        source = safe_str(response.get('SRCN', response.get('DFROM')), 'N/A')
+        destination = safe_str(response.get('DSTNN', response.get('DTO')), 'N/A')
+        current_pos = safe_str(response.get('CPOS'), 'N/A')
+        delay = safe_str(response.get('LDEL'), '0')
+        journey_date = safe_str(response.get('STD'), date_str)
+        # Determine journey state
+        pos_lower = str(current_pos).lower()
+        is_completed = any(k in pos_lower for k in ["reached destination", "journey completed", "terminated"])
+        is_not_started = any(k in pos_lower for k in ["not started", "yet to start", "at source"])
+        state = "completed" if is_completed else ("not_started" if is_not_started else "running")
+        # Get upcoming stations (up to 8)
+        stations_raw = safe_list(response, 'STNSD')
+        if not stations_raw:
+            stations_raw = safe_list(response, 'STNS')
+        upcoming = []
+        # Find current position index
+        current_code = None
+        m = re.search(r'\(([A-Z]{2,5})\)', current_pos)
+        if m:
+            current_code = m.group(1).upper()
+        # Simple approach: find station code in stations list
+        if current_code:
+            for i, s in enumerate(stations_raw):
+                sc = s.get('SC', '').upper()
+                if sc == current_code:
+                    upcoming = stations_raw[i+1:i+9]
+                    break
+        if not upcoming:
+            # fallback: show first few if not started or no match
+            if is_not_started:
+                upcoming = stations_raw[:8]
+            else:
+                upcoming = stations_raw[:8]  # fallback
+        # Format stations for display
+        formatted_stations = []
+        for s in upcoming:
+            formatted_stations.append({
+                'code': safe_str(s.get('SC', 'N/A')),
+                'name': safe_str(s.get('SN', 'N/A')),
+                'arrival': safe_str(s.get('STA', 'N/A')),
+                'departure': safe_str(s.get('STD', 'N/A')),
+                'day': safe_str(s.get('Day', ''))
+            })
+        return {
+            "train_number": train_number,
+            "train_name": train_name,
+            "current_station": current_pos,
+            "source": source,
+            "destination": destination,
+            "journey_date": journey_date,
+            "delay": delay,
+            "state": state,
+            "stations": formatted_stations,
+            "last_updated": datetime.now().strftime('%d %b %H:%M:%S')
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+def get_train_schedule(train_number):
+    if not NTES_AVAILABLE:
+        return {"error": "NTES library not installed"}
+    try:
+        response = ntes_client.schedule(train_number)
+        if not response:
+            return None
+        stations = []
+        for s in safe_list(response, 'stations'):
+            sta = s.get('STA', '')
+            std = s.get('STD', '')
+            if (sta and sta != 'N/A') or (std and std != 'N/A') or sta == 'Source' or std == 'Dest':
+                stations.append({
+                    'code': safe_str(s.get('StationCode')),
+                    'name': safe_str(s.get('StationName')),
+                    'arrival': sta if sta else 'Source',
+                    'departure': std if std else 'Dest',
+                    'day': safe_str(s.get('Day'))
+                })
+        return {
+            "train_number": train_number,
+            "train_name": safe_str(response.get('TrainName')),
+            "source": safe_str(response.get('Source')),
+            "destination": safe_str(response.get('Destination')),
+            "stations": stations,
+            "last_updated": datetime.now().strftime('%d %b %H:%M:%S')
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+def format_pnr_result(data):
+    if not data:
+        return "❌ PNR not found."
+    if isinstance(data, dict) and data.get('error'):
+        if data['error'] == "FLUSHED_PNR":
+            return "❌ FLUSHED PNR / PNR NOT YET GENERATED\n\nPlease check the PNR number and try again."
+        return f"❌ Error: {data['error']}"
+    pnr = data.get('pnr', 'N/A')
+    train_no = data.get('train_number', 'N/A')
+    train_name = data.get('train_name', 'N/A')
+    journey_date = data.get('journey_date', 'N/A')
+    class_code = data.get('class', 'N/A')
+    quota = data.get('quota', 'N/A')
+    chart_status = data.get('chart_status', 'N/A')
+    boarding = data.get('boarding_point', 'N/A')
+    destination = data.get('destination', 'N/A')
+    passengers = data.get('passengers', [])
+    msg = f"**PNR:** {pnr}\n"
+    msg += f"**Train:** {train_no} - {train_name}\n"
+    msg += f"**From:** {boarding} → {destination}\n"
+    msg += f"**Date:** {journey_date}  **Class:** {class_code} ({quota})\n"
+    msg += f"**Chart:** {chart_status}\n\n"
+    if passengers:
+        msg += "**Passengers:**\n"
+        for i, p in enumerate(passengers, 1):
+            msg += f"{i}. Booking: {p['booking_status']}  Current: {p['current_status']}\n"
+    msg += f"\n_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
+    return msg
+
+def format_live_train_result(data):
+    if not data:
+        return "❌ Train not found."
+    if isinstance(data, dict) and data.get('error'):
+        return f"❌ {data['error']}"
+    train_no = data.get('train_number', 'N/A')
+    train_name = data.get('train_name', 'N/A')
+    state = data.get('state', 'running')
+    msg = f"## 🚂 {train_no}\n"
+    msg += f"**{train_name}**\n\n"
+    msg += f"**From:** {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
+    msg += f"**Date:** {data.get('journey_date', 'N/A')}\n"
+    delay = data.get('delay', '0')
+    msg += f"**Delay:** {'✅ On Time' if delay == '0' else f'⏰ {delay} mins late'}\n"
+    msg += f"**Current Status:** {data.get('current_station', 'N/A')}\n"
+    if state == "completed":
+        msg += "\n🏁 **JOURNEY COMPLETED**\n"
+    elif state == "not_started":
+        msg += "\n⏳ **JOURNEY NOT STARTED**\n"
+    else:
+        msg += "\n**Upcoming Stations:**\n"
+        for s in data.get('stations', []):
+            msg += f"- {s['code']} - {s['name']}  Arr: {s['arrival']}  Dep: {s['departure']}\n"
+    msg += f"\n_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
+    return msg
+
+def format_schedule_result(data, start=0, chunk=20):
+    if not data:
+        return "❌ Schedule not found.", None
+    if isinstance(data, dict) and data.get('error'):
+        return f"❌ {data['error']}", None
+    stations = data.get('stations', [])
+    total = len(stations)
+    end = min(start + chunk, total)
+    if start >= total:
+        start = max(0, total - chunk)
+        end = total
+    msg = f"**Train:** {data.get('train_number', 'N/A')} - {data.get('train_name', 'N/A')}\n"
+    msg += f"**From:** {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
+    msg += f"**Showing {start+1} to {end} of {total}**\n\n"
+    for i in range(start, end):
+        s = stations[i]
+        msg += f"{i+1}. **{s['code']}** - {s['name']}\n"
+        msg += f"   Arr: {s['arrival']}  Dep: {s['departure']}  Day: {s['day']}\n\n"
+    msg += f"_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
+    # Pagination info (buttons will be handled by Streamlit)
+    return msg, (start, end, total)
+
+# ------------------------------------------------------------------
+# Main function
+# ------------------------------------------------------------------
 def main():
     st.markdown("""
     <script>
@@ -962,6 +1245,7 @@ def main():
     </script>
     """, unsafe_allow_html=True)
 
+    # Theme selection
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
     if not st.session_state.auto_theme_detected:
         st.session_state.auto_theme_detected = True
@@ -1008,6 +1292,7 @@ def main():
 
     apply_theme(effective_theme, custom_bg, custom_text)
 
+    # Sidebar
     with st.sidebar:
         st.markdown("""
         <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8;">
@@ -1260,14 +1545,15 @@ def main():
                         st.session_state.train_val = selected_train
                         st.rerun()
 
-        view = st.radio("View Mode", ["📋 Data Table", "📊 Dashboard", "💬 Chat"],
-            index=["📋 Data Table", "📊 Dashboard", "💬 Chat"].index(st.session_state.view_mode)
-            if st.session_state.view_mode in ["📋 Data Table", "📊 Dashboard", "💬 Chat"] else 0,
+        view = st.radio("View Mode", ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway"],
+            index=["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway"].index(st.session_state.view_mode)
+            if st.session_state.view_mode in ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway"] else 0,
             key="view_mode_radio")
         if view != st.session_state.view_mode:
             st.session_state.view_mode = view
             st.rerun()
 
+    # Top bar
     top_c1, top_c2 = st.columns([4, 1])
     with top_c1:
         st.markdown("<h1 style='font-size:22px; font-weight:700; margin:0;'>🚂 AI EQMS Hub Pro</h1>", unsafe_allow_html=True)
@@ -1277,6 +1563,9 @@ def main():
     st.caption(f"Enterprise Railway EQ Management  •  {format_date()}  •  {format_time()} IST")
     st.markdown("---")
 
+    # ------------------------------------------------------------------
+    # View: Chat
+    # ------------------------------------------------------------------
     if view == "💬 Chat":
         st.subheader("💬 Chat with TSKEQ Bot")
         st.caption("Ask about EQ data, trains, quota, PNR or anything else.")
@@ -1309,6 +1598,9 @@ def main():
             st.session_state.messages = []
             st.rerun()
 
+    # ------------------------------------------------------------------
+    # View: Dashboard
+    # ------------------------------------------------------------------
     elif view == "📊 Dashboard":
         st.subheader("📊 Analytics Dashboard")
         m1, m2, m3, m4 = st.columns(4)
@@ -1364,7 +1656,10 @@ def main():
         else:
             st.info("No data for charts. Adjust filters or choose another sheet.")
 
-    else:  # Data Table view
+    # ------------------------------------------------------------------
+    # View: Data Table (with print fix and train count)
+    # ------------------------------------------------------------------
+    elif view == "📋 Data Table":
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
         # Determine train column and DOJ column
         train_col_metric = None
@@ -1434,7 +1729,6 @@ def main():
             # ----- Static HTML table for printing (hidden on screen) -----
             print_cols = [c for c in display_df.columns if c != 'Select']
             print_df = display_df[print_cols].copy()
-            # Convert to HTML table with basic styling
             if not print_df.empty:
                 html_table = print_df.to_html(index=False, border=1, classes='print-table')
             else:
@@ -1707,6 +2001,108 @@ def main():
                     st.caption("Ctrl+R: Refresh | Ctrl+P: Print | Auto-sync: ON")
             st.markdown('</div>', unsafe_allow_html=True)
 
+    # ------------------------------------------------------------------
+    # NEW: View: Railway Features (PNR, Live Train, Schedule)
+    # ------------------------------------------------------------------
+    elif view == "🚂 Railway":
+        st.subheader("🚂 Indian Railways - Real‑time Info")
+        if not NTES_AVAILABLE:
+            st.error("❌ 'ntes-client' library not installed. Please run: `pip install ntes-client`")
+            st.stop()
+
+        tab1, tab2, tab3 = st.tabs(["🔍 PNR Status", "🚂 Live Train", "📋 Train Schedule"])
+
+        # ---------- PNR Tab ----------
+        with tab1:
+            st.markdown("### PNR Status Check")
+            pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr")
+            if st.button("Check PNR", key="pnr_check", use_container_width=True):
+                if not pnr_input or len(pnr_input) != 10 or not pnr_input.isdigit():
+                    st.error("Please enter a valid 10-digit PNR.")
+                else:
+                    with st.spinner("Fetching PNR details..."):
+                        data = get_pnr_status(pnr_input)
+                        if data and isinstance(data, dict) and data.get('error'):
+                            st.error(f"❌ {data['error']}")
+                        elif data:
+                            st.markdown(format_pnr_result(data))
+                        else:
+                            st.error("❌ PNR not found or flushed.")
+
+        # ---------- Live Train Tab ----------
+        with tab2:
+            st.markdown("### Live Train Status")
+            train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train")
+            # Date offset selector (today, yesterday, etc.)
+            date_options = [f"{get_date_label(i)} ({get_date_for_offset(i)})" for i in range(5)]
+            date_choice = st.selectbox("Select Date", date_options, index=0, key="rail_date")
+            offset = int(date_choice.split()[0].split('(')[-1].strip(')')) if '(' in date_choice else 0
+            if st.button("Get Live Status", key="train_live", use_container_width=True):
+                if not train_no or not train_no.isdigit() or not (3 <= len(train_no) <= 5):
+                    st.error("Please enter a valid train number (3-5 digits).")
+                else:
+                    with st.spinner("Fetching live status..."):
+                        date_str = get_date_for_offset(offset)
+                        data = get_live_train_status(train_no, date_str)
+                        if data and isinstance(data, dict) and data.get('error'):
+                            st.error(f"❌ {data['error']}")
+                        elif data:
+                            st.markdown(format_live_train_result(data))
+                        else:
+                            st.error("❌ No data available.")
+
+        # ---------- Schedule Tab ----------
+        with tab3:
+            st.markdown("### Train Schedule / Route")
+            train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch")
+            # Pagination state
+            if 'sch_start' not in st.session_state:
+                st.session_state.sch_start = 0
+            if st.button("Get Schedule", key="train_sch", use_container_width=True):
+                if not train_no_sch or not train_no_sch.isdigit() or not (3 <= len(train_no_sch) <= 5):
+                    st.error("Please enter a valid train number.")
+                else:
+                    with st.spinner("Fetching schedule..."):
+                        data = get_train_schedule(train_no_sch)
+                        if data and isinstance(data, dict) and data.get('error'):
+                            st.error(f"❌ {data['error']}")
+                        elif data:
+                            st.session_state.sch_data = data
+                            st.session_state.sch_start = 0
+                            st.rerun()
+                        else:
+                            st.error("❌ Schedule not found.")
+            # Display schedule if data exists
+            if 'sch_data' in st.session_state:
+                data = st.session_state.sch_data
+                total = len(data.get('stations', []))
+                chunk = 20
+                start = st.session_state.sch_start
+                end = min(start + chunk, total)
+                if start >= total:
+                    start = max(0, total - chunk)
+                    end = total
+                    st.session_state.sch_start = start
+                msg, _ = format_schedule_result(data, start, chunk)
+                st.markdown(msg)
+                # Pagination buttons
+                col1, col2, col3 = st.columns([1,2,1])
+                with col1:
+                    if start > 0:
+                        if st.button("◀ Previous", key="sch_prev"):
+                            st.session_state.sch_start = max(0, start - chunk)
+                            st.rerun()
+                with col2:
+                    st.write(f"Showing {start+1}-{end} of {total}")
+                with col3:
+                    if end < total:
+                        if st.button("Next ▶", key="sch_next"):
+                            st.session_state.sch_start = end
+                            st.rerun()
+
+    # ------------------------------------------------------------------
+    # Footer
+    # ------------------------------------------------------------------
     st.markdown("""
     <div class='pro-footer no-print'>
         🚂 AI EQMS Hub Pro • Created by Sharique<br>
