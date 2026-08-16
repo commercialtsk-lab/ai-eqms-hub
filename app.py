@@ -21,6 +21,9 @@ import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 from matplotlib.table import Table as MplTable
 import numpy as np
+from PIL import Image
+import hashlib
+import hmac
 
 # ------------------------------------------------------------------
 # NTES client (try to import)
@@ -94,7 +97,11 @@ defaults = {
     'pnr_result': None, 'train_result': None,
     'last_uploaded_drive_id': None,
     'manual_refresh': False,
-    'sheet_print_data': None
+    'sheet_print_data': None,
+    'analytics_data': None,
+    'notification': None,
+    'selected_rows': [],
+    'export_format': 'pdf'
 }
 
 for key, val in defaults.items():
@@ -2069,7 +2076,7 @@ def main():
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
                 st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
             with a5:
-                st.button("🖨️ PRINT", use_container_width=True, key="print_btn_fast"):
+                if st.button("🖨️ PRINT", use_container_width=True, key="print_btn_fast"):
                     st.session_state.print_trigger = True
                     st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
