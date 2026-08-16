@@ -63,6 +63,7 @@ def format_datetime(dt=None):
 # ------------------------------------------------------------------
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
 GSPREAD_CREDENTIALS = st.secrets.get("GSPREAD_CREDENTIALS")
+WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", "7fff411d9ecb183d6053870fc40823c9")
 
 if not GEMINI_API_KEY or not GSPREAD_CREDENTIALS:
     st.error("❌ Missing credentials! Please check secrets.toml")
@@ -89,6 +90,7 @@ defaults = {
     'select_all': False, 'delete_confirm': False,
     'auto_theme_detected': False, 'sidebar_collapsed': False,
     'quick_filter_train': '', 'show_keyboard_help': False, 'print_trigger': False,
+    'sch_start': 0, 'sch_data': None, 'weather_data': None
 }
 
 for key, val in defaults.items():
@@ -284,7 +286,7 @@ def sanitize_latin(text):
     return text.encode('latin-1', 'ignore').decode('latin-1')
 
 # ------------------------------------------------------------------
-# Sheet configuration and loading (unchanged)
+# Sheet configuration and loading
 # ------------------------------------------------------------------
 SHEET_CONFIG = {
     "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "doj_col": 7},
@@ -710,6 +712,266 @@ Previous conversation:
         return f"⚠️ Error: Could not process your request. Please try again later. ({str(e)})"
 
 # ------------------------------------------------------------------
+# Weather API function
+# ------------------------------------------------------------------
+def get_weather(city_name):
+    """Fetch weather data for a given city using OpenWeatherMap API"""
+    if not city_name:
+        return {'error': 'Please enter a city name'}
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            return {
+                'city': data.get('name', city_name),
+                'country': data.get('sys', {}).get('country', ''),
+                'temp': data.get('main', {}).get('temp', 'N/A'),
+                'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
+                'humidity': data.get('main', {}).get('humidity', 'N/A'),
+                'pressure': data.get('main', {}).get('pressure', 'N/A'),
+                'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
+                'icon': data.get('weather', [{}])[0].get('icon', ''),
+                'wind_speed': data.get('wind', {}).get('speed', 'N/A'),
+                'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
+                'sunrise': data.get('sys', {}).get('sunrise', 'N/A'),
+                'sunset': data.get('sys', {}).get('sunset', 'N/A')
+            }
+        else:
+            return {'error': f'City not found. Please check the name.'}
+    except Exception as e:
+        return {'error': f'Error fetching weather: {str(e)}'}
+
+# ------------------------------------------------------------------
+# NTES-based railway functions (adapted from telegram bot)
+# ------------------------------------------------------------------
+def safe_list(data, key):
+    val = data.get(key) if data else None
+    if val is None:
+        return []
+    if isinstance(val, list):
+        return val
+    return [val]
+
+def safe_str(val, default='N/A'):
+    return str(val) if val is not None else default
+
+def get_pnr_status(pnr):
+    if not NTES_AVAILABLE:
+        return {"error": "NTES library not installed"}
+    try:
+        response = ntes_client.pnr_status(pnr)
+        if not response:
+            return None
+        err_msg = response.get('errorMessage', '')
+        if err_msg and 'FLUSHED' in str(err_msg).upper():
+            return {"error": "FLUSHED_PNR"}
+        if not response.get('pnrNumber'):
+            return None
+        passengers = []
+        for p in safe_list(response, 'passengerList'):
+            passengers.append({
+                'booking_status': safe_str(p.get('bookingStatusDetails'), 'N/A'),
+                'current_status': safe_str(p.get('currentStatusDetails'), 'N/A')
+            })
+        return {
+            "pnr": safe_str(response.get('pnrNumber')),
+            "train_number": safe_str(response.get('trainNumber')),
+            "train_name": safe_str(response.get('trainName')),
+            "journey_date": safe_str(response.get('dateOfJourney')),
+            "class": safe_str(response.get('journeyClass')),
+            "quota": safe_str(response.get('quota')),
+            "chart_status": safe_str(response.get('chartStatus'), 'Not Prepared'),
+            "boarding_point": safe_str(response.get('boardingPoint')),
+            "destination": safe_str(response.get('destinationStation')),
+            "passengers": passengers
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+def get_live_train_status(train_number, date_str=None):
+    if not NTES_AVAILABLE:
+        return {"error": "NTES library not installed"}
+    try:
+        if date_str is None:
+            date_str = datetime.now().strftime("%d-%b-%Y")
+        date_formats = [date_str, date_str.replace('-', ' '), date_str.replace('-', '/')]
+        response = None
+        for fmt in date_formats:
+            try:
+                response = ntes_client.live_status(train_number, fmt)
+                if response and response.get('CPOS'):
+                    break
+            except:
+                continue
+        if not response or not response.get('CPOS'):
+            return {"error": "NO_DATA"}
+        train_name = safe_str(response.get('TNM'), 'N/A')
+        source = safe_str(response.get('SRCN', response.get('DFROM')), 'N/A')
+        destination = safe_str(response.get('DSTNN', response.get('DTO')), 'N/A')
+        current_pos = safe_str(response.get('CPOS'), 'N/A')
+        delay = safe_str(response.get('LDEL'), '0')
+        journey_date = safe_str(response.get('STD'), date_str)
+        pos_lower = str(current_pos).lower()
+        is_completed = any(k in pos_lower for k in ["reached destination", "journey completed", "terminated", "destination reached", "arrived at destination", "train completed", "train reached", "journey ended", "train terminated", "has terminated", "run terminated"])
+        is_not_started = any(k in pos_lower for k in ["not started", "yet to start", "scheduled", "at source", "will start", "starts from", "origin", "before departure"])
+        if not is_completed and destination != 'N/A':
+            dest_upper = destination.upper()
+            if any(w in pos_lower for w in ['arrived', 'reached', 'terminated', 'completed', 'ended']):
+                dest_words = [w for w in dest_upper.split() if len(w) >= 3]
+                for word in dest_words:
+                    if word in pos_str.upper(): is_completed = True; break
+        stations_raw = safe_list(response, 'STNSD')
+        if not stations_raw:
+            stations_raw = safe_list(response, 'STNS')
+        upcoming = []
+        current_code = None
+        m = re.search(r'\(([A-Z]{2,5})\)', current_pos)
+        if m:
+            current_code = m.group(1).upper()
+        if current_code:
+            for i, s in enumerate(stations_raw):
+                sc = s.get('SC', '').upper() if isinstance(s, dict) else ''
+                if sc == current_code:
+                    upcoming = stations_raw[i+1:i+9]
+                    break
+        if not upcoming:
+            if is_not_started:
+                upcoming = stations_raw[:8]
+            else:
+                upcoming = stations_raw[:8]
+        formatted_stations = []
+        for s in upcoming:
+            if isinstance(s, dict):
+                formatted_stations.append({
+                    'code': safe_str(s.get('SC', 'N/A')),
+                    'name': safe_str(s.get('SN', 'N/A')),
+                    'arrival': safe_str(s.get('STA', 'N/A')),
+                    'departure': safe_str(s.get('STD', 'N/A')),
+                    'day': safe_str(s.get('Day', ''))
+                })
+        return {
+            "train_number": train_number,
+            "train_name": train_name,
+            "current_station": current_pos,
+            "source": source,
+            "destination": destination,
+            "journey_date": journey_date,
+            "delay": delay,
+            "state": "completed" if is_completed else ("not_started" if is_not_started else "running"),
+            "stations": formatted_stations,
+            "last_updated": datetime.now().strftime('%d %b %H:%M:%S')
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+def get_train_schedule(train_number):
+    if not NTES_AVAILABLE:
+        return {"error": "NTES library not installed"}
+    try:
+        response = ntes_client.schedule(train_number)
+        if not response:
+            return None
+        stations = []
+        for s in safe_list(response, 'stations'):
+            sta = s.get('STA', '')
+            std = s.get('STD', '')
+            if (sta and sta != 'N/A') or (std and std != 'N/A') or sta == 'Source' or std == 'Dest':
+                stations.append({
+                    'code': safe_str(s.get('StationCode')),
+                    'name': safe_str(s.get('StationName')),
+                    'arrival': sta if sta else 'Source',
+                    'departure': std if std else 'Dest',
+                    'day': safe_str(s.get('Day'))
+                })
+        return {
+            "train_number": train_number,
+            "train_name": safe_str(response.get('TrainName')),
+            "source": safe_str(response.get('Source')),
+            "destination": safe_str(response.get('Destination')),
+            "stations": stations,
+            "last_updated": datetime.now().strftime('%d %b %H:%M:%S')
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+def format_pnr_result(data):
+    if not data:
+        return "❌ PNR not found."
+    if isinstance(data, dict) and data.get('error'):
+        if data['error'] == "FLUSHED_PNR":
+            return "❌ FLUSHED PNR / PNR NOT YET GENERATED\n\nPlease check the PNR number and try again."
+        return f"❌ Error: {data['error']}"
+    pnr = data.get('pnr', 'N/A')
+    train_no = data.get('train_number', 'N/A')
+    train_name = data.get('train_name', 'N/A')
+    journey_date = data.get('journey_date', 'N/A')
+    class_code = data.get('class', 'N/A')
+    quota = data.get('quota', 'N/A')
+    chart_status = data.get('chart_status', 'N/A')
+    boarding = data.get('boarding_point', 'N/A')
+    destination = data.get('destination', 'N/A')
+    passengers = data.get('passengers', [])
+    msg = f"**PNR:** {pnr}\n"
+    msg += f"**Train:** {train_no} - {train_name}\n"
+    msg += f"**From:** {boarding} → {destination}\n"
+    msg += f"**Date:** {journey_date}  **Class:** {class_code} ({quota})\n"
+    msg += f"**Chart:** {chart_status}\n\n"
+    if passengers:
+        msg += "**Passengers:**\n"
+        for i, p in enumerate(passengers, 1):
+            msg += f"{i}. Booking: {p['booking_status']}  Current: {p['current_status']}\n"
+    msg += f"\n_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
+    return msg
+
+def format_live_train_result(data):
+    if not data:
+        return "❌ Train not found."
+    if isinstance(data, dict) and data.get('error'):
+        return f"❌ {data['error']}"
+    train_no = data.get('train_number', 'N/A')
+    train_name = data.get('train_name', 'N/A')
+    state = data.get('state', 'running')
+    msg = f"## 🚂 {train_no}\n"
+    msg += f"**{train_name}**\n\n"
+    msg += f"**From:** {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
+    msg += f"**Date:** {data.get('journey_date', 'N/A')}\n"
+    delay = data.get('delay', '0')
+    msg += f"**Delay:** {'✅ On Time' if delay == '0' else f'⏰ {delay} mins late'}\n"
+    msg += f"**Current Status:** {data.get('current_station', 'N/A')}\n"
+    if state == "completed":
+        msg += "\n🏁 **JOURNEY COMPLETED**\n"
+    elif state == "not_started":
+        msg += "\n⏳ **JOURNEY NOT STARTED**\n"
+    else:
+        msg += "\n**Upcoming Stations:**\n"
+        for s in data.get('stations', []):
+            msg += f"- {s['code']} - {s['name']}  Arr: {s['arrival']}  Dep: {s['departure']}\n"
+    msg += f"\n_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
+    return msg
+
+def format_schedule_result(data, start=0, chunk=20):
+    if not data:
+        return "❌ Schedule not found.", None
+    if isinstance(data, dict) and data.get('error'):
+        return f"❌ {data['error']}", None
+    stations = data.get('stations', [])
+    total = len(stations)
+    end = min(start + chunk, total)
+    if start >= total:
+        start = max(0, total - chunk)
+        end = total
+    msg = f"**Train:** {data.get('train_number', 'N/A')} - {data.get('train_name', 'N/A')}\n"
+    msg += f"**From:** {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
+    msg += f"**Showing {start+1} to {end} of {total}**\n\n"
+    for i in range(start, end):
+        s = stations[i]
+        msg += f"{i+1}. **{s['code']}** - {s['name']}\n"
+        msg += f"   Arr: {s['arrival']}  Dep: {s['departure']}  Day: {s['day']}\n\n"
+    msg += f"_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
+    return msg, (start, end, total)
+
+# ------------------------------------------------------------------
 # Theme application (updated for train count cards)
 # ------------------------------------------------------------------
 def apply_theme(theme, custom_bg=None, custom_text=None):
@@ -1013,16 +1275,13 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
         cols = list(df.columns)
         if '_sheet_row' in cols:
             cols.remove('_sheet_row')
-        # Limit to 5 columns for mobile readability, use short headers
         cols = cols[:5]
-        # Build a compact table with smaller font (using Markdown code block with small font)
         table_lines = []
-        # Create header line
-        header = " | ".join([c[:8] for c in cols])  # shorten headers
+        header = " | ".join([c[:8] for c in cols])
         table_lines.append(header)
         table_lines.append("-" * (len(header) + 4))
         for _, row in df.head(8).iterrows():
-            row_vals = [str(row.get(c, ""))[:10] for c in cols]  # shorten values
+            row_vals = [str(row.get(c, ""))[:10] for c in cols]
             table_lines.append(" | ".join(row_vals))
         if len(df) > 8:
             table_lines.append(f"... and {len(df)-8} more rows")
@@ -1043,237 +1302,6 @@ def get_pnr_status_url(pnr):
     if not pnr or len(str(pnr)) != 10:
         return None
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
-
-# ------------------------------------------------------------------
-# NTES-based railway functions (adapted from telegram bot)
-# ------------------------------------------------------------------
-def safe_list(data, key):
-    val = data.get(key) if data else None
-    if val is None:
-        return []
-    if isinstance(val, list):
-        return val
-    return [val]
-
-def safe_str(val, default='N/A'):
-    return str(val) if val is not None else default
-
-def get_pnr_status(pnr):
-    if not NTES_AVAILABLE:
-        return {"error": "NTES library not installed"}
-    try:
-        response = ntes_client.pnr_status(pnr)
-        if not response:
-            return None
-        err_msg = response.get('errorMessage', '')
-        if err_msg and 'FLUSHED' in str(err_msg).upper():
-            return {"error": "FLUSHED_PNR"}
-        if not response.get('pnrNumber'):
-            return None
-        passengers = []
-        for p in safe_list(response, 'passengerList'):
-            passengers.append({
-                'booking_status': safe_str(p.get('bookingStatusDetails'), 'N/A'),
-                'current_status': safe_str(p.get('currentStatusDetails'), 'N/A')
-            })
-        return {
-            "pnr": safe_str(response.get('pnrNumber')),
-            "train_number": safe_str(response.get('trainNumber')),
-            "train_name": safe_str(response.get('trainName')),
-            "journey_date": safe_str(response.get('dateOfJourney')),
-            "class": safe_str(response.get('journeyClass')),
-            "quota": safe_str(response.get('quota')),
-            "chart_status": safe_str(response.get('chartStatus'), 'Not Prepared'),
-            "boarding_point": safe_str(response.get('boardingPoint')),
-            "destination": safe_str(response.get('destinationStation')),
-            "passengers": passengers
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-def get_live_train_status(train_number, date_str=None):
-    if not NTES_AVAILABLE:
-        return {"error": "NTES library not installed"}
-    try:
-        if date_str is None:
-            date_str = datetime.now().strftime("%d-%b-%Y")
-        # Try multiple date formats
-        date_formats = [date_str, date_str.replace('-', ' '), date_str.replace('-', '/')]
-        response = None
-        for fmt in date_formats:
-            try:
-                response = ntes_client.live_status(train_number, fmt)
-                if response and response.get('CPOS'):
-                    break
-            except:
-                continue
-        if not response or not response.get('CPOS'):
-            return {"error": "NO_DATA"}
-        # Simplify response – we just need basic info
-        train_name = safe_str(response.get('TNM'), 'N/A')
-        source = safe_str(response.get('SRCN', response.get('DFROM')), 'N/A')
-        destination = safe_str(response.get('DSTNN', response.get('DTO')), 'N/A')
-        current_pos = safe_str(response.get('CPOS'), 'N/A')
-        delay = safe_str(response.get('LDEL'), '0')
-        journey_date = safe_str(response.get('STD'), date_str)
-        # Determine journey state
-        pos_lower = str(current_pos).lower()
-        is_completed = any(k in pos_lower for k in ["reached destination", "journey completed", "terminated"])
-        is_not_started = any(k in pos_lower for k in ["not started", "yet to start", "at source"])
-        state = "completed" if is_completed else ("not_started" if is_not_started else "running")
-        # Get upcoming stations (up to 8)
-        stations_raw = safe_list(response, 'STNSD')
-        if not stations_raw:
-            stations_raw = safe_list(response, 'STNS')
-        upcoming = []
-        # Find current position index
-        current_code = None
-        m = re.search(r'\(([A-Z]{2,5})\)', current_pos)
-        if m:
-            current_code = m.group(1).upper()
-        # Simple approach: find station code in stations list
-        if current_code:
-            for i, s in enumerate(stations_raw):
-                sc = s.get('SC', '').upper()
-                if sc == current_code:
-                    upcoming = stations_raw[i+1:i+9]
-                    break
-        if not upcoming:
-            # fallback: show first few if not started or no match
-            if is_not_started:
-                upcoming = stations_raw[:8]
-            else:
-                upcoming = stations_raw[:8]  # fallback
-        # Format stations for display
-        formatted_stations = []
-        for s in upcoming:
-            formatted_stations.append({
-                'code': safe_str(s.get('SC', 'N/A')),
-                'name': safe_str(s.get('SN', 'N/A')),
-                'arrival': safe_str(s.get('STA', 'N/A')),
-                'departure': safe_str(s.get('STD', 'N/A')),
-                'day': safe_str(s.get('Day', ''))
-            })
-        return {
-            "train_number": train_number,
-            "train_name": train_name,
-            "current_station": current_pos,
-            "source": source,
-            "destination": destination,
-            "journey_date": journey_date,
-            "delay": delay,
-            "state": state,
-            "stations": formatted_stations,
-            "last_updated": datetime.now().strftime('%d %b %H:%M:%S')
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-def get_train_schedule(train_number):
-    if not NTES_AVAILABLE:
-        return {"error": "NTES library not installed"}
-    try:
-        response = ntes_client.schedule(train_number)
-        if not response:
-            return None
-        stations = []
-        for s in safe_list(response, 'stations'):
-            sta = s.get('STA', '')
-            std = s.get('STD', '')
-            if (sta and sta != 'N/A') or (std and std != 'N/A') or sta == 'Source' or std == 'Dest':
-                stations.append({
-                    'code': safe_str(s.get('StationCode')),
-                    'name': safe_str(s.get('StationName')),
-                    'arrival': sta if sta else 'Source',
-                    'departure': std if std else 'Dest',
-                    'day': safe_str(s.get('Day'))
-                })
-        return {
-            "train_number": train_number,
-            "train_name": safe_str(response.get('TrainName')),
-            "source": safe_str(response.get('Source')),
-            "destination": safe_str(response.get('Destination')),
-            "stations": stations,
-            "last_updated": datetime.now().strftime('%d %b %H:%M:%S')
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-def format_pnr_result(data):
-    if not data:
-        return "❌ PNR not found."
-    if isinstance(data, dict) and data.get('error'):
-        if data['error'] == "FLUSHED_PNR":
-            return "❌ FLUSHED PNR / PNR NOT YET GENERATED\n\nPlease check the PNR number and try again."
-        return f"❌ Error: {data['error']}"
-    pnr = data.get('pnr', 'N/A')
-    train_no = data.get('train_number', 'N/A')
-    train_name = data.get('train_name', 'N/A')
-    journey_date = data.get('journey_date', 'N/A')
-    class_code = data.get('class', 'N/A')
-    quota = data.get('quota', 'N/A')
-    chart_status = data.get('chart_status', 'N/A')
-    boarding = data.get('boarding_point', 'N/A')
-    destination = data.get('destination', 'N/A')
-    passengers = data.get('passengers', [])
-    msg = f"**PNR:** {pnr}\n"
-    msg += f"**Train:** {train_no} - {train_name}\n"
-    msg += f"**From:** {boarding} → {destination}\n"
-    msg += f"**Date:** {journey_date}  **Class:** {class_code} ({quota})\n"
-    msg += f"**Chart:** {chart_status}\n\n"
-    if passengers:
-        msg += "**Passengers:**\n"
-        for i, p in enumerate(passengers, 1):
-            msg += f"{i}. Booking: {p['booking_status']}  Current: {p['current_status']}\n"
-    msg += f"\n_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
-    return msg
-
-def format_live_train_result(data):
-    if not data:
-        return "❌ Train not found."
-    if isinstance(data, dict) and data.get('error'):
-        return f"❌ {data['error']}"
-    train_no = data.get('train_number', 'N/A')
-    train_name = data.get('train_name', 'N/A')
-    state = data.get('state', 'running')
-    msg = f"## 🚂 {train_no}\n"
-    msg += f"**{train_name}**\n\n"
-    msg += f"**From:** {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
-    msg += f"**Date:** {data.get('journey_date', 'N/A')}\n"
-    delay = data.get('delay', '0')
-    msg += f"**Delay:** {'✅ On Time' if delay == '0' else f'⏰ {delay} mins late'}\n"
-    msg += f"**Current Status:** {data.get('current_station', 'N/A')}\n"
-    if state == "completed":
-        msg += "\n🏁 **JOURNEY COMPLETED**\n"
-    elif state == "not_started":
-        msg += "\n⏳ **JOURNEY NOT STARTED**\n"
-    else:
-        msg += "\n**Upcoming Stations:**\n"
-        for s in data.get('stations', []):
-            msg += f"- {s['code']} - {s['name']}  Arr: {s['arrival']}  Dep: {s['departure']}\n"
-    msg += f"\n_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
-    return msg
-
-def format_schedule_result(data, start=0, chunk=20):
-    if not data:
-        return "❌ Schedule not found.", None
-    if isinstance(data, dict) and data.get('error'):
-        return f"❌ {data['error']}", None
-    stations = data.get('stations', [])
-    total = len(stations)
-    end = min(start + chunk, total)
-    if start >= total:
-        start = max(0, total - chunk)
-        end = total
-    msg = f"**Train:** {data.get('train_number', 'N/A')} - {data.get('train_name', 'N/A')}\n"
-    msg += f"**From:** {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
-    msg += f"**Showing {start+1} to {end} of {total}**\n\n"
-    for i in range(start, end):
-        s = stations[i]
-        msg += f"{i+1}. **{s['code']}** - {s['name']}\n"
-        msg += f"   Arr: {s['arrival']}  Dep: {s['departure']}  Day: {s['day']}\n\n"
-    msg += f"_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
-    return msg, (start, end, total)
 
 # ------------------------------------------------------------------
 # Main function
@@ -1512,97 +1540,96 @@ def main():
                 st.caption("No activity yet")
         st.markdown("---")
 
-        with st.expander("📑 Sheet & Filters", expanded=True):
-            sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()),
-                index=list(SHEET_CONFIG.keys()).index(st.session_state.selected_sheet)
-                if st.session_state.selected_sheet in SHEET_CONFIG else 0,
-                key="sheet_select")
+        # Sheet selection in sidebar
+        sheet_choice = st.selectbox("📑 Select Sheet", list(SHEET_CONFIG.keys()),
+            index=list(SHEET_CONFIG.keys()).index(st.session_state.selected_sheet)
+            if st.session_state.selected_sheet in SHEET_CONFIG else 0,
+            key="sheet_select")
+        if sheet_choice != st.session_state.selected_sheet:
             st.session_state.selected_sheet = sheet_choice
-            config = SHEET_CONFIG[sheet_choice]
-            start_row = config["start_row"]
-
-            pnr_input = st.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
-            if pnr_input != st.session_state.pnr_val:
-                st.session_state.pnr_val = pnr_input
-                st.session_state.current_page = 1
-                st.rerun()
-
-            train_input = st.text_input("Train (partial)", value=st.session_state.train_val, key="train_filter_input")
-            if train_input != st.session_state.train_val:
-                st.session_state.train_val = train_input
-                st.session_state.current_page = 1
-                st.rerun()
-
-            c1, c2 = st.columns(2)
-            with c1:
-                from_input = st.date_input("From DOJ", value=st.session_state.from_val,
-                    key="from_date_input", format="DD-MM-YYYY")
-            with c2:
-                to_input = st.date_input("To DOJ", value=st.session_state.to_val,
-                    key="to_date_input", format="DD-MM-YYYY")
-            if from_input != st.session_state.from_val:
-                st.session_state.from_val = from_input
-                st.session_state.current_page = 1
-                st.rerun()
-            if to_input != st.session_state.to_val:
-                st.session_state.to_val = to_input
-                st.session_state.current_page = 1
-                st.rerun()
-
-        df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
-        filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
-
-        if not filtered_df.empty:
-            pnr_col_idx = config.get("pnr_col")
-            train_col_idx = config.get("train_col")
-            doj_col_idx = config.get("doj_col")
-            if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
-                col_name = filtered_df.columns[pnr_col_idx]
-                filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.pnr_val, case=False, na=False)]
-            if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
-                col_name = filtered_df.columns[train_col_idx]
-                filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
-            if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
-                col_name = filtered_df.columns[doj_col_idx]
-                try:
-                    filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
-                    if filtered_df['_temp'].isna().all():
-                        filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
-                except Exception:
-                    filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
-                if st.session_state.from_val:
-                    filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
-                if st.session_state.to_val:
-                    filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
-                filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
-
-        train_col = None
-        for c in filtered_df.columns:
-            if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
-                train_col = c
-                break
-        if train_col and not filtered_df.empty:
-            train_options = sorted(filtered_df[train_col].dropna().unique())
-            if train_options:
-                selected_train = st.selectbox("🚆 Quick Filter by Train", [""] + list(train_options), key="quick_train_select")
-                if selected_train:
-                    filtered_df = filtered_df[filtered_df[train_col] == selected_train]
-                    if st.session_state.train_val != selected_train:
-                        st.session_state.train_val = selected_train
-                        st.rerun()
-
-        view = st.radio("View Mode", ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway"],
-            index=["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway"].index(st.session_state.view_mode)
-            if st.session_state.view_mode in ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway"] else 0,
-            key="view_mode_radio")
-        if view != st.session_state.view_mode:
-            st.session_state.view_mode = view
+            st.session_state.current_page = 1
+            st.cache_data.clear()
             st.rerun()
+
+        # Filters - apply to selected sheet
+        config = SHEET_CONFIG[sheet_choice]
+        pnr_col_idx = config.get("pnr_col")
+        train_col_idx = config.get("train_col")
+        doj_col_idx = config.get("doj_col")
+
+        st.markdown("### 🔍 Filters")
+        pnr_input = st.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
+        if pnr_input != st.session_state.pnr_val:
+            st.session_state.pnr_val = pnr_input
+            st.session_state.current_page = 1
+            st.rerun()
+
+        train_input = st.text_input("Train (partial)", value=st.session_state.train_val, key="train_filter_input")
+        if train_input != st.session_state.train_val:
+            st.session_state.train_val = train_input
+            st.session_state.current_page = 1
+            st.rerun()
+
+        c1, c2 = st.columns(2)
+        with c1:
+            from_input = st.date_input("From DOJ", value=st.session_state.from_val,
+                key="from_date_input", format="DD-MM-YYYY")
+        with c2:
+            to_input = st.date_input("To DOJ", value=st.session_state.to_val,
+                key="to_date_input", format="DD-MM-YYYY")
+        if from_input != st.session_state.from_val:
+            st.session_state.from_val = from_input
+            st.session_state.current_page = 1
+            st.rerun()
+        if to_input != st.session_state.to_val:
+            st.session_state.to_val = to_input
+            st.session_state.current_page = 1
+            st.rerun()
+
+    # Load data for selected sheet
+    df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
+    filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
+
+    # Apply filters to the selected sheet's data
+    if not filtered_df.empty:
+        config = SHEET_CONFIG[sheet_choice]
+        pnr_col_idx = config.get("pnr_col")
+        train_col_idx = config.get("train_col")
+        doj_col_idx = config.get("doj_col")
+
+        if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
+            col_name = filtered_df.columns[pnr_col_idx]
+            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.pnr_val, case=False, na=False)]
+        if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
+            col_name = filtered_df.columns[train_col_idx]
+            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
+        if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
+            col_name = filtered_df.columns[doj_col_idx]
+            try:
+                filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
+                if filtered_df['_temp'].isna().all():
+                    filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
+            except Exception:
+                filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
+            if st.session_state.from_val:
+                filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
+            if st.session_state.to_val:
+                filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
+            filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
+
+    # View mode selection (in main area)
+    view = st.radio("View Mode", ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"],
+        index=["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"].index(st.session_state.view_mode)
+        if st.session_state.view_mode in ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"] else 0,
+        key="view_mode_radio", horizontal=True)
+    if view != st.session_state.view_mode:
+        st.session_state.view_mode = view
+        st.rerun()
 
     # Top bar
     top_c1, top_c2 = st.columns([4, 1])
     with top_c1:
-        st.markdown("<h1 style='font-size:22px; font-weight:700; margin:0;'>🚂 AI EQMS Hub Pro</h1>", unsafe_allow_html=True)
+        st.markdown(f"<h1 style='font-size:22px; font-weight:700; margin:0;'>🚂 AI EQMS Hub Pro — {sheet_choice}</h1>", unsafe_allow_html=True)
     with top_c2:
         st.markdown(f"<div style='padding-top:6px; text-align:right;'><span class='status-pill status-live'>● Live</span> &nbsp; <span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span></div>", unsafe_allow_html=True)
 
@@ -1648,7 +1675,14 @@ def main():
     # View: Dashboard
     # ------------------------------------------------------------------
     elif view == "📊 Dashboard":
-        st.subheader("📊 Analytics Dashboard")
+        st.subheader(f"📊 Analytics Dashboard — {sheet_choice}")
+        # Find train column for this sheet
+        train_col = None
+        for c in filtered_df.columns:
+            if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
+                train_col = c
+                break
+
         m1, m2, m3, m4 = st.columns(4)
         with m1:
             total_records = len(filtered_df) if not filtered_df.empty else 0
@@ -1707,7 +1741,7 @@ def main():
     # ------------------------------------------------------------------
     elif view == "📋 Data Table":
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
-        # Determine train column and DOJ column
+        # Determine train column and DOJ column for this sheet
         train_col_metric = None
         doj_col = None
         for c in filtered_df.columns:
@@ -1717,7 +1751,7 @@ def main():
                 doj_col = c
 
         if not filtered_df.empty:
-            # Show train count summary - NO background color, larger font, removed "Count" text
+            # Show train count summary - NO background color on numbers, just plain
             if train_col_metric:
                 train_counts_series = filtered_df[train_col_metric].value_counts()
                 st.markdown("**🚆 Train-wise Count**")
@@ -1786,7 +1820,6 @@ def main():
                 <p style="text-align:center; font-size:10pt;">Generated: {format_datetime()} IST</p>
             </div>
             """, unsafe_allow_html=True)
-            # ---------------------------------
 
             st.markdown('<div class="print-area">', unsafe_allow_html=True)
             edited_page = st.data_editor(display_df, use_container_width=True, height=400,
@@ -1853,6 +1886,8 @@ def main():
                         gc = init_sheets()
                         sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
                         all_data = sheet.get_all_values()
+                        config = SHEET_CONFIG[sheet_choice]
+                        start_row = config["start_row"]
                         num_cols = len(all_data[0]) if all_data else 1
                         blank_row = [''] * num_cols
                         if len(all_data) >= start_row:
@@ -1935,7 +1970,6 @@ def main():
                 else:
                     st.info("Select rows to generate image")
             with wa_col3:
-                # Copy image to clipboard
                 if not filtered_df.empty:
                     img_bytes = create_table_image(filtered_df, f"{sheet_choice} Data")
                     if img_bytes:
@@ -2032,8 +2066,8 @@ def main():
                         st.caption(f"📅 Upcoming DOJ: {upcoming}")
                 with feat2:
                     st.markdown("**🚆 Train Analysis**")
-                    if train_col and not filtered_df.empty:
-                        most_common = filtered_df[train_col].mode()
+                    if train_col_metric and not filtered_df.empty:
+                        most_common = filtered_df[train_col_metric].mode()
                         if not most_common.empty:
                             st.caption(f"🔥 Most frequent train: {most_common.iloc[0]}")
                         if pnr_col:
@@ -2072,6 +2106,14 @@ def main():
                             st.error(f"❌ {data['error']}")
                         elif data:
                             st.markdown(format_pnr_result(data))
+                            # Refresh button
+                            if st.button("🔄 Refresh PNR", key="refresh_pnr", use_container_width=True):
+                                with st.spinner("Refreshing PNR..."):
+                                    data = get_pnr_status(pnr_input)
+                                    if data and isinstance(data, dict) and data.get('error'):
+                                        st.error(f"❌ {data['error']}")
+                                    elif data:
+                                        st.markdown(format_pnr_result(data))
                         else:
                             st.error("❌ PNR not found or flushed.")
 
@@ -2079,10 +2121,8 @@ def main():
         with tab2:
             st.markdown("### Live Train Status")
             train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train")
-            # Date offset selector (today, yesterday, etc.)
             date_options = [f"{get_date_label(i)} ({get_date_for_offset(i)})" for i in range(5)]
             date_choice = st.selectbox("Select Date", date_options, index=0, key="rail_date")
-            # Extract offset from the selected option
             offset = 0
             for i in range(5):
                 if get_date_label(i) in date_choice:
@@ -2099,6 +2139,14 @@ def main():
                             st.error(f"❌ {data['error']}")
                         elif data:
                             st.markdown(format_live_train_result(data))
+                            # Refresh button
+                            if st.button("🔄 Refresh Live Status", key="refresh_live", use_container_width=True):
+                                with st.spinner("Refreshing live status..."):
+                                    data = get_live_train_status(train_no, date_str)
+                                    if data and isinstance(data, dict) and data.get('error'):
+                                        st.error(f"❌ {data['error']}")
+                                    elif data:
+                                        st.markdown(format_live_train_result(data))
                         else:
                             st.error("❌ No data available.")
 
@@ -2106,7 +2154,6 @@ def main():
         with tab3:
             st.markdown("### Train Schedule / Route")
             train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch")
-            # Pagination state
             if 'sch_start' not in st.session_state:
                 st.session_state.sch_start = 0
             if st.button("Get Schedule", key="train_sch", use_container_width=True):
@@ -2123,7 +2170,6 @@ def main():
                             st.rerun()
                         else:
                             st.error("❌ Schedule not found.")
-            # Display schedule if data exists
             if 'sch_data' in st.session_state:
                 data = st.session_state.sch_data
                 total = len(data.get('stations', []))
@@ -2136,7 +2182,6 @@ def main():
                     st.session_state.sch_start = start
                 msg, _ = format_schedule_result(data, start, chunk)
                 st.markdown(msg)
-                # Pagination buttons
                 col1, col2, col3 = st.columns([1,2,1])
                 with col1:
                     if start > 0:
@@ -2150,6 +2195,57 @@ def main():
                         if st.button("Next ▶", key="sch_next"):
                             st.session_state.sch_start = end
                             st.rerun()
+
+    # ------------------------------------------------------------------
+    # View: Weather
+    # ------------------------------------------------------------------
+    elif view == "🌤️ Weather":
+        st.subheader("🌤️ Weather Information")
+        city = st.text_input("Enter City Name", placeholder="e.g., New Delhi, Mumbai, Lucknow", key="weather_city")
+        
+        if st.button("Get Weather", key="weather_btn", use_container_width=True):
+            if city:
+                with st.spinner(f"Fetching weather for {city}..."):
+                    data = get_weather(city)
+                    if data and 'error' not in data:
+                        st.session_state.weather_data = data
+                    else:
+                        st.error(data.get('error', 'Error fetching weather'))
+            else:
+                st.warning("Please enter a city name.")
+        
+        # Display weather if data exists
+        if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
+            data = st.session_state.weather_data
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                st.markdown(f"### 🌍 {data['city']}, {data['country']}")
+                st.markdown(f"**🌡️ Temperature:** {data['temp']}°C (Feels like {data['feels_like']}°C)")
+                st.markdown(f"**🌤️ Weather:** {data['weather'].title()}")
+                st.markdown(f"**💧 Humidity:** {data['humidity']}%")
+                st.markdown(f"**🌬️ Wind Speed:** {data['wind_speed']} m/s")
+                st.markdown(f"**📊 Pressure:** {data['pressure']} hPa")
+                if data.get('sunrise') and data.get('sunrise') != 'N/A':
+                    try:
+                        sunrise = datetime.fromtimestamp(data['sunrise']).strftime('%H:%M')
+                        sunset = datetime.fromtimestamp(data['sunset']).strftime('%H:%M')
+                        st.markdown(f"**🌅 Sunrise:** {sunrise}  |  **🌇 Sunset:** {sunset}")
+                    except:
+                        pass
+            with col2:
+                if data.get('icon'):
+                    icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
+                    st.image(icon_url, caption=data['weather'].title(), width=150)
+            
+            # Refresh button
+            if st.button("🔄 Refresh Weather", key="refresh_weather", use_container_width=True):
+                with st.spinner(f"Refreshing weather for {city}..."):
+                    data = get_weather(city)
+                    if data and 'error' not in data:
+                        st.session_state.weather_data = data
+                        st.rerun()
+                    else:
+                        st.error(data.get('error', 'Error fetching weather'))
 
     # ------------------------------------------------------------------
     # Footer
