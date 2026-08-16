@@ -4,7 +4,7 @@ from datetime import datetime
 
 def get_weather(city_name, api_key):
     """Fetch weather data from OpenWeatherMap API"""
-    if not api_key:
+    if not api_key or api_key == "":
         return None
     
     url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={api_key}&units=metric"
@@ -51,7 +51,11 @@ def get_weather_emoji(description):
 
 def render_weather_widget():
     """Render weather widget in sidebar"""
-    WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", "")
+    # Try to get API key from secrets
+    try:
+        WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", "")
+    except:
+        WEATHER_API_KEY = ""
     
     st.markdown("---")
     st.markdown("### 🌤️ Weather")
