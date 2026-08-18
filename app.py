@@ -24,7 +24,6 @@ import matplotlib.pyplot as plt
 from matplotlib.table import Table as MplTable
 import numpy as np
 from PIL import Image, ImageDraw
-import seaborn as sns
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -2514,9 +2513,9 @@ def create_advanced_charts(df, sheet_choice):
                                      plot_bgcolor='rgba(0,0,0,0)')
                     st.plotly_chart(fig, use_container_width=True)
 
-# ------------------------------------------------------------------
-# Main function
-# ------------------------------------------------------------------
+# ============================================================================
+# MAIN FUNCTION - COMPLETE
+# ============================================================================
 def main():
     # ------------------------------------------------------------------
     # Pro enhancements: theme persistence (localStorage), keyboard scroll,
@@ -2587,8 +2586,7 @@ def main():
                     }
                 });
 
-                // Wheel forwarding: cursor sidebar par ho aur sidebar scroll nahi kar sakta
-                // to main content scroll ho — baar baar sidebar kheenchne ki zaroorat nahi
+                // Wheel forwarding
                 doc.addEventListener('wheel', function(e) {
                     var sb = doc.querySelector('[data-testid="stSidebar"]');
                     if (sb && sb.contains(e.target)) {
@@ -2626,13 +2624,12 @@ def main():
     </script>
     """, height=0)
 
-    # Restore persisted theme (localStorage bridge query param me likh deta hai)
+    # Restore persisted theme
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
     qp_theme = st.query_params.get('__theme')
     if qp_theme in theme_options and st.session_state.theme != qp_theme:
         st.session_state.theme = qp_theme
 
-    # Restore persisted custom colors
     qp_bg = st.query_params.get('__bg')
     qp_tx = st.query_params.get('__tx')
     if qp_bg and st.session_state.custom_bg != qp_bg:
@@ -2640,13 +2637,12 @@ def main():
     if qp_tx and st.session_state.custom_text != qp_tx:
         st.session_state.custom_text = qp_tx
 
-    # Restore persisted view (keyboard 1-5 / icon nav se bhi sync)
     view_options = ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"]
     qp_view = st.query_params.get('__view')
     if qp_view in view_options and st.session_state.view_mode != qp_view:
         st.session_state.view_mode = qp_view
 
-    # --- SIDEBAR (Only for settings and uploads) ---
+    # --- SIDEBAR ---
     with st.sidebar:
         st.markdown("""
         <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8;">
@@ -2666,7 +2662,6 @@ def main():
             st.query_params['__theme'] = theme_choice
             st.rerun()
 
-        # Auto (System) = time-based (IST): 06:00-19:00 Day, 19:00-06:00 Dark
         effective_theme = theme_choice
         if theme_choice == 'Auto (System)':
             h = now_ist().hour
@@ -2687,7 +2682,7 @@ def main():
 
         apply_theme(effective_theme, custom_bg, custom_text)
 
-        # Weather widget in sidebar
+        # Weather widget
         with st.expander("🌤️ Weather", expanded=False):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city")
             if city != st.session_state.weather_city:
@@ -2870,7 +2865,7 @@ def main():
                 st.caption("No activity yet")
         st.markdown("---")
 
-        # Sheet selection in sidebar
+        # Sheet selection
         st.markdown("### 📑 Sheet")
         sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()),
             index=list(SHEET_CONFIG.keys()).index(st.session_state.selected_sheet)
@@ -2882,7 +2877,7 @@ def main():
             st.cache_data.clear()
             st.rerun()
 
-        # Filters (skip for NOTE sheet)
+        # Filters
         if sheet_choice != "NOTE":
             st.markdown("### 🔍 Filters")
             config = SHEET_CONFIG[sheet_choice]
@@ -2926,11 +2921,11 @@ def main():
                 st.session_state.current_page = 1
                 st.rerun()
 
-    # Load data for selected sheet
+    # Load data
     df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
     filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
 
-    # Apply filters (skip for NOTE sheet)
+    # Apply filters
     if not filtered_df.empty and sheet_choice != "NOTE":
         config = SHEET_CONFIG[sheet_choice]
         pnr_col_idx = config.get("pnr_col")
@@ -2957,17 +2952,15 @@ def main():
                 filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
             filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
 
-    # View mode
     view = st.session_state.view_mode
 
-    # Top bar with crawling text (CSS marquee)
+    # Top bar
     st.markdown("""
     <div class="eqms-marquee" style="background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); padding: 8px 0; border-radius: 4px; margin-bottom: 10px;">
         <span>🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save</span>
     </div>
     """, unsafe_allow_html=True)
 
-    # Top bar with compact icon navigation
     top_c1, top_nav, top_c2 = st.columns([2.4, 2.2, 1.2])
     with top_c1:
         st.markdown(f"<h1 style='font-size:22px; font-weight:700; margin:0;'>🚂 AI EQMS Hub Pro — {sheet_choice}</h1>", unsafe_allow_html=True)
@@ -2987,9 +2980,9 @@ def main():
     st.caption(f"Enterprise Railway EQ Management  •  {format_date()}  •  {format_time()} IST")
     st.markdown("---")
 
-    # ------------------------------------------------------------------
-    # View: Chat
-    # ------------------------------------------------------------------
+    # ====================================================================
+    # VIEW: CHAT
+    # ====================================================================
     if view == "💬 Chat":
         st.subheader("💬 Chat with TSKEQ Bot")
         st.caption("Ask about EQ data, trains, quota, PNR or anything else.")
@@ -3020,9 +3013,9 @@ def main():
             st.session_state.messages = []
             st.rerun()
 
-    # ------------------------------------------------------------------
-    # View: Dashboard
-    # ------------------------------------------------------------------
+    # ====================================================================
+    # VIEW: DASHBOARD
+    # ====================================================================
     elif view == "📊 Dashboard":
         st.subheader(f"📊 Analytics Dashboard — {sheet_choice}")
         
@@ -3065,9 +3058,9 @@ def main():
         else:
             st.info("No data for charts. Adjust filters or choose another sheet.")
 
-    # ------------------------------------------------------------------
-    # View: Data Table
-    # ------------------------------------------------------------------
+    # ====================================================================
+    # VIEW: DATA TABLE
+    # ====================================================================
     elif view == "📋 Data Table":
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
         train_col_metric = None
@@ -3078,7 +3071,6 @@ def main():
             if 'DOJ' in c.upper():
                 doj_col = c
 
-        # Show train count summary (skip for NOTE sheet)
         if not filtered_df.empty and sheet_choice != "NOTE":
             if train_col_metric:
                 train_counts_series = filtered_df[train_col_metric].value_counts()
@@ -3133,7 +3125,6 @@ def main():
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
 
-            # Static HTML table for printing - ALL filtered data (not just current page)
             print_export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
             if not print_export_df.empty:
                 print_html_table = print_export_df.to_html(index=False, border=1, classes='print-table', escape=False)
@@ -3260,7 +3251,6 @@ def main():
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
                 st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
             with a5:
-                # Reliable print button using iframe approach
                 components.html("""
                 <div style="width:100%;">
                     <button onclick="
@@ -3440,9 +3430,9 @@ def main():
                     st.caption("Ctrl+R: Refresh | Ctrl+P: Print")
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # ------------------------------------------------------------------
-    # View: Railway Features
-    # ------------------------------------------------------------------
+    # ====================================================================
+    # VIEW: RAILWAY
+    # ====================================================================
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real‑time Info")
 
@@ -3699,9 +3689,9 @@ def main():
                             except Exception as e:
                                 st.error(f"❌ Error: {str(e)[:200]}")
 
-    # ------------------------------------------------------------------
-    # View: Weather
-    # ------------------------------------------------------------------
+    # ====================================================================
+    # VIEW: WEATHER
+    # ====================================================================
     elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
         
@@ -3782,9 +3772,9 @@ def main():
         elif st.session_state.weather_data and 'error' in st.session_state.weather_data:
             st.error(st.session_state.weather_data['error'])
 
-    # ------------------------------------------------------------------
-    # Footer
-    # ------------------------------------------------------------------
+    # ====================================================================
+    # FOOTER
+    # ====================================================================
     st.markdown("""
     <div class='pro-footer no-print'>
         🚂 AI EQMS Hub Pro • Created by Sharique<br>
