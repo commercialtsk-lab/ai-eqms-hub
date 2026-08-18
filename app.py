@@ -90,7 +90,9 @@ defaults = {
     'to_val': None, 'upload_success': False, 'last_upload_time': None,
     'selected_sheet': "EQ", 'view_mode': "📋 Data Table",
     'select_all': False, 'delete_confirm': False,
-    'auto_theme_detected': False, 'sidebar_collapsed': False,
+    'sidebar_collapsed': False,
+    'text_input_key': 0, 'img_uploader_key': 0,
+    'audio_uploader_key': 0, 'audio_recorder_key': 0,
     'quick_filter_train': '', 'show_keyboard_help': False, 'print_trigger': False,
     'sch_start': 0, 'sch_data': None, 'weather_data': None,
     'system_theme': 'Day', 'weather_city': 'Tinsukia',
@@ -1596,6 +1598,18 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         ::-webkit-scrollbar-track {{ background: {bg}; }}
         ::-webkit-scrollbar-thumb {{ background: {border}; border-radius: 10px; }}
         ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
+        html, [data-testid="stMain"], [data-testid="stAppViewContainer"] {{ scroll-behavior: smooth !important; }}
+        footer {{ display: none !important; }}
+        .eqms-marquee {{ overflow: hidden; white-space: nowrap; }}
+        .eqms-marquee span {{
+            display: inline-block; padding-left: 100%;
+            animation: eqms-scroll 30s linear infinite;
+            color: #1f2328; font-weight: 600; font-size: 16px;
+        }}
+        @keyframes eqms-scroll {{
+            0% {{ transform: translateX(0); }}
+            100% {{ transform: translateX(-100%); }}
+        }}
         .action-box {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 18px; margin-bottom: 16px; }}
         .file-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 14px; margin: 10px 0; }}
         .file-card-title {{ color: {text_color}; font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }}
@@ -1991,44 +2005,148 @@ def get_pnr_status_url(pnr):
 # Main function
 # ------------------------------------------------------------------
 def main():
-    # Detect system theme using JavaScript
-    st.markdown("""
+    # ------------------------------------------------------------------
+    # Pro enhancements: theme persistence (localStorage), keyboard scroll,
+    # mouse-wheel forwarding, back-to-top button, theme/view shortcuts
+    # ------------------------------------------------------------------
+    components.html("""
     <script>
     (function() {
-        const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const currentTheme = isDark ? 'Dark' : 'Day';
-        const url = new URL(window.location);
-        url.searchParams.set('__system_theme', currentTheme);
-        if (!url.searchParams.has('__system_theme_set')) {
-            url.searchParams.set('__system_theme_set', '1');
-            window.location.href = url.toString();
-        }
+        try {
+            var P = window.parent;
+            var doc = P.document;
+
+            // ---- Theme persistence bridge (localStorage <-> query param) ----
+            var url = new URL(P.location.href);
+            var qpTheme = url.searchParams.get('__theme');
+            var stored = null;
+            try { stored = P.localStorage.getItem('eqms_theme'); } catch(e) {}
+            if (qpTheme) {
+                if (stored !== qpTheme) { try { P.localStorage.setItem('eqms_theme', qpTheme); } catch(e) {} }
+            } else if (stored) {
+                url.searchParams.set('__theme', stored);
+                P.location.replace(url.toString());
+                return;
+            }
+
+            // ---- One-time listeners ----
+            if (!P.__eqmsProInit) {
+                P.__eqmsProInit = true;
+
+                var mainEl = function() {
+                    var cands = ['[data-testid="stMain"]', 'section.main', '[data-testid="stAppViewContainer"]'];
+                    for (var i = 0; i < cands.length; i++) {
+                        var el = doc.querySelector(cands[i]);
+                        if (el && el.scrollHeight > el.clientHeight) return el;
+                    }
+                    return null;
+                };
+                var scrollMainBy = function(d) {
+                    var m = mainEl();
+                    if (m) { m.scrollBy({top: d, behavior: 'smooth'}); }
+                    else { P.scrollBy({top: d, behavior: 'smooth'}); }
+                };
+                var scrollMainTo = function(y) {
+                    var m = mainEl();
+                    if (m) { m.scrollTo({top: y, behavior: 'smooth'}); }
+                    else { P.scrollTo({top: y, behavior: 'smooth'}); }
+                };
+
+                // Keyboard: PageUp/PageDown/Home/End scroll | D = theme toggle | 1-5 = view switch
+                doc.addEventListener('keydown', function(e) {
+                    var t = (e.target.tagName || '').toLowerCase();
+                    if (t === 'input' || t === 'textarea' || t === 'select' || e.target.isContentEditable) return;
+                    var views = ['📋 Data Table','📊 Dashboard','💬 Chat','🚂 Railway','🌤️ Weather'];
+                    if (e.key === 'PageDown') { e.preventDefault(); scrollMainBy(600); }
+                    else if (e.key === 'PageUp') { e.preventDefault(); scrollMainBy(-600); }
+                    else if (e.key === 'Home') { e.preventDefault(); scrollMainTo(0); }
+                    else if (e.key === 'End') { e.preventDefault(); scrollMainTo(999999); }
+                    else if (e.key === 'd' || e.key === 'D') {
+                        var u = new URL(P.location.href);
+                        var cur = u.searchParams.get('__theme') || 'Day';
+                        u.searchParams.set('__theme', cur === 'Dark' ? 'Day' : 'Dark');
+                        P.location.href = u.toString();
+                    }
+                    else if (['1','2','3','4','5'].indexOf(e.key) !== -1) {
+                        var u2 = new URL(P.location.href);
+                        u2.searchParams.set('__view', views[parseInt(e.key, 10) - 1]);
+                        P.location.href = u2.toString();
+                    }
+                });
+
+                // Wheel forwarding: cursor sidebar par ho aur sidebar scroll nahi kar sakta
+                // to main content scroll ho — baar baar sidebar kheenchne ki zaroorat nahi
+                doc.addEventListener('wheel', function(e) {
+                    var sb = doc.querySelector('[data-testid="stSidebar"]');
+                    if (sb && sb.contains(e.target)) {
+                        var inner = sb.querySelector('[data-testid="stSidebarContent"]') || sb;
+                        var canScroll = inner.scrollHeight > inner.clientHeight + 5;
+                        var atTop = inner.scrollTop <= 0;
+                        var atBottom = inner.scrollTop + inner.clientHeight >= inner.scrollHeight - 2;
+                        if (!canScroll || (e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) {
+                            e.preventDefault();
+                            var m = mainEl();
+                            if (m) { m.scrollBy({top: e.deltaY}); }
+                            else { P.scrollBy({top: e.deltaY}); }
+                        }
+                    }
+                }, {passive: false});
+
+                // Back-to-top floating button
+                if (!doc.getElementById('eqms-top-btn')) {
+                    var b = doc.createElement('button');
+                    b.id = 'eqms-top-btn';
+                    b.title = 'Back to top (Home key)';
+                    b.innerHTML = '⬆';
+                    b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;'
+                        + 'width:44px;height:44px;border-radius:50%;border:none;background:#0969da;'
+                        + 'color:#fff;font-size:18px;cursor:pointer;opacity:0.85;'
+                        + 'box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
+                    b.onmouseenter = function(){ b.style.opacity = '1'; b.style.transform = 'scale(1.08)'; };
+                    b.onmouseleave = function(){ b.style.opacity = '0.85'; b.style.transform = 'scale(1)'; };
+                    b.onclick = function(){ scrollMainTo(0); };
+                    doc.body.appendChild(b);
+                }
+            }
+        } catch(e) {}
     })();
     </script>
-    """, unsafe_allow_html=True)
+    """, height=0)
 
-    # Get system theme from query params
-    system_theme = st.query_params.get('__system_theme', 'Day')
-    st.session_state.system_theme = system_theme
-
-    # Theme selection
+    # Restore persisted theme (localStorage bridge query param me likh deta hai)
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
-    if not st.session_state.auto_theme_detected:
-        st.session_state.auto_theme_detected = True
-        if st.session_state.theme == 'Day':
-            st.session_state.theme = 'Auto (System)'
+    qp_theme = st.query_params.get('__theme')
+    if qp_theme in theme_options and st.session_state.theme != qp_theme:
+        st.session_state.theme = qp_theme
+
+    # Restore persisted custom colors
+    qp_bg = st.query_params.get('__bg')
+    qp_tx = st.query_params.get('__tx')
+    if qp_bg and st.session_state.custom_bg != qp_bg:
+        st.session_state.custom_bg = qp_bg
+    if qp_tx and st.session_state.custom_text != qp_tx:
+        st.session_state.custom_text = qp_tx
+
+    # Restore persisted view (keyboard 1-5 / icon nav se bhi sync)
+    view_options = ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"]
+    qp_view = st.query_params.get('__view')
+    if qp_view in view_options and st.session_state.view_mode != qp_view:
+        st.session_state.view_mode = qp_view
 
     theme_choice = st.sidebar.selectbox("🎨 Theme", theme_options,
         index=theme_options.index(st.session_state.theme) if st.session_state.theme in theme_options else 0,
-        key="theme_select")
+        key="theme_select",
+        help="Auto (System): IST time ke hisaab se — 6AM-7PM Day, 7PM-6AM Dark. Choice save rehti hai.")
     if theme_choice != st.session_state.theme:
         st.session_state.theme = theme_choice
+        st.query_params['__theme'] = theme_choice
         st.rerun()
 
-    # Determine effective theme
+    # Auto (System) = time-based (IST): 06:00-19:00 Day, 19:00-06:00 Dark
     effective_theme = theme_choice
     if theme_choice == 'Auto (System)':
-        effective_theme = st.session_state.system_theme if st.session_state.system_theme in ['Day', 'Dark'] else 'Day'
+        h = now_ist().hour
+        effective_theme = 'Day' if 6 <= h < 19 else 'Dark'
 
     if effective_theme == 'Custom':
         custom_bg = st.sidebar.color_picker("Background Color", value=st.session_state.custom_bg, key="custom_bg_picker")
@@ -2036,6 +2154,8 @@ def main():
         if custom_bg != st.session_state.custom_bg or custom_text != st.session_state.custom_text:
             st.session_state.custom_bg = custom_bg
             st.session_state.custom_text = custom_text
+            st.query_params['__bg'] = custom_bg
+            st.query_params['__tx'] = custom_text
             st.rerun()
     else:
         custom_bg = None
@@ -2048,7 +2168,7 @@ def main():
         st.markdown("""
         <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8;">
             <span style="color:#FF9933;">🟠 नमस्ते आपका स्वागत है</span><br>
-            <span style="color:#FFFFFF;">⚪ हम भारत के लोग</span><br>
+            <span style="color:#FFFFFF; text-shadow:0 0 4px rgba(0,0,0,0.55);">⚪ हम भारत के लोग</span><br>
             <span style="color:#138808; font-weight:bold;">🟢 जय हिंद</span>
         </div>
         """, unsafe_allow_html=True)
@@ -2056,7 +2176,7 @@ def main():
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
         # Weather widget in sidebar
-        with st.expander("🌤️ Weather", expanded=True):
+        with st.expander("🌤️ Weather", expanded=False):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city")
             if city != st.session_state.weather_city:
                 st.session_state.weather_city = city
@@ -2081,7 +2201,7 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
 
-        with st.expander("🔄 Sync & Status", expanded=True):
+        with st.expander("🔄 Sync & Status", expanded=False):
             if st.button("🔄 Sync Now", use_container_width=True, key="sync_now_btn"):
                 st.cache_data.clear()
                 st.session_state.last_refresh = time.time()
@@ -2155,18 +2275,18 @@ def main():
             audio_data = None
             if mode == "📷 Image / PDF":
                 uploaded = st.file_uploader("Image or PDF", type=["png","jpg","jpeg","pdf"],
-                    label_visibility="collapsed", key="img_pdf_uploader")
+                    label_visibility="collapsed", key=f"img_pdf_uploader_{st.session_state.img_uploader_key}")
             elif mode == "📝 Text":
                 text_data = st.text_area("📝 Paste text", height=150,
                     placeholder="Messy text yahan paste karein...",
-                    label_visibility="collapsed", key="text_input_area")
+                    label_visibility="collapsed", key=f"text_input_area_{st.session_state.text_input_key}")
                 if text_data:
                     st.caption(f"✓ {len(text_data)} characters ready")
             else:
                 st.caption("🎤 Mic se record karein")
-                audio_data = st.audio_input("Record", label_visibility="collapsed", key="audio_recorder")
+                audio_data = st.audio_input("Record", label_visibility="collapsed", key=f"audio_recorder_{st.session_state.audio_recorder_key}")
                 uploaded = st.file_uploader("Ya file upload", type=["mp3","wav","ogg","m4a"],
-                    label_visibility="collapsed", key="audio_file_uploader")
+                    label_visibility="collapsed", key=f"audio_file_uploader_{st.session_state.audio_uploader_key}")
                 if audio_data:
                     st.audio(audio_data, format='audio/wav')
                 elif uploaded:
@@ -2239,6 +2359,12 @@ def main():
                                         st.session_state.upload_success = True
                                         st.session_state.last_upload_time = format_time()
                                         log_activity(f"✅ Text input → {save_res['saved']} records")
+                                    # Auto-clear inputs after successful processing
+                                    # (text box / file uploader / audio sab khali ho jayenge)
+                                    st.session_state.text_input_key += 1
+                                    st.session_state.img_uploader_key += 1
+                                    st.session_state.audio_uploader_key += 1
+                                    st.session_state.audio_recorder_key += 1
                                     st.cache_data.clear()
                                     st.session_state.last_refresh = time.time()
                                     time.sleep(0.3)
@@ -2280,7 +2406,7 @@ def main():
                     st.session_state.upload_success = False
                     st.rerun()
 
-        with st.expander("📋 Activity Log", expanded=True):
+        with st.expander("📋 Activity Log", expanded=False):
             if st.session_state.activity_log:
                 for log in reversed(st.session_state.activity_log[-20:]):
                     st.caption(f"{log.get('timestamp', '')} — {log.get('action', '')}")
@@ -2336,6 +2462,14 @@ def main():
                 st.session_state.current_page = 1
                 st.rerun()
 
+            if st.button("🧹 Clear All Filters", use_container_width=True, key="clear_filters_btn"):
+                st.session_state.pnr_val = ''
+                st.session_state.train_val = ''
+                st.session_state.from_val = None
+                st.session_state.to_val = None
+                st.session_state.current_page = 1
+                st.rerun()
+
     # Load data for selected sheet
     df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
     filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
@@ -2367,28 +2501,31 @@ def main():
                 filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
             filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
 
-    # View mode selection
-    view = st.radio("View Mode", ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"],
-        index=["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"].index(st.session_state.view_mode)
-        if st.session_state.view_mode in ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"] else 0,
-        key="view_mode_radio", horizontal=True)
-    if view != st.session_state.view_mode:
-        st.session_state.view_mode = view
-        st.rerun()
+    # View mode — ab compact icon navigation (top bar) se control hota hai,
+    # bada option strip hata diya gaya hai taaki content upar aa jaye
+    view = st.session_state.view_mode
 
-    # Top bar with crawling text (marquee)
+    # Top bar with crawling text (CSS marquee — smooth, no deprecated <marquee>)
     st.markdown("""
-    <div style="background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); padding: 8px 0; border-radius: 4px; margin-bottom: 10px; overflow: hidden;">
-        <marquee behavior="scroll" direction="left" scrollamount="4" style="color: #1f2328; font-weight: 600; font-size: 16px; padding: 4px 0;">
-            🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save
-        </marquee>
+    <div class="eqms-marquee" style="background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); padding: 8px 0; border-radius: 4px; margin-bottom: 10px;">
+        <span>🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save</span>
     </div>
     """, unsafe_allow_html=True)
 
-    # Top bar
-    top_c1, top_c2 = st.columns([4, 1])
+    # Top bar with compact icon navigation
+    top_c1, top_nav, top_c2 = st.columns([2.4, 2.2, 1.2])
     with top_c1:
         st.markdown(f"<h1 style='font-size:22px; font-weight:700; margin:0;'>🚂 AI EQMS Hub Pro — {sheet_choice}</h1>", unsafe_allow_html=True)
+    with top_nav:
+        nav_defs = [("📋", "📋 Data Table"), ("📊", "📊 Dashboard"), ("💬", "💬 Chat"), ("🚂", "🚂 Railway"), ("🌤️", "🌤️ Weather")]
+        nav_cols = st.columns(5)
+        for (icon, name), nc in zip(nav_defs, nav_cols):
+            with nc:
+                if st.button(icon, key=f"nav_btn_{name}", help=name, use_container_width=True,
+                             type="primary" if st.session_state.view_mode == name else "secondary"):
+                    st.session_state.view_mode = name
+                    st.query_params['__view'] = name
+                    st.rerun()
     with top_c2:
         st.markdown(f"<div style='padding-top:6px; text-align:right;'><span class='status-pill status-live'>● Live</span> &nbsp; <span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span></div>", unsafe_allow_html=True)
 
@@ -3096,15 +3233,7 @@ def main():
                 # If still not found, show input + instructions
                 if not api_key:
                     st.error("❌ REMOVE_BG_API_KEY not found.")
-                    st.info("""
-                    💡 **For Streamlit Cloud:** Go to your app → Settings (⚙️) → Secrets → Add:
-
-                    ```
-                    REMOVE_BG_API_KEY = "your_key_here"
-                    ```
-
-                    💡 **For local:** Add to `.streamlit/secrets.toml`
-                    """)
+                    st.info("💡 **For Streamlit Cloud:** Go to your app → Settings (⚙️) → Secrets → Add:\n\n```\nREMOVE_BG_API_KEY = \"your_key_here\"\n```\n\n💡 **For local:** Add to `.streamlit/secrets.toml`")
                     manual_key = st.text_input("Or paste key here (temporary)", type="password", key="manual_bg_key_input")
                     if manual_key and manual_key.strip():
                         st.session_state.remove_bg_key = manual_key.strip()
@@ -3136,7 +3265,8 @@ def main():
                                     st.error("❌ Failed to process photo. The remove.bg API may have rejected the image. Try another photo.")
                             except Exception as e:
                                 st.error(f"❌ Error: {str(e)[:200]}")
-# ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
     # View: Weather
     # ------------------------------------------------------------------
     elif view == "🌤️ Weather":
