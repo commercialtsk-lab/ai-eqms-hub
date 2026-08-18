@@ -1,3 +1,5 @@
+[file name]: ai_eqms_hub_pro_fixed.py
+[file content begin]
 import os
 import streamlit as st
 import streamlit.components.v1 as components
@@ -75,7 +77,7 @@ if not GEMINI_API_KEY or not GSPREAD_CREDENTIALS:
     st.stop()
 
 # ------------------------------------------------------------------
-# Session state defaults
+# Session state defaults - CHANGED: theme default to Auto (System)
 # ------------------------------------------------------------------
 defaults = {
     'messages': [], 'activity_log': [], 'last_uploaded_file': None,
@@ -85,7 +87,8 @@ defaults = {
         "Show me EQ summary", "How many records today?", "Train wise breakup",
         "Pending EQ requests", "Quota status", "PNR status"
     ],
-    'theme': 'Auto (System)', 'custom_bg': '#ffffff', 'custom_text': '#000000',
+    'theme': 'Auto (System)',  # CHANGED: default to Auto (System)
+    'custom_bg': '#ffffff', 'custom_text': '#000000',
     'current_page': 1, 'pnr_val': '', 'train_val': '', 'from_val': None,
     'to_val': None, 'upload_success': False, 'last_upload_time': None,
     'selected_sheet': "EQ", 'view_mode': "📋 Data Table",
@@ -97,7 +100,8 @@ defaults = {
     'pnr_result': None, 'train_result': None, 'search_result': None,
     'last_uploaded_drive_id': None,
     'manual_refresh': False,
-    'sheet_print_data': None
+    'sheet_print_data': None,
+    'text_input_area': ''  # NEW: for clearing text input
 }
 
 for key, val in defaults.items():
@@ -1462,7 +1466,7 @@ def process_passport_image(data):
     return final if final else no_bg
 
 # ------------------------------------------------------------------
-# Theme application with Auto (System) detection
+# Theme application
 # ------------------------------------------------------------------
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
@@ -1991,33 +1995,10 @@ def get_pnr_status_url(pnr):
 # Main function
 # ------------------------------------------------------------------
 def main():
-    # Detect system theme using JavaScript
-    st.markdown("""
-    <script>
-    (function() {
-        const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const currentTheme = isDark ? 'Dark' : 'Day';
-        const url = new URL(window.location);
-        url.searchParams.set('__system_theme', currentTheme);
-        if (!url.searchParams.has('__system_theme_set')) {
-            url.searchParams.set('__system_theme_set', '1');
-            window.location.href = url.toString();
-        }
-    })();
-    </script>
-    """, unsafe_allow_html=True)
-
-    # Get system theme from query params
-    system_theme = st.query_params.get('__system_theme', 'Day')
-    st.session_state.system_theme = system_theme
+    # REMOVED: system theme detection JavaScript and query params
 
     # Theme selection
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
-    if not st.session_state.auto_theme_detected:
-        st.session_state.auto_theme_detected = True
-        if st.session_state.theme == 'Day':
-            st.session_state.theme = 'Auto (System)'
-
     theme_choice = st.sidebar.selectbox("🎨 Theme", theme_options,
         index=theme_options.index(st.session_state.theme) if st.session_state.theme in theme_options else 0,
         key="theme_select")
@@ -2028,7 +2009,14 @@ def main():
     # Determine effective theme
     effective_theme = theme_choice
     if theme_choice == 'Auto (System)':
-        effective_theme = st.session_state.system_theme if st.session_state.system_theme in ['Day', 'Dark'] else 'Day'
+        # Keep the current theme if it's already Day or Dark, otherwise default to Day
+        if st.session_state.get('effective_theme') and st.session_state.effective_theme in ['Day', 'Dark']:
+            effective_theme = st.session_state.effective_theme
+        else:
+            effective_theme = 'Day'
+            st.session_state.effective_theme = 'Day'
+    else:
+        st.session_state.effective_theme = effective_theme
 
     if effective_theme == 'Custom':
         custom_bg = st.sidebar.color_picker("Background Color", value=st.session_state.custom_bg, key="custom_bg_picker")
@@ -2092,11 +2080,10 @@ def main():
         sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
 
-        # PRINT SHEET button - using st.button with JavaScript
+        # PRINT SHEET button
         st.markdown("---")
         st.markdown("### 🖨️ Print Options")
         
-        # Reliable print button using components.v1.html for unrestricted JS
         components.html("""
         <div style="width:100%; margin-top:8px;">
             <button onclick="
@@ -2157,6 +2144,8 @@ def main():
                 uploaded = st.file_uploader("Image or PDF", type=["png","jpg","jpeg","pdf"],
                     label_visibility="collapsed", key="img_pdf_uploader")
             elif mode == "📝 Text":
+                # Use session state value for text area to allow clearing
+                text_input_value = st.session_state.get('text_input_area', '')
                 text_data = st.text_area("📝 Paste text", height=150,
                     placeholder="Messy text yahan paste karein...",
                     label_visibility="collapsed", key="text_input_area")
@@ -2239,6 +2228,8 @@ def main():
                                         st.session_state.upload_success = True
                                         st.session_state.last_upload_time = format_time()
                                         log_activity(f"✅ Text input → {save_res['saved']} records")
+                                        # CHANGED: Clear text input after successful processing
+                                        st.session_state.text_input_area = ""
                                     st.cache_data.clear()
                                     st.session_state.last_refresh = time.time()
                                     time.sleep(0.3)
@@ -2336,6 +2327,17 @@ def main():
                 st.session_state.current_page = 1
                 st.rerun()
 
+    # REMOVED: auto_theme_detected logic and system_theme detection from main()
+
+    # View mode selector - NOW IN MAIN AREA (not sidebar)
+    view = st.radio("📊 View Mode", ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"],
+        index=["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"].index(st.session_state.view_mode)
+        if st.session_state.view_mode in ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"] else 0,
+        key="view_mode_radio", horizontal=True)
+    if view != st.session_state.view_mode:
+        st.session_state.view_mode = view
+        st.rerun()
+
     # Load data for selected sheet
     df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
     filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
@@ -2366,15 +2368,6 @@ def main():
             if st.session_state.to_val:
                 filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
             filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
-
-    # View mode selection
-    view = st.radio("View Mode", ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"],
-        index=["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"].index(st.session_state.view_mode)
-        if st.session_state.view_mode in ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"] else 0,
-        key="view_mode_radio", horizontal=True)
-    if view != st.session_state.view_mode:
-        st.session_state.view_mode = view
-        st.rerun()
 
     # Top bar with crawling text (marquee)
     st.markdown("""
@@ -2687,7 +2680,6 @@ def main():
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
                 st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
             with a5:
-                # Reliable print button using iframe approach - prints only sheet data
                 components.html("""
                 <div style="width:100%;">
                     <button onclick="
@@ -2868,7 +2860,7 @@ def main():
             st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------------------------------------------------------
-    # View: Railway Features (DITTO from Telegram Bot)
+    # View: Railway Features
     # ------------------------------------------------------------------
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real‑time Info")
@@ -3086,148 +3078,13 @@ def main():
                 st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
 
                 # --- API Key Handling ---
-                # Check all possible sources
                 api_key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
                 if not api_key:
                     api_key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
                 if not api_key and "remove_bg_key" in st.session_state:
                     api_key = str(st.session_state.remove_bg_key).strip()
 
-                # If still not found, show input + instructions
                 if not api_key:
                     st.error("❌ REMOVE_BG_API_KEY not found.")
                     st.info("""
                     💡 **For Streamlit Cloud:** Go to your app → Settings (⚙️) → Secrets → Add:
-
-                    ```
-                    REMOVE_BG_API_KEY = "your_key_here"
-                    ```
-
-                    💡 **For local:** Add to `.streamlit/secrets.toml`
-                    """)
-                    manual_key = st.text_input("Or paste key here (temporary)", type="password", key="manual_bg_key_input")
-                    if manual_key and manual_key.strip():
-                        st.session_state.remove_bg_key = manual_key.strip()
-                        st.success("✅ Key saved for this session. Refreshing...")
-                        st.rerun()
-                    st.stop()
-                else:
-                    st.success(f"✅ API Key ready: {api_key[:4]}...{api_key[-4:]}")
-
-                photo_file = st.file_uploader("Upload Photo", type=["png", "jpg", "jpeg"], key="passport_photo_uploader")
-                if photo_file:
-                    st.image(photo_file, caption="Original Photo", width=250)
-                    if st.button("✨ Process Passport Photo", type="primary", use_container_width=True, key="process_passport_btn"):
-                        with st.spinner("Processing... (10-30 seconds)"):
-                            try:
-                                image_data = photo_file.read()
-                                result = process_passport_image(image_data)
-                                if result:
-                                    st.success("✅ Passport Photo Ready!")
-                                    st.image(result, caption="✅ Background removed | Black border | 35x45mm standard", width=300)
-                                    st.download_button(
-                                        "📥 Download Passport Photo",
-                                        data=result,
-                                        file_name=f"passport_{now_ist().strftime('%Y%m%d_%H%M%S')}.png",
-                                        mime="image/png",
-                                        use_container_width=True
-                                    )
-                                else:
-                                    st.error("❌ Failed to process photo. The remove.bg API may have rejected the image. Try another photo.")
-                            except Exception as e:
-                                st.error(f"❌ Error: {str(e)[:200]}")
-# ------------------------------------------------------------------
-    # View: Weather
-    # ------------------------------------------------------------------
-    elif view == "🌤️ Weather":
-        st.subheader("🌤️ Weather Information")
-        
-        city = st.text_input("🏙️ Enter City Name", value=st.session_state.weather_city, 
-                            placeholder="e.g., Tinsukia, New Delhi, Mumbai", key="weather_city_input")
-        if city != st.session_state.weather_city:
-            st.session_state.weather_city = city
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🌤️ Get Weather", key="weather_btn", use_container_width=True):
-                if city:
-                    with st.spinner(f"Fetching weather for {city}..."):
-                        data = get_weather(city)
-                        if data and 'error' not in data:
-                            st.session_state.weather_data = data
-                            st.rerun()
-                        else:
-                            st.error(data.get('error', 'Error fetching weather'))
-                else:
-                    st.warning("Please enter a city name.")
-        with col2:
-            if st.button("🔄 Refresh", key="refresh_weather", use_container_width=True):
-                if city:
-                    with st.spinner(f"Refreshing weather for {city}..."):
-                        data = get_weather(city)
-                        if data and 'error' not in data:
-                            st.session_state.weather_data = data
-                            st.rerun()
-                        else:
-                            st.error(data.get('error', 'Error fetching weather'))
-                else:
-                    st.warning("Please enter a city name.")
-        
-        if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
-            data = st.session_state.weather_data
-            
-            st.markdown(f"""
-            <div class="weather-card">
-                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;">
-                    <div>
-                        <h2 style="margin: 0; font-size: 1.8rem;">{data['city']}, {data['country']}</h2>
-                        <div class="weather-desc">{data['weather'].title()}</div>
-                    </div>
-                    <div style="text-align: center;">
-                        <div class="weather-temp">{data['temp']}°C</div>
-                        <div style="font-size: 0.9rem; color: #656d76;">Feels like {data['feels_like']}°C</div>
-                    </div>
-                </div>
-                <hr style="margin: 12px 0; border-color: #d0d7de;">
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">
-                    <div class="weather-detail">💧 Humidity: {data['humidity']}%</div>
-                    <div class="weather-detail">🌬️ Wind: {data['wind_speed']} m/s</div>
-                    <div class="weather-detail">📊 Pressure: {data['pressure']} hPa</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            if data.get('sunrise') and data.get('sunrise') != 'N/A':
-                try:
-                    sunrise = datetime.fromtimestamp(data['sunrise']).strftime('%H:%M')
-                    sunset = datetime.fromtimestamp(data['sunset']).strftime('%H:%M')
-                    st.markdown(f"""
-                    <div style="display: flex; gap: 20px; margin-top: 8px;">
-                        <span>🌅 Sunrise: {sunrise}</span>
-                        <span>🌇 Sunset: {sunset}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-                except:
-                    pass
-            
-            if data.get('icon'):
-                icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
-                st.image(icon_url, caption=data['weather'].title(), width=100)
-            
-            st.markdown(f'<div style="font-size: 0.8rem; color: #656d76; margin-top: 10px;">🔄 Updated: {format_datetime()}</div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-        elif st.session_state.weather_data and 'error' in st.session_state.weather_data:
-            st.error(st.session_state.weather_data['error'])
-
-    # ------------------------------------------------------------------
-    # Footer
-    # ------------------------------------------------------------------
-    st.markdown("""
-    <div class='pro-footer no-print'>
-        🚂 AI EQMS Hub Pro • Created by Sharique<br>
-        © 2026 All Rights Reserved
-    </div>
-    """, unsafe_allow_html=True)
-
-if __name__ == "__main__":
-    main()
