@@ -77,7 +77,7 @@ if not GEMINI_API_KEY or not GSPREAD_CREDENTIALS:
     st.stop()
 
 # ------------------------------------------------------------------
-# Session state defaults - CHANGED: theme default to Auto (System)
+# Session state defaults
 # ------------------------------------------------------------------
 defaults = {
     'messages': [], 'activity_log': [], 'last_uploaded_file': None,
@@ -87,7 +87,7 @@ defaults = {
         "Show me EQ summary", "How many records today?", "Train wise breakup",
         "Pending EQ requests", "Quota status", "PNR status"
     ],
-    'theme': 'Auto (System)',  # CHANGED: default to Auto (System)
+    'theme': 'Auto (System)',
     'custom_bg': '#ffffff', 'custom_text': '#000000',
     'current_page': 1, 'pnr_val': '', 'train_val': '', 'from_val': None,
     'to_val': None, 'upload_success': False, 'last_upload_time': None,
@@ -101,7 +101,8 @@ defaults = {
     'last_uploaded_drive_id': None,
     'manual_refresh': False,
     'sheet_print_data': None,
-    'text_input_area': ''  # NEW: for clearing text input
+    'text_input_area': '',
+    'effective_theme': 'Day'
 }
 
 for key, val in defaults.items():
@@ -324,7 +325,7 @@ def load_sheet_data_cached(sheet_name, sheet_id):
         return pd.DataFrame()
 
 # ------------------------------------------------------------------
-# Gemini Universal Parser (from Telegram bot - EXACT COPY)
+# Gemini Universal Parser
 # ------------------------------------------------------------------
 def smart_detect_warrant(text):
     if not text:
@@ -799,7 +800,7 @@ def get_weather(city_name):
         return {'error': f'Error fetching weather: {str(e)}'}
 
 # ------------------------------------------------------------------
-# NTES-based railway functions (DITTO from Telegram Bot + improvements)
+# NTES-based railway functions
 # ------------------------------------------------------------------
 
 def safe_list(data, key):
@@ -1528,7 +1529,46 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
     <style>
         .block-container {{ padding-top: 0.5rem !important; padding-bottom: 1rem !important; }}
         .stApp {{ background-color: {bg} !important; }}
-        [data-testid="stSidebar"] {{ background-color: {card_bg} !important; border-right: 1px solid {border} !important; }}
+        [data-testid="stSidebar"] {{ 
+            background-color: {card_bg} !important; 
+            border-right: 1px solid {border} !important;
+            transition: none !important;
+        }}
+        /* Hover to expand sidebar - auto expand on hover */
+        [data-testid="stSidebar"] {{
+            min-width: 280px !important;
+            max-width: 280px !important;
+        }}
+        @media (max-width: 768px) {{
+            [data-testid="stSidebar"] {{
+                min-width: 0px !important;
+                max-width: 0px !important;
+                overflow: hidden !important;
+                transition: min-width 0.3s ease, max-width 0.3s ease !important;
+            }}
+            [data-testid="stSidebar"]:hover {{
+                min-width: 280px !important;
+                max-width: 280px !important;
+                overflow: visible !important;
+                box-shadow: 2px 0 10px rgba(0,0,0,0.2) !important;
+            }}
+            /* Show a small tab indicator on mobile */
+            [data-testid="stSidebar"]::before {{
+                content: '☰';
+                position: fixed;
+                left: 0;
+                top: 50%;
+                transform: translateY(-50%);
+                background: {accent};
+                color: white;
+                padding: 10px 8px;
+                border-radius: 0 8px 8px 0;
+                font-size: 18px;
+                z-index: 999;
+                cursor: pointer;
+                box-shadow: 1px 0 5px rgba(0,0,0,0.2);
+            }}
+        }}
         [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown div,
         [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
         [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] .stDateInput label,
@@ -1711,7 +1751,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             .stCheckbox, .stFileUploader, .stCaption, .stImage, .stVideo, .stAudio, .stPlotlyChart,
             .action-box, .pro-footer, .status-pill, .sheet-link-btn, .stChatMessage, .stChatInput,
             .train-count-container, .weather-card, .result-box, .print-area {{ display: none !important; }}
-            .print-only {{ display: block !important; }}
             .print-only {{ display: block !important; }}
             .print-only h2 {{ color: #000 !important; font-size: 18pt !important; margin-top: 0 !important; }}
             .print-only p {{ color: #333 !important; }}
@@ -1995,8 +2034,6 @@ def get_pnr_status_url(pnr):
 # Main function
 # ------------------------------------------------------------------
 def main():
-    # REMOVED: system theme detection JavaScript and query params
-
     # Theme selection
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
     theme_choice = st.sidebar.selectbox("🎨 Theme", theme_options,
@@ -2009,7 +2046,6 @@ def main():
     # Determine effective theme
     effective_theme = theme_choice
     if theme_choice == 'Auto (System)':
-        # Keep the current theme if it's already Day or Dark, otherwise default to Day
         if st.session_state.get('effective_theme') and st.session_state.effective_theme in ['Day', 'Dark']:
             effective_theme = st.session_state.effective_theme
         else:
@@ -2144,7 +2180,6 @@ def main():
                 uploaded = st.file_uploader("Image or PDF", type=["png","jpg","jpeg","pdf"],
                     label_visibility="collapsed", key="img_pdf_uploader")
             elif mode == "📝 Text":
-                # Use session state value for text area to allow clearing
                 text_input_value = st.session_state.get('text_input_area', '')
                 text_data = st.text_area("📝 Paste text", height=150,
                     placeholder="Messy text yahan paste karein...",
@@ -2228,7 +2263,7 @@ def main():
                                         st.session_state.upload_success = True
                                         st.session_state.last_upload_time = format_time()
                                         log_activity(f"✅ Text input → {save_res['saved']} records")
-                                        # CHANGED: Clear text input after successful processing
+                                        # Clear text input after successful processing
                                         st.session_state.text_input_area = ""
                                     st.cache_data.clear()
                                     st.session_state.last_refresh = time.time()
@@ -2327,9 +2362,7 @@ def main():
                 st.session_state.current_page = 1
                 st.rerun()
 
-    # REMOVED: auto_theme_detected logic and system_theme detection from main()
-
-    # View mode selector - NOW IN MAIN AREA (not sidebar)
+    # View mode selector - in main area (top)
     view = st.radio("📊 View Mode", ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"],
         index=["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"].index(st.session_state.view_mode)
         if st.session_state.view_mode in ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"] else 0,
