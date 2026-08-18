@@ -24,6 +24,9 @@ import matplotlib.pyplot as plt
 from matplotlib.table import Table as MplTable
 import numpy as np
 from PIL import Image, ImageDraw
+import seaborn as sns
+import warnings
+warnings.filterwarnings('ignore')
 
 # ------------------------------------------------------------------
 # NTES client (try to import)
@@ -39,7 +42,7 @@ except ImportError:
 # ------------------------------------------------------------------
 # Streamlit page config
 # ------------------------------------------------------------------
-st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="collapsed")
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -88,7 +91,7 @@ defaults = {
     'theme': 'Auto (System)', 'custom_bg': '#ffffff', 'custom_text': '#000000',
     'current_page': 1, 'pnr_val': '', 'train_val': '', 'from_val': None,
     'to_val': None, 'upload_success': False, 'last_upload_time': None,
-    'selected_sheet': "EQ", 'view_mode': "📋 Data Table",
+    'selected_sheet': "EQ", 'view_mode': "📊 Dashboard",
     'select_all': False, 'delete_confirm': False,
     'sidebar_collapsed': False,
     'text_input_key': 0, 'img_uploader_key': 0,
@@ -99,7 +102,8 @@ defaults = {
     'pnr_result': None, 'train_result': None, 'search_result': None,
     'last_uploaded_drive_id': None,
     'manual_refresh': False,
-    'sheet_print_data': None
+    'sheet_print_data': None,
+    'dashboard_chart_type': 'All'
 }
 
 for key, val in defaults.items():
@@ -1524,9 +1528,19 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
 
     css = f"""
     <style>
-        .block-container {{ padding-top: 0.5rem !important; padding-bottom: 1rem !important; }}
+        .block-container {{ 
+            padding-top: 0.5rem !important; 
+            padding-bottom: 1rem !important;
+            max-width: 100% !important;
+        }}
         .stApp {{ background-color: {bg} !important; }}
-        [data-testid="stSidebar"] {{ background-color: {card_bg} !important; border-right: 1px solid {border} !important; }}
+        [data-testid="stSidebar"] {{ 
+            background-color: {card_bg} !important; 
+            border-right: 1px solid {border} !important;
+            width: 280px !important;
+            min-width: 280px !important;
+            max-width: 280px !important;
+        }}
         [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown div,
         [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
         [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] .stDateInput label,
@@ -1534,7 +1548,11 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stSidebar"] .stRadio label, [data-testid="stSidebar"] .stCheckbox label {{
             color: {text_color} !important;
         }}
-        header[data-testid="stHeader"] {{ background-color: {card_bg} !important; border-bottom: 1px solid {border} !important; }}
+        header[data-testid="stHeader"] {{ 
+            background-color: {card_bg} !important; 
+            border-bottom: 1px solid {border} !important;
+            display: none !important;
+        }}
         h1, h2, h3, h4, h5, h6, .stMarkdown p, .stMarkdown div, .stMarkdown span,
         .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"], .stCaption {{
@@ -1590,7 +1608,13 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stChatMessage {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important; }}
         .stChatInput {{ background-color: {input_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; }}
         .stChatInput input {{ color: {text_color} !important; }}
-        [data-testid="stMetric"] {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 10px !important; padding: 14px !important; }}
+        [data-testid="stMetric"] {{ 
+            background-color: {card_bg} !important; 
+            border: 1px solid {border} !important; 
+            border-radius: 10px !important; 
+            padding: 14px !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+        }}
         .stTabs [data-baseweb="tab-list"] {{ background-color: {card_bg} !important; border-bottom: 1px solid {border} !important; }}
         .stTabs [data-baseweb="tab"] {{ color: {text_secondary} !important; }}
         .stTabs [data-baseweb="tab-highlight"] {{ background-color: {accent} !important; }}
@@ -1598,7 +1622,11 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         ::-webkit-scrollbar-track {{ background: {bg}; }}
         ::-webkit-scrollbar-thumb {{ background: {border}; border-radius: 10px; }}
         ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
-        html, [data-testid="stMain"], [data-testid="stAppViewContainer"] {{ scroll-behavior: smooth !important; }}
+        html, [data-testid="stMain"], [data-testid="stAppViewContainer"] {{ 
+            scroll-behavior: smooth !important;
+            overflow-y: auto !important;
+            height: 100vh !important;
+        }}
         footer {{ display: none !important; }}
         .eqms-marquee {{ overflow: hidden; white-space: nowrap; }}
         .eqms-marquee span {{
@@ -1614,7 +1642,20 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .file-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 14px; margin: 10px 0; }}
         .file-card-title {{ color: {text_color}; font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }}
         .file-card-meta {{ color: {text_secondary}; font-size: 0.8rem; margin-bottom: 10px; }}
-        .pro-footer {{ color: {text_secondary} !important; border-top: 1px solid {border} !important; text-align: center !important; padding: 18px 0 8px !important; margin-top: 28px !important; font-size: 0.85rem !important; }}
+        .pro-footer {{ 
+            color: {text_secondary} !important; 
+            border-top: 1px solid {border} !important; 
+            text-align: center !important; 
+            padding: 18px 0 8px !important; 
+            margin-top: 28px !important; 
+            font-size: 0.85rem !important;
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            background: {bg} !important;
+            z-index: 999 !important;
+        }}
         .sheet-link-btn {{
             display: inline-block !important; padding: 9px 16px !important;
             background: {button_bg} !important; color: {accent} !important;
@@ -1753,6 +1794,34 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
+        .main-content {{ 
+            padding-bottom: 80px !important;
+            overflow-y: auto !important;
+            max-height: calc(100vh - 60px) !important;
+        }}
+        [data-testid="stAppViewContainer"] {{
+            height: 100vh !important;
+            overflow-y: auto !important;
+        }}
+        [data-testid="stAppViewContainer"] > .main {{
+            overflow-y: auto !important;
+            height: 100% !important;
+        }}
+        .stPlotlyChart {{
+            height: 100% !important;
+            min-height: 400px !important;
+        }}
+        .dashboard-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+        }}
+        @media (max-width: 768px) {{
+            .dashboard-grid {{
+                grid-template-columns: 1fr;
+            }}
+        }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -2002,6 +2071,450 @@ def get_pnr_status_url(pnr):
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
 
 # ------------------------------------------------------------------
+# Dashboard Charts Functions
+# ------------------------------------------------------------------
+def create_advanced_charts(df, sheet_choice):
+    if df.empty:
+        st.info("No data available for charts")
+        return
+    
+    # Find relevant columns
+    train_col = None
+    class_col = None
+    doj_col = None
+    berth_col = None
+    from_col = None
+    to_col = None
+    vip_col = None
+    
+    for c in df.columns:
+        if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
+            train_col = c
+        if 'CLASS' in c.upper():
+            class_col = c
+        if 'DOJ' in c.upper():
+            doj_col = c
+        if 'BERTH' in c.upper():
+            berth_col = c
+        if c.upper() == 'FROM':
+            from_col = c
+        if c.upper() == 'TO':
+            to_col = c
+        if 'VIP' in c.upper() or 'MP/MLA' in c.upper():
+            vip_col = c
+    
+    # Chart type selector
+    chart_type = st.selectbox(
+        "📊 Select Chart Type",
+        ["All Charts", "Bar Charts", "Pie Charts", "Histograms", "Trend Lines", "Heatmaps", "Advanced Analytics"],
+        key="chart_type_selector"
+    )
+    
+    # --- BAR CHARTS ---
+    if chart_type in ["All Charts", "Bar Charts"]:
+        st.subheader("📊 Bar Charts")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if train_col:
+                train_counts = df[train_col].value_counts().head(15).reset_index()
+                train_counts.columns = ['Train', 'Count']
+                fig = px.bar(train_counts, x='Train', y='Count', 
+                            title="Top 15 Trains by EQ Count",
+                            color='Count', color_continuous_scale='Blues',
+                            text='Count')
+                fig.update_traces(textposition='outside')
+                fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            if class_col:
+                class_counts = df[class_col].value_counts().reset_index()
+                class_counts.columns = ['Class', 'Count']
+                fig = px.bar(class_counts, x='Class', y='Count',
+                            title="Class Distribution",
+                            color='Class', color_discrete_sequence=px.colors.qualitative.Set2,
+                            text='Count')
+                fig.update_traces(textposition='outside')
+                fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+        
+        if from_col and to_col:
+            col3, col4 = st.columns(2)
+            with col3:
+                route_counts = df.groupby([from_col, to_col]).size().reset_index(name='Count')
+                route_counts = route_counts.sort_values('Count', ascending=False).head(10)
+                route_counts['Route'] = route_counts[from_col] + " → " + route_counts[to_col]
+                fig = px.bar(route_counts, x='Route', y='Count',
+                            title="Top 10 Routes",
+                            color='Count', color_continuous_scale='Reds',
+                            text='Count')
+                fig.update_traces(textposition='outside')
+                fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col4:
+                if vip_col:
+                    vip_counts = df[vip_col].value_counts().reset_index()
+                    vip_counts.columns = ['Category', 'Count']
+                    vip_counts = vip_counts[vip_counts['Category'].astype(str).str.strip() != '']
+                    if not vip_counts.empty:
+                        fig = px.bar(vip_counts, x='Category', y='Count',
+                                    title="VIP/Priority Distribution",
+                                    color='Category', color_discrete_sequence=px.colors.qualitative.Set3,
+                                    text='Count')
+                        fig.update_traces(textposition='outside')
+                        fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True)
+    
+    # --- PIE CHARTS ---
+    if chart_type in ["All Charts", "Pie Charts"]:
+        st.subheader("🥧 Pie Charts")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if class_col:
+                class_counts = df[class_col].value_counts().reset_index()
+                class_counts.columns = ['Class', 'Count']
+                fig = px.pie(class_counts, names='Class', values='Count',
+                            title="Class Distribution",
+                            hole=0.4, color_discrete_sequence=px.colors.qualitative.Set2)
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            if train_col:
+                train_counts = df[train_col].value_counts().head(10).reset_index()
+                train_counts.columns = ['Train', 'Count']
+                other_count = len(df[train_col].value_counts()) - 10
+                if other_count > 0:
+                    other_row = pd.DataFrame({'Train': ['Others'], 'Count': [other_count]})
+                    train_counts = pd.concat([train_counts, other_row], ignore_index=True)
+                fig = px.pie(train_counts, names='Train', values='Count',
+                            title="Train Distribution (Top 10)",
+                            hole=0.3, color_discrete_sequence=px.colors.qualitative.Set3)
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+        
+        if vip_col:
+            col3, col4 = st.columns(2)
+            with col3:
+                vip_counts = df[vip_col].value_counts().reset_index()
+                vip_counts.columns = ['Category', 'Count']
+                vip_counts = vip_counts[vip_counts['Category'].astype(str).str.strip() != '']
+                if not vip_counts.empty:
+                    fig = px.pie(vip_counts, names='Category', values='Count',
+                                title="VIP/Priority Distribution",
+                                hole=0.3, color_discrete_sequence=px.colors.qualitative.Pastel)
+                    fig.update_traces(textposition='inside', textinfo='percent+label')
+                    fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+            
+            with col4:
+                if from_col and to_col:
+                    route_counts = df.groupby([from_col, to_col]).size().reset_index(name='Count')
+                    route_counts = route_counts.sort_values('Count', ascending=False).head(10)
+                    route_counts['Route'] = route_counts[from_col] + "→" + route_counts[to_col]
+                    fig = px.pie(route_counts, names='Route', values='Count',
+                                title="Top Routes Distribution",
+                                hole=0.3, color_discrete_sequence=px.colors.qualitative.Safe)
+                    fig.update_traces(textposition='inside', textinfo='percent+label')
+                    fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+    
+    # --- HISTOGRAMS ---
+    if chart_type in ["All Charts", "Histograms"]:
+        st.subheader("📈 Histograms & Frequency Polygons")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if doj_col:
+                try:
+                    df_temp = df.copy()
+                    df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
+                    if df_temp['_date'].isna().all():
+                        df_temp['_date'] = pd.to_datetime(df_temp[doj_col], errors='coerce')
+                    valid_dates = df_temp.dropna(subset=['_date'])
+                    if not valid_dates.empty:
+                        # Histogram
+                        fig = px.histogram(valid_dates, x='_date', 
+                                          title="Journey Date Distribution",
+                                          labels={'_date': 'Date'},
+                                          color_discrete_sequence=['#636efa'],
+                                          nbins=30)
+                        fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Frequency Polygon (vertical)
+                        freq_df = valid_dates['_date'].value_counts().sort_index().reset_index()
+                        freq_df.columns = ['Date', 'Frequency']
+                        fig = px.line(freq_df, x='Date', y='Frequency',
+                                     title="Frequency Polygon - Journey Dates",
+                                     markers=True, color_discrete_sequence=['#ff6b6b'])
+                        fig.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True)
+                except Exception as e:
+                    st.warning(f"Could not create date histogram: {e}")
+        
+        with col2:
+            if berth_col:
+                try:
+                    berth_data = pd.to_numeric(df[berth_col], errors='coerce').dropna()
+                    if not berth_data.empty:
+                        # Vertical histogram
+                        fig = px.histogram(x=berth_data, 
+                                          title="Berths Required Distribution",
+                                          labels={'x': 'Number of Berths'},
+                                          color_discrete_sequence=['#00cc96'],
+                                          nbins=max(1, int(berth_data.max()) + 1))
+                        fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Frequency polygon for berths
+                        berth_counts = berth_data.value_counts().sort_index().reset_index()
+                        berth_counts.columns = ['Berths', 'Frequency']
+                        fig = px.line(berth_counts, x='Berths', y='Frequency',
+                                     title="Frequency Polygon - Berths",
+                                     markers=True, color_discrete_sequence=['#ffa600'])
+                        fig.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True)
+                except Exception as e:
+                    st.warning(f"Could not create berth histogram: {e}")
+    
+    # --- TREND LINES ---
+    if chart_type in ["All Charts", "Trend Lines"]:
+        st.subheader("📉 Trend Analysis")
+        
+        if doj_col:
+            try:
+                df_temp = df.copy()
+                df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
+                if df_temp['_date'].isna().all():
+                    df_temp['_date'] = pd.to_datetime(df_temp[doj_col], errors='coerce')
+                valid_dates = df_temp.dropna(subset=['_date'])
+                
+                if not valid_dates.empty:
+                    daily = valid_dates.groupby('_date').size().reset_index(name='Count')
+                    daily = daily.sort_values('_date')
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        # Daily trend line
+                        fig = px.line(daily, x='_date', y='Count',
+                                     title="Daily Trend - Requests Over Time",
+                                     markers=True, line_shape='spline',
+                                     color_discrete_sequence=['#636efa'])
+                        fig.update_traces(marker=dict(size=8))
+                        fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    with col2:
+                        # Moving average
+                        daily['MA_3'] = daily['Count'].rolling(window=3, min_periods=1).mean()
+                        daily['MA_7'] = daily['Count'].rolling(window=7, min_periods=1).mean()
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(x=daily['_date'], y=daily['Count'],
+                                                 mode='lines+markers', name='Daily',
+                                                 line=dict(color='#636efa')))
+                        fig.add_trace(go.Scatter(x=daily['_date'], y=daily['MA_3'],
+                                                 mode='lines', name='3-Day MA',
+                                                 line=dict(color='#ff6b6b', dash='dash')))
+                        fig.add_trace(go.Scatter(x=daily['_date'], y=daily['MA_7'],
+                                                 mode='lines', name='7-Day MA',
+                                                 line=dict(color='#00cc96', dash='dot')))
+                        fig.update_layout(title="Moving Average Trends",
+                                         height=400,
+                                         paper_bgcolor='rgba(0,0,0,0)',
+                                         plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.warning(f"Could not create trend analysis: {e}")
+        
+        # Cumulative trend
+        if doj_col:
+            try:
+                df_temp = df.copy()
+                df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
+                if df_temp['_date'].isna().all():
+                    df_temp['_date'] = pd.to_datetime(df_temp[doj_col], errors='coerce')
+                valid_dates = df_temp.dropna(subset=['_date'])
+                if not valid_dates.empty:
+                    daily = valid_dates.groupby('_date').size().reset_index(name='Count')
+                    daily = daily.sort_values('_date')
+                    daily['Cumulative'] = daily['Count'].cumsum()
+                    
+                    fig = px.area(daily, x='_date', y='Cumulative',
+                                 title="Cumulative Requests Over Time",
+                                 color_discrete_sequence=['#00cc96'],
+                                 labels={'_date': 'Date', 'Cumulative': 'Total Requests'})
+                    fig.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+            except:
+                pass
+    
+    # --- HEATMAPS ---
+    if chart_type in ["All Charts", "Heatmaps"]:
+        st.subheader("🔥 Heatmaps")
+        
+        if train_col and class_col:
+            try:
+                # Create heatmap: Train vs Class
+                heat_data = pd.crosstab(df[train_col], df[class_col])
+                if not heat_data.empty and heat_data.shape[0] > 1 and heat_data.shape[1] > 1:
+                    fig = go.Figure(data=go.Heatmap(
+                        z=heat_data.values,
+                        x=heat_data.columns,
+                        y=heat_data.index,
+                        colorscale='Viridis',
+                        text=heat_data.values,
+                        texttemplate='%{text}',
+                        textfont={"size": 10}
+                    ))
+                    fig.update_layout(title="Train vs Class Heatmap",
+                                     height=500,
+                                     xaxis_title="Class",
+                                     yaxis_title="Train Number",
+                                     paper_bgcolor='rgba(0,0,0,0)',
+                                     plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+            except:
+                pass
+        
+        if from_col and to_col:
+            try:
+                # Route heatmap
+                route_data = df.groupby([from_col, to_col]).size().reset_index(name='Count')
+                if not route_data.empty and len(route_data) > 5:
+                    route_pivot = route_data.pivot(index=from_col, columns=to_col, values='Count').fillna(0)
+                    if route_pivot.shape[0] > 1 and route_pivot.shape[1] > 1:
+                        fig = go.Figure(data=go.Heatmap(
+                            z=route_pivot.values,
+                            x=route_pivot.columns,
+                            y=route_pivot.index,
+                            colorscale='Reds',
+                            text=route_pivot.values,
+                            texttemplate='%{text}',
+                            textfont={"size": 10}
+                        ))
+                        fig.update_layout(title="Route Heatmap",
+                                         height=450,
+                                         xaxis_title="To Station",
+                                         yaxis_title="From Station",
+                                         paper_bgcolor='rgba(0,0,0,0)',
+                                         plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True)
+            except:
+                pass
+    
+    # --- ADVANCED ANALYTICS ---
+    if chart_type in ["All Charts", "Advanced Analytics"]:
+        st.subheader("🚀 Advanced Analytics")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            # Gauge chart - Berth Utilization
+            if berth_col:
+                try:
+                    total_berths = pd.to_numeric(df[berth_col], errors='coerce').sum()
+                    max_berths = total_berths * 2
+                    utilization = min(100, (total_berths / max_berths) * 100)
+                    fig = go.Figure(go.Indicator(
+                        mode="gauge+number",
+                        value=utilization,
+                        title={'text': "Berth Utilization"},
+                        gauge={'axis': {'range': [0, 100]},
+                               'bar': {'color': "#00cc96"},
+                               'steps': [
+                                   {'range': [0, 50], 'color': "lightgreen"},
+                                   {'range': [50, 80], 'color': "yellow"},
+                                   {'range': [80, 100], 'color': "red"}
+                               ]}
+                    ))
+                    fig.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+                except:
+                    pass
+        
+        with col2:
+            # Donut chart - Class Distribution (Advanced)
+            if class_col:
+                class_counts = df[class_col].value_counts().reset_index()
+                class_counts.columns = ['Class', 'Count']
+                if not class_counts.empty:
+                    fig = px.pie(class_counts, names='Class', values='Count',
+                                title="Class Distribution",
+                                hole=0.5, color_discrete_sequence=px.colors.qualitative.Set3)
+                    fig.update_traces(textposition='inside', textinfo='percent+label')
+                    fig.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                                     annotations=[dict(text='Class', x=0.5, y=0.5, font_size=14, showarrow=False)])
+                    st.plotly_chart(fig, use_container_width=True)
+        
+        with col3:
+            # Speedometer - Records per day
+            if doj_col:
+                try:
+                    df_temp = df.copy()
+                    df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
+                    if df_temp['_date'].isna().all():
+                        df_temp['_date'] = pd.to_datetime(df_temp[doj_col], errors='coerce')
+                    valid_dates = df_temp.dropna(subset=['_date'])
+                    if not valid_dates.empty:
+                        days = max(1, (valid_dates['_date'].max() - valid_dates['_date'].min()).days)
+                        avg_per_day = len(valid_dates) / days
+                        fig = go.Figure(go.Indicator(
+                            mode="gauge+number",
+                            value=avg_per_day,
+                            title={'text': "Avg Records/Day"},
+                            gauge={'axis': {'range': [0, max(10, avg_per_day * 3)]},
+                                   'bar': {'color': "#636efa"}}
+                        ))
+                        fig.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True)
+                except:
+                    pass
+        
+        # Additional advanced charts
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Treemap - Train hierarchy
+            if train_col:
+                train_counts = df[train_col].value_counts().head(15).reset_index()
+                train_counts.columns = ['Train', 'Count']
+                if not train_counts.empty:
+                    fig = px.treemap(train_counts, path=['Train'], values='Count',
+                                    title="Train Request Distribution (Treemap)",
+                                    color='Count', color_continuous_scale='Blues')
+                    fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            # Waterfall - Cumulative by train
+            if train_col:
+                train_counts = df[train_col].value_counts().reset_index()
+                train_counts.columns = ['Train', 'Count']
+                if not train_counts.empty and len(train_counts) > 1:
+                    fig = go.Figure(go.Waterfall(
+                        name="Requests",
+                        orientation="h",
+                        measure=["relative"] * len(train_counts) + ["total"],
+                        x=list(train_counts['Count']) + [train_counts['Count'].sum()],
+                        y=list(train_counts['Train']) + ["Total"],
+                        text=[str(c) for c in list(train_counts['Count']) + [train_counts['Count'].sum()]],
+                        textposition="outside",
+                        decreasing={"marker": {"color": "#ff6b6b"}},
+                        increasing={"marker": {"color": "#00cc96"}}
+                    ))
+                    fig.update_layout(title="Train-wise Contribution",
+                                     height=400,
+                                     paper_bgcolor='rgba(0,0,0,0)',
+                                     plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+
+# ------------------------------------------------------------------
 # Main function
 # ------------------------------------------------------------------
 def main():
@@ -2098,7 +2611,7 @@ def main():
                     b.id = 'eqms-top-btn';
                     b.title = 'Back to top (Home key)';
                     b.innerHTML = '⬆';
-                    b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;'
+                    b.style.cssText = 'position:fixed;bottom:80px;right:26px;z-index:999999;'
                         + 'width:44px;height:44px;border-radius:50%;border:none;background:#0969da;'
                         + 'color:#fff;font-size:18px;cursor:pointer;opacity:0.85;'
                         + 'box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
@@ -2133,47 +2646,46 @@ def main():
     if qp_view in view_options and st.session_state.view_mode != qp_view:
         st.session_state.view_mode = qp_view
 
-    theme_choice = st.sidebar.selectbox("🎨 Theme", theme_options,
-        index=theme_options.index(st.session_state.theme) if st.session_state.theme in theme_options else 0,
-        key="theme_select",
-        help="Auto (System): IST time ke hisaab se — 6AM-7PM Day, 7PM-6AM Dark. Choice save rehti hai.")
-    if theme_choice != st.session_state.theme:
-        st.session_state.theme = theme_choice
-        st.query_params['__theme'] = theme_choice
-        st.rerun()
-
-    # Auto (System) = time-based (IST): 06:00-19:00 Day, 19:00-06:00 Dark
-    effective_theme = theme_choice
-    if theme_choice == 'Auto (System)':
-        h = now_ist().hour
-        effective_theme = 'Day' if 6 <= h < 19 else 'Dark'
-
-    if effective_theme == 'Custom':
-        custom_bg = st.sidebar.color_picker("Background Color", value=st.session_state.custom_bg, key="custom_bg_picker")
-        custom_text = st.sidebar.color_picker("Text Color", value=st.session_state.custom_text, key="custom_text_picker")
-        if custom_bg != st.session_state.custom_bg or custom_text != st.session_state.custom_text:
-            st.session_state.custom_bg = custom_bg
-            st.session_state.custom_text = custom_text
-            st.query_params['__bg'] = custom_bg
-            st.query_params['__tx'] = custom_text
-            st.rerun()
-    else:
-        custom_bg = None
-        custom_text = None
-
-    apply_theme(effective_theme, custom_bg, custom_text)
-
-    # Sidebar
+    # --- SIDEBAR (Only for settings and uploads) ---
     with st.sidebar:
         st.markdown("""
         <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8;">
-            <span style="color:#FF9933;">🟠 नमस्ते आपका स्वागत है</span><br>
-            <span style="color:#FFFFFF; text-shadow:0 0 4px rgba(0,0,0,0.55);">⚪ हम भारत के लोग</span><br>
+            <span style="color:#FF9933;">🟠 नमस्ते</span><br>
             <span style="color:#138808; font-weight:bold;">🟢 जय हिंद</span>
         </div>
         """, unsafe_allow_html=True)
+        
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
+
+        theme_choice = st.selectbox("🎨 Theme", theme_options,
+            index=theme_options.index(st.session_state.theme) if st.session_state.theme in theme_options else 0,
+            key="theme_select")
+        if theme_choice != st.session_state.theme:
+            st.session_state.theme = theme_choice
+            st.query_params['__theme'] = theme_choice
+            st.rerun()
+
+        # Auto (System) = time-based (IST): 06:00-19:00 Day, 19:00-06:00 Dark
+        effective_theme = theme_choice
+        if theme_choice == 'Auto (System)':
+            h = now_ist().hour
+            effective_theme = 'Day' if 6 <= h < 19 else 'Dark'
+
+        if effective_theme == 'Custom':
+            custom_bg = st.color_picker("Background Color", value=st.session_state.custom_bg, key="custom_bg_picker")
+            custom_text = st.color_picker("Text Color", value=st.session_state.custom_text, key="custom_text_picker")
+            if custom_bg != st.session_state.custom_bg or custom_text != st.session_state.custom_text:
+                st.session_state.custom_bg = custom_bg
+                st.session_state.custom_text = custom_text
+                st.query_params['__bg'] = custom_bg
+                st.query_params['__tx'] = custom_text
+                st.rerun()
+        else:
+            custom_bg = None
+            custom_text = None
+
+        apply_theme(effective_theme, custom_bg, custom_text)
 
         # Weather widget in sidebar
         with st.expander("🌤️ Weather", expanded=False):
@@ -2212,61 +2724,7 @@ def main():
         sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
 
-        # PRINT SHEET button - using st.button with JavaScript
-        st.markdown("---")
-        st.markdown("### 🖨️ Print Options")
-        
-        # Reliable print button using components.v1.html for unrestricted JS
-        components.html("""
-        <div style="width:100%; margin-top:8px;">
-            <button onclick="
-                (function(){
-                    var el = window.parent.document.querySelector('.print-only');
-                    if (!el) { alert('No data to print. Please load a sheet first.'); return; }
-                    var content = el.innerHTML;
-                    var iframe = window.parent.document.createElement('iframe');
-                    iframe.style.position = 'fixed';
-                    iframe.style.top = '-9999px';
-                    iframe.style.left = '-9999px';
-                    iframe.style.width = '0';
-                    iframe.style.height = '0';
-                    iframe.style.border = 'none';
-                    window.parent.document.body.appendChild(iframe);
-                    var doc = iframe.contentWindow.document;
-                    doc.open();
-                    doc.write('<html><head><title>Sheet Print</title>');
-                    doc.write('<style>');
-                    doc.write('@page { margin: 1cm; size: A4 landscape; }');
-                    doc.write('body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background: white; }');
-                    doc.write('h2 { text-align: center; font-size: 18pt; margin-bottom: 5px; color: #000; }');
-                    doc.write('p.meta { text-align: center; font-size: 10pt; margin-bottom: 15px; color: #333; }');
-                    doc.write('table { width: 100%; border-collapse: collapse; font-size: 7.5pt; page-break-inside: auto; }');
-                    doc.write('tr { page-break-inside: avoid; }');
-                    doc.write('thead { display: table-header-group; }');
-                    doc.write('th { background: #333 !important; color: white !important; padding: 4px 5px; border: 1px solid #333; text-align: center; font-weight: bold; }');
-                    doc.write('td { border: 1px solid #999; padding: 3px 4px; text-align: center; color: #000; word-wrap: break-word; }');
-                    doc.write('tr:nth-child(even) { background: #f5f5f5 !important; }');
-                    doc.write('</style></head><body>');
-                    doc.write(content);
-                    doc.write('</body></html>');
-                    doc.close();
-                    setTimeout(function(){
-                        iframe.contentWindow.focus();
-                        iframe.contentWindow.print();
-                        setTimeout(function(){ window.parent.document.body.removeChild(iframe); }, 2000);
-                    }, 300);
-                })();
-            " style="
-                display: block; width: 100%; padding: 10px 16px;
-                background: #0969da; color: white; text-align: center;
-                border-radius: 8px; text-decoration: none; font-weight: 600;
-                font-size: 0.95rem; border: none; cursor: pointer;
-                box-sizing: border-box; font-family: inherit;
-            ">🖨️ PRINT Sheet</button>
-        </div>
-        """, height=50)
-
-        with st.expander("📤 Upload & Process", expanded=True):
+        with st.expander("📤 Upload & Process", expanded=False):
             st.caption("📷 Image • 📄 PDF • 📝 Text • 🎤 Audio")
             mode = st.radio("Type", ["📷 Image / PDF", "📝 Text", "🎤 Voice / Audio"],
                 horizontal=True, label_visibility="collapsed", key="upload_mode_radio")
@@ -2277,7 +2735,7 @@ def main():
                 uploaded = st.file_uploader("Image or PDF", type=["png","jpg","jpeg","pdf"],
                     label_visibility="collapsed", key=f"img_pdf_uploader_{st.session_state.img_uploader_key}")
             elif mode == "📝 Text":
-                text_data = st.text_area("📝 Paste text", height=150,
+                text_data = st.text_area("📝 Paste text", height=100,
                     placeholder="Messy text yahan paste karein...",
                     label_visibility="collapsed", key=f"text_input_area_{st.session_state.text_input_key}")
                 if text_data:
@@ -2359,8 +2817,6 @@ def main():
                                         st.session_state.upload_success = True
                                         st.session_state.last_upload_time = format_time()
                                         log_activity(f"✅ Text input → {save_res['saved']} records")
-                                    # Auto-clear inputs after successful processing
-                                    # (text box / file uploader / audio sab khali ho jayenge)
                                     st.session_state.text_input_key += 1
                                     st.session_state.img_uploader_key += 1
                                     st.session_state.audio_uploader_key += 1
@@ -2380,7 +2836,7 @@ def main():
                         status.empty()
 
         if st.session_state.upload_success and st.session_state.last_uploaded_file:
-            with st.expander("📄 Last Uploaded File", expanded=True):
+            with st.expander("📄 Last Uploaded", expanded=False):
                 st.markdown(f"""
                 <div class="file-card">
                     <div class="file-card-title">📄 {st.session_state.last_uploaded_file}</div>
@@ -2393,7 +2849,7 @@ def main():
                         st.link_button("👁️ View", st.session_state.last_uploaded_view_url, use_container_width=True)
                 with c2:
                     if st.session_state.last_uploaded_print_url:
-                        st.link_button("🖨️ Print File", st.session_state.last_uploaded_print_url, use_container_width=True)
+                        st.link_button("🖨️ Print", st.session_state.last_uploaded_print_url, use_container_width=True)
                 with c3:
                     if st.session_state.last_uploaded_drive_id:
                         st.link_button("📥 Download", f"https://drive.google.com/uc?export=download&id={st.session_state.last_uploaded_drive_id}", use_container_width=True)
@@ -2415,7 +2871,7 @@ def main():
         st.markdown("---")
 
         # Sheet selection in sidebar
-        st.markdown("### 📑 Sheet Selection")
+        st.markdown("### 📑 Sheet")
         sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()),
             index=list(SHEET_CONFIG.keys()).index(st.session_state.selected_sheet)
             if st.session_state.selected_sheet in SHEET_CONFIG else 0,
@@ -2434,13 +2890,13 @@ def main():
             train_col_idx = config.get("train_col")
             doj_col_idx = config.get("doj_col")
 
-            pnr_input = st.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
+            pnr_input = st.text_input("PNR", value=st.session_state.pnr_val, key="pnr_filter_input")
             if pnr_input != st.session_state.pnr_val:
                 st.session_state.pnr_val = pnr_input
                 st.session_state.current_page = 1
                 st.rerun()
 
-            train_input = st.text_input("Train (partial)", value=st.session_state.train_val, key="train_filter_input")
+            train_input = st.text_input("Train", value=st.session_state.train_val, key="train_filter_input")
             if train_input != st.session_state.train_val:
                 st.session_state.train_val = train_input
                 st.session_state.current_page = 1
@@ -2462,7 +2918,7 @@ def main():
                 st.session_state.current_page = 1
                 st.rerun()
 
-            if st.button("🧹 Clear All Filters", use_container_width=True, key="clear_filters_btn"):
+            if st.button("🧹 Clear Filters", use_container_width=True, key="clear_filters_btn"):
                 st.session_state.pnr_val = ''
                 st.session_state.train_val = ''
                 st.session_state.from_val = None
@@ -2501,11 +2957,10 @@ def main():
                 filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
             filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
 
-    # View mode — ab compact icon navigation (top bar) se control hota hai,
-    # bada option strip hata diya gaya hai taaki content upar aa jaye
+    # View mode
     view = st.session_state.view_mode
 
-    # Top bar with crawling text (CSS marquee — smooth, no deprecated <marquee>)
+    # Top bar with crawling text (CSS marquee)
     st.markdown("""
     <div class="eqms-marquee" style="background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); padding: 8px 0; border-radius: 4px; margin-bottom: 10px;">
         <span>🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save</span>
@@ -2570,62 +3025,43 @@ def main():
     # ------------------------------------------------------------------
     elif view == "📊 Dashboard":
         st.subheader(f"📊 Analytics Dashboard — {sheet_choice}")
+        
+        # Find columns for metrics
         train_col = None
+        berth_col = None
+        doj_col = None
         for c in filtered_df.columns:
             if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
                 train_col = c
-                break
+            if 'BERTH' in str(c).upper() or 'T/BERTHS' in str(c).upper():
+                berth_col = c
+            if 'DOJ' in str(c).upper():
+                doj_col = c
 
+        # Metrics row
         m1, m2, m3, m4 = st.columns(4)
         with m1:
             total_records = len(filtered_df) if not filtered_df.empty else 0
-            st.metric("Total Records", total_records)
+            st.metric("📊 Total Records", total_records)
         with m2:
             unique_trains = filtered_df[train_col].nunique() if train_col else 0
-            st.metric("Unique Trains", unique_trains)
+            st.metric("🚆 Unique Trains", unique_trains)
         with m3:
-            berth_col = next((c for c in filtered_df.columns if 'BERTH' in str(c).upper() or 'T/BERTHS' in str(c).upper()), None)
             total_berths = 0
             if berth_col and berth_col in filtered_df:
                 total_berths = pd.to_numeric(filtered_df[berth_col], errors='coerce').sum()
-            st.metric("Total Berths", int(total_berths) if total_berths else 0)
+            st.metric("🛏️ Total Berths", int(total_berths) if total_berths else 0)
         with m4:
             expired = 0
-            doj_col = next((c for c in filtered_df.columns if 'DOJ' in str(c).upper()), None)
             if doj_col and doj_col in filtered_df:
                 expired = sum(1 for _, r in filtered_df.iterrows() if is_expired(r.get(doj_col, '')))
-            st.metric("Expired DOJ", expired)
+            st.metric("⏰ Expired DOJ", expired)
+        
         st.markdown("---")
+        
+        # Advanced Charts
         if not filtered_df.empty:
-            if train_col:
-                train_counts = filtered_df[train_col].value_counts().reset_index()
-                train_counts.columns = ['Train', 'Count']
-                fig_bar = px.bar(train_counts.head(15), x='Train', y='Count', title="Top 15 Trains by EQ Count", color='Count', color_continuous_scale='Blues')
-                fig_bar.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_bar, use_container_width=True)
-            class_col = next((c for c in filtered_df.columns if 'CLASS' in c.upper()), None)
-            if class_col:
-                class_counts = filtered_df[class_col].value_counts().reset_index()
-                class_counts.columns = ['Class', 'Count']
-                fig_pie = px.pie(class_counts, names='Class', values='Count', title="Class Distribution", hole=0.4)
-                fig_pie.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig_pie, use_container_width=True)
-            doj_col = next((c for c in filtered_df.columns if 'DOJ' in str(c).upper()), None)
-            if doj_col:
-                df_temp = filtered_df.copy()
-                df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
-                if df_temp['_date'].isna().all():
-                    df_temp['_date'] = pd.to_datetime(df_temp[doj_col], errors='coerce')
-                daily = df_temp.groupby('_date').size().reset_index(name='count')
-                if not daily.empty:
-                    fig_line = px.line(daily, x='_date', y='count', title="Daily Trend", markers=True, labels={'_date': 'Date', 'count': 'Records'}, color_discrete_sequence=['#ff6b6b'])
-                    fig_line.update_layout(height=300, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_line, use_container_width=True)
-            with st.expander("📊 Train-wise EQ Count (Full List)", expanded=False):
-                if train_col:
-                    train_counts_full = filtered_df[train_col].value_counts().reset_index()
-                    train_counts_full.columns = ['Train Number', 'EQ Count']
-                    st.dataframe(train_counts_full, use_container_width=True, height=400)
+            create_advanced_charts(filtered_df, sheet_choice)
         else:
             st.info("No data for charts. Adjust filters or choose another sheet.")
 
@@ -2824,7 +3260,7 @@ def main():
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
                 st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
             with a5:
-                # Reliable print button using iframe approach - prints only sheet data
+                # Reliable print button using iframe approach
                 components.html("""
                 <div style="width:100%;">
                     <button onclick="
@@ -3005,7 +3441,7 @@ def main():
             st.markdown('</div>', unsafe_allow_html=True)
 
     # ------------------------------------------------------------------
-    # View: Railway Features (DITTO from Telegram Bot)
+    # View: Railway Features
     # ------------------------------------------------------------------
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real‑time Info")
@@ -3222,15 +3658,12 @@ def main():
                 st.markdown("### 📸 Passport Photo Maker")
                 st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
 
-                # --- API Key Handling ---
-                # Check all possible sources
                 api_key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
                 if not api_key:
                     api_key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
                 if not api_key and "remove_bg_key" in st.session_state:
                     api_key = str(st.session_state.remove_bg_key).strip()
 
-                # If still not found, show input + instructions
                 if not api_key:
                     st.error("❌ REMOVE_BG_API_KEY not found.")
                     st.info("💡 **For Streamlit Cloud:** Go to your app → Settings (⚙️) → Secrets → Add:\n\n```\nREMOVE_BG_API_KEY = \"your_key_here\"\n```\n\n💡 **For local:** Add to `.streamlit/secrets.toml`")
