@@ -1959,10 +1959,8 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
         train_counts = df[train_col].value_counts().to_dict()
         if train_counts:
             lines.append("🚆 *TRAIN-WISE BREAKDOWN:*")
-            # Sort by count descending
             sorted_trains = sorted(train_counts.items(), key=lambda x: x[1], reverse=True)
             for i, (train, count) in enumerate(sorted_trains[:15], 1):
-                # Get berth count for this train
                 train_mask = df[train_col].astype(str) == str(train)
                 train_df = df[train_mask]
                 berth_col = next((c for c in df.columns if 'BERTH' in c.upper()), None)
@@ -1993,7 +1991,6 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     vip_col = next((c for c in df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
     if vip_col and not df.empty:
         vip_counts = df[vip_col].value_counts().to_dict()
-        # Filter out empty values
         vip_counts = {k: v for k, v in vip_counts.items() if str(k).strip()}
         if vip_counts:
             lines.append("⭐ *VIP / PRIORITY BREAKDOWN:*")
@@ -2016,7 +2013,6 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
                 lines.append("📅 *DATE INFORMATION:*")
                 lines.append(f"   • Date Range: {min_doj} to {max_doj}")
                 lines.append(f"   • Today's Date: {today_str}")
-                # Count upcoming vs expired
                 upcoming = sum(1 for d in valid_dates if d >= pd.Timestamp(now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)))
                 expired = len(valid_dates) - upcoming
                 lines.append(f"   • Upcoming Journeys: *{upcoming}*")
@@ -2070,7 +2066,7 @@ def get_pnr_status_url(pnr):
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
 
 # ------------------------------------------------------------------
-# Dashboard Charts Functions
+# Dashboard Charts Functions - COMPLETE & FIXED
 # ------------------------------------------------------------------
 def create_advanced_charts(df, sheet_choice):
     if df.empty:
@@ -2085,6 +2081,8 @@ def create_advanced_charts(df, sheet_choice):
     from_col = None
     to_col = None
     vip_col = None
+    rec_col = None
+    purpose_col = None
     
     for c in df.columns:
         if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
@@ -2101,17 +2099,24 @@ def create_advanced_charts(df, sheet_choice):
             to_col = c
         if 'VIP' in c.upper() or 'MP/MLA' in c.upper():
             vip_col = c
+        if 'RECOMMENDATION' in c.upper():
+            rec_col = c
+        if 'PURPOSE' in c.upper():
+            purpose_col = c
     
     # Chart type selector
     chart_type = st.selectbox(
         "📊 Select Chart Type",
-        ["All Charts", "Bar Charts", "Pie Charts", "Histograms", "Trend Lines", "Heatmaps", "Advanced Analytics"],
-        key="chart_type_selector"
+        ["All Charts", "Train Wise", "Route Wise", "Class Wise", "Train vs Class", "Train vs Route", "Priority vs Recommendation", "Advanced Analytics"],
+        key="chart_type_selector_new"
     )
     
-    # --- BAR CHARTS ---
-    if chart_type in ["All Charts", "Bar Charts"]:
-        st.subheader("📊 Bar Charts")
+    # ====================================================================
+    # 1. TRAIN WISE CHARTS
+    # ====================================================================
+    if chart_type in ["All Charts", "Train Wise"]:
+        st.subheader("🚆 Train Wise Analysis")
+        
         col1, col2 = st.columns(2)
         
         with col1:
@@ -2124,62 +2129,6 @@ def create_advanced_charts(df, sheet_choice):
                             text='Count')
                 fig.update_traces(textposition='outside')
                 fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            if class_col:
-                class_counts = df[class_col].value_counts().reset_index()
-                class_counts.columns = ['Class', 'Count']
-                fig = px.bar(class_counts, x='Class', y='Count',
-                            title="Class Distribution",
-                            color='Class', color_discrete_sequence=px.colors.qualitative.Set2,
-                            text='Count')
-                fig.update_traces(textposition='outside')
-                fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig, use_container_width=True)
-        
-        if from_col and to_col:
-            col3, col4 = st.columns(2)
-            with col3:
-                route_counts = df.groupby([from_col, to_col]).size().reset_index(name='Count')
-                route_counts = route_counts.sort_values('Count', ascending=False).head(10)
-                route_counts['Route'] = route_counts[from_col] + " → " + route_counts[to_col]
-                fig = px.bar(route_counts, x='Route', y='Count',
-                            title="Top 10 Routes",
-                            color='Count', color_continuous_scale='Reds',
-                            text='Count')
-                fig.update_traces(textposition='outside')
-                fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col4:
-                if vip_col:
-                    vip_counts = df[vip_col].value_counts().reset_index()
-                    vip_counts.columns = ['Category', 'Count']
-                    vip_counts = vip_counts[vip_counts['Category'].astype(str).str.strip() != '']
-                    if not vip_counts.empty:
-                        fig = px.bar(vip_counts, x='Category', y='Count',
-                                    title="VIP/Priority Distribution",
-                                    color='Category', color_discrete_sequence=px.colors.qualitative.Set3,
-                                    text='Count')
-                        fig.update_traces(textposition='outside')
-                        fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig, use_container_width=True)
-    
-    # --- PIE CHARTS ---
-    if chart_type in ["All Charts", "Pie Charts"]:
-        st.subheader("🥧 Pie Charts")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if class_col:
-                class_counts = df[class_col].value_counts().reset_index()
-                class_counts.columns = ['Class', 'Count']
-                fig = px.pie(class_counts, names='Class', values='Count',
-                            title="Class Distribution",
-                            hole=0.4, color_discrete_sequence=px.colors.qualitative.Set2)
-                fig.update_traces(textposition='inside', textinfo='percent+label')
-                fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig, use_container_width=True)
         
         with col2:
@@ -2197,196 +2146,83 @@ def create_advanced_charts(df, sheet_choice):
                 fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
                 st.plotly_chart(fig, use_container_width=True)
         
-        if vip_col:
+        if train_col and berth_col:
             col3, col4 = st.columns(2)
             with col3:
-                vip_counts = df[vip_col].value_counts().reset_index()
-                vip_counts.columns = ['Category', 'Count']
-                vip_counts = vip_counts[vip_counts['Category'].astype(str).str.strip() != '']
-                if not vip_counts.empty:
-                    fig = px.pie(vip_counts, names='Category', values='Count',
-                                title="VIP/Priority Distribution",
-                                hole=0.3, color_discrete_sequence=px.colors.qualitative.Pastel)
-                    fig.update_traces(textposition='inside', textinfo='percent+label')
-                    fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig, use_container_width=True)
+                # Train wise berth sum
+                train_berth = df.groupby(train_col)[berth_col].sum().reset_index()
+                train_berth = train_berth.sort_values(berth_col, ascending=False).head(15)
+                train_berth.columns = ['Train', 'Total Berths']
+                fig = px.bar(train_berth, x='Train', y='Total Berths',
+                            title="Top 15 Trains by Total Berths",
+                            color='Total Berths', color_continuous_scale='Reds',
+                            text='Total Berths')
+                fig.update_traces(textposition='outside')
+                fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
             
             with col4:
-                if from_col and to_col:
-                    route_counts = df.groupby([from_col, to_col]).size().reset_index(name='Count')
-                    route_counts = route_counts.sort_values('Count', ascending=False).head(10)
-                    route_counts['Route'] = route_counts[from_col] + "→" + route_counts[to_col]
-                    fig = px.pie(route_counts, names='Route', values='Count',
-                                title="Top Routes Distribution",
-                                hole=0.3, color_discrete_sequence=px.colors.qualitative.Safe)
-                    fig.update_traces(textposition='inside', textinfo='percent+label')
-                    fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                # Treemap
+                train_counts = df[train_col].value_counts().head(15).reset_index()
+                train_counts.columns = ['Train', 'Count']
+                if not train_counts.empty:
+                    fig = px.treemap(train_counts, path=['Train'], values='Count',
+                                    title="Train Request Distribution (Treemap)",
+                                    color='Count', color_continuous_scale='Blues')
+                    fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)')
                     st.plotly_chart(fig, use_container_width=True)
     
-    # --- HISTOGRAMS ---
-    if chart_type in ["All Charts", "Histograms"]:
-        st.subheader("📈 Histograms & Frequency Polygons")
+    # ====================================================================
+    # 2. ROUTE WISE CHARTS
+    # ====================================================================
+    if chart_type in ["All Charts", "Route Wise"]:
+        st.subheader("🛤️ Route Wise Analysis")
+        
         col1, col2 = st.columns(2)
         
-        with col1:
-            if doj_col:
-                try:
-                    df_temp = df.copy()
-                    df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
-                    if df_temp['_date'].isna().all():
-                        df_temp['_date'] = pd.to_datetime(df_temp[doj_col], errors='coerce')
-                    valid_dates = df_temp.dropna(subset=['_date'])
-                    if not valid_dates.empty:
-                        # Histogram
-                        fig = px.histogram(valid_dates, x='_date', 
-                                          title="Journey Date Distribution",
-                                          labels={'_date': 'Date'},
-                                          color_discrete_sequence=['#636efa'],
-                                          nbins=30)
-                        fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Frequency Polygon (vertical)
-                        freq_df = valid_dates['_date'].value_counts().sort_index().reset_index()
-                        freq_df.columns = ['Date', 'Frequency']
-                        fig = px.line(freq_df, x='Date', y='Frequency',
-                                     title="Frequency Polygon - Journey Dates",
-                                     markers=True, color_discrete_sequence=['#ff6b6b'])
-                        fig.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.warning(f"Could not create date histogram: {e}")
-        
-        with col2:
-            if berth_col:
-                try:
-                    berth_data = pd.to_numeric(df[berth_col], errors='coerce').dropna()
-                    if not berth_data.empty:
-                        # Vertical histogram
-                        fig = px.histogram(x=berth_data, 
-                                          title="Berths Required Distribution",
-                                          labels={'x': 'Number of Berths'},
-                                          color_discrete_sequence=['#00cc96'],
-                                          nbins=max(1, int(berth_data.max()) + 1))
-                        fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # Frequency polygon for berths
-                        berth_counts = berth_data.value_counts().sort_index().reset_index()
-                        berth_counts.columns = ['Berths', 'Frequency']
-                        fig = px.line(berth_counts, x='Berths', y='Frequency',
-                                     title="Frequency Polygon - Berths",
-                                     markers=True, color_discrete_sequence=['#ffa600'])
-                        fig.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.warning(f"Could not create berth histogram: {e}")
-    
-    # --- TREND LINES ---
-    if chart_type in ["All Charts", "Trend Lines"]:
-        st.subheader("📉 Trend Analysis")
-        
-        if doj_col:
-            try:
-                df_temp = df.copy()
-                df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
-                if df_temp['_date'].isna().all():
-                    df_temp['_date'] = pd.to_datetime(df_temp[doj_col], errors='coerce')
-                valid_dates = df_temp.dropna(subset=['_date'])
-                
-                if not valid_dates.empty:
-                    daily = valid_dates.groupby('_date').size().reset_index(name='Count')
-                    daily = daily.sort_values('_date')
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        # Daily trend line
-                        fig = px.line(daily, x='_date', y='Count',
-                                     title="Daily Trend - Requests Over Time",
-                                     markers=True, line_shape='spline',
-                                     color_discrete_sequence=['#636efa'])
-                        fig.update_traces(marker=dict(size=8))
-                        fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig, use_container_width=True)
-                    
-                    with col2:
-                        # Moving average
-                        daily['MA_3'] = daily['Count'].rolling(window=3, min_periods=1).mean()
-                        daily['MA_7'] = daily['Count'].rolling(window=7, min_periods=1).mean()
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=daily['_date'], y=daily['Count'],
-                                                 mode='lines+markers', name='Daily',
-                                                 line=dict(color='#636efa')))
-                        fig.add_trace(go.Scatter(x=daily['_date'], y=daily['MA_3'],
-                                                 mode='lines', name='3-Day MA',
-                                                 line=dict(color='#ff6b6b', dash='dash')))
-                        fig.add_trace(go.Scatter(x=daily['_date'], y=daily['MA_7'],
-                                                 mode='lines', name='7-Day MA',
-                                                 line=dict(color='#00cc96', dash='dot')))
-                        fig.update_layout(title="Moving Average Trends",
-                                         height=400,
-                                         paper_bgcolor='rgba(0,0,0,0)',
-                                         plot_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig, use_container_width=True)
-            except Exception as e:
-                st.warning(f"Could not create trend analysis: {e}")
-        
-        # Cumulative trend
-        if doj_col:
-            try:
-                df_temp = df.copy()
-                df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
-                if df_temp['_date'].isna().all():
-                    df_temp['_date'] = pd.to_datetime(df_temp[doj_col], errors='coerce')
-                valid_dates = df_temp.dropna(subset=['_date'])
-                if not valid_dates.empty:
-                    daily = valid_dates.groupby('_date').size().reset_index(name='Count')
-                    daily = daily.sort_values('_date')
-                    daily['Cumulative'] = daily['Count'].cumsum()
-                    
-                    fig = px.area(daily, x='_date', y='Cumulative',
-                                 title="Cumulative Requests Over Time",
-                                 color_discrete_sequence=['#00cc96'],
-                                 labels={'_date': 'Date', 'Cumulative': 'Total Requests'})
-                    fig.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig, use_container_width=True)
-            except:
-                pass
-    
-    # --- HEATMAPS ---
-    if chart_type in ["All Charts", "Heatmaps"]:
-        st.subheader("🔥 Heatmaps")
-        
-        if train_col and class_col:
-            try:
-                # Create heatmap: Train vs Class
-                heat_data = pd.crosstab(df[train_col], df[class_col])
-                if not heat_data.empty and heat_data.shape[0] > 1 and heat_data.shape[1] > 1:
-                    fig = go.Figure(data=go.Heatmap(
-                        z=heat_data.values,
-                        x=heat_data.columns,
-                        y=heat_data.index,
-                        colorscale='Viridis',
-                        text=heat_data.values,
-                        texttemplate='%{text}',
-                        textfont={"size": 10}
-                    ))
-                    fig.update_layout(title="Train vs Class Heatmap",
-                                     height=500,
-                                     xaxis_title="Class",
-                                     yaxis_title="Train Number",
-                                     paper_bgcolor='rgba(0,0,0,0)',
-                                     plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig, use_container_width=True)
-            except:
-                pass
-        
         if from_col and to_col:
-            try:
-                # Route heatmap
-                route_data = df.groupby([from_col, to_col]).size().reset_index(name='Count')
-                if not route_data.empty and len(route_data) > 5:
-                    route_pivot = route_data.pivot(index=from_col, columns=to_col, values='Count').fillna(0)
+            with col1:
+                route_counts = df.groupby([from_col, to_col]).size().reset_index(name='Count')
+                route_counts = route_counts.sort_values('Count', ascending=False).head(10)
+                route_counts['Route'] = route_counts[from_col] + " → " + route_counts[to_col]
+                fig = px.bar(route_counts, x='Route', y='Count',
+                            title="Top 10 Routes",
+                            color='Count', color_continuous_scale='Reds',
+                            text='Count')
+                fig.update_traces(textposition='outside')
+                fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                route_counts = df.groupby([from_col, to_col]).size().reset_index(name='Count')
+                route_counts = route_counts.sort_values('Count', ascending=False).head(10)
+                route_counts['Route'] = route_counts[from_col] + "→" + route_counts[to_col]
+                fig = px.pie(route_counts, names='Route', values='Count',
+                            title="Top Routes Distribution",
+                            hole=0.3, color_discrete_sequence=px.colors.qualitative.Safe)
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+        
+        if from_col and to_col and berth_col:
+            col3, col4 = st.columns(2)
+            with col3:
+                # Route wise berths
+                route_berth = df.groupby([from_col, to_col])[berth_col].sum().reset_index()
+                route_berth = route_berth.sort_values(berth_col, ascending=False).head(10)
+                route_berth['Route'] = route_berth[from_col] + " → " + route_berth[to_col]
+                fig = px.bar(route_berth, x='Route', y=berth_col,
+                            title="Top 10 Routes by Total Berths",
+                            color=berth_col, color_continuous_scale='Purples',
+                            text=berth_col)
+                fig.update_traces(textposition='outside')
+                fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col4:
+                try:
+                    route_pivot = df.groupby([from_col, to_col]).size().reset_index(name='Count')
+                    route_pivot = route_pivot.pivot(index=from_col, columns=to_col, values='Count').fillna(0)
                     if route_pivot.shape[0] > 1 and route_pivot.shape[1] > 1:
                         fig = go.Figure(data=go.Heatmap(
                             z=route_pivot.values,
@@ -2398,27 +2234,263 @@ def create_advanced_charts(df, sheet_choice):
                             textfont={"size": 10}
                         ))
                         fig.update_layout(title="Route Heatmap",
-                                         height=450,
+                                         height=400,
                                          xaxis_title="To Station",
                                          yaxis_title="From Station",
                                          paper_bgcolor='rgba(0,0,0,0)',
                                          plot_bgcolor='rgba(0,0,0,0)')
                         st.plotly_chart(fig, use_container_width=True)
-            except:
-                pass
+                except:
+                    pass
     
-    # --- ADVANCED ANALYTICS ---
+    # ====================================================================
+    # 3. CLASS WISE CHARTS
+    # ====================================================================
+    if chart_type in ["All Charts", "Class Wise"]:
+        st.subheader("🎫 Class Wise Analysis")
+        
+        col1, col2 = st.columns(2)
+        
+        if class_col:
+            with col1:
+                class_counts = df[class_col].value_counts().reset_index()
+                class_counts.columns = ['Class', 'Count']
+                fig = px.bar(class_counts, x='Class', y='Count',
+                            title="Class Distribution",
+                            color='Class', color_discrete_sequence=px.colors.qualitative.Set2,
+                            text='Count')
+                fig.update_traces(textposition='outside')
+                fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                class_counts = df[class_col].value_counts().reset_index()
+                class_counts.columns = ['Class', 'Count']
+                fig = px.pie(class_counts, names='Class', values='Count',
+                            title="Class Distribution",
+                            hole=0.4, color_discrete_sequence=px.colors.qualitative.Set2)
+                fig.update_traces(textposition='inside', textinfo='percent+label')
+                fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                                 annotations=[dict(text='Class', x=0.5, y=0.5, font_size=14, showarrow=False)])
+                st.plotly_chart(fig, use_container_width=True)
+        
+        if class_col and berth_col:
+            col3, col4 = st.columns(2)
+            with col3:
+                class_berth = df.groupby(class_col)[berth_col].sum().reset_index()
+                class_berth.columns = ['Class', 'Total Berths']
+                fig = px.bar(class_berth, x='Class', y='Total Berths',
+                            title="Class Wise Total Berths",
+                            color='Class', color_discrete_sequence=px.colors.qualitative.Set3,
+                            text='Total Berths')
+                fig.update_traces(textposition='outside')
+                fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col4:
+                class_berth = df.groupby(class_col)[berth_col].mean().reset_index()
+                class_berth.columns = ['Class', 'Avg Berths']
+                fig = px.bar(class_berth, x='Class', y='Avg Berths',
+                            title="Class Wise Average Berths",
+                            color='Class', color_discrete_sequence=px.colors.qualitative.Pastel,
+                            text='Avg Berths')
+                fig.update_traces(textposition='outside')
+                fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+    
+    # ====================================================================
+    # 4. TRAIN vs CLASS
+    # ====================================================================
+    if chart_type in ["All Charts", "Train vs Class"]:
+        st.subheader("🚆 Train vs Class Analysis")
+        
+        if train_col and class_col:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Stacked bar chart
+                train_class = df.groupby([train_col, class_col]).size().reset_index(name='Count')
+                top_trains = df[train_col].value_counts().head(10).index.tolist()
+                train_class_top = train_class[train_class[train_col].isin(top_trains)]
+                
+                fig = px.bar(train_class_top, x=train_col, y='Count', color=class_col,
+                            title="Top 10 Trains - Class Distribution (Stacked)",
+                            barmode='stack',
+                            color_discrete_sequence=px.colors.qualitative.Set3)
+                fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                                 xaxis_title="Train Number", yaxis_title="Number of Requests")
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                # Heatmap
+                heat_data = pd.crosstab(df[train_col], df[class_col])
+                if not heat_data.empty and heat_data.shape[0] > 1 and heat_data.shape[1] > 1:
+                    # Limit to top trains for readability
+                    top_trains_heat = df[train_col].value_counts().head(15).index.tolist()
+                    heat_data = heat_data.loc[heat_data.index.isin(top_trains_heat)]
+                    fig = go.Figure(data=go.Heatmap(
+                        z=heat_data.values,
+                        x=heat_data.columns,
+                        y=heat_data.index,
+                        colorscale='Viridis',
+                        text=heat_data.values,
+                        texttemplate='%{text}',
+                        textfont={"size": 10}
+                    ))
+                    fig.update_layout(title="Train vs Class Heatmap",
+                                     height=450,
+                                     xaxis_title="Class",
+                                     yaxis_title="Train Number",
+                                     paper_bgcolor='rgba(0,0,0,0)',
+                                     plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+    
+    # ====================================================================
+    # 5. TRAIN vs ROUTE
+    # ====================================================================
+    if chart_type in ["All Charts", "Train vs Route"]:
+        st.subheader("🚆 Train vs Route Analysis")
+        
+        if train_col and from_col and to_col:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Train wise top routes
+                train_routes = df.groupby([train_col, from_col, to_col]).size().reset_index(name='Count')
+                train_routes['Route'] = train_routes[from_col] + "→" + train_routes[to_col]
+                
+                top_trains_route = df[train_col].value_counts().head(8).index.tolist()
+                train_routes_top = train_routes[train_routes[train_col].isin(top_trains_route)]
+                
+                fig = px.bar(train_routes_top, x=train_col, y='Count', color='Route',
+                            title="Top 8 Trains - Route Distribution",
+                            barmode='group',
+                            color_discrete_sequence=px.colors.qualitative.Safe)
+                fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                # Train route heatmap
+                train_route_data = df.groupby([train_col, from_col]).size().reset_index(name='Count')
+                top_trains_heat = df[train_col].value_counts().head(10).index.tolist()
+                train_route_data = train_route_data[train_route_data[train_col].isin(top_trains_heat)]
+                
+                if not train_route_data.empty:
+                    try:
+                        heat_pivot = train_route_data.pivot(index=train_col, columns=from_col, values='Count').fillna(0)
+                        fig = go.Figure(data=go.Heatmap(
+                            z=heat_pivot.values,
+                            x=heat_pivot.columns,
+                            y=heat_pivot.index,
+                            colorscale='Blues',
+                            text=heat_pivot.values,
+                            texttemplate='%{text}',
+                            textfont={"size": 10}
+                        ))
+                        fig.update_layout(title="Train vs Origin Station",
+                                         height=450,
+                                         xaxis_title="From Station",
+                                         yaxis_title="Train Number",
+                                         paper_bgcolor='rgba(0,0,0,0)',
+                                         plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True)
+                    except:
+                        pass
+    
+    # ====================================================================
+    # 6. PRIORITY vs RECOMMENDATION
+    # ====================================================================
+    if chart_type in ["All Charts", "Priority vs Recommendation"]:
+        st.subheader("⭐ Priority vs Recommendation Analysis")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if vip_col:
+                vip_counts = df[vip_col].value_counts().reset_index()
+                vip_counts.columns = ['Priority', 'Count']
+                vip_counts = vip_counts[vip_counts['Priority'].astype(str).str.strip() != '']
+                if not vip_counts.empty:
+                    fig = px.bar(vip_counts, x='Priority', y='Count',
+                                title="Priority/VIP Distribution",
+                                color='Priority', color_discrete_sequence=px.colors.qualitative.Set3,
+                                text='Count')
+                    fig.update_traces(textposition='outside')
+                    fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+            
+            if rec_col:
+                rec_counts = df[rec_col].value_counts().reset_index()
+                rec_counts.columns = ['Recommender', 'Count']
+                rec_counts = rec_counts[rec_counts['Recommender'].astype(str).str.strip() != '']
+                rec_counts = rec_counts.head(10)
+                if not rec_counts.empty:
+                    fig = px.bar(rec_counts, x='Recommender', y='Count',
+                                title="Top 10 Recommenders",
+                                color='Count', color_continuous_scale='Oranges',
+                                text='Count')
+                    fig.update_traces(textposition='outside')
+                    fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            if vip_col and rec_col:
+                # Priority vs Recommendation
+                priority_rec = df.groupby([vip_col, rec_col]).size().reset_index(name='Count')
+                priority_rec = priority_rec[priority_rec[vip_col].astype(str).str.strip() != '']
+                priority_rec = priority_rec[priority_rec[rec_col].astype(str).str.strip() != '']
+                priority_rec = priority_rec.sort_values('Count', ascending=False).head(15)
+                
+                if not priority_rec.empty:
+                    fig = px.scatter(priority_rec, x=vip_col, y=rec_col, size='Count',
+                                    title="Priority vs Recommendation (Bubble Chart)",
+                                    color='Count', color_continuous_scale='Viridis',
+                                    hover_data={'Count': True})
+                    fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+        
+        # Additional: Priority wise distribution
+        if vip_col:
+            col3, col4 = st.columns(2)
+            with col3:
+                vip_counts = df[vip_col].value_counts().reset_index()
+                vip_counts.columns = ['Priority', 'Count']
+                vip_counts = vip_counts[vip_counts['Priority'].astype(str).str.strip() != '']
+                if not vip_counts.empty:
+                    fig = px.pie(vip_counts, names='Priority', values='Count',
+                                title="Priority/VIP Distribution",
+                                hole=0.3, color_discrete_sequence=px.colors.qualitative.Pastel)
+                    fig.update_traces(textposition='inside', textinfo='percent+label')
+                    fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+            
+            with col4:
+                if purpose_col:
+                    vip_purpose = df.groupby([vip_col, purpose_col]).size().reset_index(name='Count')
+                    vip_purpose = vip_purpose[vip_purpose[vip_col].astype(str).str.strip() != '']
+                    vip_purpose = vip_purpose.sort_values('Count', ascending=False).head(10)
+                    if not vip_purpose.empty:
+                        fig = px.bar(vip_purpose, x=vip_col, y='Count', color=purpose_col,
+                                    title="Priority vs Purpose",
+                                    barmode='group',
+                                    color_discrete_sequence=px.colors.qualitative.Set2)
+                        fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True)
+    
+    # ====================================================================
+    # 7. ADVANCED ANALYTICS
+    # ====================================================================
     if chart_type in ["All Charts", "Advanced Analytics"]:
         st.subheader("🚀 Advanced Analytics")
         
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            # Gauge chart - Berth Utilization
+            # Berth Utilization Gauge
             if berth_col:
                 try:
                     total_berths = pd.to_numeric(df[berth_col], errors='coerce').sum()
-                    max_berths = total_berths * 2
+                    max_berths = total_berths * 2 if total_berths > 0 else 100
                     utilization = min(100, (total_berths / max_berths) * 100)
                     fig = go.Figure(go.Indicator(
                         mode="gauge+number",
@@ -2438,7 +2510,7 @@ def create_advanced_charts(df, sheet_choice):
                     pass
         
         with col2:
-            # Donut chart - Class Distribution (Advanced)
+            # Donut chart - Class Distribution
             if class_col:
                 class_counts = df[class_col].value_counts().reset_index()
                 class_counts.columns = ['Class', 'Count']
@@ -2452,7 +2524,7 @@ def create_advanced_charts(df, sheet_choice):
                     st.plotly_chart(fig, use_container_width=True)
         
         with col3:
-            # Speedometer - Records per day
+            # Records per day speedometer
             if doj_col:
                 try:
                     df_temp = df.copy()
@@ -2475,24 +2547,10 @@ def create_advanced_charts(df, sheet_choice):
                 except:
                     pass
         
-        # Additional advanced charts
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Treemap - Train hierarchy
-            if train_col:
-                train_counts = df[train_col].value_counts().head(15).reset_index()
-                train_counts.columns = ['Train', 'Count']
-                if not train_counts.empty:
-                    fig = px.treemap(train_counts, path=['Train'], values='Count',
-                                    title="Train Request Distribution (Treemap)",
-                                    color='Count', color_continuous_scale='Blues')
-                    fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            # Waterfall - Cumulative by train
-            if train_col:
+        # Waterfall - Train wise contribution
+        if train_col:
+            col4, col5 = st.columns(2)
+            with col4:
                 train_counts = df[train_col].value_counts().reset_index()
                 train_counts.columns = ['Train', 'Count']
                 if not train_counts.empty and len(train_counts) > 1:
@@ -2512,15 +2570,46 @@ def create_advanced_charts(df, sheet_choice):
                                      paper_bgcolor='rgba(0,0,0,0)',
                                      plot_bgcolor='rgba(0,0,0,0)')
                     st.plotly_chart(fig, use_container_width=True)
+            
+            with col5:
+                # Cumulative distribution
+                train_counts_sorted = df[train_col].value_counts().sort_values(ascending=True).reset_index()
+                train_counts_sorted.columns = ['Train', 'Count']
+                train_counts_sorted['Cumulative'] = train_counts_sorted['Count'].cumsum()
+                train_counts_sorted['Percentage'] = (train_counts_sorted['Cumulative'] / train_counts_sorted['Count'].sum()) * 100
+                
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=list(range(len(train_counts_sorted))),
+                    y=train_counts_sorted['Percentage'],
+                    mode='lines+markers',
+                    name='Cumulative %',
+                    line=dict(color='#636efa', width=3),
+                    marker=dict(size=10)
+                ))
+                fig.add_trace(go.Bar(
+                    x=list(range(len(train_counts_sorted))),
+                    y=train_counts_sorted['Count'],
+                    name='Count per Train',
+                    marker_color='rgba(99, 110, 250, 0.3)',
+                    yaxis='y2'
+                ))
+                fig.update_layout(
+                    title="Cumulative Distribution - Pareto Analysis",
+                    xaxis_title="Trains (Sorted by Count)",
+                    yaxis_title="Cumulative Percentage",
+                    yaxis2=dict(title="Count", overlaying='y', side='right'),
+                    height=400,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    legend=dict(x=0.01, y=0.99)
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
-# ============================================================================
+# ====================================================================
 # MAIN FUNCTION - COMPLETE
-# ============================================================================
+# ====================================================================
 def main():
-    # ------------------------------------------------------------------
-    # Pro enhancements: theme persistence (localStorage), keyboard scroll,
-    # mouse-wheel forwarding, back-to-top button, theme/view shortcuts
-    # ------------------------------------------------------------------
     components.html("""
     <script>
     (function() {
@@ -2528,7 +2617,6 @@ def main():
             var P = window.parent;
             var doc = P.document;
 
-            // ---- Theme persistence bridge (localStorage <-> query param) ----
             var url = new URL(P.location.href);
             var qpTheme = url.searchParams.get('__theme');
             var stored = null;
@@ -2541,7 +2629,6 @@ def main():
                 return;
             }
 
-            // ---- One-time listeners ----
             if (!P.__eqmsProInit) {
                 P.__eqmsProInit = true;
 
@@ -2564,7 +2651,6 @@ def main():
                     else { P.scrollTo({top: y, behavior: 'smooth'}); }
                 };
 
-                // Keyboard: PageUp/PageDown/Home/End scroll | D = theme toggle | 1-5 = view switch
                 doc.addEventListener('keydown', function(e) {
                     var t = (e.target.tagName || '').toLowerCase();
                     if (t === 'input' || t === 'textarea' || t === 'select' || e.target.isContentEditable) return;
@@ -2586,7 +2672,6 @@ def main():
                     }
                 });
 
-                // Wheel forwarding
                 doc.addEventListener('wheel', function(e) {
                     var sb = doc.querySelector('[data-testid="stSidebar"]');
                     if (sb && sb.contains(e.target)) {
@@ -2603,7 +2688,6 @@ def main():
                     }
                 }, {passive: false});
 
-                // Back-to-top floating button
                 if (!doc.getElementById('eqms-top-btn')) {
                     var b = doc.createElement('button');
                     b.id = 'eqms-top-btn';
@@ -2646,7 +2730,8 @@ def main():
     with st.sidebar:
         st.markdown("""
         <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8;">
-            <span style="color:#FF9933;">🟠 नमस्ते</span><br>
+            <span style="color:#FF9933;">🟠 नमस्ते आपका स्वागत है</span><br>
+            <span style="color:#FFFFFF; text-shadow:0 0 4px rgba(0,0,0,0.55);">⚪ हम भारत के लोग</span><br>
             <span style="color:#138808; font-weight:bold;">🟢 जय हिंद</span>
         </div>
         """, unsafe_allow_html=True)
@@ -3020,16 +3105,16 @@ def main():
         st.subheader(f"📊 Analytics Dashboard — {sheet_choice}")
         
         # Find columns for metrics
-        train_col = None
-        berth_col = None
-        doj_col = None
+        train_col_metric = None
+        berth_col_metric = None
+        doj_col_metric = None
         for c in filtered_df.columns:
             if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
-                train_col = c
+                train_col_metric = c
             if 'BERTH' in str(c).upper() or 'T/BERTHS' in str(c).upper():
-                berth_col = c
+                berth_col_metric = c
             if 'DOJ' in str(c).upper():
-                doj_col = c
+                doj_col_metric = c
 
         # Metrics row
         m1, m2, m3, m4 = st.columns(4)
@@ -3037,17 +3122,17 @@ def main():
             total_records = len(filtered_df) if not filtered_df.empty else 0
             st.metric("📊 Total Records", total_records)
         with m2:
-            unique_trains = filtered_df[train_col].nunique() if train_col else 0
+            unique_trains = filtered_df[train_col_metric].nunique() if train_col_metric else 0
             st.metric("🚆 Unique Trains", unique_trains)
         with m3:
             total_berths = 0
-            if berth_col and berth_col in filtered_df:
-                total_berths = pd.to_numeric(filtered_df[berth_col], errors='coerce').sum()
+            if berth_col_metric and berth_col_metric in filtered_df:
+                total_berths = pd.to_numeric(filtered_df[berth_col_metric], errors='coerce').sum()
             st.metric("🛏️ Total Berths", int(total_berths) if total_berths else 0)
         with m4:
             expired = 0
-            if doj_col and doj_col in filtered_df:
-                expired = sum(1 for _, r in filtered_df.iterrows() if is_expired(r.get(doj_col, '')))
+            if doj_col_metric and doj_col_metric in filtered_df:
+                expired = sum(1 for _, r in filtered_df.iterrows() if is_expired(r.get(doj_col_metric, '')))
             st.metric("⏰ Expired DOJ", expired)
         
         st.markdown("---")
@@ -3460,7 +3545,6 @@ def main():
         else:
             tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔍 PNR Status", "🚂 Live Train", "🔎 Train Search", "📋 Train Schedule", "📸 Passport Photo"])
 
-            # ---------- PNR TAB ----------
             with tab1:
                 st.markdown("### PNR Status Check")
                 pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr")
@@ -3503,7 +3587,6 @@ def main():
                         st.markdown(format_pnr_result(st.session_state.pnr_result))
                         st.markdown('</div>', unsafe_allow_html=True)
 
-            # ---------- LIVE TRAIN TAB ----------
             with tab2:
                 st.markdown("### Live Train Status")
                 train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train")
@@ -3553,7 +3636,6 @@ def main():
                         st.markdown(msg)
                         st.markdown('</div>', unsafe_allow_html=True)
 
-            # ---------- SEARCH TAB ----------
             with tab3:
                 st.markdown("### 🔎 Train Search")
                 search_query = st.text_input("Enter Train Name or Number", placeholder="e.g., vivek, rajdhani, 22503", key="train_search_input")
@@ -3577,7 +3659,6 @@ def main():
                         st.markdown(format_train_search(st.session_state.search_result))
                         st.markdown('</div>', unsafe_allow_html=True)
 
-            # ---------- SCHEDULE TAB ----------
             with tab4:
                 st.markdown("### Train Schedule / Route")
                 train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch")
@@ -3643,7 +3724,6 @@ def main():
                     else:
                         st.info("No schedule data available.")
 
-            # ---------- PASSPORT PHOTO TAB ----------
             with tab5:
                 st.markdown("### 📸 Passport Photo Maker")
                 st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
