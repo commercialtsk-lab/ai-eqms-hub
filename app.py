@@ -1517,18 +1517,25 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
 
     css = f"""
     <style>
+        /* Main container - fixed scrolling */
         .block-container {{ 
             padding-top: 0.5rem !important; 
             padding-bottom: 80px !important;
             max-width: 100% !important;
+            overflow-y: visible !important;
         }}
         .stApp {{ background-color: {bg} !important; }}
+        .stApp > header {{
+            display: none !important;
+        }}
+        
+        /* Sidebar - fixed width, no nav items */
         [data-testid="stSidebar"] {{ 
             background-color: {card_bg} !important; 
             border-right: 1px solid {border} !important;
-            width: 280px !important;
-            min-width: 280px !important;
-            max-width: 280px !important;
+            width: 260px !important;
+            min-width: 260px !important;
+            max-width: 260px !important;
             overflow-y: auto !important;
             height: 100vh !important;
             padding-top: 10px !important;
@@ -1540,15 +1547,22 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stSidebar"] .stRadio label, [data-testid="stSidebar"] .stCheckbox label {{
             color: {text_color} !important;
         }}
+        
+        /* Hide default streamlit header */
         header[data-testid="stHeader"] {{ 
             background-color: {card_bg} !important; 
             border-bottom: 1px solid {border} !important;
+            display: none !important;
         }}
+        
+        /* Text colors */
         h1, h2, h3, h4, h5, h6, .stMarkdown p, .stMarkdown div, .stMarkdown span,
         .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"], .stCaption {{
             color: {text_color} !important;
         }}
+        
+        /* Input styles */
         .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea,
         .stSelectbox > div > div > div {{
             background-color: {input_bg} !important;
@@ -1556,6 +1570,8 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             border: 1px solid {border} !important;
             border-radius: 8px !important;
         }}
+        
+        /* Button styles */
         .stButton > button {{
             background-color: {button_bg} !important;
             color: {button_text} !important;
@@ -1579,6 +1595,8 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             background-color: {accent_hover} !important;
             border-color: {accent_hover} !important;
         }}
+        
+        /* File uploader */
         .stFileUploader {{
             background-color: {input_bg} !important;
             border: 2px dashed {border} !important;
@@ -1586,6 +1604,8 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
         .stFileUploader:hover {{ border-color: {accent} !important; }}
         .stFileUploader label {{ color: {text_secondary} !important; }}
+        
+        /* Data frames */
         .stDataFrame, [data-testid="stDataFrame"], .stDataEditor, [data-testid="stDataEditor"],
         .stDataFrame table, .stDataEditor table, .stDataFrame th, .stDataEditor th,
         .stDataFrame td, .stDataEditor td, .stDataEditor input, .stDataEditor textarea {{
@@ -1594,11 +1614,17 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             border-color: {border} !important;
         }}
         .stDataFrame th, .stDataEditor th {{ border-bottom: 2px solid {border} !important; font-weight: 600 !important; }}
+        
+        /* Expanders */
         .stExpander {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 8px !important; }}
         .streamlit-expanderHeader {{ color: {text_color} !important; font-weight: 600 !important; }}
+        
+        /* Chat */
         .stChatMessage {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important; }}
         .stChatInput {{ background-color: {input_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; }}
         .stChatInput input {{ color: {text_color} !important; }}
+        
+        /* Metrics */
         [data-testid="stMetric"] {{ 
             background-color: {card_bg} !important; 
             border: 1px solid {border} !important; 
@@ -1606,6 +1632,8 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             padding: 14px !important;
             box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
         }}
+        
+        /* Tabs */
         .stTabs [data-baseweb="tab-list"] {{ 
             background-color: {card_bg} !important; 
             border-bottom: 1px solid {border} !important;
@@ -1622,30 +1650,28 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             background-color: {accent} !important;
             color: white !important;
         }}
+        
+        /* Scrollbar */
         ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
         ::-webkit-scrollbar-track {{ background: {bg}; }}
         ::-webkit-scrollbar-thumb {{ background: {border}; border-radius: 10px; }}
         ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
-        html, [data-testid="stMain"], [data-testid="stAppViewContainer"] {{ 
-            scroll-behavior: smooth !important;
+        
+        /* Main content scrolling - FIXED */
+        html, body, [data-testid="stAppViewContainer"], [data-testid="stAppViewContainer"] > .main {{
             overflow-y: auto !important;
             height: 100vh !important;
+            scroll-behavior: smooth !important;
         }}
-        footer {{ display: none !important; }}
-        .eqms-marquee {{ overflow: hidden; white-space: nowrap; }}
-        .eqms-marquee span {{
-            display: inline-block; padding-left: 100%;
-            animation: eqms-scroll 30s linear infinite;
-            color: #1f2328; font-weight: 600; font-size: 16px;
+        .main {{
+            overflow-y: auto !important;
+            height: 100% !important;
         }}
-        @keyframes eqms-scroll {{
-            0% {{ transform: translateX(0); }}
-            100% {{ transform: translateX(-100%); }}
+        [data-testid="stAppViewBlockContainer"] {{
+            padding-bottom: 100px !important;
         }}
-        .action-box {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 18px; margin-bottom: 16px; }}
-        .file-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 14px; margin: 10px 0; }}
-        .file-card-title {{ color: {text_color}; font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }}
-        .file-card-meta {{ color: {text_secondary}; font-size: 0.8rem; margin-bottom: 10px; }}
+        
+        /* Footer - fixed at bottom */
         .pro-footer {{ 
             color: {text_secondary} !important; 
             border-top: 1px solid {border} !important; 
@@ -1660,6 +1686,32 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             background: {bg} !important;
             z-index: 999 !important;
         }}
+        
+        /* Hide footer in print */
+        @media print {{
+            .pro-footer {{ display: none !important; }}
+            .no-print {{ display: none !important; }}
+        }}
+        
+        /* Marquee */
+        .eqms-marquee {{ overflow: hidden; white-space: nowrap; }}
+        .eqms-marquee span {{
+            display: inline-block; padding-left: 100%;
+            animation: eqms-scroll 30s linear infinite;
+            color: #1f2328; font-weight: 600; font-size: 16px;
+        }}
+        @keyframes eqms-scroll {{
+            0% {{ transform: translateX(0); }}
+            100% {{ transform: translateX(-100%); }}
+        }}
+        
+        /* Action box */
+        .action-box {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 18px; margin-bottom: 16px; }}
+        .file-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 14px; margin: 10px 0; }}
+        .file-card-title {{ color: {text_color}; font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }}
+        .file-card-meta {{ color: {text_secondary}; font-size: 0.8rem; margin-bottom: 10px; }}
+        
+        /* Sheet link */
         .sheet-link-btn {{
             display: inline-block !important; padding: 9px 16px !important;
             background: {button_bg} !important; color: {accent} !important;
@@ -1668,8 +1720,12 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             transition: all 0.15s !important; font-weight: 500 !important; font-size: 0.9rem !important;
         }}
         .sheet-link-btn:hover {{ background: {accent} !important; color: white !important; border-color: {accent} !important; }}
+        
+        /* Status pill */
         .status-pill {{ display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 500; }}
         .status-live {{ background: rgba(63, 185, 80, 0.15); color: {success}; border: 1px solid {success}; }}
+        
+        /* Train count cards */
         .train-count-container {{ display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; margin: 10px 0; }}
         .train-count-card {{
             border: 1px solid {border};
@@ -1718,6 +1774,8 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             font-size: 0.75rem;
             margin-top: 2px;
         }}
+        
+        /* Weather card */
         .weather-card {{
             background: {card_bg};
             border: 1px solid {border};
@@ -1740,6 +1798,8 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             color: {text_secondary};
             padding: 4px 0;
         }}
+        
+        /* Result box */
         .result-box {{
             background: {card_bg};
             border: 2px solid {accent};
@@ -1757,6 +1817,8 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             margin: 0;
             color: {text_color};
         }}
+        
+        /* Print styles */
         .print-only {{ display: none; }}
         @media print {{
             @page {{ margin: 1cm; size: A4 landscape; }}
@@ -1766,7 +1828,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             .stCheckbox, .stFileUploader, .stCaption, .stImage, .stVideo, .stAudio, .stPlotlyChart,
             .action-box, .pro-footer, .status-pill, .sheet-link-btn, .stChatMessage, .stChatInput,
             .train-count-container, .weather-card, .result-box, .print-area {{ display: none !important; }}
-            .print-only {{ display: block !important; }}
             .print-only {{ display: block !important; }}
             .print-only h2 {{ color: #000 !important; font-size: 18pt !important; margin-top: 0 !important; }}
             .print-only p {{ color: #333 !important; }}
@@ -1795,26 +1856,13 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             }}
             .print-only tr:nth-child(even) {{ background: #f5f5f5 !important; }}
         }}
+        
+        /* Transitions */
         * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
-        .main-content {{ 
-            padding-bottom: 80px !important;
-            overflow-y: auto !important;
-            max-height: calc(100vh - 60px) !important;
-        }}
-        [data-testid="stAppViewContainer"] {{
-            height: 100vh !important;
-            overflow-y: auto !important;
-        }}
-        [data-testid="stAppViewContainer"] > .main {{
-            overflow-y: auto !important;
-            height: 100% !important;
-        }}
-        .stPlotlyChart {{
-            height: 100% !important;
-            min-height: 400px !important;
-        }}
+        
+        /* Dashboard grid */
         .dashboard-grid {{
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -1826,8 +1874,17 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
                 grid-template-columns: 1fr;
             }}
         }}
-        .sidebar-nav {{
-            display: none !important;
+        
+        /* Hide sidebar navigation items that appear automatically */
+        .stSidebar .stSelectbox, 
+        .stSidebar .stTextInput,
+        .stSidebar .stDateInput,
+        .stSidebar .stNumberInput,
+        .stSidebar .stTextArea,
+        .stSidebar .stRadio,
+        .stSidebar .stCheckbox,
+        .stSidebar .stFileUploader {{
+            z-index: 1;
         }}
     </style>
     """
@@ -2359,7 +2416,7 @@ def main():
     if qp_view in view_options and st.session_state.view_mode != qp_view:
         st.session_state.view_mode = qp_view
 
-    # --- SIDEBAR ---
+    # --- SIDEBAR - Only Welcome Text, Theme, Weather, Sync, Upload, Sheet, Filters ---
     with st.sidebar:
         st.markdown("""
         <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8;">
@@ -2774,7 +2831,7 @@ def main():
             st.info("No data for charts. Adjust filters or choose another sheet.")
 
     # ============================================================
-    # VIEW: DATA TABLE (simplified)
+    # VIEW: DATA TABLE
     # ============================================================
     elif view == "📋 Data Table":
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
@@ -2784,7 +2841,6 @@ def main():
         else:
             st.info("No data to show.")
         
-        # Export buttons
         if not filtered_df.empty:
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -3140,7 +3196,7 @@ def main():
             st.error(st.session_state.weather_data['error'])
 
     # ============================================================
-    # FOOTER
+    # FOOTER - Fixed at bottom
     # ============================================================
     st.markdown("""
     <div class='pro-footer no-print'>
