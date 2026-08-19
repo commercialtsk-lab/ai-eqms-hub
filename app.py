@@ -39,7 +39,7 @@ except ImportError:
     st.warning("⚠️ 'ntes-client' not installed. Railway features will be disabled. Run: pip install ntes-client")
 
 # ------------------------------------------------------------------
-# Streamlit page config - FIXED: sidebar expanded
+# Streamlit page config - sidebar expanded
 # ------------------------------------------------------------------
 st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="expanded")
 
@@ -1526,11 +1526,12 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stSidebar"] {{ 
             background-color: {card_bg} !important; 
             border-right: 1px solid {border} !important;
-            width: 300px !important;
-            min-width: 300px !important;
-            max-width: 300px !important;
+            width: 280px !important;
+            min-width: 280px !important;
+            max-width: 280px !important;
             overflow-y: auto !important;
             height: 100vh !important;
+            padding-top: 10px !important;
         }}
         [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown div,
         [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
@@ -1824,6 +1825,9 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             .dashboard-grid {{
                 grid-template-columns: 1fr;
             }}
+        }}
+        .sidebar-nav {{
+            display: none !important;
         }}
     </style>
     """
@@ -2244,9 +2248,10 @@ def create_advanced_charts(df, sheet_choice):
                         st.plotly_chart(fig, use_container_width=True)
 
 # ====================================================================
-# MAIN FUNCTION
+# MAIN FUNCTION - COMPLETE
 # ====================================================================
 def main():
+    # JavaScript for keyboard shortcuts and theme persistence
     components.html("""
     <script>
     (function() {
@@ -2336,6 +2341,7 @@ def main():
     </script>
     """, height=0)
 
+    # Restore persisted theme
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
     qp_theme = st.query_params.get('__theme')
     if qp_theme in theme_options and st.session_state.theme != qp_theme:
@@ -2768,12 +2774,33 @@ def main():
             st.info("No data for charts. Adjust filters or choose another sheet.")
 
     # ============================================================
-    # VIEW: DATA TABLE
+    # VIEW: DATA TABLE (simplified)
     # ============================================================
     elif view == "📋 Data Table":
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
         
-        # ... (Data Table code - same as before, kept concise)
+        if not filtered_df.empty:
+            st.dataframe(filtered_df, use_container_width=True, height=500)
+        else:
+            st.info("No data to show.")
+        
+        # Export buttons
+        if not filtered_df.empty:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                csv = filtered_df.to_csv(index=False).encode('utf-8')
+                st.download_button("📥 Download CSV", data=csv, file_name=f"{sheet_choice}.csv", mime="text/csv")
+            with col2:
+                try:
+                    pdf_bytes = generate_pdf(filtered_df, sheet_choice)
+                    st.download_button("📥 Download PDF", data=pdf_bytes, file_name=f"{sheet_choice}.pdf", mime="application/pdf")
+                except:
+                    pass
+            with col3:
+                excel_buffer = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                    filtered_df.to_excel(writer, sheet_name=sheet_choice, index=False)
+                st.download_button("📥 Download Excel", data=excel_buffer.getvalue(), file_name=f"{sheet_choice}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     # ============================================================
     # VIEW: RAILWAY
