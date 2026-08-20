@@ -20,12 +20,11 @@ from googleapiclient.http import MediaIoBaseUpload
 from fpdf import FPDF
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import matplotlib.pyplot as plt
 from matplotlib.table import Table as MplTable
 import numpy as np
 from PIL import Image, ImageDraw
-import warnings
-warnings.filterwarnings('ignore')
 
 # ------------------------------------------------------------------
 # NTES client (try to import)
@@ -96,12 +95,13 @@ defaults = {
     'text_input_key': 0, 'img_uploader_key': 0,
     'audio_uploader_key': 0, 'audio_recorder_key': 0,
     'quick_filter_train': '', 'show_keyboard_help': False, 'print_trigger': False,
-    'sch_start': 0, 'sch_data': None, 'weather_data': None,
+    'sch_start': 0, 'sch_data': None, 'weather_data': None, 'weather_forecast': None,
     'system_theme': 'Day', 'weather_city': 'Tinsukia',
     'pnr_result': None, 'train_result': None, 'search_result': None,
     'last_uploaded_drive_id': None,
     'manual_refresh': False,
-    'sheet_print_data': None
+    'sheet_print_data': None,
+    'dashboard_filters': {'pnr': '', 'train': '', 'from_doj': None, 'to_doj': None, 'class_filter': '', 'route_filter': '', 'vip_filter': ''}
 }
 
 for key, val in defaults.items():
@@ -324,7 +324,7 @@ def load_sheet_data_cached(sheet_name, sheet_id):
         return pd.DataFrame()
 
 # ------------------------------------------------------------------
-# Gemini Universal Parser
+# Gemini Universal Parser (from Telegram bot - EXACT COPY)
 # ------------------------------------------------------------------
 def smart_detect_warrant(text):
     if not text:
@@ -769,18 +769,17 @@ Previous conversation:
         return f"⚠️ Error: Could not process your request. Please try again later. ({str(e)})"
 
 # ------------------------------------------------------------------
-# Weather API function - UPDATED with full forecast details
+# Weather API function
 # ------------------------------------------------------------------
 def get_weather(city_name):
     if not city_name:
         return {'error': 'Please enter a city name'}
     try:
-        # Current weather
         url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            result = {
+            return {
                 'city': data.get('name', city_name),
                 'country': data.get('sys', {}).get('country', ''),
                 'temp': data.get('main', {}).get('temp', 'N/A'),
@@ -792,43 +791,59 @@ def get_weather(city_name):
                 'wind_speed': data.get('wind', {}).get('speed', 'N/A'),
                 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
                 'sunrise': data.get('sys', {}).get('sunrise', 'N/A'),
-                'sunset': data.get('sys', {}).get('sunset', 'N/A'),
-                'temp_min': data.get('main', {}).get('temp_min', 'N/A'),
-                'temp_max': data.get('main', {}).get('temp_max', 'N/A'),
-                'visibility': data.get('visibility', 'N/A'),
-                'clouds': data.get('clouds', {}).get('all', 'N/A')
+                'sunset': data.get('sys', {}).get('sunset', 'N/A')
             }
-            
-            # Try to get 5-day forecast
-            try:
-                forecast_url = f"https://api.openweathermap.org/data/2.5/forecast?q={city_name}&appid={WEATHER_API_KEY}&units=metric&cnt=5"
-                forecast_response = requests.get(forecast_url, timeout=10)
-                if forecast_response.status_code == 200:
-                    forecast_data = forecast_response.json()
-                    forecast_list = []
-                    for item in forecast_data.get('list', [])[:5]:
-                        forecast_list.append({
-                            'dt': item.get('dt', ''),
-                            'temp': item.get('main', {}).get('temp', 'N/A'),
-                            'weather': item.get('weather', [{}])[0].get('description', 'N/A'),
-                            'icon': item.get('weather', [{}])[0].get('icon', ''),
-                            'humidity': item.get('main', {}).get('humidity', 'N/A'),
-                            'wind_speed': item.get('wind', {}).get('speed', 'N/A')
-                        })
-                    result['forecast'] = forecast_list
-                else:
-                    result['forecast'] = []
-            except:
-                result['forecast'] = []
-            
-            return result
         else:
             return {'error': f'City not found. Please check the name.'}
     except Exception as e:
         return {'error': f'Error fetching weather: {str(e)}'}
 
+
+def get_weather_forecast(city_name):
+    if not city_name:
+        return {'error': 'Please enter a city name'}
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/forecast?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            forecast_list = data.get('list', [])
+            daily_forecast = {}
+            for item in forecast_list:
+                date = item.get('dt_txt', '')[:10]
+                if date not in daily_forecast:
+                    daily_forecast[date] = {
+                        'temps': [], 'weather': item['weather'][0]['main'] if item.get('weather') else 'N/A',
+                        'icon': item['weather'][0]['icon'] if item.get('weather') else '',
+                        'humidity': item['main']['humidity'],
+                        'wind': item['wind']['speed'],
+                        'pressure': item['main']['pressure'],
+                        'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'
+                    }
+                daily_forecast[date]['temps'].append(item['main']['temp'])
+
+            result = []
+            for date, info in list(daily_forecast.items())[:5]:
+                result.append({
+                    'date': date,
+                    'temp': round(sum(info['temps'])/len(info['temps']), 1),
+                    'min_temp': round(min(info['temps']), 1),
+                    'max_temp': round(max(info['temps']), 1),
+                    'weather': info['weather'],
+                    'description': info['description'].title(),
+                    'icon': info['icon'],
+                    'humidity': info['humidity'],
+                    'wind': info['wind'],
+                    'pressure': info['pressure']
+                })
+            return {'forecast': result, 'city': data.get('city', {}).get('name', city_name), 'country': data.get('city', {}).get('country', '')}
+        else:
+            return {'error': f'City not found. Please check the name.'}
+    except Exception as e:
+        return {'error': f'Error fetching forecast: {str(e)}'}
+
 # ------------------------------------------------------------------
-# NTES-based railway functions
+# NTES-based railway functions (DITTO from Telegram Bot + improvements)
 # ------------------------------------------------------------------
 
 def safe_list(data, key):
@@ -1495,7 +1510,7 @@ def process_passport_image(data):
     return final if final else no_bg
 
 # ------------------------------------------------------------------
-# Theme application with Auto (System) detection - FIXED scrolling font black
+# Theme application with Auto (System) detection
 # ------------------------------------------------------------------
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
@@ -1516,7 +1531,10 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         button_hover_text = "white"
         button_hover_border = accent
         number_color = "#0969da"
-        scrollbar_color = "#d0d7de"
+        table_header_bg = "#333333"
+        table_header_text = "#ffffff"
+        table_alt_row = "#f5f5f5"
+        chart_bg = "rgba(0,0,0,0)"
     elif theme == 'Dark':
         bg = "#0d1117"
         card_bg = "#161b22"
@@ -1535,18 +1553,34 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         button_hover_text = "white"
         button_hover_border = accent
         number_color = "#58a6ff"
-        scrollbar_color = "#30363d"
+        table_header_bg = "#1f6feb"
+        table_header_text = "#ffffff"
+        table_alt_row = "#161b22"
+        chart_bg = "rgba(0,0,0,0)"
     else:
+        # Custom theme with intelligent color adaptation
         bg = custom_bg if custom_bg else "#ffffff"
+
+        # Detect if background is dark or light
+        def is_dark_color(hex_color):
+            try:
+                hex_color = hex_color.lstrip('#')
+                r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+                brightness = (r * 299 + g * 587 + b * 114) / 1000
+                return brightness < 128
+            except:
+                return False
+
+        is_dark = is_dark_color(bg)
         card_bg = bg
-        text_color = custom_text if custom_text else "#000000"
+        text_color = custom_text if custom_text else ("#e6edf3" if is_dark else "#1f2328")
         text_secondary = text_color
-        border = "#d0d7de"
+        border = "#505050" if is_dark else "#d0d7de"
         input_bg = bg
-        accent = "#0969da"
-        accent_hover = "#0550ae"
-        success = "#1a7f37"
-        danger = "#cf222e"
+        accent = "#58a6ff" if is_dark else "#0969da"
+        accent_hover = "#79c0ff" if is_dark else "#0550ae"
+        success = "#3fb950" if is_dark else "#1a7f37"
+        danger = "#f85149" if is_dark else "#cf222e"
         button_bg = bg
         button_text = text_color
         button_border = border
@@ -1554,17 +1588,16 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         button_hover_text = "white"
         button_hover_border = accent
         number_color = accent
-        scrollbar_color = border
+        table_header_bg = "#1f6feb" if is_dark else "#333333"
+        table_header_text = "#ffffff"
+        table_alt_row = "#1a1a2e" if is_dark else "#f5f5f5"
+        chart_bg = "rgba(0,0,0,0)"
 
     css = f"""
     <style>
         .block-container {{ padding-top: 0.5rem !important; padding-bottom: 1rem !important; }}
         .stApp {{ background-color: {bg} !important; }}
-        [data-testid="stSidebar"] {{ 
-            background-color: {card_bg} !important; 
-            border-right: 1px solid {border} !important;
-            padding-top: 5px !important;
-        }}
+        [data-testid="stSidebar"] {{ background-color: {card_bg} !important; border-right: 1px solid {border} !important; }}
         [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown div,
         [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
         [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] .stDateInput label,
@@ -1615,6 +1648,8 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
         .stFileUploader:hover {{ border-color: {accent} !important; }}
         .stFileUploader label {{ color: {text_secondary} !important; }}
+
+        /* Enhanced DataFrame / Table styling for custom themes */
         .stDataFrame, [data-testid="stDataFrame"], .stDataEditor, [data-testid="stDataEditor"],
         .stDataFrame table, .stDataEditor table, .stDataFrame th, .stDataEditor th,
         .stDataFrame td, .stDataEditor td, .stDataEditor input, .stDataEditor textarea {{
@@ -1622,7 +1657,24 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             color: {text_color} !important;
             border-color: {border} !important;
         }}
-        .stDataFrame th, .stDataEditor th {{ border-bottom: 2px solid {border} !important; font-weight: 600 !important; }}
+        .stDataFrame th, .stDataEditor th {{ 
+            background-color: {table_header_bg} !important;
+            color: {table_header_text} !important;
+            border-bottom: 2px solid {border} !important; 
+            font-weight: 600 !important; 
+        }}
+        .stDataFrame tr:nth-child(even) td, .stDataEditor tr:nth-child(even) td {{
+            background-color: {table_alt_row} !important;
+        }}
+        .stDataFrame td, .stDataEditor td {{ 
+            text-align: center !important;
+            border: 1px solid {border} !important;
+        }}
+
+        /* Plotly chart text colors */
+        .js-plotly-plot .plotly text {{ fill: {text_color} !important; }}
+        .js-plotly-plot .plotly .gtitle {{ fill: {text_color} !important; }}
+
         .stExpander {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 8px !important; }}
         .streamlit-expanderHeader {{ color: {text_color} !important; font-weight: 600 !important; }}
         .stChatMessage {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important; }}
@@ -1632,20 +1684,17 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stTabs [data-baseweb="tab-list"] {{ background-color: {card_bg} !important; border-bottom: 1px solid {border} !important; }}
         .stTabs [data-baseweb="tab"] {{ color: {text_secondary} !important; }}
         .stTabs [data-baseweb="tab-highlight"] {{ background-color: {accent} !important; }}
-        
-        /* SCROLLBAR - BLACK COLOR */
         ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
         ::-webkit-scrollbar-track {{ background: {bg}; }}
-        ::-webkit-scrollbar-thumb {{ background: {scrollbar_color}; border-radius: 10px; }}
-        ::-webkit-scrollbar-thumb:hover {{ background: #000000; }}
-        
+        ::-webkit-scrollbar-thumb {{ background: {border}; border-radius: 10px; }}
+        ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
         html, [data-testid="stMain"], [data-testid="stAppViewContainer"] {{ scroll-behavior: smooth !important; }}
         footer {{ display: none !important; }}
         .eqms-marquee {{ overflow: hidden; white-space: nowrap; }}
         .eqms-marquee span {{
             display: inline-block; padding-left: 100%;
             animation: eqms-scroll 30s linear infinite;
-            color: #1f2328; font-weight: 600; font-size: 16px;
+            color: {text_color}; font-weight: 600; font-size: 16px;
         }}
         @keyframes eqms-scroll {{
             0% {{ transform: translateX(0); }}
@@ -1675,7 +1724,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             text-align: center;
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             transition: transform 0.15s ease, box-shadow 0.15s ease;
-            background: transparent;
+            background: {card_bg};
         }}
         .train-count-card:hover {{ transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.12); border-color: {accent}; }}
         .train-count-number {{ 
@@ -1701,7 +1750,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             padding: 8px 20px;
             min-width: 120px;
             text-align: center;
-            background: transparent;
+            background: {card_bg};
         }}
         .train-total-number {{ 
             color: {success};
@@ -1763,6 +1812,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             .action-box, .pro-footer, .status-pill, .sheet-link-btn, .stChatMessage, .stChatInput,
             .train-count-container, .weather-card, .result-box, .print-area {{ display: none !important; }}
             .print-only {{ display: block !important; }}
+            .print-only {{ display: block !important; }}
             .print-only h2 {{ color: #000 !important; font-size: 18pt !important; margin-top: 0 !important; }}
             .print-only p {{ color: #333 !important; }}
             .print-only table {{ 
@@ -1793,40 +1843,16 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
-        .forecast-grid {{
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 10px;
-            margin-top: 15px;
-        }}
-        .forecast-item {{
-            background: {card_bg};
-            border: 1px solid {border};
-            border-radius: 12px;
-            padding: 12px;
-            text-align: center;
-        }}
-        .forecast-item .temp {{
-            font-size: 1.3rem;
-            font-weight: 700;
-            color: {number_color};
-        }}
-        .forecast-item .desc {{
-            font-size: 0.8rem;
-            color: {text_secondary};
-        }}
-        .forecast-item .day {{
-            font-weight: 600;
-            color: {text_color};
-        }}
-        @media (max-width: 768px) {{
-            .forecast-grid {{
-                grid-template-columns: repeat(3, 1fr);
-            }}
+
+        /* Advanced: Custom scrollbar for tables */
+        .stDataFrame [data-testid="stDataFrameResizable"] {{
+            border: 1px solid {border} !important;
+            border-radius: 8px !important;
         }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
+
 
 # ------------------------------------------------------------------
 # PDF, image, WhatsApp helpers
@@ -1930,12 +1956,14 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     now_str = format_datetime()
     lines = []
 
+    # Header
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append(f"📊 *{sheet_name} SHEET REPORT*")
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append(f"🕐 Generated: {now_str}")
     lines.append("")
 
+    # Overview
     lines.append("📋 *OVERVIEW:*")
     if selected_count > 0:
         lines.append(f"   • Selected Records: *{selected_count}*")
@@ -1949,6 +1977,7 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
         lines.append(f"   • Total Records: *{total_rows}*")
     lines.append("")
 
+    # Train-wise detailed breakdown
     train_col = None
     for c in df.columns:
         if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
@@ -1959,8 +1988,10 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
         train_counts = df[train_col].value_counts().to_dict()
         if train_counts:
             lines.append("🚆 *TRAIN-WISE BREAKDOWN:*")
+            # Sort by count descending
             sorted_trains = sorted(train_counts.items(), key=lambda x: x[1], reverse=True)
             for i, (train, count) in enumerate(sorted_trains[:15], 1):
+                # Get berth count for this train
                 train_mask = df[train_col].astype(str) == str(train)
                 train_df = df[train_mask]
                 berth_col = next((c for c in df.columns if 'BERTH' in c.upper()), None)
@@ -1976,6 +2007,7 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
                 lines.append(f"   ... and {len(sorted_trains)-15} more trains")
             lines.append("")
 
+    # Class-wise breakdown
     class_col = next((c for c in df.columns if 'CLASS' in c.upper()), None)
     if class_col and not df.empty:
         class_counts = df[class_col].value_counts().to_dict()
@@ -1986,9 +2018,11 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
                 lines.append(f"   • {cls}: *{count}* request(s)")
             lines.append("")
 
+    # VIP/Status breakdown
     vip_col = next((c for c in df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
     if vip_col and not df.empty:
         vip_counts = df[vip_col].value_counts().to_dict()
+        # Filter out empty values
         vip_counts = {k: v for k, v in vip_counts.items() if str(k).strip()}
         if vip_counts:
             lines.append("⭐ *VIP / PRIORITY BREAKDOWN:*")
@@ -1996,6 +2030,7 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
                 lines.append(f"   • {status}: *{count}* request(s)")
             lines.append("")
 
+    # DOJ range
     doj_col = next((c for c in df.columns if 'DOJ' in c.upper()), None)
     if doj_col and not df.empty:
         try:
@@ -2010,6 +2045,7 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
                 lines.append("📅 *DATE INFORMATION:*")
                 lines.append(f"   • Date Range: {min_doj} to {max_doj}")
                 lines.append(f"   • Today's Date: {today_str}")
+                # Count upcoming vs expired
                 upcoming = sum(1 for d in valid_dates if d >= pd.Timestamp(now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)))
                 expired = len(valid_dates) - upcoming
                 lines.append(f"   • Upcoming Journeys: *{upcoming}*")
@@ -2019,6 +2055,7 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
         except:
             pass
 
+    # Route / From-To summary
     from_col = next((c for c in df.columns if c.upper() == 'FROM'), None)
     to_col = next((c for c in df.columns if c.upper() == 'TO'), None)
     if from_col and to_col and not df.empty:
@@ -2033,6 +2070,7 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
         except:
             pass
 
+    # Total berths
     berth_col = next((c for c in df.columns if 'BERTH' in c.upper()), None)
     if berth_col and not df.empty:
         try:
@@ -2046,6 +2084,7 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
         except:
             pass
 
+    # Footer
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append(f"🔗 *Sheet Link:*")
     lines.append(f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit")
@@ -2059,200 +2098,22 @@ def get_pnr_status_url(pnr):
         return None
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
 
-# ====================================================================
-# DASHBOARD CHARTS - COMPLETE with filters
-# ====================================================================
-def create_advanced_charts(df, sheet_choice):
-    if df.empty:
-        st.info("No data available for charts")
-        return
-    
-    train_col = None
-    class_col = None
-    doj_col = None
-    berth_col = None
-    from_col = None
-    to_col = None
-    vip_col = None
-    rec_col = None
-    purpose_col = None
-    
-    for c in df.columns:
-        if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
-            train_col = c
-        if 'CLASS' in c.upper():
-            class_col = c
-        if 'DOJ' in c.upper():
-            doj_col = c
-        if 'BERTH' in c.upper():
-            berth_col = c
-        if c.upper() == 'FROM':
-            from_col = c
-        if c.upper() == 'TO':
-            to_col = c
-        if 'VIP' in c.upper() or 'MP/MLA' in c.upper():
-            vip_col = c
-        if 'RECOMMENDATION' in c.upper():
-            rec_col = c
-        if 'PURPOSE' in c.upper():
-            purpose_col = c
-    
-    chart_type = st.selectbox(
-        "📊 Select Chart Type",
-        ["All Charts", "Train Wise", "Route Wise", "Class Wise", "Train vs Class", "Train vs Route", "Priority vs Recommendation", "Advanced Analytics"],
-        key="chart_type_selector_final"
-    )
-    
-    # ============================================================
-    # TRAIN WISE
-    # ============================================================
-    if chart_type in ["All Charts", "Train Wise"]:
-        st.subheader("🚆 Train Wise Analysis")
-        col1, col2 = st.columns(2)
-        with col1:
-            if train_col:
-                train_counts = df[train_col].value_counts().head(15).reset_index()
-                train_counts.columns = ['Train', 'Count']
-                fig = px.bar(train_counts, x='Train', y='Count', title="Top 15 Trains by EQ Count", color='Count', color_continuous_scale='Blues', text='Count')
-                fig.update_traces(textposition='outside')
-                fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig, use_container_width=True)
-        with col2:
-            if train_col:
-                train_counts = df[train_col].value_counts().head(10).reset_index()
-                train_counts.columns = ['Train', 'Count']
-                other_count = len(df[train_col].value_counts()) - 10
-                if other_count > 0:
-                    other_row = pd.DataFrame({'Train': ['Others'], 'Count': [other_count]})
-                    train_counts = pd.concat([train_counts, other_row], ignore_index=True)
-                fig = px.pie(train_counts, names='Train', values='Count', title="Train Distribution (Top 10)", hole=0.3, color_discrete_sequence=px.colors.qualitative.Set3)
-                fig.update_traces(textposition='inside', textinfo='percent+label')
-                fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig, use_container_width=True)
-    
-    # ============================================================
-    # ROUTE WISE
-    # ============================================================
-    if chart_type in ["All Charts", "Route Wise"]:
-        st.subheader("🛤️ Route Wise Analysis")
-        if from_col and to_col:
-            col1, col2 = st.columns(2)
-            with col1:
-                route_counts = df.groupby([from_col, to_col]).size().reset_index(name='Count')
-                route_counts = route_counts.sort_values('Count', ascending=False).head(10)
-                route_counts['Route'] = route_counts[from_col] + " → " + route_counts[to_col]
-                fig = px.bar(route_counts, x='Route', y='Count', title="Top 10 Routes", color='Count', color_continuous_scale='Reds', text='Count')
-                fig.update_traces(textposition='outside')
-                fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                route_counts = df.groupby([from_col, to_col]).size().reset_index(name='Count')
-                route_counts = route_counts.sort_values('Count', ascending=False).head(10)
-                route_counts['Route'] = route_counts[from_col] + "→" + route_counts[to_col]
-                fig = px.pie(route_counts, names='Route', values='Count', title="Top Routes Distribution", hole=0.3, color_discrete_sequence=px.colors.qualitative.Safe)
-                fig.update_traces(textposition='inside', textinfo='percent+label')
-                fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig, use_container_width=True)
-    
-    # ============================================================
-    # CLASS WISE
-    # ============================================================
-    if chart_type in ["All Charts", "Class Wise"]:
-        st.subheader("🎫 Class Wise Analysis")
-        if class_col:
-            col1, col2 = st.columns(2)
-            with col1:
-                class_counts = df[class_col].value_counts().reset_index()
-                class_counts.columns = ['Class', 'Count']
-                fig = px.bar(class_counts, x='Class', y='Count', title="Class Distribution", color='Class', color_discrete_sequence=px.colors.qualitative.Set2, text='Count')
-                fig.update_traces(textposition='outside')
-                fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                class_counts = df[class_col].value_counts().reset_index()
-                class_counts.columns = ['Class', 'Count']
-                fig = px.pie(class_counts, names='Class', values='Count', title="Class Distribution", hole=0.4, color_discrete_sequence=px.colors.qualitative.Set2)
-                fig.update_traces(textposition='inside', textinfo='percent+label')
-                fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig, use_container_width=True)
-    
-    # ============================================================
-    # TRAIN vs CLASS
-    # ============================================================
-    if chart_type in ["All Charts", "Train vs Class"]:
-        st.subheader("🚆 Train vs Class Analysis")
-        if train_col and class_col:
-            col1, col2 = st.columns(2)
-            with col1:
-                train_class = df.groupby([train_col, class_col]).size().reset_index(name='Count')
-                top_trains = df[train_col].value_counts().head(10).index.tolist()
-                train_class_top = train_class[train_class[train_col].isin(top_trains)]
-                fig = px.bar(train_class_top, x=train_col, y='Count', color=class_col, title="Top 10 Trains - Class Distribution", barmode='stack', color_discrete_sequence=px.colors.qualitative.Set3)
-                fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                heat_data = pd.crosstab(df[train_col], df[class_col])
-                if not heat_data.empty and heat_data.shape[0] > 1 and heat_data.shape[1] > 1:
-                    top_trains_heat = df[train_col].value_counts().head(15).index.tolist()
-                    heat_data = heat_data.loc[heat_data.index.isin(top_trains_heat)]
-                    fig = go.Figure(data=go.Heatmap(z=heat_data.values, x=heat_data.columns, y=heat_data.index, colorscale='Viridis', text=heat_data.values, texttemplate='%{text}'))
-                    fig.update_layout(title="Train vs Class Heatmap", height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig, use_container_width=True)
-    
-    # ============================================================
-    # TRAIN vs ROUTE
-    # ============================================================
-    if chart_type in ["All Charts", "Train vs Route"]:
-        st.subheader("🚆 Train vs Route Analysis")
-        if train_col and from_col and to_col:
-            col1, col2 = st.columns(2)
-            with col1:
-                train_routes = df.groupby([train_col, from_col, to_col]).size().reset_index(name='Count')
-                train_routes['Route'] = train_routes[from_col] + "→" + train_routes[to_col]
-                top_trains_route = df[train_col].value_counts().head(8).index.tolist()
-                train_routes_top = train_routes[train_routes[train_col].isin(top_trains_route)]
-                fig = px.bar(train_routes_top, x=train_col, y='Count', color='Route', title="Top 8 Trains - Route Distribution", barmode='group', color_discrete_sequence=px.colors.qualitative.Safe)
-                fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                st.plotly_chart(fig, use_container_width=True)
-    
-    # ============================================================
-    # PRIORITY vs RECOMMENDATION
-    # ============================================================
-    if chart_type in ["All Charts", "Priority vs Recommendation"]:
-        st.subheader("⭐ Priority vs Recommendation Analysis")
-        if vip_col and rec_col:
-            col1, col2 = st.columns(2)
-            with col1:
-                priority_rec = df.groupby([vip_col, rec_col]).size().reset_index(name='Count')
-                priority_rec = priority_rec[priority_rec[vip_col].astype(str).str.strip() != '']
-                priority_rec = priority_rec[priority_rec[rec_col].astype(str).str.strip() != '']
-                priority_rec = priority_rec.sort_values('Count', ascending=False).head(15)
-                if not priority_rec.empty:
-                    fig = px.scatter(priority_rec, x=vip_col, y=rec_col, size='Count', title="Priority vs Recommendation", color='Count', color_continuous_scale='Viridis')
-                    fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig, use_container_width=True)
-            with col2:
-                if vip_col:
-                    vip_counts = df[vip_col].value_counts().reset_index()
-                    vip_counts.columns = ['Priority', 'Count']
-                    vip_counts = vip_counts[vip_counts['Priority'].astype(str).str.strip() != '']
-                    if not vip_counts.empty:
-                        fig = px.pie(vip_counts, names='Priority', values='Count', title="Priority Distribution", hole=0.3, color_discrete_sequence=px.colors.qualitative.Pastel)
-                        fig.update_traces(textposition='inside', textinfo='percent+label')
-                        fig.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig, use_container_width=True)
-
-# ====================================================================
-# MAIN FUNCTION
-# ====================================================================
+# ------------------------------------------------------------------
+# Main function
+# ------------------------------------------------------------------
 def main():
-    # Theme persistence
+    # ------------------------------------------------------------------
+    # Pro enhancements: theme persistence (localStorage), keyboard scroll,
+    # mouse-wheel forwarding, back-to-top button, theme/view shortcuts
+    # ------------------------------------------------------------------
     components.html("""
     <script>
     (function() {
         try {
             var P = window.parent;
             var doc = P.document;
+
+            // ---- Theme persistence bridge (localStorage <-> query param) ----
             var url = new URL(P.location.href);
             var qpTheme = url.searchParams.get('__theme');
             var stored = null;
@@ -2264,8 +2125,11 @@ def main():
                 P.location.replace(url.toString());
                 return;
             }
+
+            // ---- One-time listeners ----
             if (!P.__eqmsProInit) {
                 P.__eqmsProInit = true;
+
                 var mainEl = function() {
                     var cands = ['[data-testid="stMain"]', 'section.main', '[data-testid="stAppViewContainer"]'];
                     for (var i = 0; i < cands.length; i++) {
@@ -2284,6 +2148,8 @@ def main():
                     if (m) { m.scrollTo({top: y, behavior: 'smooth'}); }
                     else { P.scrollTo({top: y, behavior: 'smooth'}); }
                 };
+
+                // Keyboard: PageUp/PageDown/Home/End scroll | D = theme toggle | 1-5 = view switch
                 doc.addEventListener('keydown', function(e) {
                     var t = (e.target.tagName || '').toLowerCase();
                     if (t === 'input' || t === 'textarea' || t === 'select' || e.target.isContentEditable) return;
@@ -2304,6 +2170,9 @@ def main():
                         P.location.href = u2.toString();
                     }
                 });
+
+                // Wheel forwarding: cursor sidebar par ho aur sidebar scroll nahi kar sakta
+                // to main content scroll ho — baar baar sidebar kheenchne ki zaroorat nahi
                 doc.addEventListener('wheel', function(e) {
                     var sb = doc.querySelector('[data-testid="stSidebar"]');
                     if (sb && sb.contains(e.target)) {
@@ -2319,12 +2188,17 @@ def main():
                         }
                     }
                 }, {passive: false});
+
+                // Back-to-top floating button
                 if (!doc.getElementById('eqms-top-btn')) {
                     var b = doc.createElement('button');
                     b.id = 'eqms-top-btn';
                     b.title = 'Back to top (Home key)';
                     b.innerHTML = '⬆';
-                    b.style.cssText = 'position:fixed;bottom:80px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:#0969da;color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
+                    b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;'
+                        + 'width:44px;height:44px;border-radius:50%;border:none;background:#0969da;'
+                        + 'color:#fff;font-size:18px;cursor:pointer;opacity:0.85;'
+                        + 'box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
                     b.onmouseenter = function(){ b.style.opacity = '1'; b.style.transform = 'scale(1.08)'; };
                     b.onmouseleave = function(){ b.style.opacity = '0.85'; b.style.transform = 'scale(1)'; };
                     b.onclick = function(){ scrollMainTo(0); };
@@ -2336,12 +2210,13 @@ def main():
     </script>
     """, height=0)
 
-    # Restore persisted theme
+    # Restore persisted theme (localStorage bridge query param me likh deta hai)
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
     qp_theme = st.query_params.get('__theme')
     if qp_theme in theme_options and st.session_state.theme != qp_theme:
         st.session_state.theme = qp_theme
 
+    # Restore persisted custom colors
     qp_bg = st.query_params.get('__bg')
     qp_tx = st.query_params.get('__tx')
     if qp_bg and st.session_state.custom_bg != qp_bg:
@@ -2349,12 +2224,43 @@ def main():
     if qp_tx and st.session_state.custom_text != qp_tx:
         st.session_state.custom_text = qp_tx
 
+    # Restore persisted view (keyboard 1-5 / icon nav se bhi sync)
     view_options = ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"]
     qp_view = st.query_params.get('__view')
     if qp_view in view_options and st.session_state.view_mode != qp_view:
         st.session_state.view_mode = qp_view
 
-    # --- SIDEBAR ---
+    theme_choice = st.sidebar.selectbox("🎨 Theme", theme_options,
+        index=theme_options.index(st.session_state.theme) if st.session_state.theme in theme_options else 0,
+        key="theme_select",
+        help="Auto (System): IST time ke hisaab se — 6AM-7PM Day, 7PM-6AM Dark. Choice save rehti hai.")
+    if theme_choice != st.session_state.theme:
+        st.session_state.theme = theme_choice
+        st.query_params['__theme'] = theme_choice
+        st.rerun()
+
+    # Auto (System) = time-based (IST): 06:00-19:00 Day, 19:00-06:00 Dark
+    effective_theme = theme_choice
+    if theme_choice == 'Auto (System)':
+        h = now_ist().hour
+        effective_theme = 'Day' if 6 <= h < 19 else 'Dark'
+
+    if effective_theme == 'Custom':
+        custom_bg = st.sidebar.color_picker("Background Color", value=st.session_state.custom_bg, key="custom_bg_picker")
+        custom_text = st.sidebar.color_picker("Text Color", value=st.session_state.custom_text, key="custom_text_picker")
+        if custom_bg != st.session_state.custom_bg or custom_text != st.session_state.custom_text:
+            st.session_state.custom_bg = custom_bg
+            st.session_state.custom_text = custom_text
+            st.query_params['__bg'] = custom_bg
+            st.query_params['__tx'] = custom_text
+            st.rerun()
+    else:
+        custom_bg = None
+        custom_text = None
+
+    apply_theme(effective_theme, custom_bg, custom_text)
+
+    # Sidebar
     with st.sidebar:
         st.markdown("""
         <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8;">
@@ -2403,10 +2309,11 @@ def main():
         sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
 
-        # PRINT SHEET button
+        # PRINT SHEET button - using st.button with JavaScript
         st.markdown("---")
         st.markdown("### 🖨️ Print Options")
         
+        # Reliable print button using components.v1.html for unrestricted JS
         components.html("""
         <div style="width:100%; margin-top:8px;">
             <button onclick="
@@ -2549,6 +2456,8 @@ def main():
                                         st.session_state.upload_success = True
                                         st.session_state.last_upload_time = format_time()
                                         log_activity(f"✅ Text input → {save_res['saved']} records")
+                                    # Auto-clear inputs after successful processing
+                                    # (text box / file uploader / audio sab khali ho jayenge)
                                     st.session_state.text_input_key += 1
                                     st.session_state.img_uploader_key += 1
                                     st.session_state.audio_uploader_key += 1
@@ -2689,17 +2598,18 @@ def main():
                 filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
             filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
 
-    # View mode
+    # View mode — ab compact icon navigation (top bar) se control hota hai,
+    # bada option strip hata diya gaya hai taaki content upar aa jaye
     view = st.session_state.view_mode
 
-    # Top bar with crawling text (CSS marquee)
+    # Top bar with crawling text (CSS marquee — smooth, no deprecated <marquee>)
     st.markdown("""
     <div class="eqms-marquee" style="background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); padding: 8px 0; border-radius: 4px; margin-bottom: 10px;">
         <span>🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save</span>
     </div>
     """, unsafe_allow_html=True)
 
-    # Top bar with compact icon navigation - ORIGINAL STYLE
+    # Top bar with compact icon navigation
     top_c1, top_nav, top_c2 = st.columns([2.4, 2.2, 1.2])
     with top_c1:
         st.markdown(f"<h1 style='font-size:22px; font-weight:700; margin:0;'>🚂 AI EQMS Hub Pro — {sheet_choice}</h1>", unsafe_allow_html=True)
@@ -2719,9 +2629,9 @@ def main():
     st.caption(f"Enterprise Railway EQ Management  •  {format_date()}  •  {format_time()} IST")
     st.markdown("---")
 
-    # ============================================================
-    # VIEW: CHAT
-    # ============================================================
+    # ------------------------------------------------------------------
+    # View: Chat
+    # ------------------------------------------------------------------
     if view == "💬 Chat":
         st.subheader("💬 Chat with TSKEQ Bot")
         st.caption("Ask about EQ data, trains, quota, PNR or anything else.")
@@ -2752,51 +2662,253 @@ def main():
             st.session_state.messages = []
             st.rerun()
 
-    # ============================================================
-    # VIEW: DASHBOARD
-    # ============================================================
+    # ------------------------------------------------------------------
+    # View: Dashboard
+    # ------------------------------------------------------------------
     elif view == "📊 Dashboard":
         st.subheader(f"📊 Analytics Dashboard — {sheet_choice}")
-        
-        train_col_metric = None
-        berth_col_metric = None
-        doj_col_metric = None
-        for c in filtered_df.columns:
-            if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
-                train_col_metric = c
-            if 'BERTH' in str(c).upper() or 'T/BERTHS' in str(c).upper():
-                berth_col_metric = c
-            if 'DOJ' in str(c).upper():
-                doj_col_metric = c
 
-        m1, m2, m3, m4 = st.columns(4)
+        # ── Advanced Filters (same as Data Table) ──
+        if sheet_choice != "NOTE":
+            with st.expander("🔍 Advanced Filters", expanded=False):
+                f1, f2, f3 = st.columns(3)
+                with f1:
+                    dash_pnr = st.text_input("🔎 PNR (partial)", value=st.session_state.dashboard_filters.get('pnr',''), key="dash_pnr_filter")
+                with f2:
+                    dash_train = st.text_input("🚆 Train (partial)", value=st.session_state.dashboard_filters.get('train',''), key="dash_train_filter")
+                with f3:
+                    dash_class = st.text_input("🎫 Class (partial)", value=st.session_state.dashboard_filters.get('class_filter',''), key="dash_class_filter")
+
+                f4, f5, f6 = st.columns(3)
+                with f4:
+                    dash_from_doj = st.date_input("📅 From DOJ", value=st.session_state.dashboard_filters.get('from_doj'), key="dash_from_doj", format="DD-MM-YYYY")
+                with f5:
+                    dash_to_doj = st.date_input("📅 To DOJ", value=st.session_state.dashboard_filters.get('to_doj'), key="dash_to_doj", format="DD-MM-YYYY")
+                with f6:
+                    dash_vip = st.text_input("⭐ VIP Status", value=st.session_state.dashboard_filters.get('vip_filter',''), key="dash_vip_filter")
+
+                f7, f8 = st.columns([1,1])
+                with f7:
+                    dash_route = st.text_input("🛤️ Route (FROM-TO)", value=st.session_state.dashboard_filters.get('route_filter',''), key="dash_route_filter", placeholder="e.g., NTSK-DLI")
+                with f8:
+                    st.markdown("<div style='padding-top:28px;'></div>", unsafe_allow_html=True)
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if st.button("🚀 Apply Filters", use_container_width=True, key="dash_apply_filter"):
+                            st.session_state.dashboard_filters = {
+                                'pnr': dash_pnr, 'train': dash_train, 'from_doj': dash_from_doj,
+                                'to_doj': dash_to_doj, 'class_filter': dash_class, 'route_filter': dash_route,
+                                'vip_filter': dash_vip
+                            }
+                            st.rerun()
+                    with c2:
+                        if st.button("🧹 Clear", use_container_width=True, key="dash_clear_filter"):
+                            st.session_state.dashboard_filters = {'pnr':'','train':'','from_doj':None,'to_doj':None,'class_filter':'','route_filter':'','vip_filter':''}
+                            st.rerun()
+
+        # Apply dashboard filters to a working copy
+        dash_df = filtered_df.copy() if not filtered_df.empty else pd.DataFrame()
+        if not dash_df.empty and sheet_choice != "NOTE":
+            dfilters = st.session_state.dashboard_filters
+            config = SHEET_CONFIG[sheet_choice]
+
+            if dfilters['pnr'] and config.get("pnr_col") is not None:
+                col_name = dash_df.columns[config["pnr_col"]]
+                dash_df = dash_df[dash_df[col_name].astype(str).str.contains(dfilters['pnr'], case=False, na=False)]
+            if dfilters['train'] and config.get("train_col") is not None:
+                col_name = dash_df.columns[config["train_col"]]
+                dash_df = dash_df[dash_df[col_name].astype(str).str.contains(dfilters['train'], case=False, na=False)]
+            if (dfilters['from_doj'] or dfilters['to_doj']) and config.get("doj_col") is not None:
+                col_name = dash_df.columns[config["doj_col"]]
+                try:
+                    dash_df['_temp'] = pd.to_datetime(dash_df[col_name], format='%d-%m-%Y', errors='coerce')
+                    if dash_df['_temp'].isna().all():
+                        dash_df['_temp'] = pd.to_datetime(dash_df[col_name], errors='coerce')
+                except:
+                    dash_df['_temp'] = pd.to_datetime(dash_df[col_name], errors='coerce')
+                if dfilters['from_doj']:
+                    dash_df = dash_df[dash_df['_temp'] >= pd.to_datetime(dfilters['from_doj'])]
+                if dfilters['to_doj']:
+                    dash_df = dash_df[dash_df['_temp'] <= pd.to_datetime(dfilters['to_doj'])]
+                dash_df = dash_df.drop('_temp', axis=1, errors='ignore')
+            if dfilters['class_filter']:
+                class_col = next((c for c in dash_df.columns if 'CLASS' in c.upper()), None)
+                if class_col:
+                    dash_df = dash_df[dash_df[class_col].astype(str).str.contains(dfilters['class_filter'], case=False, na=False)]
+            if dfilters['vip_filter']:
+                vip_col = next((c for c in dash_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
+                if vip_col:
+                    dash_df = dash_df[dash_df[vip_col].astype(str).str.contains(dfilters['vip_filter'], case=False, na=False)]
+            if dfilters['route_filter']:
+                from_col = next((c for c in dash_df.columns if c.upper() == 'FROM'), None)
+                to_col = next((c for c in dash_df.columns if c.upper() == 'TO'), None)
+                if from_col and to_col:
+                    route = dfilters['route_filter'].upper().replace(' ', '').replace('-', '')
+                    dash_df = dash_df[dash_df.apply(lambda r: f"{str(r.get(from_col,'')).upper()}{str(r.get(to_col,'')).upper()}" == route or f"{str(r.get(from_col,'')).upper()}-{str(r.get(to_col,'')).upper()}" == dfilters['route_filter'].upper().replace(' ','') or (dfilters['route_filter'].upper().replace(' ','') in f"{str(r.get(from_col,'')).upper()}{str(r.get(to_col,'')).upper()}"), axis=1)]
+
+        # ── Metrics ──
+        train_col = None
+        for c in dash_df.columns:
+            if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
+                train_col = c
+                break
+
+        m1, m2, m3, m4, m5 = st.columns(5)
         with m1:
-            total_records = len(filtered_df) if not filtered_df.empty else 0
-            st.metric("📊 Total Records", total_records)
+            total_records = len(dash_df) if not dash_df.empty else 0
+            st.metric("📋 Total Records", total_records)
         with m2:
-            unique_trains = filtered_df[train_col_metric].nunique() if train_col_metric else 0
+            unique_trains = dash_df[train_col].nunique() if train_col else 0
             st.metric("🚆 Unique Trains", unique_trains)
         with m3:
+            berth_col = next((c for c in dash_df.columns if 'BERTH' in str(c).upper() or 'T/BERTHS' in str(c).upper()), None)
             total_berths = 0
-            if berth_col_metric and berth_col_metric in filtered_df:
-                total_berths = pd.to_numeric(filtered_df[berth_col_metric], errors='coerce').sum()
+            if berth_col and berth_col in dash_df:
+                total_berths = pd.to_numeric(dash_df[berth_col], errors='coerce').sum()
             st.metric("🛏️ Total Berths", int(total_berths) if total_berths else 0)
         with m4:
             expired = 0
-            if doj_col_metric and doj_col_metric in filtered_df:
-                expired = sum(1 for _, r in filtered_df.iterrows() if is_expired(r.get(doj_col_metric, '')))
-            st.metric("⏰ Expired DOJ", expired)
-        
-        st.markdown("---")
-        
-        if not filtered_df.empty:
-            create_advanced_charts(filtered_df, sheet_choice)
-        else:
-            st.info("No data for charts. Adjust filters or choose another sheet.")
+            doj_col = next((c for c in dash_df.columns if 'DOJ' in str(c).upper()), None)
+            if doj_col and doj_col in dash_df:
+                expired = sum(1 for _, r in dash_df.iterrows() if is_expired(r.get(doj_col, '')))
+            st.metric("⏰ Expired", expired)
+        with m5:
+            upcoming = 0
+            if doj_col and doj_col in dash_df:
+                upcoming = sum(1 for _, r in dash_df.iterrows() if not is_expired(r.get(doj_col, '')))
+            st.metric("📅 Upcoming", upcoming)
 
-    # ============================================================
-    # VIEW: DATA TABLE
-    # ============================================================
+        st.markdown("---")
+
+        if dash_df.empty:
+            st.info("No data for charts. Adjust filters or choose another sheet.")
+        else:
+            # ── Row 1: Train Comparison + Class Comparison ──
+            r1c1, r1c2 = st.columns(2)
+
+            with r1c1:
+                if train_col:
+                    train_counts = dash_df[train_col].value_counts().reset_index()
+                    train_counts.columns = ['Train', 'Count']
+                    fig_bar = px.bar(train_counts.head(15), x='Train', y='Count', 
+                        title="🚆 Train-wise EQ Comparison", color='Count', 
+                        color_continuous_scale='Blues', text='Count')
+                    fig_bar.update_traces(textposition='outside')
+                    fig_bar.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_bar, use_container_width=True)
+
+            with r1c2:
+                class_col = next((c for c in dash_df.columns if 'CLASS' in c.upper()), None)
+                if class_col:
+                    class_counts = dash_df[class_col].value_counts().reset_index()
+                    class_counts.columns = ['Class', 'Count']
+                    fig_pie = px.pie(class_counts, names='Class', values='Count', 
+                        title="🎫 Class-wise Distribution", hole=0.4,
+                        color_discrete_sequence=px.colors.qualitative.Set3)
+                    fig_pie.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_pie, use_container_width=True)
+
+            # ── Row 2: Route Comparison ──
+            from_col = next((c for c in dash_df.columns if c.upper() == 'FROM'), None)
+            to_col = next((c for c in dash_df.columns if c.upper() == 'TO'), None)
+            if from_col and to_col:
+                route_df = dash_df.copy()
+                route_df['Route'] = route_df[from_col].astype(str).str.upper() + " → " + route_df[to_col].astype(str).str.upper()
+                route_counts = route_df['Route'].value_counts().reset_index()
+                route_counts.columns = ['Route', 'Count']
+                if not route_counts.empty:
+                    fig_route = px.bar(route_counts.head(15), y='Route', x='Count', 
+                        title="🛤️ Route-wise Comparison (Top 15)", color='Count',
+                        color_continuous_scale='Greens', orientation='h', text='Count')
+                    fig_route.update_traces(textposition='outside')
+                    fig_route.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_route, use_container_width=True)
+
+            # ── Row 3: Train × Class (Grouped) ──
+            if train_col and class_col:
+                tc_df = dash_df.groupby([train_col, class_col]).size().reset_index(name='Count')
+                if not tc_df.empty:
+                    fig_tc = px.bar(tc_df, x=train_col, y='Count', color=class_col,
+                        title="🚆×🎫 Train cum Class Analysis", barmode='group',
+                        color_discrete_sequence=px.colors.qualitative.Bold)
+                    fig_tc.update_layout(height=420, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_tc, use_container_width=True)
+
+            # ── Row 4: Route × Class ──
+            if from_col and to_col and class_col:
+                rc_df = dash_df.copy()
+                rc_df['Route'] = rc_df[from_col].astype(str).str.upper() + " → " + rc_df[to_col].astype(str).str.upper()
+                rc_group = rc_df.groupby(['Route', class_col]).size().reset_index(name='Count')
+                if not rc_group.empty:
+                    fig_rc = px.bar(rc_group.head(30), x='Route', y='Count', color=class_col,
+                        title="🛤️×🎫 Route cum Class Analysis", barmode='stack',
+                        color_discrete_sequence=px.colors.qualitative.Vivid)
+                    fig_rc.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis_tickangle=-45)
+                    st.plotly_chart(fig_rc, use_container_width=True)
+
+            # ── Row 5: Train × Route Heatmap ──
+            if train_col and from_col and to_col:
+                tr_df = dash_df.copy()
+                tr_df['Route'] = tr_df[from_col].astype(str).str.upper() + " → " + tr_df[to_col].astype(str).str.upper()
+                tr_pivot = tr_df.groupby([train_col, 'Route']).size().reset_index(name='Count')
+                if not tr_pivot.empty:
+                    pivot_table = tr_pivot.pivot(index=train_col, columns='Route', values='Count').fillna(0)
+                    fig_heat = px.imshow(pivot_table, text_auto=True, aspect="auto",
+                        title="🚆×🛤️ Train cum Route Heatmap",
+                        color_continuous_scale='YlOrRd')
+                    fig_heat.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_heat, use_container_width=True)
+
+            # ── Row 6: VIP / Priority + Daily Trend ──
+            r6c1, r6c2 = st.columns(2)
+
+            with r6c1:
+                vip_col = next((c for c in dash_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
+                if vip_col:
+                    vip_counts = dash_df[vip_col].value_counts().reset_index()
+                    vip_counts.columns = ['Status', 'Count']
+                    vip_counts = vip_counts[vip_counts['Status'].astype(str).str.strip() != '']
+                    if not vip_counts.empty:
+                        fig_vip = px.bar(vip_counts.head(10), x='Status', y='Count',
+                            title="⭐ VIP / Priority Breakdown", color='Count',
+                            color_continuous_scale='Reds', text='Count')
+                        fig_vip.update_traces(textposition='outside')
+                        fig_vip.update_layout(height=380, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig_vip, use_container_width=True)
+
+            with r6c2:
+                if doj_col:
+                    df_temp = dash_df.copy()
+                    df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
+                    if df_temp['_date'].isna().all():
+                        df_temp['_date'] = pd.to_datetime(df_temp[doj_col], errors='coerce')
+                    daily = df_temp.groupby('_date').size().reset_index(name='count')
+                    if not daily.empty:
+                        fig_line = px.line(daily, x='_date', y='count', title="📈 Daily Journey Trend",
+                            markers=True, labels={'_date': 'Date', 'count': 'Records'},
+                            color_discrete_sequence=['#ff6b6b'])
+                        fig_line.update_layout(height=380, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig_line, use_container_width=True)
+
+            # ── Row 7: Berth Demand Analysis ──
+            if berth_col and train_col:
+                berth_train = dash_df.groupby(train_col)[berth_col].apply(lambda x: pd.to_numeric(x, errors='coerce').sum()).reset_index()
+                berth_train.columns = ['Train', 'Total_Berths']
+                berth_train = berth_train.sort_values('Total_Berths', ascending=False).head(15)
+                if not berth_train.empty:
+                    fig_berth = px.bar(berth_train, x='Train', y='Total_Berths',
+                        title="🛏️ Berth Demand by Train", color='Total_Berths',
+                        color_continuous_scale='Purples', text='Total_Berths')
+                    fig_berth.update_traces(textposition='outside')
+                    fig_berth.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig_berth, use_container_width=True)
+
+            # ── Row 8: Full Data Table in Dashboard ──
+            with st.expander("📋 View Filtered Data Table", expanded=False):
+                display_dash = dash_df.drop(columns=['_sheet_row'], errors='ignore')
+                st.dataframe(display_dash, use_container_width=True, height=400)
+                st.caption(f"Showing {len(dash_df)} of {len(filtered_df)} records")
+
     elif view == "📋 Data Table":
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
         train_col_metric = None
@@ -2989,6 +3101,7 @@ def main():
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
                 st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
             with a5:
+                # Reliable print button using iframe approach - prints only sheet data
                 components.html("""
                 <div style="width:100%;">
                     <button onclick="
@@ -3089,7 +3202,7 @@ def main():
                             </script>
                         </div>
                         """
-                        st.components.v1.html(copy_js, height=50)
+                        components.html(copy_js, height=50)
                     else:
                         st.info("Image generation failed")
                 else:
@@ -3168,9 +3281,9 @@ def main():
                     st.caption("Ctrl+R: Refresh | Ctrl+P: Print")
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # ============================================================
-    # VIEW: RAILWAY
-    # ============================================================
+    # ------------------------------------------------------------------
+    # View: Railway Features (DITTO from Telegram Bot)
+    # ------------------------------------------------------------------
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real‑time Info")
 
@@ -3386,15 +3499,26 @@ def main():
                 st.markdown("### 📸 Passport Photo Maker")
                 st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
 
+                # --- API Key Handling ---
+                # Check all possible sources
                 api_key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
                 if not api_key:
                     api_key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
                 if not api_key and "remove_bg_key" in st.session_state:
                     api_key = str(st.session_state.remove_bg_key).strip()
 
+                # If still not found, show input + instructions
                 if not api_key:
                     st.error("❌ REMOVE_BG_API_KEY not found.")
-                    st.info("💡 **For Streamlit Cloud:** Go to your app → Settings (⚙️) → Secrets → Add:\n\n```\nREMOVE_BG_API_KEY = \"your_key_here\"\n```\n\n💡 **For local:** Add to `.streamlit/secrets.toml`")
+                    st.info("""
+                    💡 **For Streamlit Cloud:** Go to your app → Settings (⚙️) → Secrets → Add:
+
+                    ```
+                    REMOVE_BG_API_KEY = "your_key_here"
+                    ```
+
+                    💡 **For local:** Add to `.streamlit/secrets.toml`
+                    """)
                     manual_key = st.text_input("Or paste key here (temporary)", type="password", key="manual_bg_key_input")
                     if manual_key and manual_key.strip():
                         st.session_state.remove_bg_key = manual_key.strip()
@@ -3426,26 +3550,28 @@ def main():
                                     st.error("❌ Failed to process photo. The remove.bg API may have rejected the image. Try another photo.")
                             except Exception as e:
                                 st.error(f"❌ Error: {str(e)[:200]}")
-
-    # ============================================================
-    # VIEW: WEATHER - FULL FORECAST WITH DETAILS
-    # ============================================================
+# ------------------------------------------------------------------
+    # View: Weather
+    # ------------------------------------------------------------------
     elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
-        
+
         city = st.text_input("🏙️ Enter City Name", value=st.session_state.weather_city, 
                             placeholder="e.g., Tinsukia, New Delhi, Mumbai", key="weather_city_input")
         if city != st.session_state.weather_city:
             st.session_state.weather_city = city
-        
-        col1, col2 = st.columns(2)
+
+        col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("🌤️ Get Weather", key="weather_btn", use_container_width=True):
                 if city:
                     with st.spinner(f"Fetching weather for {city}..."):
                         data = get_weather(city)
+                        forecast = get_weather_forecast(city)
                         if data and 'error' not in data:
                             st.session_state.weather_data = data
+                            if forecast and 'error' not in forecast:
+                                st.session_state.weather_forecast = forecast
                             st.rerun()
                         else:
                             st.error(data.get('error', 'Error fetching weather'))
@@ -3456,95 +3582,127 @@ def main():
                 if city:
                     with st.spinner(f"Refreshing weather for {city}..."):
                         data = get_weather(city)
+                        forecast = get_weather_forecast(city)
                         if data and 'error' not in data:
                             st.session_state.weather_data = data
+                            if forecast and 'error' not in forecast:
+                                st.session_state.weather_forecast = forecast
                             st.rerun()
                         else:
                             st.error(data.get('error', 'Error fetching weather'))
                 else:
                     st.warning("Please enter a city name.")
-        
+        with col3:
+            if st.button("📍 Use My Location", key="weather_location", use_container_width=True):
+                st.info("💡 Enter your city name above for accurate weather data.")
+
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
-            
-            # Current Weather
+
+            # ── Current Weather Card ──
             st.markdown(f"""
             <div class="weather-card">
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;">
                     <div>
                         <h2 style="margin: 0; font-size: 1.8rem;">{data['city']}, {data['country']}</h2>
                         <div class="weather-desc">{data['weather'].title()}</div>
+                        <div style="font-size: 0.85rem; color: #656d76; margin-top: 4px;">🔄 Updated: {format_datetime()}</div>
                     </div>
                     <div style="text-align: center;">
                         <div class="weather-temp">{data['temp']}°C</div>
                         <div style="font-size: 0.9rem; color: #656d76;">Feels like {data['feels_like']}°C</div>
                     </div>
                 </div>
-                <hr style="margin: 12px 0; border-color: #d0d7de;">
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px;">
-                    <div class="weather-detail">💧 Humidity: {data['humidity']}%</div>
-                    <div class="weather-detail">🌬️ Wind: {data['wind_speed']} m/s</div>
-                    <div class="weather-detail">📊 Pressure: {data['pressure']} hPa</div>
-                    <div class="weather-detail">🌡️ Min: {data['temp_min']}°C / Max: {data['temp_max']}°C</div>
-                    <div class="weather-detail">👁️ Visibility: {data['visibility']} m</div>
-                    <div class="weather-detail">☁️ Clouds: {data['clouds']}%</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # Sunrise/Sunset
+                <hr style="margin: 14px 0; border-color: #d0d7de;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;">
+                    <div class="weather-detail">💧 Humidity: <b>{data['humidity']}%</b></div>
+                    <div class="weather-detail">🌬️ Wind Speed: <b>{data['wind_speed']} m/s</b></div>
+                    <div class="weather-detail">📊 Pressure: <b>{data['pressure']} hPa</b></div>
+                    <div class="weather-detail">🌡️ Feels Like: <b>{data['feels_like']}°C</b></div>
+            """)
+
             if data.get('sunrise') and data.get('sunrise') != 'N/A':
                 try:
-                    sunrise = datetime.fromtimestamp(data['sunrise']).strftime('%H:%M')
-                    sunset = datetime.fromtimestamp(data['sunset']).strftime('%H:%M')
+                    sunrise = datetime.fromtimestamp(data['sunrise']).strftime('%I:%M %p')
+                    sunset = datetime.fromtimestamp(data['sunset']).strftime('%I:%M %p')
                     st.markdown(f"""
-                    <div style="display: flex; gap: 30px; margin: 10px 0;">
-                        <span>🌅 Sunrise: {sunrise}</span>
-                        <span>🌇 Sunset: {sunset}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    <div class="weather-detail">🌅 Sunrise: <b>{sunrise}</b></div>
+                    <div class="weather-detail">🌇 Sunset: <b>{sunset}</b></div>
+                    """)
                 except:
                     pass
-            
+
+            st.markdown("</div></div>", unsafe_allow_html=True)
+
             if data.get('icon'):
                 icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
-                st.image(icon_url, caption=data['weather'].title(), width=100)
-            
-            st.markdown(f'<div style="font-size: 0.8rem; color: #656d76; margin-top: 10px;">🔄 Updated: {format_datetime()}</div>', unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            # 5-Day Forecast
-            if data.get('forecast') and len(data['forecast']) > 0:
-                st.subheader("📅 5-Day Forecast")
-                
-                forecast_html = '<div class="forecast-grid">'
-                for item in data['forecast']:
-                    dt = datetime.fromtimestamp(item['dt']).strftime('%a, %d %b')
-                    temp = item['temp']
-                    weather = item['weather'].title()
-                    icon = item.get('icon', '')
-                    humidity = item.get('humidity', 'N/A')
-                    wind = item.get('wind_speed', 'N/A')
-                    
-                    icon_url = f"https://openweathermap.org/img/wn/{icon}.png" if icon else ""
-                    
-                    forecast_html += f'''
-                    <div class="forecast-item">
-                        <div class="day">{dt}</div>
-                        <div style="font-size:1.8rem;">{temp}°C</div>
-                        <div class="desc">{weather}</div>
-                        <div class="desc">💧 {humidity}%</div>
-                        <div class="desc">🌬️ {wind} m/s</div>
-                    </div>
-                    '''
-                forecast_html += '</div>'
-                st.markdown(forecast_html, unsafe_allow_html=True)
-            
+                c1, c2, c3 = st.columns([1,1,1])
+                with c2:
+                    st.image(icon_url, caption=data['weather'].title(), width=120)
+
+            # ── 5-Day Forecast ──
+            if st.session_state.weather_forecast and 'error' not in st.session_state.weather_forecast:
+                forecast = st.session_state.weather_forecast
+                st.markdown("---")
+                st.subheader(f"📅 5-Day Forecast for {forecast.get('city', city)}")
+
+                forecast_data = forecast.get('forecast', [])
+                if forecast_data:
+                    # Create forecast cards
+                    cols = st.columns(min(5, len(forecast_data)))
+                    for idx, day in enumerate(forecast_data):
+                        with cols[idx]:
+                            date_obj = datetime.strptime(day['date'], '%Y-%m-%d')
+                            day_name = date_obj.strftime('%a, %d %b')
+                            icon_url = f"https://openweathermap.org/img/wn/{day['icon']}@2x.png" if day.get('icon') else ""
+
+                            st.markdown(f"""
+                            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                border-radius: 16px; padding: 16px; text-align: center; color: white;
+                                box-shadow: 0 4px 15px rgba(0,0,0,0.2); margin-bottom: 10px;">
+                                <div style="font-size: 0.9rem; font-weight: 600; margin-bottom: 8px;">{day_name}</div>
+                                <img src="{icon_url}" style="width: 60px; height: 60px; margin: 5px 0;">
+                                <div style="font-size: 1.6rem; font-weight: 700;">{day['temp']}°C</div>
+                                <div style="font-size: 0.75rem; margin: 4px 0;">{day['description']}</div>
+                                <div style="font-size: 0.8rem; margin-top: 8px; opacity: 0.9;">
+                                    🔺 {day['max_temp']}° / 🔻 {day['min_temp']}°
+                                </div>
+                                <div style="font-size: 0.75rem; margin-top: 6px; opacity: 0.85;">
+                                    💧 {day['humidity']}% | 🌬️ {day['wind']} m/s
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+
+                    # Forecast trend chart
+                    fig_forecast = go.Figure()
+                    dates = [datetime.strptime(d['date'], '%Y-%m-%d').strftime('%d %b') for d in forecast_data]
+                    fig_forecast.add_trace(go.Scatter(x=dates, y=[d['max_temp'] for d in forecast_data],
+                        mode='lines+markers', name='Max Temp', line=dict(color='#ff6b6b', width=3)))
+                    fig_forecast.add_trace(go.Scatter(x=dates, y=[d['min_temp'] for d in forecast_data],
+                        mode='lines+markers', name='Min Temp', line=dict(color='#4ecdc4', width=3)))
+                    fig_forecast.add_trace(go.Scatter(x=dates, y=[d['temp'] for d in forecast_data],
+                        mode='lines+markers', name='Avg Temp', line=dict(color='#ffe66d', width=3)))
+                    fig_forecast.update_layout(
+                        title="📈 5-Day Temperature Trend",
+                        height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+                    )
+                    st.plotly_chart(fig_forecast, use_container_width=True)
+
+                    # Detailed forecast table
+                    with st.expander("📋 Detailed Forecast Data", expanded=False):
+                        forecast_df = pd.DataFrame(forecast_data)
+                        forecast_df['date'] = pd.to_datetime(forecast_df['date']).dt.strftime('%d-%m-%Y')
+                        forecast_df.columns = ['Date', 'Avg Temp (°C)', 'Min (°C)', 'Max (°C)', 'Weather', 'Description', 'Icon', 'Humidity (%)', 'Wind (m/s)', 'Pressure (hPa)']
+                        st.dataframe(forecast_df.drop(columns=['Icon']), use_container_width=True)
+
         elif st.session_state.weather_data and 'error' in st.session_state.weather_data:
             st.error(st.session_state.weather_data['error'])
+        else:
+            st.info("Enter a city name and click 'Get Weather' to see detailed weather information including 5-day forecast.")
 
-    # ============================================================
-    # FOOTER
-    # ============================================================
+    # Footer
+    # ------------------------------------------------------------------
     st.markdown("""
     <div class='pro-footer no-print'>
         🚂 AI EQMS Hub Pro • Created by Sharique<br>
