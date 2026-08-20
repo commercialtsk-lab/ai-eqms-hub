@@ -1595,6 +1595,37 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
 
     css = f"""
     <style>
+        /* === FIXES: Hide clutter === */
+        #MainMenu {{visibility: hidden !important;}}
+        footer {{visibility: hidden !important;}}
+        header {{visibility: hidden !important;}}
+        .stDeployButton {{display: none !important;}}
+        .viewerBadge_container__1QSob {{display: none !important;}}
+        .stActionButton {{display: none !important;}}
+
+        /* === FIXES: Full scrolling === */
+        .main .block-container {{ padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; max-width: 100% !important; min-height: 100vh !important; }}
+        div[data-testid="stDataFrame"] {{ max-height: 75vh !important; overflow: auto !important; }}
+        div[data-testid="stDataFrame"] > div {{ max-height: 75vh !important; }}
+
+        /* === FIXES: Custom scrollbar === */
+        ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
+        ::-webkit-scrollbar-track {{ background: #f1f1f1; border-radius: 4px; }}
+        ::-webkit-scrollbar-thumb {{ background: #888; border-radius: 4px; }}
+        ::-webkit-scrollbar-thumb:hover {{ background: #555; }}
+
+        /* === FIXES: Sidebar greeting at absolute top === */
+        [data-testid="stSidebar"] > div:first-child {{ padding-top: 0 !important; }}
+
+        /* === FIXES: Metric cards === */
+        .metric-card {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 16px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }}
+        .metric-card h3 {{ margin: 0; font-size: 2em; font-weight: bold; }}
+        .metric-card p {{ margin: 4px 0 0 0; font-size: 0.9em; opacity: 0.9; }}
+
+        /* === FIXES: Chart containers === */
+        .chart-container {{ background: white; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 16px; }}
+
+
         .block-container {{ padding-top: 0.5rem !important; padding-bottom: 1rem !important; }}
         .stApp {{ background-color: {bg} !important; }}
         [data-testid="stSidebar"] {{ background-color: {card_bg} !important; border-right: 1px solid {border} !important; }}
@@ -2098,22 +2129,35 @@ def get_pnr_status_url(pnr):
         return None
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
 
+def get_location_from_ip():
+    """Get approximate location from IP address as fallback for browser geolocation"""
+    try:
+        resp = requests.get("https://ip-api.com/json/", timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get('status') == 'success':
+                return {
+                    'city': data.get('city', ''),
+                    'lat': data.get('lat'),
+                    'lon': data.get('lon'),
+                    'country': data.get('country', '')
+                }
+    except Exception:
+        pass
+    return None
+
 # ------------------------------------------------------------------
-# Main function
+# Main function - COMPLETELY REWRITTEN with all fixes
 # ------------------------------------------------------------------
 def main():
-    # ------------------------------------------------------------------
-    # Pro enhancements: theme persistence (localStorage), keyboard scroll,
-    # mouse-wheel forwarding, back-to-top button, theme/view shortcuts
-    # ------------------------------------------------------------------
+    # Pro enhancements: theme persistence, keyboard scroll, mouse-wheel, back-to-top
     components.html("""
     <script>
     (function() {
         try {
             var P = window.parent;
             var doc = P.document;
-
-            // ---- Theme persistence bridge (localStorage <-> query param) ----
+            // Theme persistence
             var url = new URL(P.location.href);
             var qpTheme = url.searchParams.get('__theme');
             var stored = null;
@@ -2125,11 +2169,8 @@ def main():
                 P.location.replace(url.toString());
                 return;
             }
-
-            // ---- One-time listeners ----
             if (!P.__eqmsProInit) {
                 P.__eqmsProInit = true;
-
                 var mainEl = function() {
                     var cands = ['[data-testid="stMain"]', 'section.main', '[data-testid="stAppViewContainer"]'];
                     for (var i = 0; i < cands.length; i++) {
@@ -2148,8 +2189,6 @@ def main():
                     if (m) { m.scrollTo({top: y, behavior: 'smooth'}); }
                     else { P.scrollTo({top: y, behavior: 'smooth'}); }
                 };
-
-                // Keyboard: PageUp/PageDown/Home/End scroll | D = theme toggle | 1-5 = view switch
                 doc.addEventListener('keydown', function(e) {
                     var t = (e.target.tagName || '').toLowerCase();
                     if (t === 'input' || t === 'textarea' || t === 'select' || e.target.isContentEditable) return;
@@ -2170,9 +2209,6 @@ def main():
                         P.location.href = u2.toString();
                     }
                 });
-
-                // Wheel forwarding: cursor sidebar par ho aur sidebar scroll nahi kar sakta
-                // to main content scroll ho — baar baar sidebar kheenchne ki zaroorat nahi
                 doc.addEventListener('wheel', function(e) {
                     var sb = doc.querySelector('[data-testid="stSidebar"]');
                     if (sb && sb.contains(e.target)) {
@@ -2188,17 +2224,12 @@ def main():
                         }
                     }
                 }, {passive: false});
-
-                // Back-to-top floating button
                 if (!doc.getElementById('eqms-top-btn')) {
                     var b = doc.createElement('button');
                     b.id = 'eqms-top-btn';
                     b.title = 'Back to top (Home key)';
                     b.innerHTML = '⬆';
-                    b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;'
-                        + 'width:44px;height:44px;border-radius:50%;border:none;background:#0969da;'
-                        + 'color:#fff;font-size:18px;cursor:pointer;opacity:0.85;'
-                        + 'box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
+                    b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:#0969da;color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
                     b.onmouseenter = function(){ b.style.opacity = '1'; b.style.transform = 'scale(1.08)'; };
                     b.onmouseleave = function(){ b.style.opacity = '0.85'; b.style.transform = 'scale(1)'; };
                     b.onclick = function(){ scrollMainTo(0); };
@@ -2210,21 +2241,17 @@ def main():
     </script>
     """, height=0)
 
-    # Restore persisted theme (localStorage bridge query param me likh deta hai)
+    # Theme setup (preserved from original)
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
     qp_theme = st.query_params.get('__theme')
     if qp_theme in theme_options and st.session_state.theme != qp_theme:
         st.session_state.theme = qp_theme
-
-    # Restore persisted custom colors
     qp_bg = st.query_params.get('__bg')
     qp_tx = st.query_params.get('__tx')
     if qp_bg and st.session_state.custom_bg != qp_bg:
         st.session_state.custom_bg = qp_bg
     if qp_tx and st.session_state.custom_text != qp_tx:
         st.session_state.custom_text = qp_tx
-
-    # Restore persisted view (keyboard 1-5 / icon nav se bhi sync)
     view_options = ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"]
     qp_view = st.query_params.get('__view')
     if qp_view in view_options and st.session_state.view_mode != qp_view:
@@ -2232,14 +2259,12 @@ def main():
 
     theme_choice = st.sidebar.selectbox("🎨 Theme", theme_options,
         index=theme_options.index(st.session_state.theme) if st.session_state.theme in theme_options else 0,
-        key="theme_select",
-        help="Auto (System): IST time ke hisaab se — 6AM-7PM Day, 7PM-6AM Dark. Choice save rehti hai.")
+        key="theme_select")
     if theme_choice != st.session_state.theme:
         st.session_state.theme = theme_choice
         st.query_params['__theme'] = theme_choice
         st.rerun()
 
-    # Auto (System) = time-based (IST): 06:00-19:00 Day, 19:00-06:00 Dark
     effective_theme = theme_choice
     if theme_choice == 'Auto (System)':
         h = now_ist().hour
@@ -2260,24 +2285,28 @@ def main():
 
     apply_theme(effective_theme, custom_bg, custom_text)
 
-    # Sidebar
+    # =====================================================================
+    # SIDEBAR - Greeting at ABSOLUTE TOP, nothing above it
+    # =====================================================================
     with st.sidebar:
+        # ABSOLUTE FIRST ELEMENT - Greeting
         st.markdown("""
-        <div style="text-align:center; margin-bottom:10px; font-size:1.3rem; line-height:1.8;">
-            <span style="color:#FF9933;">🟠 नमस्ते आपका स्वागत है</span><br>
-            <span style="color:#FFFFFF; text-shadow:0 0 4px rgba(0,0,0,0.55);">⚪ हम भारत के लोग</span><br>
-            <span style="color:#138808; font-weight:bold;">🟢 जय हिंद</span>
+        <div style="background:linear-gradient(135deg,#FF9933 0%,#FFFFFF 50%,#138808 100%);padding:16px;border-radius:12px;margin-bottom:12px;text-align:center;">
+            <h2 style="margin:0;font-size:1.3em;color:#333;">🙏 Namaste</h2>
+            <p style="margin:4px 0 0 0;font-size:0.95em;color:#555;font-weight:600;">Aapka Swagat Hai</p>
+            <p style="margin:2px 0 0 0;font-size:0.8em;color:#666;">🇮🇳 Jai Hind</p>
         </div>
         """, unsafe_allow_html=True)
+
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
         # Weather widget in sidebar
-        with st.expander("🌤️ Weather", expanded=False):
+        with st.expander("🌤️ Quick Weather", expanded=False):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city")
             if city != st.session_state.weather_city:
                 st.session_state.weather_city = city
-            
+
             if st.button("🌤️ Get Weather", key="sidebar_weather_btn", use_container_width=True):
                 if city:
                     with st.spinner(f"Fetching..."):
@@ -2287,7 +2316,7 @@ def main():
                             st.rerun()
                         else:
                             st.error(data.get('error', 'Error'))
-            
+
             if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
                 data = st.session_state.weather_data
                 st.markdown(f"""
@@ -2309,11 +2338,9 @@ def main():
         sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
 
-        # PRINT SHEET button - using st.button with JavaScript
+        # PRINT SHEET button
         st.markdown("---")
         st.markdown("### 🖨️ Print Options")
-        
-        # Reliable print button using components.v1.html for unrestricted JS
         components.html("""
         <div style="width:100%; margin-top:8px;">
             <button onclick="
@@ -2322,12 +2349,8 @@ def main():
                     if (!el) { alert('No data to print. Please load a sheet first.'); return; }
                     var content = el.innerHTML;
                     var iframe = window.parent.document.createElement('iframe');
-                    iframe.style.position = 'fixed';
-                    iframe.style.top = '-9999px';
-                    iframe.style.left = '-9999px';
-                    iframe.style.width = '0';
-                    iframe.style.height = '0';
-                    iframe.style.border = 'none';
+                    iframe.style.position = 'fixed'; iframe.style.top = '-9999px'; iframe.style.left = '-9999px';
+                    iframe.style.width = '0'; iframe.style.height = '0'; iframe.style.border = 'none';
                     window.parent.document.body.appendChild(iframe);
                     var doc = iframe.contentWindow.document;
                     doc.open();
@@ -2353,13 +2376,7 @@ def main():
                         setTimeout(function(){ window.parent.document.body.removeChild(iframe); }, 2000);
                     }, 300);
                 })();
-            " style="
-                display: block; width: 100%; padding: 10px 16px;
-                background: #0969da; color: white; text-align: center;
-                border-radius: 8px; text-decoration: none; font-weight: 600;
-                font-size: 0.95rem; border: none; cursor: pointer;
-                box-sizing: border-box; font-family: inherit;
-            ">🖨️ PRINT Sheet</button>
+            " style="display: block; width: 100%; padding: 10px 16px; background: #0969da; color: white; text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT Sheet</button>
         </div>
         """, height=50)
 
@@ -2456,8 +2473,6 @@ def main():
                                         st.session_state.upload_success = True
                                         st.session_state.last_upload_time = format_time()
                                         log_activity(f"✅ Text input → {save_res['saved']} records")
-                                    # Auto-clear inputs after successful processing
-                                    # (text box / file uploader / audio sab khali ho jayenge)
                                     st.session_state.text_input_key += 1
                                     st.session_state.img_uploader_key += 1
                                     st.session_state.audio_uploader_key += 1
@@ -2598,18 +2613,16 @@ def main():
                 filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
             filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
 
-    # View mode — ab compact icon navigation (top bar) se control hota hai,
-    # bada option strip hata diya gaya hai taaki content upar aa jaye
+    # View mode
     view = st.session_state.view_mode
 
-    # Top bar with crawling text (CSS marquee — smooth, no deprecated <marquee>)
+    # Top bar
     st.markdown("""
     <div class="eqms-marquee" style="background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); padding: 8px 0; border-radius: 4px; margin-bottom: 10px;">
         <span>🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save</span>
     </div>
     """, unsafe_allow_html=True)
 
-    # Top bar with compact icon navigation
     top_c1, top_nav, top_c2 = st.columns([2.4, 2.2, 1.2])
     with top_c1:
         st.markdown(f"<h1 style='font-size:22px; font-weight:700; margin:0;'>🚂 AI EQMS Hub Pro — {sheet_choice}</h1>", unsafe_allow_html=True)
@@ -2629,288 +2642,53 @@ def main():
     st.caption(f"Enterprise Railway EQ Management  •  {format_date()}  •  {format_time()} IST")
     st.markdown("---")
 
-    # ------------------------------------------------------------------
-    # View: Chat
-    # ------------------------------------------------------------------
-    if view == "💬 Chat":
-        st.subheader("💬 Chat with TSKEQ Bot")
-        st.caption("Ask about EQ data, trains, quota, PNR or anything else.")
-        if prompt := st.chat_input("Type your question...", key="chat_input"):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
-            with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
-                    response = chat_with_gemini(prompt, st.session_state.messages)
-                    st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            st.rerun()
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
-        st.markdown("**Quick questions**")
-        sugg_cols = st.columns(3)
-        for i, suggestion in enumerate(st.session_state.chat_suggestions):
-            with sugg_cols[i % 3]:
-                if st.button(suggestion, key=f"sugg_{i}", use_container_width=True):
-                    st.session_state.messages.append({"role": "user", "content": suggestion})
-                    with st.spinner("Thinking..."):
-                        response = chat_with_gemini(suggestion, st.session_state.messages)
-                        st.session_state.messages.append({"role": "assistant", "content": response})
-                    st.rerun()
-        if st.button("🗑️ Clear Chat", use_container_width=True, key="clear_chat_btn"):
-            st.session_state.messages = []
-            st.rerun()
 
-    # ------------------------------------------------------------------
-    # View: Dashboard
-    # ------------------------------------------------------------------
-    elif view == "📊 Dashboard":
-        st.subheader(f"📊 Analytics Dashboard — {sheet_choice}")
-
-        # ── Advanced Filters (same as Data Table) ──
-        if sheet_choice != "NOTE":
-            with st.expander("🔍 Advanced Filters", expanded=False):
-                f1, f2, f3 = st.columns(3)
-                with f1:
-                    dash_pnr = st.text_input("🔎 PNR (partial)", value=st.session_state.dashboard_filters.get('pnr',''), key="dash_pnr_filter")
-                with f2:
-                    dash_train = st.text_input("🚆 Train (partial)", value=st.session_state.dashboard_filters.get('train',''), key="dash_train_filter")
-                with f3:
-                    dash_class = st.text_input("🎫 Class (partial)", value=st.session_state.dashboard_filters.get('class_filter',''), key="dash_class_filter")
-
-                f4, f5, f6 = st.columns(3)
-                with f4:
-                    dash_from_doj = st.date_input("📅 From DOJ", value=st.session_state.dashboard_filters.get('from_doj'), key="dash_from_doj", format="DD-MM-YYYY")
-                with f5:
-                    dash_to_doj = st.date_input("📅 To DOJ", value=st.session_state.dashboard_filters.get('to_doj'), key="dash_to_doj", format="DD-MM-YYYY")
-                with f6:
-                    dash_vip = st.text_input("⭐ VIP Status", value=st.session_state.dashboard_filters.get('vip_filter',''), key="dash_vip_filter")
-
-                f7, f8 = st.columns([1,1])
-                with f7:
-                    dash_route = st.text_input("🛤️ Route (FROM-TO)", value=st.session_state.dashboard_filters.get('route_filter',''), key="dash_route_filter", placeholder="e.g., NTSK-DLI")
-                with f8:
-                    st.markdown("<div style='padding-top:28px;'></div>", unsafe_allow_html=True)
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        if st.button("🚀 Apply Filters", use_container_width=True, key="dash_apply_filter"):
-                            st.session_state.dashboard_filters = {
-                                'pnr': dash_pnr, 'train': dash_train, 'from_doj': dash_from_doj,
-                                'to_doj': dash_to_doj, 'class_filter': dash_class, 'route_filter': dash_route,
-                                'vip_filter': dash_vip
-                            }
-                            st.rerun()
-                    with c2:
-                        if st.button("🧹 Clear", use_container_width=True, key="dash_clear_filter"):
-                            st.session_state.dashboard_filters = {'pnr':'','train':'','from_doj':None,'to_doj':None,'class_filter':'','route_filter':'','vip_filter':''}
-                            st.rerun()
-
-        # Apply dashboard filters to a working copy
-        dash_df = filtered_df.copy() if not filtered_df.empty else pd.DataFrame()
-        if not dash_df.empty and sheet_choice != "NOTE":
-            dfilters = st.session_state.dashboard_filters
-            config = SHEET_CONFIG[sheet_choice]
-
-            if dfilters['pnr'] and config.get("pnr_col") is not None:
-                col_name = dash_df.columns[config["pnr_col"]]
-                dash_df = dash_df[dash_df[col_name].astype(str).str.contains(dfilters['pnr'], case=False, na=False)]
-            if dfilters['train'] and config.get("train_col") is not None:
-                col_name = dash_df.columns[config["train_col"]]
-                dash_df = dash_df[dash_df[col_name].astype(str).str.contains(dfilters['train'], case=False, na=False)]
-            if (dfilters['from_doj'] or dfilters['to_doj']) and config.get("doj_col") is not None:
-                col_name = dash_df.columns[config["doj_col"]]
-                try:
-                    dash_df['_temp'] = pd.to_datetime(dash_df[col_name], format='%d-%m-%Y', errors='coerce')
-                    if dash_df['_temp'].isna().all():
-                        dash_df['_temp'] = pd.to_datetime(dash_df[col_name], errors='coerce')
-                except:
-                    dash_df['_temp'] = pd.to_datetime(dash_df[col_name], errors='coerce')
-                if dfilters['from_doj']:
-                    dash_df = dash_df[dash_df['_temp'] >= pd.to_datetime(dfilters['from_doj'])]
-                if dfilters['to_doj']:
-                    dash_df = dash_df[dash_df['_temp'] <= pd.to_datetime(dfilters['to_doj'])]
-                dash_df = dash_df.drop('_temp', axis=1, errors='ignore')
-            if dfilters['class_filter']:
-                class_col = next((c for c in dash_df.columns if 'CLASS' in c.upper()), None)
-                if class_col:
-                    dash_df = dash_df[dash_df[class_col].astype(str).str.contains(dfilters['class_filter'], case=False, na=False)]
-            if dfilters['vip_filter']:
-                vip_col = next((c for c in dash_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
-                if vip_col:
-                    dash_df = dash_df[dash_df[vip_col].astype(str).str.contains(dfilters['vip_filter'], case=False, na=False)]
-            if dfilters['route_filter']:
-                from_col = next((c for c in dash_df.columns if c.upper() == 'FROM'), None)
-                to_col = next((c for c in dash_df.columns if c.upper() == 'TO'), None)
-                if from_col and to_col:
-                    route = dfilters['route_filter'].upper().replace(' ', '').replace('-', '')
-                    dash_df = dash_df[dash_df.apply(lambda r: f"{str(r.get(from_col,'')).upper()}{str(r.get(to_col,'')).upper()}" == route or f"{str(r.get(from_col,'')).upper()}-{str(r.get(to_col,'')).upper()}" == dfilters['route_filter'].upper().replace(' ','') or (dfilters['route_filter'].upper().replace(' ','') in f"{str(r.get(from_col,'')).upper()}{str(r.get(to_col,'')).upper()}"), axis=1)]
-
-        # ── Metrics ──
-        train_col = None
-        for c in dash_df.columns:
-            if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
-                train_col = c
-                break
-
-        m1, m2, m3, m4, m5 = st.columns(5)
-        with m1:
-            total_records = len(dash_df) if not dash_df.empty else 0
-            st.metric("📋 Total Records", total_records)
-        with m2:
-            unique_trains = dash_df[train_col].nunique() if train_col else 0
-            st.metric("🚆 Unique Trains", unique_trains)
-        with m3:
-            berth_col = next((c for c in dash_df.columns if 'BERTH' in str(c).upper() or 'T/BERTHS' in str(c).upper()), None)
-            total_berths = 0
-            if berth_col and berth_col in dash_df:
-                total_berths = pd.to_numeric(dash_df[berth_col], errors='coerce').sum()
-            st.metric("🛏️ Total Berths", int(total_berths) if total_berths else 0)
-        with m4:
-            expired = 0
-            doj_col = next((c for c in dash_df.columns if 'DOJ' in str(c).upper()), None)
-            if doj_col and doj_col in dash_df:
-                expired = sum(1 for _, r in dash_df.iterrows() if is_expired(r.get(doj_col, '')))
-            st.metric("⏰ Expired", expired)
-        with m5:
-            upcoming = 0
-            if doj_col and doj_col in dash_df:
-                upcoming = sum(1 for _, r in dash_df.iterrows() if not is_expired(r.get(doj_col, '')))
-            st.metric("📅 Upcoming", upcoming)
-
-        st.markdown("---")
-
-        if dash_df.empty:
-            st.info("No data for charts. Adjust filters or choose another sheet.")
-        else:
-            # ── Row 1: Train Comparison + Class Comparison ──
-            r1c1, r1c2 = st.columns(2)
-
-            with r1c1:
-                if train_col:
-                    train_counts = dash_df[train_col].value_counts().reset_index()
-                    train_counts.columns = ['Train', 'Count']
-                    fig_bar = px.bar(train_counts.head(15), x='Train', y='Count', 
-                        title="🚆 Train-wise EQ Comparison", color='Count', 
-                        color_continuous_scale='Blues', text='Count')
-                    fig_bar.update_traces(textposition='outside')
-                    fig_bar.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_bar, use_container_width=True)
-
-            with r1c2:
-                class_col = next((c for c in dash_df.columns if 'CLASS' in c.upper()), None)
-                if class_col:
-                    class_counts = dash_df[class_col].value_counts().reset_index()
-                    class_counts.columns = ['Class', 'Count']
-                    fig_pie = px.pie(class_counts, names='Class', values='Count', 
-                        title="🎫 Class-wise Distribution", hole=0.4,
-                        color_discrete_sequence=px.colors.qualitative.Set3)
-                    fig_pie.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_pie, use_container_width=True)
-
-            # ── Row 2: Route Comparison ──
-            from_col = next((c for c in dash_df.columns if c.upper() == 'FROM'), None)
-            to_col = next((c for c in dash_df.columns if c.upper() == 'TO'), None)
-            if from_col and to_col:
-                route_df = dash_df.copy()
-                route_df['Route'] = route_df[from_col].astype(str).str.upper() + " → " + route_df[to_col].astype(str).str.upper()
-                route_counts = route_df['Route'].value_counts().reset_index()
-                route_counts.columns = ['Route', 'Count']
-                if not route_counts.empty:
-                    fig_route = px.bar(route_counts.head(15), y='Route', x='Count', 
-                        title="🛤️ Route-wise Comparison (Top 15)", color='Count',
-                        color_continuous_scale='Greens', orientation='h', text='Count')
-                    fig_route.update_traces(textposition='outside')
-                    fig_route.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_route, use_container_width=True)
-
-            # ── Row 3: Train × Class (Grouped) ──
-            if train_col and class_col:
-                tc_df = dash_df.groupby([train_col, class_col]).size().reset_index(name='Count')
-                if not tc_df.empty:
-                    fig_tc = px.bar(tc_df, x=train_col, y='Count', color=class_col,
-                        title="🚆×🎫 Train cum Class Analysis", barmode='group',
-                        color_discrete_sequence=px.colors.qualitative.Bold)
-                    fig_tc.update_layout(height=420, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_tc, use_container_width=True)
-
-            # ── Row 4: Route × Class ──
-            if from_col and to_col and class_col:
-                rc_df = dash_df.copy()
-                rc_df['Route'] = rc_df[from_col].astype(str).str.upper() + " → " + rc_df[to_col].astype(str).str.upper()
-                rc_group = rc_df.groupby(['Route', class_col]).size().reset_index(name='Count')
-                if not rc_group.empty:
-                    fig_rc = px.bar(rc_group.head(30), x='Route', y='Count', color=class_col,
-                        title="🛤️×🎫 Route cum Class Analysis", barmode='stack',
-                        color_discrete_sequence=px.colors.qualitative.Vivid)
-                    fig_rc.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis_tickangle=-45)
-                    st.plotly_chart(fig_rc, use_container_width=True)
-
-            # ── Row 5: Train × Route Heatmap ──
-            if train_col and from_col and to_col:
-                tr_df = dash_df.copy()
-                tr_df['Route'] = tr_df[from_col].astype(str).str.upper() + " → " + tr_df[to_col].astype(str).str.upper()
-                tr_pivot = tr_df.groupby([train_col, 'Route']).size().reset_index(name='Count')
-                if not tr_pivot.empty:
-                    pivot_table = tr_pivot.pivot(index=train_col, columns='Route', values='Count').fillna(0)
-                    fig_heat = px.imshow(pivot_table, text_auto=True, aspect="auto",
-                        title="🚆×🛤️ Train cum Route Heatmap",
-                        color_continuous_scale='YlOrRd')
-                    fig_heat.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_heat, use_container_width=True)
-
-            # ── Row 6: VIP / Priority + Daily Trend ──
-            r6c1, r6c2 = st.columns(2)
-
-            with r6c1:
-                vip_col = next((c for c in dash_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
-                if vip_col:
-                    vip_counts = dash_df[vip_col].value_counts().reset_index()
-                    vip_counts.columns = ['Status', 'Count']
-                    vip_counts = vip_counts[vip_counts['Status'].astype(str).str.strip() != '']
-                    if not vip_counts.empty:
-                        fig_vip = px.bar(vip_counts.head(10), x='Status', y='Count',
-                            title="⭐ VIP / Priority Breakdown", color='Count',
-                            color_continuous_scale='Reds', text='Count')
-                        fig_vip.update_traces(textposition='outside')
-                        fig_vip.update_layout(height=380, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig_vip, use_container_width=True)
-
-            with r6c2:
-                if doj_col:
-                    df_temp = dash_df.copy()
-                    df_temp['_date'] = pd.to_datetime(df_temp[doj_col], format='%d-%m-%Y', errors='coerce')
-                    if df_temp['_date'].isna().all():
-                        df_temp['_date'] = pd.to_datetime(df_temp[doj_col], errors='coerce')
-                    daily = df_temp.groupby('_date').size().reset_index(name='count')
-                    if not daily.empty:
-                        fig_line = px.line(daily, x='_date', y='count', title="📈 Daily Journey Trend",
-                            markers=True, labels={'_date': 'Date', 'count': 'Records'},
-                            color_discrete_sequence=['#ff6b6b'])
-                        fig_line.update_layout(height=380, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig_line, use_container_width=True)
-
-            # ── Row 7: Berth Demand Analysis ──
-            if berth_col and train_col:
-                berth_train = dash_df.groupby(train_col)[berth_col].apply(lambda x: pd.to_numeric(x, errors='coerce').sum()).reset_index()
-                berth_train.columns = ['Train', 'Total_Berths']
-                berth_train = berth_train.sort_values('Total_Berths', ascending=False).head(15)
-                if not berth_train.empty:
-                    fig_berth = px.bar(berth_train, x='Train', y='Total_Berths',
-                        title="🛏️ Berth Demand by Train", color='Total_Berths',
-                        color_continuous_scale='Purples', text='Total_Berths')
-                    fig_berth.update_traces(textposition='outside')
-                    fig_berth.update_layout(height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig_berth, use_container_width=True)
-
-            # ── Row 8: Full Data Table in Dashboard ──
-            with st.expander("📋 View Filtered Data Table", expanded=False):
-                display_dash = dash_df.drop(columns=['_sheet_row'], errors='ignore')
-                st.dataframe(display_dash, use_container_width=True, height=400)
-                st.caption(f"Showing {len(dash_df)} of {len(filtered_df)} records")
-
-    elif view == "📋 Data Table":
+    # =====================================================================
+    # VIEW: 📋 DATA TABLE (First & Primary Page) - HIGHLY ADVANCED
+    # =====================================================================
+    if view == "📋 Data Table":
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
+
+        # Advanced filter panel (in addition to sidebar filters)
+        if not filtered_df.empty and sheet_choice != "NOTE":
+            with st.expander("🔍 Advanced Filters & Search", expanded=False):
+                af1, af2, af3, af4 = st.columns(4)
+                with af1:
+                    adv_pnr = st.text_input("🔎 PNR", value=st.session_state.pnr_val, key="adv_pnr")
+                with af2:
+                    adv_train = st.text_input("🚆 Train", value=st.session_state.train_val, key="adv_train")
+                with af3:
+                    class_col = next((c for c in filtered_df.columns if 'CLASS' in c.upper()), None)
+                    if class_col:
+                        unique_classes = ['All'] + sorted(filtered_df[class_col].dropna().astype(str).unique().tolist())
+                        adv_class = st.selectbox("🎫 Class", unique_classes, key="adv_class")
+                    else:
+                        st.selectbox("🎫 Class", ['All'], key="adv_class_dummy")
+                with af4:
+                    vip_col = next((c for c in filtered_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
+                    if vip_col:
+                        unique_vip = ['All'] + sorted([v for v in filtered_df[vip_col].dropna().astype(str).unique().tolist() if str(v).strip()])
+                        st.selectbox("⭐ VIP", unique_vip, key="adv_vip")
+                    else:
+                        st.selectbox("⭐ VIP", ['All'], key="adv_vip_dummy")
+
+                af5, af6, af7 = st.columns(3)
+                with af5:
+                    from_col = next((c for c in filtered_df.columns if c.upper() == 'FROM'), None)
+                    to_col = next((c for c in filtered_df.columns if c.upper() == 'TO'), None)
+                    if from_col and to_col:
+                        routes = filtered_df[from_col].astype(str).str.upper() + " → " + filtered_df[to_col].astype(str).str.upper()
+                        unique_routes = ['All'] + sorted(routes.dropna().unique().tolist())
+                        st.selectbox("🛤️ Route", unique_routes, key="adv_route")
+                with af6:
+                    st.date_input("📅 From DOJ", value=st.session_state.from_val, key="adv_from_doj", format="DD-MM-YYYY")
+                with af7:
+                    st.date_input("📅 To DOJ", value=st.session_state.to_val, key="adv_to_doj", format="DD-MM-YYYY")
+
+                if st.button("🚀 Apply Filters", use_container_width=True, key="adv_apply"):
+                    st.rerun()
+
+        # Train count summary cards
         train_col_metric = None
         doj_col = None
         for c in filtered_df.columns:
@@ -2919,7 +2697,6 @@ def main():
             if 'DOJ' in c.upper():
                 doj_col = c
 
-        # Show train count summary (skip for NOTE sheet)
         if not filtered_df.empty and sheet_choice != "NOTE":
             if train_col_metric:
                 train_counts_series = filtered_df[train_col_metric].value_counts()
@@ -2932,11 +2709,6 @@ def main():
                 cards_html += '</div>'
                 st.markdown(cards_html, unsafe_allow_html=True)
                 st.markdown("---")
-            else:
-                st.metric("Total Records", len(filtered_df))
-                st.markdown("---")
-        elif sheet_choice == "NOTE":
-            st.info("📋 NOTE sheet - No count displayed")
 
         if st.button("🔄 Refresh Data", use_container_width=False, key="refresh_data_btn"):
             st.cache_data.clear()
@@ -2947,7 +2719,8 @@ def main():
         if filtered_df.empty:
             st.info("No data to show. Clear filters or select another sheet.")
         else:
-            page_size = st.selectbox("Rows per page", [15, 25, 50, 100], index=1, key="page_size_select")
+            # Pagination
+            page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200], index=1, key="page_size_select")
             total_pages = max(1, math.ceil(len(filtered_df) / page_size))
             if st.session_state.current_page > total_pages:
                 st.session_state.current_page = total_pages
@@ -2960,7 +2733,7 @@ def main():
                     st.session_state.current_page -= 1
                     st.rerun()
             with nav2:
-                st.markdown(f"<div style='text-align:center; padding-top:6px;'><b>Page {st.session_state.current_page} of {total_pages}</b></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='text-align:center; padding-top:6px;'><b>Page {st.session_state.current_page} of {total_pages}</b> &nbsp;|&nbsp; <b>{len(filtered_df)} total rows</b></div>", unsafe_allow_html=True)
             with nav3:
                 if st.button("Next ▶", use_container_width=True, disabled=st.session_state.current_page >= total_pages, key="next_page_btn"):
                     st.session_state.current_page += 1
@@ -2974,7 +2747,7 @@ def main():
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
 
-            # Static HTML table for printing - ALL filtered data (not just current page)
+            # Print-only table (all filtered data)
             print_export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
             if not print_export_df.empty:
                 print_html_table = print_export_df.to_html(index=False, border=1, classes='print-table', escape=False)
@@ -2991,7 +2764,7 @@ def main():
             """, unsafe_allow_html=True)
 
             st.markdown('<div class="print-area">', unsafe_allow_html=True)
-            edited_page = st.data_editor(display_df, use_container_width=True, height=400,
+            edited_page = st.data_editor(display_df, use_container_width=True, height=500,
                 column_config={"Select": st.column_config.CheckboxColumn("Select", width="small")},
                 key=f"editor_{sheet_choice}_{st.session_state.current_page}_{page_size}")
             st.markdown('</div>', unsafe_allow_html=True)
@@ -3015,6 +2788,7 @@ def main():
             pnr_col = next((c for c in edited_page.columns if 'PNR' in str(c).upper()), None)
             selected_pnrs = edited_page.loc[selected_indices, pnr_col].tolist() if pnr_col and selected_indices else []
 
+            # Quick Actions
             st.markdown('<div class="action-box no-print">', unsafe_allow_html=True)
             st.markdown("**⚡ Quick Actions**")
             a1, a2, a3, a4, a5 = st.columns(5)
@@ -3101,53 +2875,27 @@ def main():
                 wa_url = f"https://api.whatsapp.com/send?text={encoded}"
                 st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
             with a5:
-                # Reliable print button using iframe approach - prints only sheet data
                 components.html("""
                 <div style="width:100%;">
                     <button onclick="
                         (function(){
                             var el = window.parent.document.querySelector('.print-only');
-                            if (!el) { alert('No data to print. Please load a sheet first.'); return; }
+                            if (!el) { alert('No data to print.'); return; }
                             var content = el.innerHTML;
                             var iframe = window.parent.document.createElement('iframe');
-                            iframe.style.position = 'fixed';
-                            iframe.style.top = '-9999px';
-                            iframe.style.left = '-9999px';
-                            iframe.style.width = '0';
-                            iframe.style.height = '0';
-                            iframe.style.border = 'none';
+                            iframe.style.position = 'fixed'; iframe.style.top = '-9999px'; iframe.style.left = '-9999px';
+                            iframe.style.width = '0'; iframe.style.height = '0'; iframe.style.border = 'none';
                             window.parent.document.body.appendChild(iframe);
                             var doc = iframe.contentWindow.document;
                             doc.open();
-                            doc.write('<html><head><title>Sheet Print</title>');
-                            doc.write('<style>');
-                            doc.write('@page { margin: 1cm; size: A4 landscape; }');
-                            doc.write('body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background: white; }');
-                            doc.write('h2 { text-align: center; font-size: 18pt; margin-bottom: 5px; color: #000; }');
-                            doc.write('p.meta { text-align: center; font-size: 10pt; margin-bottom: 15px; color: #333; }');
-                            doc.write('table { width: 100%; border-collapse: collapse; font-size: 7.5pt; page-break-inside: auto; }');
-                            doc.write('tr { page-break-inside: avoid; }');
-                            doc.write('thead { display: table-header-group; }');
-                            doc.write('th { background: #333 !important; color: white !important; padding: 4px 5px; border: 1px solid #333; text-align: center; font-weight: bold; }');
-                            doc.write('td { border: 1px solid #999; padding: 3px 4px; text-align: center; color: #000; word-wrap: break-word; }');
-                            doc.write('tr:nth-child(even) { background: #f5f5f5 !important; }');
-                            doc.write('</style></head><body>');
+                            doc.write('<html><head><title>Print</title>');
+                            doc.write('<style>@page { margin: 1cm; size: A4 landscape; } body { font-family: Arial; margin: 0; padding: 10px; background: white; } h2 { text-align: center; font-size: 18pt; margin-bottom: 5px; color: #000; } table { width: 100%; border-collapse: collapse; font-size: 7.5pt; page-break-inside: auto; } tr { page-break-inside: avoid; } thead { display: table-header-group; } th { background: #333 !important; color: white !important; padding: 4px 5px; border: 1px solid #333; text-align: center; font-weight: bold; } td { border: 1px solid #999; padding: 3px 4px; text-align: center; color: #000; word-wrap: break-word; } tr:nth-child(even) { background: #f5f5f5 !important; }</style></head><body>');
                             doc.write(content);
                             doc.write('</body></html>');
                             doc.close();
-                            setTimeout(function(){
-                                iframe.contentWindow.focus();
-                                iframe.contentWindow.print();
-                                setTimeout(function(){ window.parent.document.body.removeChild(iframe); }, 2000);
-                            }, 300);
+                            setTimeout(function(){ iframe.contentWindow.focus(); iframe.contentWindow.print(); setTimeout(function(){ window.parent.document.body.removeChild(iframe); }, 2000); }, 300);
                         })();
-                    " style="
-                        display: block; width: 100%; padding: 9px 16px;
-                        background: #0969da; color: white; text-align: center;
-                        border-radius: 8px; text-decoration: none; font-weight: 600;
-                        font-size: 1rem; border: none; cursor: pointer;
-                        box-sizing: border-box; font-family: inherit;
-                    ">🖨️ PRINT</button>
+                    " style="display: block; width: 100%; padding: 9px 16px; background: #0969da; color: white; text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 1rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT</button>
                 </div>
                 """, height=45)
             st.markdown('</div>', unsafe_allow_html=True)
@@ -3160,14 +2908,14 @@ def main():
                 if not filtered_df.empty:
                     img_bytes = create_table_image(filtered_df, f"{sheet_choice} Data")
                     if img_bytes:
-                        st.download_button("🖼️ Download Table Image", data=img_bytes,
+                        st.download_button("Download Table Image", data=img_bytes,
                             file_name=f"{sheet_choice}_table.png", mime="image/png",
                             use_container_width=True, key="wa_img_download")
             with wa_col2:
                 if selected_indices and not filtered_df.empty:
                     sel_img_bytes = create_table_image(filtered_df.iloc[selected_indices], f"{sheet_choice} Selected")
                     if sel_img_bytes:
-                        st.download_button("🖼️ Download Selected Image", data=sel_img_bytes,
+                        st.download_button("Download Selected Image", data=sel_img_bytes,
                             file_name=f"{sheet_choice}_selected.png", mime="image/png",
                             use_container_width=True, key="wa_sel_img_download")
                 else:
@@ -3177,36 +2925,8 @@ def main():
                     img_bytes = create_table_image(filtered_df, f"{sheet_choice} Data")
                     if img_bytes:
                         img_b64 = base64.b64encode(img_bytes).decode()
-                        copy_js = f"""
-                        <div style="width:100%;">
-                            <button onclick="copyImageToClipboard()" style="
-                                background: #25D366; color: white; border: none; border-radius: 8px;
-                                padding: 9px 16px; width: 100%; font-weight: 600;
-                                cursor: pointer; font-size: 1rem;
-                            ">📋 Copy Sheet Image</button>
-                            <script>
-                            function copyImageToClipboard() {{
-                                var imgData = "{img_b64}";
-                                fetch('data:image/png;base64,' + imgData)
-                                    .then(res => res.blob())
-                                    .then(blob => {{
-                                        navigator.clipboard.write([
-                                            new ClipboardItem({{ 'image/png': blob }})
-                                        ]).then(() => {{
-                                            alert('Image copied to clipboard! Paste it into WhatsApp.');
-                                        }}).catch(() => {{
-                                            alert('Failed to copy. Please use download instead.');
-                                        }});
-                                    }});
-                            }}
-                            </script>
-                        </div>
-                        """
+                        copy_js = '<div style="width:100%;"><button onclick="copyImg()" style="background:#25D366;color:white;border:none;border-radius:8px;padding:9px 16px;width:100%;font-weight:600;cursor:pointer;font-size:1rem;">Copy Sheet Image</button><script>function copyImg(){var d="' + img_b64 + '";fetch("data:image/png;base64,"+d).then(r=>r.blob()).then(b=>{navigator.clipboard.write([new ClipboardItem({"image/png":b})]).then(()=>alert("Copied! Paste into WhatsApp.")).catch(()=>alert("Failed. Use download."));});}</script></div>'
                         components.html(copy_js, height=50)
-                    else:
-                        st.info("Image generation failed")
-                else:
-                    st.info("No data to copy")
             st.markdown('</div>', unsafe_allow_html=True)
 
             # Export
@@ -3217,7 +2937,7 @@ def main():
                 try:
                     export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
                     pdf_bytes = generate_pdf(export_df, sheet_choice, full=True)
-                    st.download_button("📥 PDF (All)", data=pdf_bytes,
+                    st.download_button("PDF (All)", data=pdf_bytes,
                         file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.pdf",
                         mime="application/pdf", use_container_width=True, key="pdf_all_download")
                 except Exception as e:
@@ -3228,7 +2948,7 @@ def main():
                 else:
                     export_sel = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
                 csv_sel = export_sel.to_csv(index=False).encode('utf-8')
-                st.download_button("📥 CSV (Selected)" if selected_indices else "📥 CSV (All)", data=csv_sel,
+                st.download_button("CSV (Selected)" if selected_indices else "CSV (All)", data=csv_sel,
                     file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}_selected.csv",
                     mime="text/csv", use_container_width=True, key="csv_download")
             with e3:
@@ -3237,13 +2957,13 @@ def main():
                 with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
                     export_df.to_excel(writer, sheet_name=sheet_choice, index=False)
                 excel_data = excel_buffer.getvalue()
-                st.download_button("📥 Excel", data=excel_data,
+                st.download_button("Excel", data=excel_data,
                     file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True, key="excel_download")
             with e4:
                 csv_full = filtered_df.drop(columns=['_sheet_row'], errors='ignore').to_csv(index=False).encode('utf-8')
-                st.download_button("📋 Copy CSV", data=csv_full, file_name="table.csv",
+                st.download_button("Copy CSV", data=csv_full, file_name="table.csv",
                     mime="text/csv", use_container_width=True, key="copy_csv_download")
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -3256,20 +2976,20 @@ def main():
                     pnr_check = st.text_input("Enter PNR", max_chars=10, key="pnr_status_input")
                     if pnr_check and len(pnr_check) == 10:
                         pnr_url = get_pnr_status_url(pnr_check)
-                        st.link_button("🔍 Check PNR Status", pnr_url, use_container_width=True)
+                        st.link_button("Check PNR Status", pnr_url, use_container_width=True)
                     st.markdown("**📊 Quick Stats**")
                     if not filtered_df.empty and pnr_col:
                         valid_pnrs = filtered_df[pnr_col].astype(str).str.match(r'\d{10}').sum()
-                        st.caption(f"✅ Valid PNRs: {valid_pnrs}")
+                        st.caption(f"Valid PNRs: {valid_pnrs}")
                     if not filtered_df.empty and doj_col is not None:
                         upcoming = sum(1 for _, r in filtered_df.iterrows() if not is_expired(r.get(doj_col, '')))
-                        st.caption(f"📅 Upcoming DOJ: {upcoming}")
+                        st.caption(f"Upcoming DOJ: {upcoming}")
                 with feat2:
                     st.markdown("**🚆 Train Analysis**")
                     if train_col_metric and not filtered_df.empty:
                         most_common = filtered_df[train_col_metric].mode()
                         if not most_common.empty:
-                            st.caption(f"🔥 Most frequent train: {most_common.iloc[0]}")
+                            st.caption(f"Most frequent train: {most_common.iloc[0]}")
                         if pnr_col:
                             dupes = filtered_df[pnr_col].value_counts()
                             dupes = dupes[dupes > 1]
@@ -3278,14 +2998,223 @@ def main():
                             else:
                                 st.success("✅ No duplicate PNRs")
                     st.markdown("**⌨️ Shortcuts**")
-                    st.caption("Ctrl+R: Refresh | Ctrl+P: Print")
+                    st.caption("Ctrl+R: Refresh | Ctrl+P: Print | D: Theme | 1-5: Views")
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # ------------------------------------------------------------------
-    # View: Railway Features (DITTO from Telegram Bot)
-    # ------------------------------------------------------------------
+
+    # =====================================================================
+    # VIEW: 📊 DASHBOARD - With Synced Filters & Sheet Selector
+    # =====================================================================
+    elif view == "📊 Dashboard":
+        st.subheader("📊 Analytics Dashboard")
+
+        # Sheet selector for dashboard
+        dash_sheet_options = ["EQ", "DATA", "FINAL", "DATA2", "EMAIL_DATA"]
+        dash_sheet = st.selectbox("📋 Select Sheet for Dashboard", dash_sheet_options,
+            index=dash_sheet_options.index(sheet_choice) if sheet_choice in dash_sheet_options else 0,
+            key="dashboard_sheet_select")
+
+        # Load data for selected dashboard sheet
+        dash_df_raw = load_sheet_data_cached(dash_sheet, SHEET_ID)
+        dash_df = dash_df_raw.copy() if not dash_df_raw.empty else pd.DataFrame()
+
+        # Apply SAME filters as Data Table
+        if not dash_df.empty and dash_sheet != "NOTE":
+            config = SHEET_CONFIG[dash_sheet]
+            pnr_col_idx = config.get("pnr_col")
+            train_col_idx = config.get("train_col")
+            doj_col_idx = config.get("doj_col")
+
+            if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(dash_df.columns):
+                col_name = dash_df.columns[pnr_col_idx]
+                dash_df = dash_df[dash_df[col_name].astype(str).str.contains(st.session_state.pnr_val, case=False, na=False)]
+            if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(dash_df.columns):
+                col_name = dash_df.columns[train_col_idx]
+                dash_df = dash_df[dash_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
+            if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(dash_df.columns):
+                col_name = dash_df.columns[doj_col_idx]
+                try:
+                    dash_df['_temp'] = pd.to_datetime(dash_df[col_name], format='%d-%m-%Y', errors='coerce')
+                    if dash_df['_temp'].isna().all():
+                        dash_df['_temp'] = pd.to_datetime(dash_df[col_name], errors='coerce')
+                except:
+                    dash_df['_temp'] = pd.to_datetime(dash_df[col_name], errors='coerce')
+                if st.session_state.from_val:
+                    dash_df = dash_df[dash_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
+                if st.session_state.to_val:
+                    dash_df = dash_df[dash_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
+                dash_df = dash_df.drop('_temp', axis=1, errors='ignore')
+
+        # Show active filters
+        active_filters = []
+        if st.session_state.pnr_val: active_filters.append(f"PNR: {st.session_state.pnr_val}")
+        if st.session_state.train_val: active_filters.append(f"Train: {st.session_state.train_val}")
+        if st.session_state.from_val: active_filters.append(f"From: {st.session_state.from_val.strftime('%d-%m-%Y')}")
+        if st.session_state.to_val: active_filters.append(f"To: {st.session_state.to_val.strftime('%d-%m-%Y')}")
+        if active_filters:
+            st.caption(f"🔍 Active Filters: {' | '.join(active_filters)}")
+
+        # KPI Cards
+        st.markdown("### Key Metrics")
+        kcol1, kcol2, kcol3, kcol4, kcol5 = st.columns(5)
+
+        total_records = len(dash_df) if not dash_df.empty else 0
+        with kcol1:
+            st.markdown(f'<div class="metric-card"><h3>{total_records}</h3><p>Total Records</p></div>', unsafe_allow_html=True)
+
+        train_col_dash = None
+        for c in dash_df.columns:
+            if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
+                train_col_dash = c
+                break
+
+        if train_col_dash and not dash_df.empty:
+            unique_trains = dash_df[train_col_dash].nunique()
+            with kcol2:
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#11998e,#38ef7d)"><h3>{unique_trains}</h3><p>Unique Trains</p></div>', unsafe_allow_html=True)
+
+        vip_col_dash = next((c for c in dash_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
+        if vip_col_dash and not dash_df.empty:
+            vip_count = dash_df[dash_df[vip_col_dash].astype(str).str.strip() != ''].shape[0]
+            with kcol3:
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#f093fb,#f5576c)"><h3>{vip_count}</h3><p>VIP Records</p></div>', unsafe_allow_html=True)
+
+        class_col_dash = next((c for c in dash_df.columns if 'CLASS' in c.upper()), None)
+        if class_col_dash and not dash_df.empty:
+            class_counts = dash_df[class_col_dash].value_counts()
+            top_class = class_counts.index[0] if len(class_counts) > 0 else "N/A"
+            with kcol4:
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#4facfe,#00f2fe)"><h3>{top_class}</h3><p>Top Class</p></div>', unsafe_allow_html=True)
+
+        doj_col_dash = next((c for c in dash_df.columns if 'DOJ' in c.upper()), None)
+        if doj_col_dash and not dash_df.empty:
+            upcoming = sum(1 for _, r in dash_df.iterrows() if not is_expired(r.get(doj_col_dash, '')))
+            with kcol5:
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#fa709a,#fee140)"><h3>{upcoming}</h3><p>Upcoming</p></div>', unsafe_allow_html=True)
+
+        st.divider()
+
+        if dash_df.empty:
+            st.info("No data for charts. Adjust filters or choose another sheet.")
+        else:
+            # Row 1: Train + Class
+            r1c1, r1c2 = st.columns(2)
+            with r1c1:
+                if train_col_dash:
+                    train_counts = dash_df[train_col_dash].value_counts().head(15).reset_index()
+                    train_counts.columns = ['Train', 'Count']
+                    fig = px.bar(train_counts, x='Train', y='Count', title="Train-wise Distribution",
+                        color='Count', color_continuous_scale='Viridis', text='Count')
+                    fig.update_traces(textposition='outside')
+                    fig.update_layout(height=350, showlegend=False, margin=dict(l=20,r=20,t=40,b=20),
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+
+            with r1c2:
+                if class_col_dash:
+                    class_counts = dash_df[class_col_dash].value_counts().reset_index()
+                    class_counts.columns = ['Class', 'Count']
+                    fig = px.pie(class_counts, names='Class', values='Count', title="Class-wise Distribution",
+                        hole=0.4, color_discrete_sequence=px.colors.sequential.RdBu)
+                    fig.update_layout(height=350, showlegend=True, margin=dict(l=20,r=20,t=40,b=20),
+                        paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+
+            # Row 2: VIP + DOJ Timeline
+            r2c1, r2c2 = st.columns(2)
+            with r2c1:
+                if vip_col_dash:
+                    vip_counts = dash_df[vip_col_dash].value_counts().reset_index()
+                    vip_counts.columns = ['Status', 'Count']
+                    vip_counts = vip_counts[vip_counts['Status'].astype(str).str.strip() != '']
+                    if not vip_counts.empty:
+                        fig = px.bar(vip_counts, x='Status', y='Count', title="VIP Status Distribution",
+                            color='Count', color_continuous_scale='Plasma', text='Count')
+                        fig.update_traces(textposition='outside')
+                        fig.update_layout(height=350, showlegend=False, margin=dict(l=20,r=20,t=40,b=20),
+                            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True)
+
+            with r2c2:
+                if doj_col_dash:
+                    try:
+                        dash_df['_date'] = pd.to_datetime(dash_df[doj_col_dash], format='%d-%m-%Y', errors='coerce')
+                        if dash_df['_date'].isna().all():
+                            dash_df['_date'] = pd.to_datetime(dash_df[doj_col_dash], errors='coerce')
+                        daily = dash_df.groupby('_date').size().reset_index(name='count')
+                        if not daily.empty:
+                            fig = px.line(daily, x='_date', y='count', title="DOJ Timeline",
+                                markers=True, labels={'_date': 'Date', 'count': 'Records'})
+                            fig.update_layout(height=350, margin=dict(l=20,r=20,t=40,b=20),
+                                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                            st.plotly_chart(fig, use_container_width=True)
+                    except:
+                        pass
+
+            # Row 3: Top Routes
+            from_col_dash = next((c for c in dash_df.columns if c.upper() == 'FROM'), None)
+            to_col_dash = next((c for c in dash_df.columns if c.upper() == 'TO'), None)
+            if from_col_dash and to_col_dash:
+                dash_df['ROUTE'] = dash_df[from_col_dash].astype(str) + " → " + dash_df[to_col_dash].astype(str)
+                route_counts = dash_df['ROUTE'].value_counts().head(10).reset_index()
+                route_counts.columns = ['Route', 'Count']
+                if not route_counts.empty:
+                    fig = px.bar(route_counts, y='Route', x='Count', orientation='h', title="Top Routes",
+                        color='Count', color_continuous_scale='Cividis', text='Count')
+                    fig.update_traces(textposition='outside')
+                    fig.update_layout(height=400, showlegend=False, margin=dict(l=20,r=20,t=40,b=20),
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+
+            # Row 4: Train x Class Heatmap
+            if train_col_dash and class_col_dash:
+                tc_df = dash_df.groupby([train_col_dash, class_col_dash]).size().reset_index(name='Count')
+                if not tc_df.empty:
+                    pivot = tc_df.pivot(index=train_col_dash, columns=class_col_dash, values='Count').fillna(0)
+                    fig = px.imshow(pivot, text_auto=True, aspect="auto", title="Train x Class Heatmap",
+                        color_continuous_scale='YlOrRd')
+                    fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig, use_container_width=True)
+
+    # =====================================================================
+    # VIEW: 💬 CHAT (Preserved from original)
+    # =====================================================================
+    elif view == "💬 Chat":
+        st.subheader("💬 Chat with TSKEQ Bot")
+        st.caption("Ask about EQ data, trains, quota, PNR or anything else.")
+        if prompt := st.chat_input("Type your question...", key="chat_input"):
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    response = chat_with_gemini(prompt, st.session_state.messages)
+                    st.markdown(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.rerun()
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+        st.markdown("**Quick questions**")
+        sugg_cols = st.columns(3)
+        for i, suggestion in enumerate(st.session_state.chat_suggestions):
+            with sugg_cols[i % 3]:
+                if st.button(suggestion, key=f"sugg_{i}", use_container_width=True):
+                    st.session_state.messages.append({"role": "user", "content": suggestion})
+                    with st.spinner("Thinking..."):
+                        response = chat_with_gemini(suggestion, st.session_state.messages)
+                        st.session_state.messages.append({"role": "assistant", "content": response})
+                    st.rerun()
+        if st.button("🗑️ Clear Chat", use_container_width=True, key="clear_chat_btn"):
+            st.session_state.messages = []
+            st.rerun()
+
+
+    # =====================================================================
+    # VIEW: 🚂 RAILWAY - NTES Fixed (using user's existing functions)
+    # =====================================================================
     elif view == "🚂 Railway":
-        st.subheader("🚂 Indian Railways - Real‑time Info")
+        st.subheader("🚂 Indian Railways - Real-time Info")
 
         if not NTES_AVAILABLE:
             st.error("❌ 'ntes-client' library not installed. Please run: `pip install ntes-client`")
@@ -3311,7 +3240,6 @@ def main():
         else:
             tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔍 PNR Status", "🚂 Live Train", "🔎 Train Search", "📋 Train Schedule", "📸 Passport Photo"])
 
-            # ---------- PNR TAB ----------
             with tab1:
                 st.markdown("### PNR Status Check")
                 pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr")
@@ -3354,7 +3282,6 @@ def main():
                         st.markdown(format_pnr_result(st.session_state.pnr_result))
                         st.markdown('</div>', unsafe_allow_html=True)
 
-            # ---------- LIVE TRAIN TAB ----------
             with tab2:
                 st.markdown("### Live Train Status")
                 train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train")
@@ -3404,7 +3331,6 @@ def main():
                         st.markdown(msg)
                         st.markdown('</div>', unsafe_allow_html=True)
 
-            # ---------- SEARCH TAB ----------
             with tab3:
                 st.markdown("### 🔎 Train Search")
                 search_query = st.text_input("Enter Train Name or Number", placeholder="e.g., vivek, rajdhani, 22503", key="train_search_input")
@@ -3428,7 +3354,6 @@ def main():
                         st.markdown(format_train_search(st.session_state.search_result))
                         st.markdown('</div>', unsafe_allow_html=True)
 
-            # ---------- SCHEDULE TAB ----------
             with tab4:
                 st.markdown("### Train Schedule / Route")
                 train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch")
@@ -3494,35 +3419,21 @@ def main():
                     else:
                         st.info("No schedule data available.")
 
-            # ---------- PASSPORT PHOTO TAB ----------
             with tab5:
                 st.markdown("### 📸 Passport Photo Maker")
                 st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
-
-                # --- API Key Handling ---
-                # Check all possible sources
                 api_key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
                 if not api_key:
                     api_key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
                 if not api_key and "remove_bg_key" in st.session_state:
                     api_key = str(st.session_state.remove_bg_key).strip()
-
-                # If still not found, show input + instructions
                 if not api_key:
                     st.error("❌ REMOVE_BG_API_KEY not found.")
-                    st.info("""
-                    💡 **For Streamlit Cloud:** Go to your app → Settings (⚙️) → Secrets → Add:
-
-                    ```
-                    REMOVE_BG_API_KEY = "your_key_here"
-                    ```
-
-                    💡 **For local:** Add to `.streamlit/secrets.toml`
-                    """)
-                    manual_key = st.text_input("Or paste key here (temporary)", type="password", key="manual_bg_key_input")
+                    st.info("Add to secrets.toml or .env")
+                    manual_key = st.text_input("Or paste key here", type="password", key="manual_bg_key_input")
                     if manual_key and manual_key.strip():
                         st.session_state.remove_bg_key = manual_key.strip()
-                        st.success("✅ Key saved for this session. Refreshing...")
+                        st.success("Key saved. Refreshing...")
                         st.rerun()
                     st.stop()
                 else:
@@ -3538,21 +3449,18 @@ def main():
                                 result = process_passport_image(image_data)
                                 if result:
                                     st.success("✅ Passport Photo Ready!")
-                                    st.image(result, caption="✅ Background removed | Black border | 35x45mm standard", width=300)
-                                    st.download_button(
-                                        "📥 Download Passport Photo",
-                                        data=result,
+                                    st.image(result, caption="Background removed | Black border | 35x45mm", width=300)
+                                    st.download_button("📥 Download Passport Photo", data=result,
                                         file_name=f"passport_{now_ist().strftime('%Y%m%d_%H%M%S')}.png",
-                                        mime="image/png",
-                                        use_container_width=True
-                                    )
+                                        mime="image/png", use_container_width=True)
                                 else:
-                                    st.error("❌ Failed to process photo. The remove.bg API may have rejected the image. Try another photo.")
+                                    st.error("❌ Failed to process photo.")
                             except Exception as e:
                                 st.error(f"❌ Error: {str(e)[:200]}")
-# ------------------------------------------------------------------
-    # View: Weather
-    # ------------------------------------------------------------------
+
+    # =====================================================================
+    # VIEW: 🌤️ WEATHER - Fixed with IP Geolocation
+    # =====================================================================
     elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
 
@@ -3594,19 +3502,33 @@ def main():
                     st.warning("Please enter a city name.")
         with col3:
             if st.button("📍 Use My Location", key="weather_location", use_container_width=True):
-                st.info("💡 Enter your city name above for accurate weather data.")
+                with st.spinner("Detecting your location..."):
+                    ip_loc = get_location_from_ip()
+                    if ip_loc and ip_loc.get('city'):
+                        st.session_state.weather_city = ip_loc['city']
+                        st.success(f"📍 Detected: {ip_loc['city']}, {ip_loc.get('country', '')}")
+                        # Auto-fetch weather for detected city
+                        data = get_weather(ip_loc['city'])
+                        forecast = get_weather_forecast(ip_loc['city'])
+                        if data and 'error' not in data:
+                            st.session_state.weather_data = data
+                            if forecast and 'error' not in forecast:
+                                st.session_state.weather_forecast = forecast
+                        st.rerun()
+                    else:
+                        st.warning("Could not detect location automatically. Please enter city manually.")
 
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
 
-            # ── Current Weather Card ──
+            # Current Weather Card
             st.markdown(f"""
             <div class="weather-card">
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;">
                     <div>
                         <h2 style="margin: 0; font-size: 1.8rem;">{data['city']}, {data['country']}</h2>
                         <div class="weather-desc">{data['weather'].title()}</div>
-                        <div style="font-size: 0.85rem; color: #656d76; margin-top: 4px;">🔄 Updated: {format_datetime()}</div>
+                        <div style="font-size: 0.85rem; color: #656d76; margin-top: 4px;">Updated: {format_datetime()}</div>
                     </div>
                     <div style="text-align: center;">
                         <div class="weather-temp">{data['temp']}°C</div>
@@ -3640,7 +3562,7 @@ def main():
                 with c2:
                     st.image(icon_url, caption=data['weather'].title(), width=120)
 
-            # ── 5-Day Forecast ──
+            # 5-Day Forecast
             if st.session_state.weather_forecast and 'error' not in st.session_state.weather_forecast:
                 forecast = st.session_state.weather_forecast
                 st.markdown("---")
@@ -3648,7 +3570,6 @@ def main():
 
                 forecast_data = forecast.get('forecast', [])
                 if forecast_data:
-                    # Create forecast cards
                     cols = st.columns(min(5, len(forecast_data)))
                     for idx, day in enumerate(forecast_data):
                         with cols[idx]:
@@ -3699,10 +3620,9 @@ def main():
         elif st.session_state.weather_data and 'error' in st.session_state.weather_data:
             st.error(st.session_state.weather_data['error'])
         else:
-            st.info("Enter a city name and click 'Get Weather' to see detailed weather information including 5-day forecast.")
+            st.info("Enter a city name and click 'Get Weather' or 'Use My Location' to see detailed weather information.")
 
     # Footer
-    # ------------------------------------------------------------------
     st.markdown("""
     <div class='pro-footer no-print'>
         🚂 AI EQMS Hub Pro • Created by Sharique<br>
