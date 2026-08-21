@@ -35,7 +35,6 @@ try:
     NTES_AVAILABLE = True
 except ImportError:
     NTES_AVAILABLE = False
-    st.warning("⚠️ 'ntes-client' not installed. Railway features will be disabled. Run: pip install ntes-client")
 
 # ------------------------------------------------------------------
 # Streamlit page config
@@ -101,7 +100,12 @@ defaults = {
     'last_uploaded_drive_id': None,
     'manual_refresh': False,
     'sheet_print_data': None,
-    'dashboard_filters': {'pnr': '', 'train': '', 'from_doj': None, 'to_doj': None, 'class_filter': '', 'route_filter': '', 'vip_filter': ''}
+    'dashboard_filters': {'pnr': '', 'train': '', 'from_doj': None, 'to_doj': None, 'class_filter': '', 'route_filter': '', 'vip_filter': ''},
+    'global_search': '',
+    'sort_column': None,
+    'sort_ascending': True,
+    'column_filters': {},
+    'rows_per_page': 25,
 }
 
 for key, val in defaults.items():
@@ -260,8 +264,8 @@ def sanitize_latin(text):
     if not text:
         return ''
     replacements = {
-        '•': '-', '·': '-', '‘': "'", '’': "'",
-        '“': '"', '”': '"', '–': '-', '—': '-',
+        '•': '-', '·': '-', '\u2018': "'", '\u2019': "'",
+        '\u201c': '"', '\u201d': '"', '\u2013': '-', '\u2014': '-',
     }
     for k, v in replacements.items():
         text = text.replace(k, v)
@@ -324,7 +328,7 @@ def load_sheet_data_cached(sheet_name, sheet_id):
         return pd.DataFrame()
 
 # ------------------------------------------------------------------
-# Gemini Universal Parser (from Telegram bot - EXACT COPY)
+# Gemini Universal Parser
 # ------------------------------------------------------------------
 def smart_detect_warrant(text):
     if not text:
@@ -334,7 +338,7 @@ def smart_detect_warrant(text):
         r'IC[-_\s]*(\d{2,4})',
         r'WARRANT\s*NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
         r'WARRANT\s*NUMBER\s*[:#]?\s*([A-Z0-9\-]+)',
-        r'W[\/\-]?NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
+        r'W[/\-]?NO\.?\s*[:#]?\s*([A-Z0-9\-]+)',
         r'MP[-_\s]*(\d{2,4})',
         r'MLA[-_\s]*(\d{2,4})'
     ]
@@ -353,9 +357,9 @@ def smart_detect_rail_board(text):
     clean_text = re.sub(r'\s+', ' ', text).strip()
     patterns = [
         r'RAIL\s*BOARD',
-        r'OFFICE\s*OF\s*(?:THE\s*)?HON\'?BLE\s*MINISTER\s*RAILWAYS',
+        r'OFFICE\s*OF\s*(?:THE\s*)?HON\'BLE\s*MINISTER\s*RAILWAYS',
         r'OFFICE\s*OF\s*(?:THE\s*)?HONOURABLE\s*MINISTER\s*RAILWAYS',
-        r'HON\'?BLE\s*MINISTER\s*RAILWAYS',
+        r'HON\'BLE\s*MINISTER\s*RAILWAYS',
         r'HONOURABLE\s*MINISTER\s*RAILWAYS',
         r'MINISTER\s*RAILWAYS',
         r'MINISTRY\s*OF\s*RAILWAYS',
@@ -568,8 +572,8 @@ Otherwise, leave these fields empty.
 === EXTRACTION RULES ===
 1. PNR: 10 digits only. Remove any extra characters.
 2. Train Number: 3-5 digits. Remove DN/UP suffix.
-3. DOJ: Convert to DD-MM-YYYY. "24/25.06.26" → "24-06-2026"
-4. Phone: Remove all non‑digits, then take the LAST 10 digits. Example: "+919138328565" → "9138328565"
+3. DOJ: Convert to DD-MM-YYYY. "24/25.06.26" -> "24-06-2026"
+4. Phone: Remove all non-digits, then take the LAST 10 digits. Example: "+919138328565" -> "9138328565"
 5. Berths: Number only. Default 1.
 6. Warrant: Look for "IC-240", "MP-123", "WARRANT NO:", "W/No."
 7. Diary: Look for "DIARY NO:", "D/No."
@@ -769,7 +773,7 @@ Previous conversation:
         return f"⚠️ Error: Could not process your request. Please try again later. ({str(e)})"
 
 # ------------------------------------------------------------------
-# Weather API function
+# Weather API functions
 # ------------------------------------------------------------------
 def get_weather(city_name):
     if not city_name:
@@ -798,7 +802,6 @@ def get_weather(city_name):
     except Exception as e:
         return {'error': f'Error fetching weather: {str(e)}'}
 
-
 def get_weather_forecast(city_name):
     if not city_name:
         return {'error': 'Please enter a city name'}
@@ -841,1117 +844,43 @@ def get_weather_forecast(city_name):
             return {'error': f'City not found. Please check the name.'}
     except Exception as e:
         return {'error': f'Error fetching forecast: {str(e)}'}
-
-# ------------------------------------------------------------------
-# NTES-based railway functions (DITTO from Telegram Bot + improvements)
-# ------------------------------------------------------------------
-
-def safe_list(data, key):
-    val = data.get(key) if data else None
-    if val is None:
-        return []
-    if isinstance(val, list):
-        return val
-    return [val]
-
-def safe_str(val, default='N/A'):
-    return str(val) if val is not None else default
-
-def get_date_label(offset):
-    target = datetime.now() - timedelta(days=offset)
-    day = target.day
-    suffix = {1:'st', 2:'nd', 3:'rd'}.get(day%10 if day not in [11,12,13] else 0, 'th')
-    return f"{day}{suffix} {target.strftime('%b')}"
-
-def get_date_for_offset(offset):
-    return (datetime.now() - timedelta(days=offset)).strftime("%d-%b-%Y")
-
-def format_station_time(time_str):
-    if not time_str or time_str in ['N/A', 'Source', 'Dest']:
-        return time_str
-    time_parts = time_str.split()
-    if len(time_parts) >= 2 and any(m in time_parts[1] for m in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']):
-        return time_parts[0]
-    return time_str
-
-def get_stn_field(station, possible_keys, default=''):
-    if not station or not isinstance(station, dict):
-        return default
-    for key in possible_keys:
-        if key in station:
-            return station[key]
-    lower_map = {k.lower(): v for k, v in station.items()}
-    for key in possible_keys:
-        if key.lower() in lower_map:
-            return lower_map[key.lower()]
-    return default
-
-def normalize_station(s):
-    if not s or not isinstance(s, dict):
-        return {'SC':'N/A','SN':'N/A','STA':'N/A','STD':'N/A','ETA':'','ETD':'','DAY':''}
-    sta = s.get('STA','')
-    std = s.get('STD','')
-    eta = s.get('ETA','')
-    etd = s.get('ETD','')
-    day = s.get('Day', s.get('day', ''))
-    return {
-        'SC': get_stn_field(s, ['SC','StationCode','StnCode','Code','stationCode','stnCode','StnCd'], 'N/A'),
-        'SN': get_stn_field(s, ['SN','StationName','StnName','Name','stationName','stnName'], 'N/A'),
-        'STA': sta if sta else (eta if eta else 'N/A'),
-        'STD': std if std else (etd if etd else 'N/A'),
-        'ETA': eta, 'ETD': etd, 'DAY': safe_str(day, '')
-    }
-
-def find_station_index(stations, current_code, current_name, pos_str):
-    if not stations:
-        return -1, "none"
-    if current_code:
-        current_code = current_code.upper().strip()
-    if current_name:
-        current_name = current_name.upper().strip()
-    if current_code:
-        for i, s in enumerate(stations):
-            if s.get('SC','').upper().strip() == current_code:
-                return i, "code_exact"
-    if current_code and len(current_code) >= 3:
-        for i, s in enumerate(stations):
-            sc = s.get('SC','').upper().strip()
-            if sc and (current_code in sc or sc in current_code):
-                return i, "code_contains"
-    if current_name:
-        for i, s in enumerate(stations):
-            sn = s.get('SN','').upper().strip()
-            if sn == current_name:
-                return i, "name_exact"
-    if current_name:
-        for i, s in enumerate(stations):
-            sn = s.get('SN','').upper().strip()
-            if sn and (current_name in sn or sn in current_name):
-                return i, "name_contain"
-    if current_name:
-        current_words = set(re.findall(r'[A-Z]{3,}', current_name))
-        for i, s in enumerate(stations):
-            sn = s.get('SN','').upper().strip()
-            if current_words.intersection(set(re.findall(r'[A-Z]{3,}', sn))):
-                return i, "name_word"
-    return -1, "none"
-
-def find_nearest_stoppage(stations, current_code, current_name, pos_str):
-    if not stations:
-        return -1, "none"
-    idx, _ = find_station_index(stations, current_code, current_name, pos_str)
-    if idx >= 0:
-        return idx, "direct"
-    pos_lower = pos_str.lower()
-    if 'between' in pos_lower:
-        match = re.search(r'between\s+([A-Z]+)\s+and\s+([A-Z]+)', pos_str, re.IGNORECASE)
-        if match:
-            next_code = match.group(2).upper()
-            for i, s in enumerate(stations):
-                if s.get('SC','').upper().strip() == next_code:
-                    return i, "between"
-    patterns = [r'after\s+([A-Z]+)\s+before\s+([A-Z]+)', r'from\s+([A-Z]+)\s+to\s+([A-Z]+)']
-    for pattern in patterns:
-        match = re.search(pattern, pos_str, re.IGNORECASE)
-        if match:
-            next_code = match.group(2).upper()
-            for i, s in enumerate(stations):
-                if s.get('SC','').upper().strip() == next_code:
-                    return i, "pattern"
-    return -1, "none"
-
-def get_full_schedule(train_number):
-    try:
-        return [normalize_station(s) for s in safe_list(ntes_client.schedule(train_number), 'stations')
-                if (s.get('STA') and s.get('STA') != 'N/A') or (s.get('STD') and s.get('STD') != 'N/A')
-                or s.get('STA') == 'Source' or s.get('STD') == 'Dest']
-    except Exception:
-        return []
-
-def get_pnr_status(pnr):
-    if not NTES_AVAILABLE:
-        return {"error": "NTES library not installed"}
-    try:
-        response = ntes_client.pnr_status(pnr)
-        if not response:
-            return {"error": "NO_DATA", "message": "Empty response from NTES server"}
-        err_msg = response.get('errorMessage', '')
-        if err_msg and 'FLUSHED' in str(err_msg).upper():
-            return {"error": "FLUSHED_PNR"}
-        if not response.get('pnrNumber'):
-            return {"error": "NO_DATA", "message": "Invalid PNR or server error"}
-        passengers = []
-        for p in safe_list(response, 'passengerList'):
-            passengers.append({
-                'booking_status': safe_str(p.get('bookingStatusDetails'), 'N/A'),
-                'current_status': safe_str(p.get('currentStatusDetails'), 'N/A')
-            })
-        return {
-            "pnr": safe_str(response.get('pnrNumber')),
-            "train_number": safe_str(response.get('trainNumber')),
-            "train_name": safe_str(response.get('trainName')),
-            "journey_date": safe_str(response.get('dateOfJourney')),
-            "class": safe_str(response.get('journeyClass')),
-            "quota": safe_str(response.get('quota')),
-            "chart_status": safe_str(response.get('chartStatus'), 'Not Prepared'),
-            "boarding_point": safe_str(response.get('boardingPoint')),
-            "destination": safe_str(response.get('destinationStation')),
-            "passengers": passengers
-        }
-    except requests.exceptions.ConnectTimeout:
-        return {"error": "TIMEOUT", "message": "NTES server is not responding. Indian Railways server may be down or blocking requests. Please try again later."}
-    except requests.exceptions.ConnectionError:
-        return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server. Check your internet connection or try using a VPN."}
-    except Exception as e:
-        err_str = str(e)
-        if "timeout" in err_str.lower() or "connection" in err_str.lower():
-            return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}. The Indian Railways server may be temporarily unavailable."}
-        return {"error": "API_ERROR", "message": err_str[:200]}
-
-def get_confirmation_prediction(passengers, chart_status):
-    if "prepared" in str(chart_status).lower() or not passengers:
-        return None
-    confirmed = 0
-    for p in passengers:
-        status = str(p.get('current_status', '')).upper()
-        if 'CNF' in status:
-            confirmed += 1
-        elif 'RAC' in status:
-            confirmed += 0.5
-        elif 'PQWL' in status or 'WL' in status:
-            try:
-                if '/' in status:
-                    confirmed += 0.7 if int(status.split('/')[-1]) <= 3 else 0.4 if int(status.split('/')[-1]) <= 5 else 0.1
-            except:
-                confirmed += 0.2
-    base = (confirmed / len(passengers)) * 100
-    if confirmed / len(passengers) < 0.5:
-        base += 10
-    return min(100, max(0, round(base)))
-
-def get_status_icon(status, chart_status=None):
-    status_upper = str(status).upper()
-    if 'CAN' in status_upper:
-        return "❌"
-    if 'CNF' in status_upper:
-        return "✅"
-    if 'RAC' in status_upper:
-        return "🟡"
-    if 'PQWL' in status_upper or 'WL' in status_upper:
-        return "🔴" if chart_status and "prepared" in str(chart_status).lower() else "⏱️"
-    return "ℹ️"
-
-def get_status_note(status, chart_status):
-    status_upper = str(status).upper()
-    if 'CAN' in status_upper:
-        return "❌ Ticket Cancelled!"
-    if 'CNF' in status_upper:
-        return "✅ Confirmed!"
-    if 'RAC' in status_upper:
-        return "🟡 RAC - May get confirmed" if "prepared" in str(chart_status).lower() else "🟡 RAC - Chance of confirmation"
-    if 'PQWL' in status_upper:
-        if "prepared" in str(chart_status).lower():
-            return "🔴 PQWL - Chart ready, waiting"
-        try:
-            num = int(status.split('/')[-1]) if '/' in status else 0
-        except:
-            num = 0
-        if num <= 3:
-            return "⏱️ PQWL - Good chance!"
-        elif num <= 5:
-            return "⏱️ PQWL - May confirm"
-        return "⏱️ PQWL - Low chance"
-    if 'WL' in status_upper:
-        if "prepared" in str(chart_status).lower():
-            return "🔴 WL - Chart ready, waiting"
-        try:
-            num = int(status.split('/')[-1]) if '/' in status else 0
-        except:
-            num = 0
-        if num <= 5:
-            return "⏱️ WL - Good chance!"
-        elif num <= 10:
-            return "⏱️ WL - May confirm"
-        return "⏱️ WL - Low chance"
-    return "ℹ️ Check status"
-
-def format_pnr_result(data):
-    if not data:
-        return "❌ PNR not found."
-    if isinstance(data, dict) and data.get('error'):
-        if data['error'] == "FLUSHED_PNR":
-            return "❌ FLUSHED PNR / PNR NOT YET GENERATED\n\nPlease check the PNR number and try again."
-        return f"❌ Error: {data['error']}"
-
-    pnr = data.get('pnr', 'N/A')
-    train_no = data.get('train_number', 'N/A')
-    train_name = data.get('train_name', 'N/A')
-    journey_date = data.get('journey_date', 'N/A')
-    class_code = data.get('class', 'N/A')
-    quota = data.get('quota', 'N/A')
-    chart_status = data.get('chart_status', 'N/A')
-    boarding = data.get('boarding_point', 'N/A')
-    destination = data.get('destination', 'N/A')
-    passengers = data.get('passengers', [])
-
-    is_cancelled = any('CAN' in str(p.get('current_status', '')).upper() for p in passengers)
-    chart_prepared = "prepared" in str(chart_status).lower()
-    chart_icon = "✅" if chart_prepared else "❌"
-    chart_text = "Chart Prepared" if chart_prepared else "Chart Not Prepared"
-
-    msg = f"🎟️ PNR: {pnr}\n🚃 Train Number: {train_no}\n🚇 Train Name: {train_name}\n📍 {boarding} ➡️ {destination}\n🗓️ Journey Date: {journey_date}\n😎 Class & Quota: {class_code} ({quota})\n📋 Chart Status: {chart_text} {chart_icon}\n"
-
-    if not chart_prepared and not is_cancelled:
-        pred = get_confirmation_prediction(passengers, chart_status)
-        if pred is not None:
-            msg += f"🎯 Confirmation: {'🟢' if pred >= 80 else '🟡' if pred >= 50 else '🔴'} {pred}% {'High' if pred >= 80 else 'Medium' if pred >= 50 else 'Low'} Chance\n"
-
-    msg += "\n👫 Passenger List 👫\n"
-    circles = ["❶", "❷", "❸", "❹", "❺", "❻", "❼", "❽", "❾", "❿"]
-    for i, p in enumerate(passengers, 1):
-        booking = p.get('booking_status', 'N/A')
-        current = p.get('current_status', 'N/A')
-        circle = circles[i-1] if i <= len(circles) else f"{i}️⃣"
-        booking_icon = get_status_icon(booking, chart_status)
-        current_icon = get_status_icon(current, chart_status)
-        note = get_status_note(current, chart_status)
-        msg += f"\n{circle}\nBooking Status: {booking} {booking_icon}\nCurrent Status: {current} {current_icon}\nStatus Note: {note}\n"
-
-    msg += f"\n\n📌 Last Updated @ {now_ist().strftime('%d %b %H:%M:%S')}"
-    return msg
-
-def get_live_train_status(train_number, date_str=None):
-    if not NTES_AVAILABLE:
-        return {"error": "NTES library not installed"}
-    try:
-        if date_str is None:
-            date_str = datetime.now().strftime("%d-%b-%Y")
-        date_formats = [date_str, date_str.replace('-', ' '), date_str.replace('-', '/')]
-        response = None
-        for fmt in date_formats:
-            try:
-                response = ntes_client.live_status(train_number, fmt)
-                if response and response.get('CPOS'):
-                    break
-            except Exception:
-                continue
-        if not response or not response.get('CPOS'):
-            return {"error": "NO_DATA", "message": "No live data available for this train/date"}
-
-        train_name = safe_str(response.get('TNM'), 'N/A')
-        source = safe_str(response.get('SRCN', response.get('DFROM')), 'N/A')
-        destination = safe_str(response.get('DSTNN', response.get('DTO')), 'N/A')
-        dest_code = safe_str(response.get('DST'), '')
-        journey_date = safe_str(response.get('STD'), date_str)
-        current_pos = safe_str(response.get('CPOS'), 'N/A')
-        delay = safe_str(response.get('LDEL'), '0')
-        excpt = safe_str(response.get('EXCP'), '')
-
-        pos_str = str(current_pos)
-        pos_lower = pos_str.lower()
-        is_completed = any(k in pos_lower for k in ["reached destination", "journey completed", "terminated", "destination reached", "arrived at destination", "train completed", "train reached", "journey ended", "train terminated", "has terminated", "run terminated"])
-        is_not_started = any(k in pos_lower for k in ["not started", "yet to start", "scheduled", "at source", "will start", "starts from", "origin", "before departure"])
-
-        if not is_completed and destination != 'N/A':
-            dest_upper = destination.upper()
-            if any(w in pos_lower for w in ['arrived', 'reached', 'terminated', 'completed', 'ended']):
-                dest_words = [w for w in dest_upper.split() if len(w) >= 3]
-                for word in dest_words:
-                    if word in pos_str.upper():
-                        is_completed = True
-                        break
-
-        current_code = None
-        current_name = None
-        m = re.search(r'\(([A-Z]{2,5})\)', pos_str)
-        if m:
-            current_code = m.group(1).upper()
-        if not current_code:
-            for pattern in [r'from\s+([A-Z]{2,5})\b', r'at\s+([A-Z]{2,5})\b', r'(?:departed|arrived|left|reached)\s+(?:from\s+|at\s+)?([A-Z]{2,5})\b']:
-                m = re.search(pattern, pos_str, re.IGNORECASE)
-                if m:
-                    current_code = m.group(1).upper()
-                    break
-        if not current_name:
-            for pattern in [r'(?:from|at|departed|arrived|left|reached)\s+([A-Z][A-Z\s]+?)(?:\s*\(|$)', r'(?:has|is)\s+([A-Z][A-Z\s]+?)\s+(?:station|junction|jn)']:
-                m = re.search(pattern, pos_str, re.IGNORECASE)
-                if m:
-                    current_name = re.sub(r'\s+(JUNCTION|JN|ROAD|RD|CITY|CANTT|NAGAR|NG)$', '', m.group(1).strip().upper())
-                    break
-
-        live_stations_map = {}
-        stations_raw = safe_list(response, 'STNSD')
-        if not stations_raw:
-            stations_raw = safe_list(response, 'STNS')
-        all_live = []
-        for s in stations_raw:
-            ns = normalize_station(s)
-            if ns['SC'] != 'N/A':
-                live_stations_map[ns['SC'].upper()] = ns
-                all_live.append(ns)
-
-        full_stations = get_full_schedule(train_number)
-        merged_stations = []
-        for s in full_stations:
-            sc = s['SC'].upper()
-            if sc in live_stations_map:
-                live = live_stations_map[sc]
-                merged = s.copy()
-                for k in ['ETA','ETD','DAY','STA','STD']:
-                    if live.get(k):
-                        merged[k] = live[k]
-                merged_stations.append(merged)
-            else:
-                merged_stations.append(s)
-
-        upcoming = []
-        mapped_idx = -1
-        is_non_stoppage = False
-
-        if is_completed:
-            upcoming = []
-        elif is_not_started:
-            upcoming = merged_stations[:8]
-        else:
-            if merged_stations:
-                curr_idx, match_type = find_station_index(merged_stations, current_code, current_name, pos_str)
-                if curr_idx >= 0:
-                    if curr_idx + 1 < len(merged_stations):
-                        upcoming = merged_stations[curr_idx+1:curr_idx+9]
-                    else:
-                        is_completed = True
-                else:
-                    is_non_stoppage = True
-                    mapped_idx, map_type = find_nearest_stoppage(merged_stations, current_code, current_name, pos_str)
-                    if mapped_idx >= 0:
-                        if mapped_idx + 1 < len(merged_stations):
-                            upcoming = merged_stations[mapped_idx+1:mapped_idx+9]
-                        else:
-                            is_completed = True
-                    elif all_live and (current_code or current_name):
-                        live_idx, _ = find_station_index(all_live, current_code, current_name, pos_str)
-                        if live_idx >= 0 and live_idx + 1 < len(all_live):
-                            next_code = all_live[live_idx+1].get('SC', '').upper()
-                            for i, ms in enumerate(merged_stations):
-                                if ms.get('SC','').upper() == next_code:
-                                    upcoming = merged_stations[i:i+8]
-                                    break
-                            if not upcoming:
-                                upcoming = all_live[live_idx+1:live_idx+9]
-                    if not upcoming:
-                        return {"error": "NO_DATA", "message": "Train position unclear for this date"}
-            elif all_live:
-                curr_idx, _ = find_station_index(all_live, current_code, current_name, pos_str)
-                if curr_idx >= 0:
-                    upcoming = all_live[curr_idx+1:curr_idx+9]
-                else:
-                    return {"error": "NO_DATA", "message": "Train position unclear for this date"}
-
-        if not upcoming and not is_completed and merged_stations:
-            upcoming = merged_stations[:8]
-
-        return {
-            "train_number": train_number,
-            "train_name": train_name,
-            "current_station": current_pos,
-            "source": source,
-            "destination": destination,
-            "journey_date": journey_date,
-            "delay": delay,
-            "excpt": excpt,
-            "state": "completed" if is_completed else ("not_started" if is_not_started else "running"),
-            "stations": upcoming[:8],
-            "last_updated": datetime.now().strftime('%d %b %H:%M:%S'),
-            "query_date": date_str,
-            "current_code": current_code,
-            "current_name": current_name,
-            "is_non_stoppage": is_non_stoppage,
-            "mapped_idx": mapped_idx
-        }
-    except requests.exceptions.ConnectTimeout:
-        return {"error": "TIMEOUT", "message": "NTES server is not responding. Indian Railways server may be down or blocking requests. Please try again later."}
-    except requests.exceptions.ConnectionError:
-        return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server. Check your internet connection or try using a VPN."}
-    except Exception as e:
-        err_str = str(e)
-        if "timeout" in err_str.lower() or "connection" in err_str.lower():
-            return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}. The Indian Railways server may be temporarily unavailable."}
-        return {"error": "API_ERROR", "message": err_str[:200]}
-
-def format_live_train_result(data):
-    if not data:
-        return "❌ Train not found. Please check the train number.", None
-    if isinstance(data, dict) and data.get('error'):
-        return f"❌ {data.get('error')}: {data.get('message', 'Unknown error')}", None
-
-    train_no = data.get('train_number', 'N/A')
-    query_date = data.get('query_date', datetime.now().strftime("%d-%b-%Y"))
-    journey_state = data.get('state', 'running')
-
-    current_offset = 0
-    for offset in range(5):
-        if query_date == get_date_for_offset(offset):
-            current_offset = offset
-            break
-    date_label = get_date_label(current_offset)
-
-    msg = f"## 🚂 LIVE TRAIN STATUS — {date_label.upper()}\n\n"
-    msg += f"**Train:** {data.get('train_name', 'N/A')} ({train_no})\n"
-    msg += f"**From:** {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
-    msg += f"**Date:** {data.get('journey_date', 'N/A')}\n"
-
-    delay = data.get('delay', '0')
-    msg += f"**Delay:** {'✅ On Time' if str(delay) == '0' else f'⏰ {delay} mins late'}\n"
-    msg += f"**Current Status:** {data.get('current_station', 'N/A')}\n"
-
-    if data.get('excpt'):
-        msg += f"\n⚠️ **Exception:** {data.get('excpt')}\n"
-
-    if journey_state == "completed":
-        msg += "\n🏁 **JOURNEY COMPLETED**\n✅ Train has reached its destination.\n"
-    elif journey_state == "not_started":
-        msg += "\n⏳ **JOURNEY NOT STARTED**\n📌 Train is yet to depart from source.\n"
-        stations = data.get('stations', [])
-        if stations:
-            msg += "\n**Scheduled Stations:**\n"
-            for i, s in enumerate(stations[:8], 1):
-                msg += f"{i}. **{s.get('SC', 'N/A')}** — {s.get('SN', 'N/A')}\n"
-                msg += f"   Arr: {format_station_time(s.get('STA', 'N/A'))} | Dep: {format_station_time(s.get('STD', 'N/A'))}"
-                if s.get('DAY'):
-                    msg += f" | Day: {s.get('DAY', '')}"
-                msg += "\n"
-        else:
-            msg += "\n📋 No schedule available.\n"
-    else:
-        stations = data.get('stations', [])
-        if stations:
-            msg += "\n**Upcoming Stations:**\n"
-            for i, s in enumerate(stations, 1):
-                arrival = s.get('ETA', '') or s.get('STA', 'N/A')
-                departure = s.get('ETD', '') or s.get('STD', 'N/A')
-                msg += f"{i}. **{s.get('SC', 'N/A')}** — {s.get('SN', 'N/A')}\n"
-                msg += f"   Arr: {format_station_time(arrival)} | Dep: {format_station_time(departure)}"
-                if s.get('DAY'):
-                    msg += f" | Day: {s.get('DAY', '')}"
-                msg += "\n"
-        else:
-            msg += "\n📋 No upcoming stations available.\n"
-
-    msg += f"\n_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
-    return msg, None
-
-def search_trains(query):
-    if not NTES_AVAILABLE:
-        return {"error": "NTES library not installed"}
-    try:
-        response = ntes_client.search(query)
-        if not response or not response.get('trains'):
-            return None
-        trains = []
-        for t in safe_list(response, 'trains')[:15]:
-            trains.append({
-                'train_number': safe_str(t.get('train_number')),
-                'train_name': safe_str(t.get('train_name')),
-                'source': safe_str(t.get('source')),
-                'destination': safe_str(t.get('destination'))
-            })
-        return {"query": query, "trains": trains, "last_updated": datetime.now().strftime('%d %b %H:%M:%S')}
-    except requests.exceptions.ConnectTimeout:
-        return {"error": "TIMEOUT", "message": "NTES server is not responding."}
-    except requests.exceptions.ConnectionError:
-        return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server."}
-    except Exception as e:
-        err_str = str(e)
-        if "timeout" in err_str.lower() or "connection" in err_str.lower():
-            return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}"}
-        return {"error": "API_ERROR", "message": err_str[:200]}
-
-def format_train_search(data):
-    if not data:
-        return "❌ No trains found. Please try again."
-    if isinstance(data, dict) and data.get('error'):
-        return f"❌ {data['error']}"
-    msg = f"## 🔍 TRAIN SEARCH RESULTS\n\n"
-    msg += f"**Query:** {data.get('query', 'N/A')}\n\n"
-    for t in data.get('trains', [])[:10]:
-        msg += f"🚂 **{t.get('train_number', 'N/A')}** — {t.get('train_name', 'N/A')}\n"
-        msg += f"   Route: {t.get('source', 'N/A')} → {t.get('destination', 'N/A')}\n\n"
-    msg += f"_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
-    return msg
-
-def get_train_schedule(train_number):
-    if not NTES_AVAILABLE:
-        return {"error": "NTES library not installed"}
-    try:
-        response = ntes_client.schedule(train_number)
-        if not response:
-            return None
-        stations = []
-        for s in safe_list(response, 'stations'):
-            sta = s.get('STA', '')
-            std = s.get('STD', '')
-            if (sta and sta != 'N/A') or (std and std != 'N/A') or sta == 'Source' or std == 'Dest':
-                stations.append({
-                    'code': safe_str(s.get('StationCode')),
-                    'name': safe_str(s.get('StationName')),
-                    'arrival': sta if sta else 'Source',
-                    'departure': std if std else 'Dest',
-                    'day': safe_str(s.get('Day'))
-                })
-        return {
-            "train_number": train_number,
-            "train_name": safe_str(response.get('TrainName')),
-            "source": safe_str(response.get('Source')),
-            "destination": safe_str(response.get('Destination')),
-            "stations": stations,
-            "last_updated": datetime.now().strftime('%d %b %H:%M:%S')
-        }
-    except requests.exceptions.ConnectTimeout:
-        return {"error": "TIMEOUT", "message": "NTES server is not responding."}
-    except requests.exceptions.ConnectionError:
-        return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server."}
-    except Exception as e:
-        err_str = str(e)
-        if "timeout" in err_str.lower() or "connection" in err_str.lower():
-            return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}"}
-        return {"error": "API_ERROR", "message": err_str[:200]}
-
-def format_schedule_result(data, start=0, chunk=20):
-    if not data:
-        return "❌ Schedule not found.", None
-    if isinstance(data, dict) and data.get('error'):
-        return f"❌ {data['error']}", None
-    if isinstance(data, dict) and 'stations' not in data:
-        return "❌ Invalid schedule data.", None
-
-    stations = data.get('stations', [])
-    total = len(stations)
-    end = min(start + chunk, total)
-    if start >= total:
-        start = max(0, total - chunk)
-        end = total
-
-    msg = f"**Train:** {data.get('train_number', 'N/A')} - {data.get('train_name', 'N/A')}\n"
-    msg += f"**From:** {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
-    msg += f"**Showing {start+1} to {end} of {total}**\n\n"
-
-    for i in range(start, end):
-        s = stations[i]
-        msg += f"{i+1}. **{s['code']}** - {s['name']}\n"
-        msg += f"   🕐 Arr: {s['arrival']}  |  🕐 Dep: {s['departure']}"
-        if s.get('day') and s.get('day') != 'N/A':
-            msg += f"  |  Day: {s['day']}"
-        msg += "\n\n"
-
-    msg += f"_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
-    return msg, (start, end, total)
-
-# ------------------------------------------------------------------
-# Passport Photo Processing
-# ------------------------------------------------------------------
-def remove_background(image_data):
-    key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
-    if not key:
-        key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
-    if not key and "remove_bg_key" in st.session_state:
-        key = str(st.session_state.remove_bg_key).strip()
-    if not key:
-        return None
-    try:
-        r = requests.post(
-            "https://api.remove.bg/v1.0/removebg",
-            files={"image_file": ("image.jpg", image_data, "image/jpeg")},
-            data={"size": "auto", "format": "png"},
-            headers={"X-Api-Key": key},
-            timeout=30
-        )
-        return r.content if r.status_code == 200 else None
-    except Exception:
-        return None
-
-def add_border(image_data):
-    try:
-        img = Image.open(io.BytesIO(image_data))
-        if img.mode != "RGBA":
-            img = img.convert("RGBA")
-        w, h = img.size
-        PW, PH = 413, 531
-        BS = 8
-        new_img = Image.new("RGB", (PW, PH), "white")
-        target_w = PW - (BS * 2)
-        target_h = PH - (BS * 2)
-        scale = min(target_w / w, target_h / h)
-        new_w = int(w * scale)
-        new_h = int(h * scale)
-        img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        img_bg = Image.new("RGB", (new_w, new_h), "white")
-        if img_resized.mode == "RGBA":
-            img_bg.paste(img_resized, (0, 0), img_resized)
-        else:
-            img_bg.paste(img_resized, (0, 0))
-        x = (target_w - new_w) // 2 + BS
-        y = (target_h - new_h) // 2 + BS
-        new_img.paste(img_bg, (x, y))
-        draw = ImageDraw.Draw(new_img)
-        draw.rectangle([(0, 0), (PW - 1, PH - 1)], outline="black", width=6)
-        draw.rectangle([(6, 6), (PW - 7, PH - 7)], outline="black", width=2)
-        output = io.BytesIO()
-        new_img.save(output, format="PNG", quality=100)
-        output.seek(0)
-        return output.getvalue()
-    except Exception as e:
-        return None
-
-def process_passport_image(data):
-    no_bg = remove_background(data)
-    if no_bg is None:
-        return None
-    final = add_border(no_bg)
-    return final if final else no_bg
-
-# ------------------------------------------------------------------
-# Theme application with Auto (System) detection
-# ------------------------------------------------------------------
-def apply_theme(theme, custom_bg=None, custom_text=None):
-    if theme == 'Day':
-        bg = "#f6f8fa"
-        card_bg = "#ffffff"
-        text_color = "#1f2328"
-        text_secondary = "#656d76"
-        border = "#d0d7de"
-        input_bg = "#ffffff"
-        accent = "#0969da"
-        accent_hover = "#0550ae"
-        success = "#1a7f37"
-        danger = "#cf222e"
-        button_bg = "#f6f8fa"
-        button_text = "#1f2328"
-        button_border = "#d0d7de"
-        button_hover_bg = accent
-        button_hover_text = "white"
-        button_hover_border = accent
-        number_color = "#0969da"
-        table_header_bg = "#333333"
-        table_header_text = "#ffffff"
-        table_alt_row = "#f5f5f5"
-        chart_bg = "rgba(0,0,0,0)"
-    elif theme == 'Dark':
-        bg = "#0d1117"
-        card_bg = "#161b22"
-        text_color = "#e6edf3"
-        text_secondary = "#8b949e"
-        border = "#30363d"
-        input_bg = "#0d1117"
-        accent = "#58a6ff"
-        accent_hover = "#79c0ff"
-        success = "#3fb950"
-        danger = "#f85149"
-        button_bg = "#21262d"
-        button_text = "#e6edf3"
-        button_border = "#30363d"
-        button_hover_bg = accent
-        button_hover_text = "white"
-        button_hover_border = accent
-        number_color = "#58a6ff"
-        table_header_bg = "#1f6feb"
-        table_header_text = "#ffffff"
-        table_alt_row = "#161b22"
-        chart_bg = "rgba(0,0,0,0)"
-    else:
-        # Custom theme with intelligent color adaptation
-        bg = custom_bg if custom_bg else "#ffffff"
-
-        # Detect if background is dark or light
-        def is_dark_color(hex_color):
-            try:
-                hex_color = hex_color.lstrip('#')
-                r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-                brightness = (r * 299 + g * 587 + b * 114) / 1000
-                return brightness < 128
-            except:
-                return False
-
-        is_dark = is_dark_color(bg)
-        card_bg = bg
-        text_color = custom_text if custom_text else ("#e6edf3" if is_dark else "#1f2328")
-        text_secondary = text_color
-        border = "#505050" if is_dark else "#d0d7de"
-        input_bg = bg
-        accent = "#58a6ff" if is_dark else "#0969da"
-        accent_hover = "#79c0ff" if is_dark else "#0550ae"
-        success = "#3fb950" if is_dark else "#1a7f37"
-        danger = "#f85149" if is_dark else "#cf222e"
-        button_bg = bg
-        button_text = text_color
-        button_border = border
-        button_hover_bg = accent
-        button_hover_text = "white"
-        button_hover_border = accent
-        number_color = accent
-        table_header_bg = "#1f6feb" if is_dark else "#333333"
-        table_header_text = "#ffffff"
-        table_alt_row = "#1a1a2e" if is_dark else "#f5f5f5"
-        chart_bg = "rgba(0,0,0,0)"
-
-    css = f"""
-    <style>        /* === FIXES: Hide clutter === */
-        #MainMenu {visibility: hidden !important;}
-        footer {visibility: hidden !important;}
-        header {visibility: hidden !important;}
-        .stDeployButton {display: none !important;}
-        .viewerBadge_container__1QSob {display: none !important;}
-        .stActionButton {display: none !important;}
-
-        /* === FIXES: Full scrolling === */
-        .main .block-container { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; max-width: 100% !important; min-height: 100vh !important; }
-        div[data-testid="stDataFrame"] { max-height: 75vh !important; overflow: auto !important; }
-        div[data-testid="stDataFrame"] > div { max-height: 75vh !important; }
-
-        /* === FIXES: Custom scrollbar === */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #555; }
-
-        /* === FIXES: Sidebar greeting at absolute top === */
-        [data-testid="stSidebar"] > div:first-child { padding-top: 0 !important; }
-
-        /* === FIXES: Metric cards === */
-        .metric-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 16px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }
-        .metric-card h3 { margin: 0; font-size: 2em; font-weight: bold; }
-        .metric-card p { margin: 4px 0 0 0; font-size: 0.9em; opacity: 0.9; }
-
-        /* === FIXES: Chart containers === */
-        .chart-container { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 16px; }
-
-
-        .block-container {{ padding-top: 0.5rem !important; padding-bottom: 1rem !important; }}
-        .stApp {{ background-color: {bg} !important; }}
-        [data-testid="stSidebar"] {{ background-color: {card_bg} !important; border-right: 1px solid {border} !important; }}
-        [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown div,
-        [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
-        [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] .stDateInput label,
-        [data-testid="stSidebar"] .stNumberInput label, [data-testid="stSidebar"] .stTextArea label,
-        [data-testid="stSidebar"] .stRadio label, [data-testid="stSidebar"] .stCheckbox label {{
-            color: {text_color} !important;
-        }}
-        header[data-testid="stHeader"] {{ background-color: {card_bg} !important; border-bottom: 1px solid {border} !important; }}
-        h1, h2, h3, h4, h5, h6, .stMarkdown p, .stMarkdown div, .stMarkdown span,
-        .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
-        [data-testid="stMetricLabel"], [data-testid="stMetricValue"], .stCaption {{
-            color: {text_color} !important;
-        }}
-        .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea,
-        .stSelectbox > div > div > div {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-            border: 1px solid {border} !important;
-            border-radius: 8px !important;
-        }}
-        .stButton > button {{
-            background-color: {button_bg} !important;
-            color: {button_text} !important;
-            border: 1px solid {button_border} !important;
-            border-radius: 8px !important;
-            font-weight: 500 !important;
-            transition: all 0.15s ease !important;
-        }}
-        .stButton > button:hover {{
-            background-color: {button_hover_bg} !important;
-            color: {button_hover_text} !important;
-            border-color: {button_hover_border} !important;
-        }}
-        .stButton > button:disabled {{ opacity: 0.45 !important; cursor: not-allowed !important; }}
-        .stButton > button[kind="primary"] {{
-            background-color: {accent} !important;
-            color: white !important;
-            border-color: {accent} !important;
-        }}
-        .stButton > button[kind="primary"]:hover {{
-            background-color: {accent_hover} !important;
-            border-color: {accent_hover} !important;
-        }}
-        .stFileUploader {{
-            background-color: {input_bg} !important;
-            border: 2px dashed {border} !important;
-            border-radius: 12px !important; padding: 16px !important;
-        }}
-        .stFileUploader:hover {{ border-color: {accent} !important; }}
-        .stFileUploader label {{ color: {text_secondary} !important; }}
-
-        /* Enhanced DataFrame / Table styling for custom themes */
-        .stDataFrame, [data-testid="stDataFrame"], .stDataEditor, [data-testid="stDataEditor"],
-        .stDataFrame table, .stDataEditor table, .stDataFrame th, .stDataEditor th,
-        .stDataFrame td, .stDataEditor td, .stDataEditor input, .stDataEditor textarea {{
-            background-color: {card_bg} !important;
-            color: {text_color} !important;
-            border-color: {border} !important;
-        }}
-        .stDataFrame th, .stDataEditor th {{ 
-            background-color: {table_header_bg} !important;
-            color: {table_header_text} !important;
-            border-bottom: 2px solid {border} !important; 
-            font-weight: 600 !important; 
-        }}
-        .stDataFrame tr:nth-child(even) td, .stDataEditor tr:nth-child(even) td {{
-            background-color: {table_alt_row} !important;
-        }}
-        .stDataFrame td, .stDataEditor td {{ 
-            text-align: center !important;
-            border: 1px solid {border} !important;
-        }}
-
-        /* Plotly chart text colors */
-        .js-plotly-plot .plotly text {{ fill: {text_color} !important; }}
-        .js-plotly-plot .plotly .gtitle {{ fill: {text_color} !important; }}
-
-        .stExpander {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 8px !important; }}
-        .streamlit-expanderHeader {{ color: {text_color} !important; font-weight: 600 !important; }}
-        .stChatMessage {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important; }}
-        .stChatInput {{ background-color: {input_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; }}
-        .stChatInput input {{ color: {text_color} !important; }}
-        [data-testid="stMetric"] {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 10px !important; padding: 14px !important; }}
-        .stTabs [data-baseweb="tab-list"] {{ background-color: {card_bg} !important; border-bottom: 1px solid {border} !important; }}
-        .stTabs [data-baseweb="tab"] {{ color: {text_secondary} !important; }}
-        .stTabs [data-baseweb="tab-highlight"] {{ background-color: {accent} !important; }}
-        ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
-        ::-webkit-scrollbar-track {{ background: {bg}; }}
-        ::-webkit-scrollbar-thumb {{ background: {border}; border-radius: 10px; }}
-        ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
-        html, [data-testid="stMain"], [data-testid="stAppViewContainer"] {{ scroll-behavior: smooth !important; }}
-        footer {{ display: none !important; }}
-        .eqms-marquee {{ overflow: hidden; white-space: nowrap; }}
-        .eqms-marquee span {{
-            display: inline-block; padding-left: 100%;
-            animation: eqms-scroll 30s linear infinite;
-            color: {text_color}; font-weight: 600; font-size: 16px;
-        }}
-        @keyframes eqms-scroll {{
-            0% {{ transform: translateX(0); }}
-            100% {{ transform: translateX(-100%); }}
-        }}
-        .action-box {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 18px; margin-bottom: 16px; }}
-        .file-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 14px; margin: 10px 0; }}
-        .file-card-title {{ color: {text_color}; font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }}
-        .file-card-meta {{ color: {text_secondary}; font-size: 0.8rem; margin-bottom: 10px; }}
-        .pro-footer {{ color: {text_secondary} !important; border-top: 1px solid {border} !important; text-align: center !important; padding: 18px 0 8px !important; margin-top: 28px !important; font-size: 0.85rem !important; }}
-        .sheet-link-btn {{
-            display: inline-block !important; padding: 9px 16px !important;
-            background: {button_bg} !important; color: {accent} !important;
-            border: 1px solid {button_border} !important; border-radius: 8px !important;
-            text-decoration: none !important; text-align: center !important; width: 100% !important;
-            transition: all 0.15s !important; font-weight: 500 !important; font-size: 0.9rem !important;
-        }}
-        .sheet-link-btn:hover {{ background: {accent} !important; color: white !important; border-color: {accent} !important; }}
-        .status-pill {{ display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 500; }}
-        .status-live {{ background: rgba(63, 185, 80, 0.15); color: {success}; border: 1px solid {success}; }}
-        .train-count-container {{ display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; margin: 10px 0; }}
-        .train-count-card {{
-            border: 1px solid {border};
-            border-radius: 10px;
-            padding: 8px 16px;
-            min-width: 80px;
-            text-align: center;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-            background: {card_bg};
-        }}
-        .train-count-card:hover {{ transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.12); border-color: {accent}; }}
-        .train-count-number {{ 
-            color: {number_color};
-            font-weight: 800;
-            font-size: 1.8rem;
-            line-height: 1.2;
-            letter-spacing: -0.5px;
-        }}
-        .train-count-badge {{ 
-            display: inline-block;
-            background: {accent};
-            color: white;
-            font-size: 0.9rem;
-            font-weight: 700;
-            padding: 2px 10px;
-            border-radius: 20px;
-            margin-top: 2px;
-        }}
-        .train-total-card {{ 
-            border: 2px solid {success};
-            border-radius: 12px;
-            padding: 8px 20px;
-            min-width: 120px;
-            text-align: center;
-            background: {card_bg};
-        }}
-        .train-total-number {{ 
-            color: {success};
-            font-weight: 800;
-            font-size: 1.5rem;
-            line-height: 1.2;
-        }}
-        .train-total-label {{ 
-            color: {text_secondary};
-            font-size: 0.75rem;
-            margin-top: 2px;
-        }}
-        .weather-card {{
-            background: {card_bg};
-            border: 1px solid {border};
-            border-radius: 16px;
-            padding: 20px;
-            margin: 10px 0;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-        }}
-        .weather-temp {{
-            font-size: 3.5rem;
-            font-weight: 700;
-            color: {number_color};
-        }}
-        .weather-desc {{
-            font-size: 1.2rem;
-            color: {text_color};
-        }}
-        .weather-detail {{
-            font-size: 0.95rem;
-            color: {text_secondary};
-            padding: 4px 0;
-        }}
-        .result-box {{
-            background: {card_bg};
-            border: 2px solid {accent};
-            border-radius: 12px;
-            padding: 20px;
-            margin: 15px 0;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        }}
-        .result-box pre {{
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-family: inherit;
-            font-size: 0.95rem;
-            line-height: 1.6;
-            margin: 0;
-            color: {text_color};
-        }}
-        .print-only {{ display: none; }}
-        @media print {{
-            @page {{ margin: 1cm; size: A4 landscape; }}
-            body {{ background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
-            .no-print, header, footer, .stSidebar, .stButton, .stExpander, .stTabs,
-            .stSelectbox, .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio,
-            .stCheckbox, .stFileUploader, .stCaption, .stImage, .stVideo, .stAudio, .stPlotlyChart,
-            .action-box, .pro-footer, .status-pill, .sheet-link-btn, .stChatMessage, .stChatInput,
-            .train-count-container, .weather-card, .result-box, .print-area {{ display: none !important; }}
-            .print-only {{ display: block !important; }}
-            .print-only {{ display: block !important; }}
-            .print-only h2 {{ color: #000 !important; font-size: 18pt !important; margin-top: 0 !important; }}
-            .print-only p {{ color: #333 !important; }}
-            .print-only table {{ 
-                width: 100% !important; 
-                border-collapse: collapse !important; 
-                font-size: 8pt !important;
-                page-break-inside: auto !important;
-            }}
-            .print-only tr {{ page-break-inside: avoid !important; }}
-            .print-only thead {{ display: table-header-group !important; }}
-            .print-only th {{ 
-                background: #333 !important; 
-                color: white !important; 
-                padding: 5px 6px !important;
-                border: 1px solid #333 !important;
-                font-size: 8pt !important;
-                text-align: center !important;
-            }}
-            .print-only td {{ 
-                border: 1px solid #999 !important; 
-                padding: 3px 5px !important;
-                font-size: 8pt !important;
-                color: #000 !important;
-                word-wrap: break-word !important;
-            }}
-            .print-only tr:nth-child(even) {{ background: #f5f5f5 !important; }}
-        }}
-        * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
-        .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
-        .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
-
-        /* Advanced: Custom scrollbar for tables */
-        .stDataFrame [data-testid="stDataFrameResizable"] {{
-            border: 1px solid {border} !important;
-            border-radius: 8px !important;
-        }}
-    </style>
-    """
-    st.markdown(css, unsafe_allow_html=True)
-
-
-# ------------------------------------------------------------------
-# PDF, image, WhatsApp helpers
-# ------------------------------------------------------------------
-def get_weather_forecast(city_name):
-    if not city_name:
-        return {'error': 'Please enter a city name'}
-    try:
-        url = f"https://api.openweathermap.org/data/2.5/forecast?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            forecast_list = data.get('list', [])
-            daily_forecast = {}
-            for item in forecast_list:
-                date = item.get('dt_txt', '')[:10]
-                if date not in daily_forecast:
-                    daily_forecast[date] = {
-                        'temps': [], 'weather': item['weather'][0]['main'] if item.get('weather') else 'N/A',
-                        'icon': item['weather'][0]['icon'] if item.get('weather') else '',
-                        'humidity': item['main']['humidity'],
-                        'wind': item['wind']['speed'],
-                        'pressure': item['main']['pressure'],
-                        'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'
-                    }
-                daily_forecast[date]['temps'].append(item['main']['temp'])
-
-            result = []
-            for date, info in list(daily_forecast.items())[:5]:
-                result.append({
-                    'date': date,
-                    'temp': round(sum(info['temps'])/len(info['temps']), 1),
-                    'min_temp': round(min(info['temps']), 1),
-                    'max_temp': round(max(info['temps']), 1),
-                    'weather': info['weather'],
-                    'description': info['description'].title(),
-                    'icon': info['icon'],
-                    'humidity': info['humidity'],
-                    'wind': info['wind'],
-                    'pressure': info['pressure']
-                })
-            return {'forecast': result, 'city': data.get('city', {}).get('name', city_name), 'country': data.get('city', {}).get('country', '')}
-        else:
-            return {'error': f'City not found. Please check the name.'}
-    except Exception as e:
-        return {'error': f'Error fetching forecast: {str(e)}'}
-
-# ------------------------------------------------------------------
-# NTES-based railway functions (DITTO from Telegram Bot + improvements)
-# ------------------------------------------------------------------
-
-
 
 def get_location_from_ip():
     """Get approximate location from IP address as fallback for browser geolocation"""
-    try:
-        resp = requests.get("https://ip-api.com/json/", timeout=5)
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get('status') == 'success':
-                return {
-                    'city': data.get('city', ''),
-                    'lat': data.get('lat'),
-                    'lon': data.get('lon'),
-                    'country': data.get('country', '')
-                }
-    except Exception:
-        pass
+    services = [
+        "https://ip-api.com/json/",
+        "https://ipinfo.io/json",
+        "https://api.ipgeolocation.io/ipgeo?apiKey=demo",
+    ]
+    for service in services:
+        try:
+            if "ip-api" in service:
+                resp = requests.get(service, timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get('status') == 'success':
+                        return {
+                            'city': data.get('city', ''),
+                            'lat': data.get('lat'),
+                            'lon': data.get('lon'),
+                            'country': data.get('country', '')
+                        }
+            elif "ipinfo" in service:
+                resp = requests.get(service, timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return {
+                        'city': data.get('city', '').replace(', India', '').strip(),
+                        'country': data.get('country', ''),
+                        'lat': None, 'lon': None
+                    }
+        except Exception:
+            continue
     return None
+
+# ------------------------------------------------------------------
+# NTES-based railway functions
+# ------------------------------------------------------------------
 def safe_list(data, key):
     val = data.get(key) if data else None
     if val is None:
@@ -1962,15 +891,6 @@ def safe_list(data, key):
 
 def safe_str(val, default='N/A'):
     return str(val) if val is not None else default
-
-def get_date_label(offset):
-    target = datetime.now() - timedelta(days=offset)
-    day = target.day
-    suffix = {1:'st', 2:'nd', 3:'rd'}.get(day%10 if day not in [11,12,13] else 0, 'th')
-    return f"{day}{suffix} {target.strftime('%b')}"
-
-def get_date_for_offset(offset):
-    return (datetime.now() - timedelta(days=offset)).strftime("%d-%b-%Y")
 
 def format_station_time(time_str):
     if not time_str or time_str in ['N/A', 'Source', 'Dest']:
@@ -2616,58 +1536,55 @@ def process_passport_image(data):
     return final if final else no_bg
 
 # ------------------------------------------------------------------
-# Theme application with Auto (System) detection
+# Theme application
 # ------------------------------------------------------------------
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
-        bg = "#f6f8fa"
+        bg = "#f8fafc"
         card_bg = "#ffffff"
-        text_color = "#1f2328"
-        text_secondary = "#656d76"
-        border = "#d0d7de"
+        text_color = "#1e293b"
+        text_secondary = "#64748b"
+        border = "#e2e8f0"
         input_bg = "#ffffff"
-        accent = "#0969da"
-        accent_hover = "#0550ae"
-        success = "#1a7f37"
-        danger = "#cf222e"
-        button_bg = "#f6f8fa"
-        button_text = "#1f2328"
-        button_border = "#d0d7de"
+        accent = "#2563eb"
+        accent_hover = "#1d4ed8"
+        success = "#16a34a"
+        danger = "#dc2626"
+        button_bg = "#f1f5f9"
+        button_text = "#1e293b"
+        button_border = "#cbd5e1"
         button_hover_bg = accent
         button_hover_text = "white"
         button_hover_border = accent
-        number_color = "#0969da"
-        table_header_bg = "#333333"
+        number_color = "#2563eb"
+        table_header_bg = "#1e293b"
         table_header_text = "#ffffff"
-        table_alt_row = "#f5f5f5"
+        table_alt_row = "#f8fafc"
         chart_bg = "rgba(0,0,0,0)"
     elif theme == 'Dark':
-        bg = "#0d1117"
-        card_bg = "#161b22"
-        text_color = "#e6edf3"
-        text_secondary = "#8b949e"
-        border = "#30363d"
-        input_bg = "#0d1117"
-        accent = "#58a6ff"
-        accent_hover = "#79c0ff"
-        success = "#3fb950"
-        danger = "#f85149"
-        button_bg = "#21262d"
-        button_text = "#e6edf3"
-        button_border = "#30363d"
+        bg = "#0f172a"
+        card_bg = "#1e293b"
+        text_color = "#f1f5f9"
+        text_secondary = "#94a3b8"
+        border = "#334155"
+        input_bg = "#0f172a"
+        accent = "#60a5fa"
+        accent_hover = "#93c5fd"
+        success = "#4ade80"
+        danger = "#f87171"
+        button_bg = "#334155"
+        button_text = "#f1f5f9"
+        button_border = "#475569"
         button_hover_bg = accent
         button_hover_text = "white"
         button_hover_border = accent
-        number_color = "#58a6ff"
-        table_header_bg = "#1f6feb"
+        number_color = "#60a5fa"
+        table_header_bg = "#2563eb"
         table_header_text = "#ffffff"
-        table_alt_row = "#161b22"
+        table_alt_row = "#1e293b"
         chart_bg = "rgba(0,0,0,0)"
     else:
-        # Custom theme with intelligent color adaptation
         bg = custom_bg if custom_bg else "#ffffff"
-
-        # Detect if background is dark or light
         def is_dark_color(hex_color):
             try:
                 hex_color = hex_color.lstrip('#')
@@ -2676,17 +1593,16 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
                 return brightness < 128
             except:
                 return False
-
         is_dark = is_dark_color(bg)
         card_bg = bg
-        text_color = custom_text if custom_text else ("#e6edf3" if is_dark else "#1f2328")
+        text_color = custom_text if custom_text else ("#f1f5f9" if is_dark else "#1e293b")
         text_secondary = text_color
-        border = "#505050" if is_dark else "#d0d7de"
+        border = "#475569" if is_dark else "#e2e8f0"
         input_bg = bg
-        accent = "#58a6ff" if is_dark else "#0969da"
-        accent_hover = "#79c0ff" if is_dark else "#0550ae"
-        success = "#3fb950" if is_dark else "#1a7f37"
-        danger = "#f85149" if is_dark else "#cf222e"
+        accent = "#60a5fa" if is_dark else "#2563eb"
+        accent_hover = "#93c5fd" if is_dark else "#1d4ed8"
+        success = "#4ade80" if is_dark else "#16a34a"
+        danger = "#f87171" if is_dark else "#dc2626"
         button_bg = bg
         button_text = text_color
         button_border = border
@@ -2694,13 +1610,37 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         button_hover_text = "white"
         button_hover_border = accent
         number_color = accent
-        table_header_bg = "#1f6feb" if is_dark else "#333333"
+        table_header_bg = "#2563eb" if is_dark else "#1e293b"
         table_header_text = "#ffffff"
-        table_alt_row = "#1a1a2e" if is_dark else "#f5f5f5"
+        table_alt_row = "#1e293b" if is_dark else "#f8fafc"
         chart_bg = "rgba(0,0,0,0)"
 
     css = f"""
     <style>
+        #MainMenu {{visibility: hidden !important;}}
+        footer {{visibility: hidden !important;}}
+        header {{visibility: hidden !important;}}
+        .stDeployButton {{display: none !important;}}
+        .viewerBadge_container__1QSob {{display: none !important;}}
+        .stActionButton {{display: none !important;}}
+
+        .main .block-container {{ padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; max-width: 100% !important; min-height: 100vh !important; }}
+        div[data-testid="stDataFrame"] {{ max-height: 75vh !important; overflow: auto !important; }}
+        div[data-testid="stDataFrame"] > div {{ max-height: 75vh !important; }}
+
+        ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
+        ::-webkit-scrollbar-track {{ background: {bg}; border-radius: 4px; }}
+        ::-webkit-scrollbar-thumb {{ background: {border}; border-radius: 4px; }}
+        ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
+
+        [data-testid="stSidebar"] > div:first-child {{ padding-top: 0 !important; }}
+
+        .metric-card {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 16px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }}
+        .metric-card h3 {{ margin: 0; font-size: 2em; font-weight: bold; }}
+        .metric-card p {{ margin: 4px 0 0 0; font-size: 0.9em; opacity: 0.9; }}
+
+        .chart-container {{ background: {card_bg}; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 16px; border: 1px solid {border}; }}
+
         .block-container {{ padding-top: 0.5rem !important; padding-bottom: 1rem !important; }}
         .stApp {{ background-color: {bg} !important; }}
         [data-testid="stSidebar"] {{ background-color: {card_bg} !important; border-right: 1px solid {border} !important; }}
@@ -2755,7 +1695,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stFileUploader:hover {{ border-color: {accent} !important; }}
         .stFileUploader label {{ color: {text_secondary} !important; }}
 
-        /* Enhanced DataFrame / Table styling for custom themes */
         .stDataFrame, [data-testid="stDataFrame"], .stDataEditor, [data-testid="stDataEditor"],
         .stDataFrame table, .stDataEditor table, .stDataFrame th, .stDataEditor th,
         .stDataFrame td, .stDataEditor td, .stDataEditor input, .stDataEditor textarea {{
@@ -2777,7 +1716,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             border: 1px solid {border} !important;
         }}
 
-        /* Plotly chart text colors */
         .js-plotly-plot .plotly text {{ fill: {text_color} !important; }}
         .js-plotly-plot .plotly .gtitle {{ fill: {text_color} !important; }}
 
@@ -2790,10 +1728,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stTabs [data-baseweb="tab-list"] {{ background-color: {card_bg} !important; border-bottom: 1px solid {border} !important; }}
         .stTabs [data-baseweb="tab"] {{ color: {text_secondary} !important; }}
         .stTabs [data-baseweb="tab-highlight"] {{ background-color: {accent} !important; }}
-        ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
-        ::-webkit-scrollbar-track {{ background: {bg}; }}
-        ::-webkit-scrollbar-thumb {{ background: {border}; border-radius: 10px; }}
-        ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
         html, [data-testid="stMain"], [data-testid="stAppViewContainer"] {{ scroll-behavior: smooth !important; }}
         footer {{ display: none !important; }}
         .eqms-marquee {{ overflow: hidden; white-space: nowrap; }}
@@ -2918,7 +1852,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             .action-box, .pro-footer, .status-pill, .sheet-link-btn, .stChatMessage, .stChatInput,
             .train-count-container, .weather-card, .result-box, .print-area {{ display: none !important; }}
             .print-only {{ display: block !important; }}
-            .print-only {{ display: block !important; }}
             .print-only h2 {{ color: #000 !important; font-size: 18pt !important; margin-top: 0 !important; }}
             .print-only p {{ color: #333 !important; }}
             .print-only table {{ 
@@ -2949,8 +1882,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
-
-        /* Advanced: Custom scrollbar for tables */
         .stDataFrame [data-testid="stDataFrameResizable"] {{
             border: 1px solid {border} !important;
             border-radius: 8px !important;
@@ -2958,7 +1889,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
-
 
 # ------------------------------------------------------------------
 # PDF, image, WhatsApp helpers
@@ -2979,7 +1909,7 @@ def generate_pdf(df, title, full=True):
             return output.encode('latin-1')
         else:
             return output
-    
+
     pdf = FPDF('L', 'mm', 'A4')
     pdf.add_page()
     pdf.set_font("Arial", 'B', 12)
@@ -3061,15 +1991,11 @@ def create_table_image(df, title):
 def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     now_str = format_datetime()
     lines = []
-
-    # Header
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append(f"📊 *{sheet_name} SHEET REPORT*")
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append(f"🕐 Generated: {now_str}")
     lines.append("")
-
-    # Overview
     lines.append("📋 *OVERVIEW:*")
     if selected_count > 0:
         lines.append(f"   • Selected Records: *{selected_count}*")
@@ -3082,22 +2008,17 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     else:
         lines.append(f"   • Total Records: *{total_rows}*")
     lines.append("")
-
-    # Train-wise detailed breakdown
     train_col = None
     for c in df.columns:
         if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
             train_col = c
             break
-
     if train_col and not df.empty:
         train_counts = df[train_col].value_counts().to_dict()
         if train_counts:
             lines.append("🚆 *TRAIN-WISE BREAKDOWN:*")
-            # Sort by count descending
             sorted_trains = sorted(train_counts.items(), key=lambda x: x[1], reverse=True)
             for i, (train, count) in enumerate(sorted_trains[:15], 1):
-                # Get berth count for this train
                 train_mask = df[train_col].astype(str) == str(train)
                 train_df = df[train_mask]
                 berth_col = next((c for c in df.columns if 'BERTH' in c.upper()), None)
@@ -3112,8 +2033,6 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
             if len(sorted_trains) > 15:
                 lines.append(f"   ... and {len(sorted_trains)-15} more trains")
             lines.append("")
-
-    # Class-wise breakdown
     class_col = next((c for c in df.columns if 'CLASS' in c.upper()), None)
     if class_col and not df.empty:
         class_counts = df[class_col].value_counts().to_dict()
@@ -3123,20 +2042,15 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
             for cls, count in sorted_classes:
                 lines.append(f"   • {cls}: *{count}* request(s)")
             lines.append("")
-
-    # VIP/Status breakdown
     vip_col = next((c for c in df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
     if vip_col and not df.empty:
         vip_counts = df[vip_col].value_counts().to_dict()
-        # Filter out empty values
         vip_counts = {k: v for k, v in vip_counts.items() if str(k).strip()}
         if vip_counts:
             lines.append("⭐ *VIP / PRIORITY BREAKDOWN:*")
             for status, count in list(vip_counts.items())[:8]:
                 lines.append(f"   • {status}: *{count}* request(s)")
             lines.append("")
-
-    # DOJ range
     doj_col = next((c for c in df.columns if 'DOJ' in c.upper()), None)
     if doj_col and not df.empty:
         try:
@@ -3150,8 +2064,7 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
                 today_str = now_ist().strftime('%d-%m-%Y')
                 lines.append("📅 *DATE INFORMATION:*")
                 lines.append(f"   • Date Range: {min_doj} to {max_doj}")
-                lines.append(f"   • Today's Date: {today_str}")
-                # Count upcoming vs expired
+                lines.append(f"   • Today\'s Date: {today_str}")
                 upcoming = sum(1 for d in valid_dates if d >= pd.Timestamp(now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)))
                 expired = len(valid_dates) - upcoming
                 lines.append(f"   • Upcoming Journeys: *{upcoming}*")
@@ -3160,8 +2073,6 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
                 lines.append("")
         except:
             pass
-
-    # Route / From-To summary
     from_col = next((c for c in df.columns if c.upper() == 'FROM'), None)
     to_col = next((c for c in df.columns if c.upper() == 'TO'), None)
     if from_col and to_col and not df.empty:
@@ -3175,8 +2086,6 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
                 lines.append("")
         except:
             pass
-
-    # Total berths
     berth_col = next((c for c in df.columns if 'BERTH' in c.upper()), None)
     if berth_col and not df.empty:
         try:
@@ -3189,14 +2098,11 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
                 lines.append("")
         except:
             pass
-
-    # Footer
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append(f"🔗 *Sheet Link:*")
     lines.append(f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit")
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append("📱 Sent via AI EQMS Hub Pro")
-
     return "\n".join(lines)
 
 def get_pnr_status_url(pnr):
@@ -3207,96 +2113,35 @@ def get_pnr_status_url(pnr):
 # ------------------------------------------------------------------
 # Main function
 # ------------------------------------------------------------------
-
-# ------------------------------------------------------------------
-# Main function - COMPLETELY REWRITTEN with all fixes
-# ------------------------------------------------------------------
 def main():
-    # Pro enhancements: theme persistence, keyboard scroll, mouse-wheel, back-to-top
+    # Clean JavaScript - only back-to-top button, no scroll hijacking
     components.html("""
     <script>
     (function() {
         try {
             var P = window.parent;
             var doc = P.document;
-            var P = window.parent;
-            var doc = P.document;
-            // Theme persistence
-            var url = new URL(P.location.href);
-            var qpTheme = url.searchParams.get('__theme');
-            var stored = null;
-            try { stored = P.localStorage.getItem('eqms_theme'); } catch(e) {}
-            if (qpTheme) {
-                if (stored !== qpTheme) { try { P.localStorage.setItem('eqms_theme', qpTheme); } catch(e) {} }
-            } else if (stored) {
-                url.searchParams.set('__theme', stored);
-                P.location.replace(url.toString());
-                return;
-            }
             if (!P.__eqmsProInit) {
                 P.__eqmsProInit = true;
-                var mainEl = function() {
-                    var cands = ['[data-testid="stMain"]', 'section.main', '[data-testid="stAppViewContainer"]'];
-                    for (var i = 0; i < cands.length; i++) {
-                        var el = doc.querySelector(cands[i]);
-                        if (el && el.scrollHeight > el.clientHeight) return el;
-                    }
-                    return null;
-                };
-                var scrollMainBy = function(d) {
-                    var m = mainEl();
-                    if (m) { m.scrollBy({top: d, behavior: 'smooth'}); }
-                    else { P.scrollBy({top: d, behavior: 'smooth'}); }
-                };
-                var scrollMainTo = function(y) {
-                    var m = mainEl();
-                    if (m) { m.scrollTo({top: y, behavior: 'smooth'}); }
-                    else { P.scrollTo({top: y, behavior: 'smooth'}); }
-                };
                 doc.addEventListener('keydown', function(e) {
                     var t = (e.target.tagName || '').toLowerCase();
                     if (t === 'input' || t === 'textarea' || t === 'select' || e.target.isContentEditable) return;
-                    var views = ['📋 Data Table','📊 Dashboard','💬 Chat','🚂 Railway','🌤️ Weather'];
-                    if (e.key === 'PageDown') { e.preventDefault(); scrollMainBy(600); }
-                    else if (e.key === 'PageUp') { e.preventDefault(); scrollMainBy(-600); }
-                    else if (e.key === 'Home') { e.preventDefault(); scrollMainTo(0); }
-                    else if (e.key === 'End') { e.preventDefault(); scrollMainTo(999999); }
-                    else if (e.key === 'd' || e.key === 'D') {
+                    if (e.key === 'd' || e.key === 'D') {
                         var u = new URL(P.location.href);
                         var cur = u.searchParams.get('__theme') || 'Day';
                         u.searchParams.set('__theme', cur === 'Dark' ? 'Day' : 'Dark');
                         P.location.href = u.toString();
                     }
-                    else if (['1','2','3','4','5'].indexOf(e.key) !== -1) {
-                        var u2 = new URL(P.location.href);
-                        u2.searchParams.set('__view', views[parseInt(e.key, 10) - 1]);
-                        P.location.href = u2.toString();
-                    }
                 });
-                doc.addEventListener('wheel', function(e) {
-                    var sb = doc.querySelector('[data-testid="stSidebar"]');
-                    if (sb && sb.contains(e.target)) {
-                        var inner = sb.querySelector('[data-testid="stSidebarContent"]') || sb;
-                        var canScroll = inner.scrollHeight > inner.clientHeight + 5;
-                        var atTop = inner.scrollTop <= 0;
-                        var atBottom = inner.scrollTop + inner.clientHeight >= inner.scrollHeight - 2;
-                        if (!canScroll || (e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) {
-                            e.preventDefault();
-                            var m = mainEl();
-                            if (m) { m.scrollBy({top: e.deltaY}); }
-                            else { P.scrollBy({top: e.deltaY}); }
-                        }
-                    }
-                }, {passive: false});
                 if (!doc.getElementById('eqms-top-btn')) {
                     var b = doc.createElement('button');
                     b.id = 'eqms-top-btn';
-                    b.title = 'Back to top (Home key)';
+                    b.title = 'Back to top';
                     b.innerHTML = '⬆';
-                    b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:#0969da;color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
+                    b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:#2563eb;color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
                     b.onmouseenter = function(){ b.style.opacity = '1'; b.style.transform = 'scale(1.08)'; };
                     b.onmouseleave = function(){ b.style.opacity = '0.85'; b.style.transform = 'scale(1)'; };
-                    b.onclick = function(){ scrollMainTo(0); };
+                    b.onclick = function(){ window.scrollTo({top:0, behavior:'smooth'}); };
                     doc.body.appendChild(b);
                 }
             }
@@ -3305,7 +2150,7 @@ def main():
     </script>
     """, height=0)
 
-    # Theme setup (preserved from original)
+    # Theme setup
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
     qp_theme = st.query_params.get('__theme')
     if qp_theme in theme_options and st.session_state.theme != qp_theme:
@@ -3350,15 +2195,16 @@ def main():
     apply_theme(effective_theme, custom_bg, custom_text)
 
     # =====================================================================
-    # SIDEBAR - Greeting at ABSOLUTE TOP, nothing above it
+    # SIDEBAR - Greeting at ABSOLUTE TOP
     # =====================================================================
     with st.sidebar:
         # ABSOLUTE FIRST ELEMENT - Greeting
         st.markdown("""
-        <div style="background:linear-gradient(135deg,#FF9933 0%,#FFFFFF 50%,#138808 100%);padding:16px;border-radius:12px;margin-bottom:12px;text-align:center;">
-            <h2 style="margin:0;font-size:1.3em;color:#333;">🙏 Namaste</h2>
-            <p style="margin:4px 0 0 0;font-size:0.95em;color:#555;font-weight:600;">Aapka Swagat Hai</p>
-            <p style="margin:2px 0 0 0;font-size:0.8em;color:#666;">🇮🇳 Jai Hind</p>
+        <div style="background:linear-gradient(135deg,#FF9933 0%,#FFFFFF 50%,#138808 100%);padding:16px;border-radius:12px;margin-bottom:12px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+            <h2 style="margin:0;font-size:1.4em;color:#1e293b;font-weight:700;">🙏 Namaste</h2>
+            <p style="margin:6px 0 0 0;font-size:1em;color:#334155;font-weight:600;">Aapka Swagat Hai</p>
+            <p style="margin:4px 0 0 0;font-size:0.95em;color:#475569;font-weight:500;">Ham Bharat ke log</p>
+            <p style="margin:4px 0 0 0;font-size:1em;color:#166534;font-weight:700;">🇮🇳 Jai Hind</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -3370,7 +2216,6 @@ def main():
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city")
             if city != st.session_state.weather_city:
                 st.session_state.weather_city = city
-
             if st.button("🌤️ Get Weather", key="sidebar_weather_btn", use_container_width=True):
                 if city:
                     with st.spinner(f"Fetching..."):
@@ -3380,14 +2225,13 @@ def main():
                             st.rerun()
                         else:
                             st.error(data.get('error', 'Error'))
-
             if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
                 data = st.session_state.weather_data
                 st.markdown(f"""
                 <div style="text-align:center; padding: 5px 0;">
                     <div style="font-size:1.5rem; font-weight:700;">{data['temp']}°C</div>
                     <div>{data['weather'].title()}</div>
-                    <div style="font-size:0.8rem; color:#656d76;">💧 {data['humidity']}%  🌬️ {data['wind_speed']} m/s</div>
+                    <div style="font-size:0.8rem; color:#64748b;">💧 {data['humidity']}%  🌬️ {data['wind_speed']} m/s</div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -3440,7 +2284,7 @@ def main():
                         setTimeout(function(){ window.parent.document.body.removeChild(iframe); }, 2000);
                     }, 300);
                 })();
-            " style="display: block; width: 100%; padding: 10px 16px; background: #0969da; color: white; text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT Sheet</button>
+            " style="display: block; width: 100%; padding: 10px 16px; background: #2563eb; color: white; text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT Sheet</button>
         </div>
         """, height=50)
 
@@ -3706,16 +2550,42 @@ def main():
     st.caption(f"Enterprise Railway EQ Management  •  {format_date()}  •  {format_time()} IST")
     st.markdown("---")
 
-
     # =====================================================================
-    # VIEW: 📋 DATA TABLE (First & Primary Page) - HIGHLY ADVANCED
+    # VIEW: 📋 DATA TABLE - Advanced with all facilities
     # =====================================================================
     if view == "📋 Data Table":
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
 
-        # Advanced filter panel (in addition to sidebar filters)
+        # Global Search Bar
         if not filtered_df.empty and sheet_choice != "NOTE":
-            with st.expander("🔍 Advanced Filters & Search", expanded=False):
+            search_col1, search_col2 = st.columns([4, 1])
+            with search_col1:
+                global_search = st.text_input("🔍 Global Search (searches all columns)", 
+                    value=st.session_state.global_search,
+                    placeholder="Type to search across all columns...",
+                    key="global_search_input")
+                if global_search != st.session_state.global_search:
+                    st.session_state.global_search = global_search
+                    st.session_state.current_page = 1
+                    st.rerun()
+            with search_col2:
+                if st.button("🧹 Clear Search", use_container_width=True, key="clear_global_search"):
+                    st.session_state.global_search = ''
+                    st.session_state.current_page = 1
+                    st.rerun()
+
+            # Apply global search
+            if st.session_state.global_search:
+                search_term = st.session_state.global_search.lower()
+                mask = pd.Series([False] * len(filtered_df))
+                for col in filtered_df.columns:
+                    if col != '_sheet_row':
+                        mask = mask | filtered_df[col].astype(str).str.lower().str.contains(search_term, na=False)
+                filtered_df = filtered_df[mask]
+
+        # Advanced filter panel
+        if not filtered_df.empty and sheet_choice != "NOTE":
+            with st.expander("🔍 Advanced Filters & Column Search", expanded=False):
                 af1, af2, af3, af4 = st.columns(4)
                 with af1:
                     adv_pnr = st.text_input("🔎 PNR", value=st.session_state.pnr_val, key="adv_pnr")
@@ -3744,6 +2614,8 @@ def main():
                         routes = filtered_df[from_col].astype(str).str.upper() + " → " + filtered_df[to_col].astype(str).str.upper()
                         unique_routes = ['All'] + sorted(routes.dropna().unique().tolist())
                         st.selectbox("🛤️ Route", unique_routes, key="adv_route")
+                    else:
+                        st.selectbox("🛤️ Route", ['All'], key="adv_route_dummy")
                 with af6:
                     st.date_input("📅 From DOJ", value=st.session_state.from_val, key="adv_from_doj", format="DD-MM-YYYY")
                 with af7:
@@ -3783,8 +2655,24 @@ def main():
         if filtered_df.empty:
             st.info("No data to show. Clear filters or select another sheet.")
         else:
-            # Pagination
-            page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200], index=1, key="page_size_select")
+            # Sorting
+            sort_col = st.session_state.sort_column
+            sort_asc = st.session_state.sort_ascending
+            if sort_col and sort_col in filtered_df.columns:
+                try:
+                    filtered_df = filtered_df.sort_values(by=sort_col, ascending=sort_asc, key=lambda col: col.astype(str))
+                except:
+                    pass
+
+            # Rows per page selector
+            page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200], 
+                index=[15, 25, 50, 100, 200].index(st.session_state.rows_per_page) if st.session_state.rows_per_page in [15,25,50,100,200] else 1,
+                key="page_size_select")
+            if page_size != st.session_state.rows_per_page:
+                st.session_state.rows_per_page = page_size
+                st.session_state.current_page = 1
+                st.rerun()
+
             total_pages = max(1, math.ceil(len(filtered_df) / page_size))
             if st.session_state.current_page > total_pages:
                 st.session_state.current_page = total_pages
@@ -3810,6 +2698,29 @@ def main():
             sheet_rows = page_df['_sheet_row'].tolist() if '_sheet_row' in page_df.columns else []
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
+
+            # Sorting controls above table
+            if not display_df.empty:
+                sort_cols = st.columns(4)
+                with sort_cols[0]:
+                    sort_options = ['None'] + list(display_df.columns)
+                    current_sort = st.session_state.sort_column if st.session_state.sort_column in display_df.columns else 'None'
+                    new_sort = st.selectbox("📊 Sort by", sort_options, index=sort_options.index(current_sort) if current_sort in sort_options else 0, key="sort_by_select")
+                    if new_sort != current_sort:
+                        st.session_state.sort_column = None if new_sort == 'None' else new_sort
+                        st.rerun()
+                with sort_cols[1]:
+                    if st.session_state.sort_column:
+                        sort_dir = st.selectbox("Direction", ['Ascending', 'Descending'], 
+                            index=0 if st.session_state.sort_ascending else 1, key="sort_dir_select")
+                        new_asc = sort_dir == 'Ascending'
+                        if new_asc != st.session_state.sort_ascending:
+                            st.session_state.sort_ascending = new_asc
+                            st.rerun()
+                with sort_cols[2]:
+                    st.write("")
+                with sort_cols[3]:
+                    st.write("")
 
             # Print-only table (all filtered data)
             print_export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
@@ -3959,7 +2870,7 @@ def main():
                             doc.close();
                             setTimeout(function(){ iframe.contentWindow.focus(); iframe.contentWindow.print(); setTimeout(function(){ window.parent.document.body.removeChild(iframe); }, 2000); }, 300);
                         })();
-                    " style="display: block; width: 100%; padding: 9px 16px; background: #0969da; color: white; text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 1rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT</button>
+                    " style="display: block; width: 100%; padding: 9px 16px; background: #2563eb; color: white; text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 1rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT</button>
                 </div>
                 """, height=45)
             st.markdown('</div>', unsafe_allow_html=True)
@@ -4062,12 +2973,11 @@ def main():
                             else:
                                 st.success("✅ No duplicate PNRs")
                     st.markdown("**⌨️ Shortcuts**")
-                    st.caption("Ctrl+R: Refresh | Ctrl+P: Print | D: Theme | 1-5: Views")
+                    st.caption("D: Toggle Theme | Refresh button for data sync")
             st.markdown('</div>', unsafe_allow_html=True)
 
-
     # =====================================================================
-    # VIEW: 📊 DASHBOARD - With Synced Filters & Sheet Selector
+    # VIEW: 📊 DASHBOARD - Fixed errors
     # =====================================================================
     elif view == "📊 Dashboard":
         st.subheader("📊 Analytics Dashboard")
@@ -4139,7 +3049,7 @@ def main():
 
         vip_col_dash = next((c for c in dash_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
         if vip_col_dash and not dash_df.empty:
-            vip_count = dash_df[dash_col_dash[vip_col_dash].astype(str).str.strip() != ''].shape[0]
+            vip_count = dash_df[vip_col_dash].astype(str).str.strip().ne('').sum()
             with kcol3:
                 st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#f093fb,#f5576c)"><h3>{vip_count}</h3><p>VIP Records</p></div>', unsafe_allow_html=True)
 
@@ -4241,7 +3151,7 @@ def main():
                     st.plotly_chart(fig, use_container_width=True)
 
     # =====================================================================
-    # VIEW: 💬 CHAT (Preserved from original)
+    # VIEW: 💬 CHAT
     # =====================================================================
     elif view == "💬 Chat":
         st.subheader("💬 Chat with TSKEQ Bot")
@@ -4273,9 +3183,8 @@ def main():
             st.session_state.messages = []
             st.rerun()
 
-
     # =====================================================================
-    # VIEW: 🚂 RAILWAY - NTES Fixed (using user's existing functions)
+    # VIEW: 🚂 RAILWAY - Search Train tab REMOVED
     # =====================================================================
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real-time Info")
@@ -4302,7 +3211,8 @@ def main():
                 sch_url = f"https://www.railyatri.in/train-schedule/{train_no_sch}"
                 st.link_button("📋 View Schedule", sch_url, use_container_width=True)
         else:
-            tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔍 PNR Status", "🚂 Live Train", "🔎 Train Search", "📋 Train Schedule", "📸 Passport Photo"])
+            # REMOVED Search Train tab - only 4 tabs now
+            tab1, tab2, tab3, tab4 = st.tabs(["🔍 PNR Status", "🚂 Live Train", "📋 Train Schedule", "📸 Passport Photo"])
 
             with tab1:
                 st.markdown("### PNR Status Check")
@@ -4396,29 +3306,6 @@ def main():
                         st.markdown('</div>', unsafe_allow_html=True)
 
             with tab3:
-                st.markdown("### 🔎 Train Search")
-                search_query = st.text_input("Enter Train Name or Number", placeholder="e.g., vivek, rajdhani, 22503", key="train_search_input")
-                if st.button("🔎 Search", key="train_search_btn", use_container_width=True):
-                    if not search_query or len(search_query.strip()) < 3:
-                        st.error("Please enter at least 3 characters.")
-                    else:
-                        with st.spinner(f"Searching for '{search_query}'..."):
-                            data = search_trains(search_query.strip().lower())
-                            if data and isinstance(data, dict) and data.get('error'):
-                                st.error(f"❌ {data['error']}")
-                            elif data:
-                                st.session_state.search_result = data
-                                st.rerun()
-                            else:
-                                st.error("❌ No trains found.")
-
-                if st.session_state.search_result:
-                    with st.container():
-                        st.markdown('<div class="result-box">', unsafe_allow_html=True)
-                        st.markdown(format_train_search(st.session_state.search_result))
-                        st.markdown('</div>', unsafe_allow_html=True)
-
-            with tab4:
                 st.markdown("### Train Schedule / Route")
                 train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch")
                 if 'sch_start' not in st.session_state:
@@ -4483,7 +3370,7 @@ def main():
                     else:
                         st.info("No schedule data available.")
 
-            with tab5:
+            with tab4:
                 st.markdown("### 📸 Passport Photo Maker")
                 st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
                 api_key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
@@ -4523,7 +3410,7 @@ def main():
                                 st.error(f"❌ Error: {str(e)[:200]}")
 
     # =====================================================================
-    # VIEW: 🌤️ WEATHER - Fixed with IP Geolocation
+    # VIEW: 🌤️ WEATHER - Fixed HTML structure
     # =====================================================================
     elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
@@ -4571,7 +3458,6 @@ def main():
                     if ip_loc and ip_loc.get('city'):
                         st.session_state.weather_city = ip_loc['city']
                         st.success(f"📍 Detected: {ip_loc['city']}, {ip_loc.get('country', '')}")
-                        # Auto-fetch weather for detected city
                         data = get_weather(ip_loc['city'])
                         forecast = get_weather_forecast(ip_loc['city'])
                         if data and 'error' not in data:
@@ -4580,45 +3466,49 @@ def main():
                                 st.session_state.weather_forecast = forecast
                         st.rerun()
                     else:
-                        st.warning("Could not detect location automatically. Please enter city manually.")
+                        st.error("❌ Could not detect location automatically. Please enter city manually.")
 
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
 
-            # Current Weather Card
-            st.markdown(f"""
+            # Current Weather Card - FIXED: proper HTML structure, no broken divs
+            weather_html = f"""
             <div class="weather-card">
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;">
                     <div>
-                        <h2 style="margin: 0; font-size: 1.8rem;">{data['city']}, {data['country']}</h2>
+                        <h2 style="margin: 0; font-size: 1.8rem; color: inherit;">{data['city']}, {data['country']}</h2>
                         <div class="weather-desc">{data['weather'].title()}</div>
-                        <div style="font-size: 0.85rem; color: #656d76; margin-top: 4px;">Updated: {format_datetime()}</div>
+                        <div style="font-size: 0.85rem; color: inherit; opacity: 0.7; margin-top: 4px;">Updated: {format_datetime()}</div>
                     </div>
                     <div style="text-align: center;">
                         <div class="weather-temp">{data['temp']}°C</div>
-                        <div style="font-size: 0.9rem; color: #656d76;">Feels like {data['feels_like']}°C</div>
+                        <div style="font-size: 0.9rem; opacity: 0.7;">Feels like {data['feels_like']}°C</div>
                     </div>
                 </div>
-                <hr style="margin: 14px 0; border-color: #d0d7de;">
+                <hr style="margin: 14px 0; border-color: rgba(128,128,128,0.3);">
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;">
                     <div class="weather-detail">💧 Humidity: <b>{data['humidity']}%</b></div>
                     <div class="weather-detail">🌬️ Wind Speed: <b>{data['wind_speed']} m/s</b></div>
                     <div class="weather-detail">📊 Pressure: <b>{data['pressure']} hPa</b></div>
                     <div class="weather-detail">🌡️ Feels Like: <b>{data['feels_like']}°C</b></div>
-            """)
+            """
 
             if data.get('sunrise') and data.get('sunrise') != 'N/A':
                 try:
                     sunrise = datetime.fromtimestamp(data['sunrise']).strftime('%I:%M %p')
                     sunset = datetime.fromtimestamp(data['sunset']).strftime('%I:%M %p')
-                    st.markdown(f"""
+                    weather_html += f"""
                     <div class="weather-detail">🌅 Sunrise: <b>{sunrise}</b></div>
                     <div class="weather-detail">🌇 Sunset: <b>{sunset}</b></div>
-                    """)
+                    """
                 except:
                     pass
 
-            st.markdown("</div></div>", unsafe_allow_html=True)
+            weather_html += """
+                </div>
+            </div>
+            """
+            st.markdown(weather_html, unsafe_allow_html=True)
 
             if data.get('icon'):
                 icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
