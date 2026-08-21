@@ -742,23 +742,19 @@ def get_forecast_by_coords(lat, lon):
     except Exception as e: return {'error': f'Error: {str(e)}'}
 
 def get_location_from_ip():
-    services = ["https://ip-api.com/json/", "https://ipinfo.io/json"]
-    for service in services:
+    services = [
+        {"url": "https://ipapi.co/json/", "parser": lambda d: {'city': d.get('city', ''), 'lat': d.get('latitude'), 'lon': d.get('longitude'), 'country': d.get('country_name', '')}},
+        {"url": "https://ip-api.com/json/", "parser": lambda d: {'city': d.get('city', ''), 'lat': d.get('lat'), 'lon': d.get('lon'), 'country': d.get('country', '')} if d.get('status') == 'success' else None},
+        {"url": "https://ipinfo.io/json", "parser": lambda d: {'city': d.get('city', '').replace(', India', '').strip(), 'lat': float(d.get('loc','').split(',')[0]) if d.get('loc') else None, 'lon': float(d.get('loc','').split(',')[1]) if d.get('loc') and len(d.get('loc','').split(','))>1 else None, 'country': d.get('country', '')}}
+    ]
+    for svc in services:
         try:
-            if "ip-api" in service:
-                resp = requests.get(service, timeout=5)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if data.get('status') == 'success':
-                        return {'city': data.get('city', ''), 'lat': data.get('lat'), 'lon': data.get('lon'), 'country': data.get('country', '')}
-            elif "ipinfo" in service:
-                resp = requests.get(service, timeout=5)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    loc = data.get('loc', '').split(',')
-                    lat = float(loc[0]) if len(loc) > 0 else None
-                    lon = float(loc[1]) if len(loc) > 1 else None
-                    return {'city': data.get('city', '').replace(', India', '').strip(), 'country': data.get('country', ''), 'lat': lat, 'lon': lon}
+            resp = requests.get(svc["url"], timeout=8)
+            if resp.status_code == 200:
+                data = resp.json()
+                result = svc["parser"](data)
+                if result and result.get('city'):
+                    return result
         except Exception: continue
     return None
 
@@ -1455,6 +1451,20 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
+        [data-testid="stSidebar"] { display: flex !important; visibility: visible !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; }
+        .metric-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s ease; }}
+        .metric-card:hover {{ transform: translateY(-3px); box-shadow: 0 4px 16px rgba(0,0,0,0.1); }}
+        .metric-card h3 {{ margin: 0; font-size: 2.2rem; color: {accent}; font-weight: 800; }}
+        .metric-card p {{ margin: 4px 0 0 0; color: {text_secondary}; font-size: 0.9rem; font-weight: 500; }}
+        .weather-scene {{ display: flex; justify-content: center; align-items: center; gap: 30px; margin: 20px 0; flex-wrap: wrap; }}
+        .weather-char {{ text-align: center; animation: weather-bounce 2.5s ease-in-out infinite; }}
+        .weather-char:nth-child(2) {{ animation-delay: 0.3s; }}
+        .weather-char:nth-child(3) {{ animation-delay: 0.6s; }}
+        .weather-char .emoji {{ font-size: 5rem; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }}
+        .weather-char .label {{ font-size: 1rem; font-weight: 600; color: #475569; margin-top: 8px; }}
+        .rain-anim {{ animation: rain-fall 0.8s linear infinite; display: inline-block; }}
+        @keyframes rain-fall {{ 0% {{ transform: translateY(-15px); opacity: 0; }} 30% {{ opacity: 1; }} 100% {{ transform: translateY(25px); opacity: 0; }} }}
+        @keyframes weather-bounce {{ 0%,100% {{ transform: translateY(0); }} 50% {{ transform: translateY(-12px); }} }}
         .stDataFrame [data-testid="stDataFrameResizable"] {{
             border: 1px solid {border} !important; border-radius: 8px !important;
         }}
@@ -1664,11 +1674,11 @@ def main():
         bottom: 0;
         left: 0;
         width: 100%;
-        height: 120px;
+        height: 140px;
         z-index: 0;
         pointer-events: none;
         overflow: hidden;
-        opacity: 0.12;
+        opacity: 0.25;
     }
     .train-track {
         position: absolute;
@@ -1702,7 +1712,16 @@ def main():
         left: -200px;
         width: 180px;
         height: 60px;
-        animation: train-move 25s linear infinite;
+        animation: train-move 18s linear infinite;
+    }
+    .train-engine-2 {
+        position: absolute;
+        bottom: 38px;
+        left: -200px;
+        width: 180px;
+        height: 60px;
+        animation: train-move 18s linear infinite;
+        animation-delay: 9s;
     }
     @keyframes train-move {
         0% { left: -200px; }
@@ -1831,6 +1850,21 @@ def main():
         <div class="track-light"></div>
         <div class="track-light"></div>
         <div class="train-engine">
+            <div class="engine-cabin">
+                <div class="engine-window"></div>
+            </div>
+            <div class="engine-body">
+                <div class="engine-chimney"></div>
+                <div class="engine-light"></div>
+            </div>
+            <div class="engine-wheel"></div>
+            <div class="engine-wheel"></div>
+            <div class="engine-wheel"></div>
+            <div class="engine-smoke"></div>
+            <div class="engine-smoke"></div>
+            <div class="engine-smoke"></div>
+        </div>
+        <div class="train-engine-2">
             <div class="engine-cabin">
                 <div class="engine-window"></div>
             </div>
@@ -2242,7 +2276,7 @@ def main():
     # Top bar
     st.markdown("""
     <div class="eqms-marquee" style="background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); padding: 8px 0; border-radius: 4px; margin-bottom: 10px;">
-        <span>🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save</span>
+        <span style="color: #1e293b !important; text-shadow: 0 0 10px rgba(255,255,255,1), 1px 1px 3px rgba(0,0,0,0.5); font-weight: 700; letter-spacing: 0.5px; font-size: 15px;">🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -2688,6 +2722,11 @@ def main():
         dash_df_raw = load_sheet_data_cached(dash_sheet, SHEET_ID)
         dash_df = dash_df_raw.copy() if not dash_df_raw.empty else pd.DataFrame()
 
+        if st.button("🔄 Refresh Dashboard Data", key="refresh_dash_btn"):
+            st.cache_data.clear()
+            st.session_state.last_refresh = time.time()
+            st.rerun()
+
         # Apply SAME filters as Data Table
         if not dash_df.empty and dash_sheet != "NOTE":
             config = SHEET_CONFIG[dash_sheet]
@@ -2721,31 +2760,49 @@ def main():
         st.markdown("### Key Metrics")
         kcol1, kcol2, kcol3, kcol4, kcol5 = st.columns(5)
         total_records = len(dash_df) if not dash_df.empty else 0
-        with kcol1: st.markdown(f'<div class="metric-card"><h3>{total_records}</h3><p>Total Records</p></div>', unsafe_allow_html=True)
+        with kcol1: 
+            st.markdown(f'<div class="metric-card"><h3>{total_records}</h3><p>Total Records</p></div>', unsafe_allow_html=True)
 
         train_col_dash = None
         for c in dash_df.columns:
             if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
                 train_col_dash = c; break
-        if train_col_dash and not dash_df.empty:
-            unique_trains = dash_df[train_col_dash].nunique()
-            with kcol2: st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#11998e,#38ef7d)"><h3>{unique_trains}</h3><p>Unique Trains</p></div>', unsafe_allow_html=True)
+        if train_col_dash and not dash_df.empty and dash_df[train_col_dash].notna().sum() > 0:
+            unique_trains = dash_df[train_col_dash].dropna().astype(str).str.strip().ne('').nunique()
+            with kcol2: 
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#11998e,#38ef7d); color: white;"><h3 style="color: white;">{unique_trains}</h3><p style="color: rgba(255,255,255,0.9);">Unique Trains</p></div>', unsafe_allow_html=True)
+        else:
+            with kcol2: 
+                st.markdown(f'<div class="metric-card"><h3>—</h3><p>Unique Trains</p></div>', unsafe_allow_html=True)
 
         vip_col_dash = next((c for c in dash_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
-        if vip_col_dash and not dash_df.empty:
+        if vip_col_dash and not dash_df.empty and dash_df[vip_col_dash].notna().sum() > 0:
             vip_count = dash_df[vip_col_dash].astype(str).str.strip().ne('').sum()
-            with kcol3: st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#f093fb,#f5576c)"><h3>{vip_count}</h3><p>VIP Records</p></div>', unsafe_allow_html=True)
+            with kcol3: 
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#f093fb,#f5576c); color: white;"><h3 style="color: white;">{vip_count}</h3><p style="color: rgba(255,255,255,0.9);">VIP Records</p></div>', unsafe_allow_html=True)
+        else:
+            with kcol3: 
+                st.markdown(f'<div class="metric-card"><h3>—</h3><p>VIP Records</p></div>', unsafe_allow_html=True)
 
         class_col_dash = next((c for c in dash_df.columns if 'CLASS' in c.upper()), None)
-        if class_col_dash and not dash_df.empty:
-            class_counts = dash_df[class_col_dash].value_counts()
+        if class_col_dash and not dash_df.empty and dash_df[class_col_dash].notna().sum() > 0:
+            class_counts = dash_df[class_col_dash].dropna().astype(str).str.strip()
+            class_counts = class_counts[class_counts != ''].value_counts()
             top_class = class_counts.index[0] if len(class_counts) > 0 else "N/A"
-            with kcol4: st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#4facfe,#00f2fe)"><h3>{top_class}</h3><p>Top Class</p></div>', unsafe_allow_html=True)
+            with kcol4: 
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#4facfe,#00f2fe); color: white;"><h3 style="color: white;">{top_class}</h3><p style="color: rgba(255,255,255,0.9);">Top Class</p></div>', unsafe_allow_html=True)
+        else:
+            with kcol4: 
+                st.markdown(f'<div class="metric-card"><h3>—</h3><p>Top Class</p></div>', unsafe_allow_html=True)
 
         doj_col_dash = next((c for c in dash_df.columns if 'DOJ' in c.upper()), None)
         if doj_col_dash and not dash_df.empty:
             upcoming = sum(1 for _, r in dash_df.iterrows() if not is_expired(r.get(doj_col_dash, '')))
-            with kcol5: st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#fa709a,#fee140)"><h3>{upcoming}</h3><p>Upcoming</p></div>', unsafe_allow_html=True)
+            with kcol5: 
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#fa709a,#fee140); color: white;"><h3 style="color: white;">{upcoming}</h3><p style="color: rgba(255,255,255,0.9);">Upcoming</p></div>', unsafe_allow_html=True)
+        else:
+            with kcol5: 
+                st.markdown(f'<div class="metric-card"><h3>—</h3><p>Upcoming</p></div>', unsafe_allow_html=True)
 
         st.divider()
 
@@ -2754,30 +2811,44 @@ def main():
         else:
             # Graph 1: Train-wise Distribution (Vertical Bar with detailed values)
             st.markdown("### 1️⃣ Train-wise Distribution")
-            if train_col_dash:
-                train_counts = dash_df[train_col_dash].value_counts().head(15).reset_index()
-                train_counts.columns = ['Train', 'Count']
-                fig1 = px.bar(train_counts, x='Train', y='Count', title="Train-wise Request Count",
-                    color='Count', color_continuous_scale='Viridis', text='Count',
-                    labels={'Train': 'Train Number', 'Count': 'Total Requests'})
-                fig1.update_traces(textposition='outside', textfont_size=12)
-                fig1.update_layout(height=400, showlegend=False, margin=dict(l=20,r=20,t=50,b=20),
-                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                    font=dict(size=12), title_font_size=16)
-                st.plotly_chart(fig1, use_container_width=True)
+            if train_col_dash and not dash_df.empty and dash_df[train_col_dash].notna().sum() > 0:
+                tc = dash_df[train_col_dash].dropna().astype(str).str.strip()
+                tc = tc[tc != '']
+                if len(tc) > 0:
+                    train_counts = tc.value_counts().head(15).reset_index()
+                    train_counts.columns = ['Train', 'Count']
+                    fig1 = px.bar(train_counts, x='Train', y='Count', title="Train-wise Request Count",
+                        color='Count', color_continuous_scale='Viridis', text='Count',
+                        labels={'Train': 'Train Number', 'Count': 'Total Requests'})
+                    fig1.update_traces(textposition='outside', textfont_size=12)
+                    fig1.update_layout(height=400, showlegend=False, margin=dict(l=20,r=20,t=50,b=20),
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                        font=dict(size=12), title_font_size=16)
+                    st.plotly_chart(fig1, use_container_width=True)
+                else:
+                    st.info("ℹ️ No train data available for chart.")
+            else:
+                st.info("ℹ️ Train column not found or empty in this sheet.")
 
             # Graph 2: Class-wise Distribution (Round Pie/Donut with detailed values)
             st.markdown("### 2️⃣ Class-wise Distribution")
-            if class_col_dash:
-                class_counts = dash_df[class_col_dash].value_counts().reset_index()
-                class_counts.columns = ['Class', 'Count']
-                fig2 = px.pie(class_counts, names='Class', values='Count', title="Class-wise Breakdown",
-                    hole=0.5, color_discrete_sequence=px.colors.sequential.RdBu)
-                fig2.update_traces(textinfo='label+percent+value', textfont_size=12,
-                    pull=[0.05 if i == 0 else 0 for i in range(len(class_counts))])
-                fig2.update_layout(height=400, showlegend=True, margin=dict(l=20,r=20,t=50,b=20),
-                    paper_bgcolor='rgba(0,0,0,0)', font=dict(size=12), title_font_size=16)
-                st.plotly_chart(fig2, use_container_width=True)
+            if class_col_dash and not dash_df.empty and dash_df[class_col_dash].notna().sum() > 0:
+                cc = dash_df[class_col_dash].dropna().astype(str).str.strip()
+                cc = cc[cc != '']
+                if len(cc) > 0:
+                    class_counts = cc.value_counts().reset_index()
+                    class_counts.columns = ['Class', 'Count']
+                    fig2 = px.pie(class_counts, names='Class', values='Count', title="Class-wise Breakdown",
+                        hole=0.5, color_discrete_sequence=px.colors.sequential.RdBu)
+                    fig2.update_traces(textinfo='label+percent+value', textfont_size=12,
+                        pull=[0.05 if i == 0 else 0 for i in range(len(class_counts))])
+                    fig2.update_layout(height=400, showlegend=True, margin=dict(l=20,r=20,t=50,b=20),
+                        paper_bgcolor='rgba(0,0,0,0)', font=dict(size=12), title_font_size=16)
+                    st.plotly_chart(fig2, use_container_width=True)
+                else:
+                    st.info("ℹ️ No class data available for chart.")
+            else:
+                st.info("ℹ️ Class column not found or empty in this sheet.")
 
             # Graph 3: Route-wise Distribution (Horizontal Bar with detailed values)
             st.markdown("### 3️⃣ Route-wise Distribution")
@@ -3327,6 +3398,56 @@ def main():
 
             weather_html += "</div>"
             st.markdown(weather_html, unsafe_allow_html=True)
+
+            # Animated Weather Cartoon Scene
+            weather_condition = str(data.get('weather', '')).lower()
+            cartoon_html = """
+            <div class="weather-scene">
+            """
+            if 'rain' in weather_condition or 'drizz' in weather_condition:
+                cartoon_html += """
+                <div class="weather-char"><div class="emoji">🌧️</div><div class="label">Heavy Rain</div></div>
+                <div class="weather-char"><div class="emoji rain-anim">💧</div><div class="label">Wet Day</div></div>
+                <div class="weather-char"><div class="emoji">☔</div><div class="label">Carry Umbrella</div></div>
+                """
+            elif 'cloud' in weather_condition:
+                cartoon_html += """
+                <div class="weather-char"><div class="emoji">☁️</div><div class="label">Cloudy Sky</div></div>
+                <div class="weather-char"><div class="emoji">🌥️</div><div class="label">Partly Cloudy</div></div>
+                <div class="weather-char"><div class="emoji">🌬️</div><div class="label">Breezy</div></div>
+                """
+            elif 'clear' in weather_condition or 'sun' in weather_condition:
+                cartoon_html += """
+                <div class="weather-char"><div class="emoji">☀️</div><div class="label">Sunny Day</div></div>
+                <div class="weather-char"><div class="emoji">😎</div><div class="label">Stay Cool</div></div>
+                <div class="weather-char"><div class="emoji">🕶️</div><div class="label">Wear Shades</div></div>
+                """
+            elif 'thunder' in weather_condition or 'storm' in weather_condition:
+                cartoon_html += """
+                <div class="weather-char"><div class="emoji">⛈️</div><div class="label">Thunderstorm</div></div>
+                <div class="weather-char"><div class="emoji">⚡</div><div class="label">Stay Indoor</div></div>
+                <div class="weather-char"><div class="emoji">🌩️</div><div class="label">Lightning</div></div>
+                """
+            elif 'snow' in weather_condition or 'frost' in weather_condition or 'freez' in weather_condition:
+                cartoon_html += """
+                <div class="weather-char"><div class="emoji">❄️</div><div class="label">Snowfall</div></div>
+                <div class="weather-char"><div class="emoji">☃️</div><div class="label">Stay Warm</div></div>
+                <div class="weather-char"><div class="emoji">🧣</div><div class="label">Wear Warm</div></div>
+                """
+            elif 'mist' in weather_condition or 'fog' in weather_condition or 'haz' in weather_condition:
+                cartoon_html += """
+                <div class="weather-char"><div class="emoji">🌫️</div><div class="label">Foggy</div></div>
+                <div class="weather-char"><div class="emoji">🚗</div><div class="label">Drive Slow</div></div>
+                <div class="weather-char"><div class="emoji">🔦</div><div class="label">Low Visibility</div></div>
+                """
+            else:
+                cartoon_html += """
+                <div class="weather-char"><div class="emoji">🌤️</div><div class="label">Pleasant</div></div>
+                <div class="weather-char"><div class="emoji">🌈</div><div class="label">Good Day</div></div>
+                <div class="weather-char"><div class="emoji">🚂</div><div class="label">Safe Journey</div></div>
+                """
+            cartoon_html += "</div>"
+            st.markdown(cartoon_html, unsafe_allow_html=True)
 
             if data.get('icon'):
                 icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
