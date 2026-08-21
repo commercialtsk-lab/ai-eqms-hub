@@ -1,3 +1,4 @@
+
 import os
 import streamlit as st
 import streamlit.components.v1 as components
@@ -26,9 +27,6 @@ from matplotlib.table import Table as MplTable
 import numpy as np
 from PIL import Image, ImageDraw
 
-# ------------------------------------------------------------------
-# NTES client (try to import)
-# ------------------------------------------------------------------
 try:
     from ntes import NTESClient
     ntes_client = NTESClient()
@@ -36,9 +34,6 @@ try:
 except ImportError:
     NTES_AVAILABLE = False
 
-# ------------------------------------------------------------------
-# Streamlit page config
-# ------------------------------------------------------------------
 st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="expanded")
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -47,23 +42,17 @@ def now_ist():
     return datetime.now(IST)
 
 def format_time(dt=None):
-    if dt is None:
-        dt = now_ist()
+    if dt is None: dt = now_ist()
     return dt.strftime("%H:%M:%S")
 
 def format_date(dt=None):
-    if dt is None:
-        dt = now_ist()
+    if dt is None: dt = now_ist()
     return dt.strftime("%d-%m-%Y")
 
 def format_datetime(dt=None):
-    if dt is None:
-        dt = now_ist()
+    if dt is None: dt = now_ist()
     return dt.strftime("%d-%m-%Y %H:%M:%S")
 
-# ------------------------------------------------------------------
-# Secrets and credentials
-# ------------------------------------------------------------------
 GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
 GSPREAD_CREDENTIALS = st.secrets.get("GSPREAD_CREDENTIALS")
 WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", "7fff411d9ecb183d6053870fc40823c9")
@@ -71,20 +60,15 @@ DRIVE_FOLDER_ID = "1H1gf8WqfoTYFT_pU9WfIDLrHg-NpuUSI"
 SHEET_ID = "1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI"
 
 if not GEMINI_API_KEY or not GSPREAD_CREDENTIALS:
-    st.error("❌ Missing credentials! Please check secrets.toml")
+    st.error("Missing credentials! Please check secrets.toml")
     st.stop()
 
-# ------------------------------------------------------------------
-# Session state defaults
-# ------------------------------------------------------------------
 defaults = {
     'messages': [], 'activity_log': [], 'last_uploaded_file': None,
     'last_uploaded_drive_url': None, 'last_uploaded_view_url': None,
     'last_uploaded_print_url': None, 'last_refresh': time.time(),
-    'chat_suggestions': [
-        "Show me EQ summary", "How many records today?", "Train wise breakup",
-        "Pending EQ requests", "Quota status", "PNR status"
-    ],
+    'chat_suggestions': ["Show me EQ summary", "How many records today?", "Train wise breakup",
+        "Pending EQ requests", "Quota status", "PNR status"],
     'theme': 'Auto (System)', 'custom_bg': '#ffffff', 'custom_text': '#000000',
     'current_page': 1, 'pnr_val': '', 'train_val': '', 'from_val': None,
     'to_val': None, 'upload_success': False, 'last_upload_time': None,
@@ -97,24 +81,17 @@ defaults = {
     'sch_start': 0, 'sch_data': None, 'weather_data': None, 'weather_forecast': None,
     'system_theme': 'Day', 'weather_city': 'Tinsukia',
     'pnr_result': None, 'train_result': None, 'search_result': None,
-    'last_uploaded_drive_id': None,
-    'manual_refresh': False,
+    'last_uploaded_drive_id': None, 'manual_refresh': False,
     'sheet_print_data': None,
     'dashboard_filters': {'pnr': '', 'train': '', 'from_doj': None, 'to_doj': None, 'class_filter': '', 'route_filter': '', 'vip_filter': ''},
-    'global_search': '',
-    'sort_column': None,
-    'sort_ascending': True,
-    'column_filters': {},
-    'rows_per_page': 25,
+    'global_search': '', 'sort_column': None, 'sort_ascending': True, 'column_filters': {},
+    'rows_per_page': 25, 'dashboard_sheet': 'EQ', 'adv_filters': {},
+    'weather_lat': None, 'weather_lon': None, 'weather_location_name': None,
 }
-
 for key, val in defaults.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
-# ------------------------------------------------------------------
-# Date helper functions for Railway tab
-# ------------------------------------------------------------------
 def get_date_label(offset):
     target = datetime.now() - timedelta(days=offset)
     day = target.day
@@ -124,9 +101,6 @@ def get_date_label(offset):
 def get_date_for_offset(offset):
     return (datetime.now() - timedelta(days=offset)).strftime("%d-%b-%Y")
 
-# ------------------------------------------------------------------
-# Station map
-# ------------------------------------------------------------------
 STATION_MAP = {
     'NTSK': 'New Tinsukia', 'GHY': 'Guwahati', 'NDLS': 'New Delhi', 'HWH': 'Howrah',
     'PNBE': 'Patna', 'BSB': 'Varanasi', 'CNB': 'Kanpur Central', 'LKO': 'Lucknow',
@@ -174,9 +148,6 @@ STATION_MAP = {
     'AGC': 'Agra Cantt', 'KOJ': 'Kokrajhar'
 }
 
-# ------------------------------------------------------------------
-# Cached resources
-# ------------------------------------------------------------------
 @st.cache_resource
 def init_gemini():
     genai.configure(api_key=GEMINI_API_KEY)
@@ -196,57 +167,43 @@ def init_drive():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scopes)
     return build('drive', 'v3', credentials=creds)
 
-# ------------------------------------------------------------------
-# Helper functions
-# ------------------------------------------------------------------
 def clean_pnr(pnr):
-    if not pnr:
-        return ''
+    if not pnr: return ''
     digits = re.sub(r'\D', '', str(pnr))
     return digits if len(digits) == 10 else (digits[-10:] if len(digits) > 10 else '')
 
 def clean_phone(phone):
-    if not phone:
-        return ''
+    if not phone: return ''
     digits = re.sub(r'\D', '', str(phone))
     return digits[-10:] if len(digits) >= 10 else ''
 
 def parse_date(date_str):
-    if not date_str:
-        return ''
-    if isinstance(date_str, datetime):
-        return date_str.strftime("%d-%m-%Y")
+    if not date_str: return ''
+    if isinstance(date_str, datetime): return date_str.strftime("%d-%m-%Y")
     date_str = str(date_str).strip()
     multi_match = re.search(r'(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{2,4})', date_str)
     if multi_match:
         day, month, year = multi_match.groups()
-        day = day.zfill(2)
-        month = month.zfill(2)
-        if len(year) == 2:
-            year = '20' + year
-        if int(month) > 12 and int(day) <= 12:
-            day, month = month, day
+        day, month = day.zfill(2), month.zfill(2)
+        if len(year) == 2: year = '20' + year
+        if int(month) > 12 and int(day) <= 12: day, month = month, day
         return f"{day}-{month}-{year}"
     return date_str
 
 def get_station(code):
-    if not code:
-        return ''
+    if not code: return ''
     code = str(code).upper().strip()
     return f"{code} ({STATION_MAP[code]})" if code in STATION_MAP else code
 
 def is_expired(doj_str):
-    if not doj_str:
-        return False
+    if not doj_str: return False
     parsed = parse_date(doj_str)
-    if not parsed:
-        return False
+    if not parsed: return False
     try:
         doj_dt = datetime.strptime(parsed, "%d-%m-%Y")
         today = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
         return doj_dt < today
-    except Exception:
-        return False
+    except Exception: return False
 
 def col_index_to_letter(idx):
     result = ""
@@ -261,26 +218,16 @@ def log_activity(action: str):
         st.session_state.activity_log = st.session_state.activity_log[-50:]
 
 def sanitize_latin(text):
-    if not text:
-        return ''
-    replacements = {
-        '•': '-', '·': '-', '\u2018': "'", '\u2019': "'",
-        '\u201c': '"', '\u201d': '"', '\u2013': '-', '\u2014': '-',
-    }
-    for k, v in replacements.items():
-        text = text.replace(k, v)
+    if not text: return ''
+    replacements = {'•': '-', '·': '-', '\u2018': "'", '\u2019': "'", '\u201c': '"', '\u201d': '"', '\u2013': '-', '\u2014': '-'}
+    for k, v in replacements.items(): text = text.replace(k, v)
     return text.encode('latin-1', 'ignore').decode('latin-1')
 
-# ------------------------------------------------------------------
-# Sheet configuration and loading
-# ------------------------------------------------------------------
-EQ_HEADINGS = [
-    'S/N', 'PNR', 'FROM', 'TO', 'BOARDING', 'T/N', 'CLASS', 'DOJ',
+EQ_HEADINGS = ['S/N', 'PNR', 'FROM', 'TO', 'BOARDING', 'T/N', 'CLASS', 'DOJ',
     'PASS NAME', 'PASS PH', 'T/BERTHS', 'PURPOSE', 'ADDRESS',
     'DIARY NO', 'RECOMMENDATION', 'DESIGNATION', 'PHONE NUBER',
     'MP/MLA/MR/MINISTER/VIP/VVIP', 'WARRANT NUMBER', 'PROCEESING DATE+TIME',
-    'APPLICATION DATE', 'RAILWAY/ZONE/DIVISION', 'PREFERENCE'
-]
+    'APPLICATION DATE', 'RAILWAY/ZONE/DIVISION', 'PREFERENCE']
 
 SHEET_CONFIG = {
     "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "doj_col": 7, "headings": EQ_HEADINGS},
@@ -299,8 +246,7 @@ def load_sheet_data_cached(sheet_name, sheet_id):
         all_data = sheet.get_all_values()
         config = SHEET_CONFIG.get(sheet_name, {"start_row": 1})
         start_row = config["start_row"]
-        if len(all_data) < start_row:
-            return pd.DataFrame()
+        if len(all_data) < start_row: return pd.DataFrame()
         headers_raw = all_data[start_row - 2] if start_row > 1 else (all_data[0] if all_data else [])
         data_rows = all_data[start_row - 1:] if start_row <= len(all_data) else []
         seen = {}
@@ -313,8 +259,7 @@ def load_sheet_data_cached(sheet_name, sheet_id):
             else:
                 seen[h_str] = 0
                 unique_headers.append(h_str)
-        if not data_rows:
-            return pd.DataFrame()
+        if not data_rows: return pd.DataFrame()
         max_cols = len(unique_headers)
         padded_rows = []
         for row in data_rows:
@@ -327,12 +272,8 @@ def load_sheet_data_cached(sheet_name, sheet_id):
         st.error(f"Error loading {sheet_name}: {e}")
         return pd.DataFrame()
 
-# ------------------------------------------------------------------
-# Gemini Universal Parser
-# ------------------------------------------------------------------
 def smart_detect_warrant(text):
-    if not text:
-        return {'warrant': '', 'found': False}
+    if not text: return {'warrant': '', 'found': False}
     text = str(text).upper()
     patterns = [
         r'IC[-_\s]*(\d{2,4})',
@@ -351,31 +292,20 @@ def smart_detect_warrant(text):
     return {'warrant': '', 'found': False}
 
 def smart_detect_rail_board(text):
-    if not text:
-        return {'isRailBoard': False}
+    if not text: return {'isRailBoard': False}
     text = str(text).upper()
     clean_text = re.sub(r'\s+', ' ', text).strip()
     patterns = [
-        r'RAIL\s*BOARD',
-        r'OFFICE\s*OF\s*(?:THE\s*)?HON\'BLE\s*MINISTER\s*RAILWAYS',
+        r'RAIL\s*BOARD', r'OFFICE\s*OF\s*(?:THE\s*)?HON\'BLE\s*MINISTER\s*RAILWAYS',
         r'OFFICE\s*OF\s*(?:THE\s*)?HONOURABLE\s*MINISTER\s*RAILWAYS',
-        r'HON\'BLE\s*MINISTER\s*RAILWAYS',
-        r'HONOURABLE\s*MINISTER\s*RAILWAYS',
-        r'MINISTER\s*RAILWAYS',
-        r'MINISTRY\s*OF\s*RAILWAYS',
-        r'RAIL\s*MANTRI',
-        r'RAIL\s*BHAWAN'
+        r'HON\'BLE\s*MINISTER\s*RAILWAYS', r'HONOURABLE\s*MINISTER\s*RAILWAYS',
+        r'MINISTER\s*RAILWAYS', r'MINISTRY\s*OF\s*RAILWAYS', r'RAIL\s*MANTRI', r'RAIL\s*BHAWAN'
     ]
     for pattern in patterns:
-        if re.search(pattern, clean_text):
-            return {'isRailBoard': True}
+        if re.search(pattern, clean_text): return {'isRailBoard': True}
     keywords = ['MINISTER', 'RAILWAYS', 'RAILWAY', 'HONBLE', "HON'BLE", 'RAIL MANTRI', 'OFFICE', 'RAIL', 'BOARD']
-    score = 0
-    for kw in keywords:
-        if kw in clean_text:
-            score += 1
-    if score >= 4:
-        return {'isRailBoard': True}
+    score = sum(1 for kw in keywords if kw in clean_text)
+    if score >= 4: return {'isRailBoard': True}
     if 'OFFICE' in clean_text and 'MINISTER' in clean_text and ('RAILWAYS' in clean_text or 'RAILWAY' in clean_text):
         office_idx = clean_text.find('OFFICE')
         minister_idx = clean_text.find('MINISTER')
@@ -384,8 +314,7 @@ def smart_detect_rail_board(text):
     return {'isRailBoard': False}
 
 def smart_detect_diary(text):
-    if not text:
-        return {'diary': '', 'found': False}
+    if not text: return {'diary': '', 'found': False}
     text = str(text).upper()
     patterns = [
         r'DIARY\s*NO\.?\s*[:#]?\s*([A-Z0-9\/\-]+)',
@@ -396,35 +325,24 @@ def smart_detect_diary(text):
         match = re.search(pattern, text)
         if match:
             diary = match.group(1).strip()
-            if len(diary) > 3:
-                return {'diary': diary, 'found': True}
+            if len(diary) > 3: return {'diary': diary, 'found': True}
     return {'diary': '', 'found': False}
 
 def smart_detect_vip(text):
-    if not text:
-        return ''
+    if not text: return ''
     text = str(text).upper()
-    if 'MINISTER' in text:
-        return 'MINISTER'
-    if re.search(r'\bMR\b', text):
-        return 'MR'
-    if re.search(r'\bMP\b', text) and 'PMO' not in text:
-        return 'MP'
-    if re.search(r'\bMLA\b', text):
-        return 'MLA'
-    if 'OSD' in text:
-        return 'OSD'
-    if 'PMO' in text:
-        return 'PMO'
-    if 'VVIP' in text:
-        return 'VVIP'
-    if 'VIP' in text:
-        return 'VIP'
+    if 'MINISTER' in text: return 'MINISTER'
+    if re.search(r'\bMR\b', text): return 'MR'
+    if re.search(r'\bMP\b', text) and 'PMO' not in text: return 'MP'
+    if re.search(r'\bMLA\b', text): return 'MLA'
+    if 'OSD' in text: return 'OSD'
+    if 'PMO' in text: return 'PMO'
+    if 'VVIP' in text: return 'VVIP'
+    if 'VIP' in text: return 'VIP'
     return ''
 
 def smart_detect_lower_seat(text):
-    if not text:
-        return False
+    if not text: return False
     text = str(text).upper()
     keywords = ['AGE+', 'AGE +', 'MEDICAL', 'HANDICAP', 'SR CITIZEN', 'SENIOR', 'DISABLED']
     return any(kw in text for kw in keywords)
@@ -434,8 +352,7 @@ def process_extracted_records(records):
     seen = set()
     for rec in records:
         pnr = clean_pnr(rec.get('PNR', ''))
-        if not pnr or pnr in seen:
-            continue
+        if not pnr or pnr in seen: continue
         seen.add(pnr)
         full_text = ' '.join([
             str(rec.get('PURPOSE', '')), str(rec.get('ADDRESS', '')),
@@ -457,30 +374,23 @@ def process_extracted_records(records):
             diary_val = 'RAIL BOARD'
         if not warrant_val:
             warrant = smart_detect_warrant(full_text)
-            if warrant['found']:
-                warrant_val = warrant['warrant']
+            if warrant['found']: warrant_val = warrant['warrant']
         if not diary_val or diary_val == '-' or diary_val == '':
             diary = smart_detect_diary(full_text)
-            if diary['found']:
-                diary_val = diary['diary']
+            if diary['found']: diary_val = diary['diary']
         if not vip:
             detected_vip = smart_detect_vip(full_text)
-            if detected_vip:
-                vip = detected_vip
+            if detected_vip: vip = detected_vip
         if smart_detect_lower_seat(full_text) and (pref == 'General' or pref == '' or pref == '-'):
             pref = 'Lower Seat'
-        if not pref or pref == '' or pref == '-':
-            pref = 'General'
+        if not pref or pref == '' or pref == '-': pref = 'General'
         doj_raw = str(rec.get('DOJ', '')).strip()
         doj_parsed = parse_date(doj_raw)
-        if not doj_parsed or doj_parsed == 'Invalid Date' or doj_parsed == 'NaN-NaN-NaN':
-            doj_parsed = ''
-        clean_record = {
-            'PNR': pnr,
-            'T_N': str(rec.get('T_N', '')).strip(),
+        if not doj_parsed or doj_parsed == 'Invalid Date' or doj_parsed == 'NaN-NaN-NaN': doj_parsed = ''
+        cleaned.append({
+            'PNR': pnr, 'T_N': str(rec.get('T_N', '')).strip(),
             'CLASS': str(rec.get('CLASS', '')).strip().upper(),
-            'DOJ': doj_parsed,
-            'FROM': str(rec.get('FROM', '')).strip().upper(),
+            'DOJ': doj_parsed, 'FROM': str(rec.get('FROM', '')).strip().upper(),
             'TO': str(rec.get('TO', '')).strip().upper(),
             'BOARDING': str(rec.get('BOARDING', '')).strip().upper(),
             'PASS_NAME': str(rec.get('PASS_NAME', '')).strip(),
@@ -488,19 +398,14 @@ def process_extracted_records(records):
             'T_BERTHS': int(rec.get('T_BERTHS', 1)) if str(rec.get('T_BERTHS', '')).isdigit() else 1,
             'PURPOSE': str(rec.get('PURPOSE', '')).strip(),
             'ADDRESS': str(rec.get('ADDRESS', '')).strip(),
-            'DIARY_NO': diary_val,
-            'RECOMMENDATION': str(rec.get('RECOMMENDATION', '')).strip(),
+            'DIARY_NO': diary_val, 'RECOMMENDATION': str(rec.get('RECOMMENDATION', '')).strip(),
             'DESIGNATION': str(rec.get('DESIGNATION', '')).strip(),
-            'VIP_STATUS': vip,
-            'APPLICATION_DATE': parse_date(str(rec.get('APPLICATION_DATE', ''))),
-            'RAILWAY_ZONE': zone,
-            'PREFERENCE': pref,
+            'VIP_STATUS': vip, 'APPLICATION_DATE': parse_date(str(rec.get('APPLICATION_DATE', ''))),
+            'RAILWAY_ZONE': zone, 'PREFERENCE': pref,
             'PHONE_NUBER': clean_phone(str(rec.get('PHONE_NUBER', ''))),
             'WARRANT_NO': warrant_val
-        }
-        cleaned.append(clean_record)
-    if not cleaned:
-        return {'error': 'No valid records extracted'}
+        })
+    if not cleaned: return {'error': 'No valid records extracted'}
     return {'records': cleaned, 'count': len(cleaned)}
 
 def gemini_universal_parser(input_data, input_type, mime_type, progress_callback=None):
@@ -618,74 +523,56 @@ CRITICAL: Return ONLY the JSON array. No explanations, no extra text. If you can
         parts.append({"inline_data": {"mime_type": mime_type or "audio/ogg", "data": input_data}})
         parts.append({"text": system_prompt})
     elif input_type == 'text':
-        parts.append({"text": system_prompt + "\n\nINPUT DATA:\n" + input_data})
+        parts.append({"text": system_prompt + """
+
+INPUT DATA:
+""" + input_data})
     else:
         return {'error': 'Unsupported type'}
-    if progress_callback:
-        progress_callback(30, "Sending to Gemini...")
-    payload = {
-        "contents": [{"parts": parts}],
-        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 16384}
-    }
+    if progress_callback: progress_callback(30, "Sending to Gemini...")
+    payload = {"contents": [{"parts": parts}], "generationConfig": {"temperature": 0.4, "maxOutputTokens": 16384}}
     try:
         headers = {"Content-Type": "application/json"}
         response = requests.post(url, json=payload, headers=headers, timeout=120)
-        if response.status_code != 200:
-            return {'error': f'Gemini API Error: {response.status_code}'}
+        if response.status_code != 200: return {'error': f'Gemini API Error: {response.status_code}'}
         data = response.json()
         if not data.get('candidates') or not data['candidates'][0].get('content', {}).get('parts'):
             return {'error': 'Empty response from Gemini'}
         response_text = data['candidates'][0]['content']['parts'][0]['text']
-        if progress_callback:
-            progress_callback(60, "Parsing Gemini response...")
+        if progress_callback: progress_callback(60, "Parsing Gemini response...")
         json_match = re.search(r'\[\s*\{[\s\S]*\}\s*\]', response_text)
         if not json_match:
             json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', response_text)
-            if json_match:
-                json_str = json_match.group(1)
+            if json_match: json_str = json_match.group(1)
             else:
-                if progress_callback:
-                    progress_callback(80, "Using fallback extraction...")
+                if progress_callback: progress_callback(80, "Using fallback extraction...")
                 return {'error': 'Could not parse Gemini response', 'raw': response_text[:500]}
-        else:
-            json_str = json_match.group(0)
+        else: json_str = json_match.group(0)
         json_str = json_str.replace('```json', '').replace('```', '').strip()
         json_str = re.sub(r',\s*}', '}', json_str)
-        json_str = re.sub(r',\s*]', ']', json_str)
+        json_str = re.sub(r',\s*\]', ']', json_str)
         json_str = re.sub(r'([a-zA-Z0-9_]+)\s*:', r'"\1":', json_str)
         json_str = json_str.replace("'", '"')
         records = json.loads(json_str)
-        if isinstance(records, dict):
-            records = [records]
-        if progress_callback:
-            progress_callback(90, "Processing records...")
+        if isinstance(records, dict): records = [records]
+        if progress_callback: progress_callback(90, "Processing records...")
         result = process_extracted_records(records)
-        if progress_callback:
-            progress_callback(100, "Complete!")
+        if progress_callback: progress_callback(100, "Complete!")
         return result
     except Exception as e:
         return {'error': f'Parser Error: {e}'}
 
-# ------------------------------------------------------------------
-# Drive upload and sheet save
-# ------------------------------------------------------------------
 def upload_to_drive(file_bytes, filename, mime_type):
     try:
         drive_service = init_drive()
         file_metadata = {'name': filename, 'parents': [DRIVE_FOLDER_ID]}
         media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type, resumable=True)
-        file = drive_service.files().create(
-            body=file_metadata, media_body=media,
-            fields='id,name,webViewLink,size'
-        ).execute()
+        file = drive_service.files().create(body=file_metadata, media_body=media, fields='id,name,webViewLink,size').execute()
         file_id = file.get('id')
-        return {
-            'success': True, 'id': file_id, 'name': file.get('name'),
-            'url': file.get('webViewLink'), 'size': file.get('size'),
-            'view_url': f"https://drive.google.com/file/d/{file_id}/view",
-            'print_url': f"https://drive.google.com/file/d/{file_id}/preview",
-            'download_url': f"https://drive.google.com/uc?export=download&id={file_id}"
-        }
+        return {'success': True, 'id': file_id, 'name': file.get('name'), 'url': file.get('webViewLink'),
+                'size': file.get('size'), 'view_url': f"https://drive.google.com/file/d/{file_id}/view",
+                'print_url': f"https://drive.google.com/file/d/{file_id}/preview",
+                'download_url': f"https://drive.google.com/uc?export=download&id={file_id}"}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
@@ -697,10 +584,8 @@ def save_to_sheet(sheet, records):
         for row in all_data[start_row-1:]:
             if row and len(row) > 1:
                 pnr = clean_pnr(row[1])
-                if pnr:
-                    existing_pnrs.append(pnr)
-        saved = 0
-        skipped = 0
+                if pnr: existing_pnrs.append(pnr)
+        saved, skipped = 0, 0
         next_sn = len(all_data) - start_row + 2
         for rec in records:
             pnr = clean_pnr(rec.get('PNR', ''))
@@ -708,14 +593,12 @@ def save_to_sheet(sheet, records):
                 skipped += 1
                 continue
             now = format_datetime()
-            row = [
-                next_sn, pnr, rec.get('FROM', ''), rec.get('TO', ''), rec.get('BOARDING', ''),
+            row = [next_sn, pnr, rec.get('FROM', ''), rec.get('TO', ''), rec.get('BOARDING', ''),
                 rec.get('T_N', ''), rec.get('CLASS', ''), rec.get('DOJ', ''), rec.get('PASS_NAME', ''),
                 rec.get('PASS_PH', ''), rec.get('T_BERTHS', 1), rec.get('PURPOSE', ''), rec.get('ADDRESS', ''),
                 rec.get('DIARY_NO', ''), rec.get('RECOMMENDATION', ''), rec.get('DESIGNATION', ''),
                 rec.get('PHONE_NUBER', ''), rec.get('VIP_STATUS', ''), rec.get('WARRANT_NO', ''),
-                now, rec.get('APPLICATION_DATE', ''), rec.get('RAILWAY_ZONE', ''), rec.get('PREFERENCE', 'General')
-            ]
+                now, rec.get('APPLICATION_DATE', ''), rec.get('RAILWAY_ZONE', ''), rec.get('PREFERENCE', 'General')]
             sheet.append_row(row)
             existing_pnrs.append(pnr)
             next_sn += 1
@@ -762,49 +645,34 @@ Instructions:
 Previous conversation:
 """
         for msg in chat_history[-10:]:
-            if msg['role'] == 'user':
-                system_prompt += f"User: {msg['content']}\n"
-            else:
-                system_prompt += f"Assistant: {msg['content']}\n"
+            if msg['role'] == 'user': system_prompt += f"User: {msg['content']}\n"
+            else: system_prompt += f"Assistant: {msg['content']}\n"
         system_prompt += f"\nUser: {user_message}\nAssistant:"
         response = model.generate_content(system_prompt)
         return response.text
     except Exception as e:
         return f"⚠️ Error: Could not process your request. Please try again later. ({str(e)})"
 
-# ------------------------------------------------------------------
-# Weather API functions
-# ------------------------------------------------------------------
 def get_weather(city_name):
-    if not city_name:
-        return {'error': 'Please enter a city name'}
+    if not city_name: return {'error': 'Please enter a city name'}
     try:
         url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            return {
-                'city': data.get('name', city_name),
-                'country': data.get('sys', {}).get('country', ''),
-                'temp': data.get('main', {}).get('temp', 'N/A'),
-                'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
-                'humidity': data.get('main', {}).get('humidity', 'N/A'),
-                'pressure': data.get('main', {}).get('pressure', 'N/A'),
+            return {'city': data.get('name', city_name), 'country': data.get('sys', {}).get('country', ''),
+                'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
+                'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
                 'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
                 'icon': data.get('weather', [{}])[0].get('icon', ''),
-                'wind_speed': data.get('wind', {}).get('speed', 'N/A'),
-                'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
-                'sunrise': data.get('sys', {}).get('sunrise', 'N/A'),
-                'sunset': data.get('sys', {}).get('sunset', 'N/A')
-            }
-        else:
-            return {'error': f'City not found. Please check the name.'}
-    except Exception as e:
-        return {'error': f'Error fetching weather: {str(e)}'}
+                'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
+                'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
+                'lat': data.get('coord', {}).get('lat'), 'lon': data.get('coord', {}).get('lon')}
+        else: return {'error': 'City not found. Please check the name.'}
+    except Exception as e: return {'error': f'Error fetching weather: {str(e)}'}
 
 def get_weather_forecast(city_name):
-    if not city_name:
-        return {'error': 'Please enter a city name'}
+    if not city_name: return {'error': 'Please enter a city name'}
     try:
         url = f"https://api.openweathermap.org/data/2.5/forecast?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
         response = requests.get(url, timeout=10)
@@ -815,43 +683,66 @@ def get_weather_forecast(city_name):
             for item in forecast_list:
                 date = item.get('dt_txt', '')[:10]
                 if date not in daily_forecast:
-                    daily_forecast[date] = {
-                        'temps': [], 'weather': item['weather'][0]['main'] if item.get('weather') else 'N/A',
-                        'icon': item['weather'][0]['icon'] if item.get('weather') else '',
-                        'humidity': item['main']['humidity'],
-                        'wind': item['wind']['speed'],
-                        'pressure': item['main']['pressure'],
-                        'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'
-                    }
+                    daily_forecast[date] = {'temps': [], 'weather': item['weather'][0]['main'] if item.get('weather') else 'N/A',
+                        'icon': item['weather'][0]['icon'] if item.get('weather') else '', 'humidity': item['main']['humidity'],
+                        'wind': item['wind']['speed'], 'pressure': item['main']['pressure'],
+                        'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'}
                 daily_forecast[date]['temps'].append(item['main']['temp'])
-
             result = []
             for date, info in list(daily_forecast.items())[:5]:
-                result.append({
-                    'date': date,
-                    'temp': round(sum(info['temps'])/len(info['temps']), 1),
-                    'min_temp': round(min(info['temps']), 1),
-                    'max_temp': round(max(info['temps']), 1),
-                    'weather': info['weather'],
-                    'description': info['description'].title(),
-                    'icon': info['icon'],
-                    'humidity': info['humidity'],
-                    'wind': info['wind'],
-                    'pressure': info['pressure']
-                })
+                result.append({'date': date, 'temp': round(sum(info['temps'])/len(info['temps']), 1),
+                    'min_temp': round(min(info['temps']), 1), 'max_temp': round(max(info['temps']), 1),
+                    'weather': info['weather'], 'description': info['description'].title(),
+                    'icon': info['icon'], 'humidity': info['humidity'], 'wind': info['wind'], 'pressure': info['pressure']})
             return {'forecast': result, 'city': data.get('city', {}).get('name', city_name), 'country': data.get('city', {}).get('country', '')}
-        else:
-            return {'error': f'City not found. Please check the name.'}
-    except Exception as e:
-        return {'error': f'Error fetching forecast: {str(e)}'}
+        else: return {'error': 'City not found. Please check the name.'}
+    except Exception as e: return {'error': f'Error fetching forecast: {str(e)}'}
+
+def get_weather_by_coords(lat, lon):
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            return {'city': data.get('name', 'Unknown'), 'country': data.get('sys', {}).get('country', ''),
+                'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
+                'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
+                'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
+                'icon': data.get('weather', [{}])[0].get('icon', ''),
+                'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
+                'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
+                'lat': lat, 'lon': lon}
+        else: return {'error': 'Location not found'}
+    except Exception as e: return {'error': f'Error: {str(e)}'}
+
+def get_forecast_by_coords(lat, lon):
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            forecast_list = data.get('list', [])
+            daily_forecast = {}
+            for item in forecast_list:
+                date = item.get('dt_txt', '')[:10]
+                if date not in daily_forecast:
+                    daily_forecast[date] = {'temps': [], 'weather': item['weather'][0]['main'] if item.get('weather') else 'N/A',
+                        'icon': item['weather'][0]['icon'] if item.get('weather') else '', 'humidity': item['main']['humidity'],
+                        'wind': item['wind']['speed'], 'pressure': item['main']['pressure'],
+                        'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'}
+                daily_forecast[date]['temps'].append(item['main']['temp'])
+            result = []
+            for date, info in list(daily_forecast.items())[:5]:
+                result.append({'date': date, 'temp': round(sum(info['temps'])/len(info['temps']), 1),
+                    'min_temp': round(min(info['temps']), 1), 'max_temp': round(max(info['temps']), 1),
+                    'weather': info['weather'], 'description': info['description'].title(),
+                    'icon': info['icon'], 'humidity': info['humidity'], 'wind': info['wind'], 'pressure': info['pressure']})
+            return {'forecast': result, 'city': data.get('city', {}).get('name', 'Unknown'), 'country': data.get('city', {}).get('country', '')}
+        else: return {'error': 'Forecast not available'}
+    except Exception as e: return {'error': f'Error: {str(e)}'}
 
 def get_location_from_ip():
-    """Get approximate location from IP address as fallback for browser geolocation"""
-    services = [
-        "https://ip-api.com/json/",
-        "https://ipinfo.io/json",
-        "https://api.ipgeolocation.io/ipgeo?apiKey=demo",
-    ]
+    services = ["https://ip-api.com/json/", "https://ipinfo.io/json"]
     for service in services:
         try:
             if "ip-api" in service:
@@ -859,57 +750,41 @@ def get_location_from_ip():
                 if resp.status_code == 200:
                     data = resp.json()
                     if data.get('status') == 'success':
-                        return {
-                            'city': data.get('city', ''),
-                            'lat': data.get('lat'),
-                            'lon': data.get('lon'),
-                            'country': data.get('country', '')
-                        }
+                        return {'city': data.get('city', ''), 'lat': data.get('lat'), 'lon': data.get('lon'), 'country': data.get('country', '')}
             elif "ipinfo" in service:
                 resp = requests.get(service, timeout=5)
                 if resp.status_code == 200:
                     data = resp.json()
-                    return {
-                        'city': data.get('city', '').replace(', India', '').strip(),
-                        'country': data.get('country', ''),
-                        'lat': None, 'lon': None
-                    }
-        except Exception:
-            continue
+                    loc = data.get('loc', '').split(',')
+                    lat = float(loc[0]) if len(loc) > 0 else None
+                    lon = float(loc[1]) if len(loc) > 1 else None
+                    return {'city': data.get('city', '').replace(', India', '').strip(), 'country': data.get('country', ''), 'lat': lat, 'lon': lon}
+        except Exception: continue
     return None
 
-# ------------------------------------------------------------------
-# NTES-based railway functions
-# ------------------------------------------------------------------
 def safe_list(data, key):
     val = data.get(key) if data else None
-    if val is None:
-        return []
-    if isinstance(val, list):
-        return val
+    if val is None: return []
+    if isinstance(val, list): return val
     return [val]
 
 def safe_str(val, default='N/A'):
     return str(val) if val is not None else default
 
 def format_station_time(time_str):
-    if not time_str or time_str in ['N/A', 'Source', 'Dest']:
-        return time_str
+    if not time_str or time_str in ['N/A', 'Source', 'Dest']: return time_str
     time_parts = time_str.split()
     if len(time_parts) >= 2 and any(m in time_parts[1] for m in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']):
         return time_parts[0]
     return time_str
 
 def get_stn_field(station, possible_keys, default=''):
-    if not station or not isinstance(station, dict):
-        return default
+    if not station or not isinstance(station, dict): return default
     for key in possible_keys:
-        if key in station:
-            return station[key]
+        if key in station: return station[key]
     lower_map = {k.lower(): v for k, v in station.items()}
     for key in possible_keys:
-        if key.lower() in lower_map:
-            return lower_map[key.lower()]
+        if key.lower() in lower_map: return lower_map[key.lower()]
     return default
 
 def normalize_station(s):
@@ -920,70 +795,55 @@ def normalize_station(s):
     eta = s.get('ETA','')
     etd = s.get('ETD','')
     day = s.get('Day', s.get('day', ''))
-    return {
-        'SC': get_stn_field(s, ['SC','StationCode','StnCode','Code','stationCode','stnCode','StnCd'], 'N/A'),
+    return {'SC': get_stn_field(s, ['SC','StationCode','StnCode','Code','stationCode','stnCode','StnCd'], 'N/A'),
         'SN': get_stn_field(s, ['SN','StationName','StnName','Name','stationName','stnName'], 'N/A'),
-        'STA': sta if sta else (eta if eta else 'N/A'),
-        'STD': std if std else (etd if etd else 'N/A'),
-        'ETA': eta, 'ETD': etd, 'DAY': safe_str(day, '')
-    }
+        'STA': sta if sta else (eta if eta else 'N/A'), 'STD': std if std else (etd if etd else 'N/A'),
+        'ETA': eta, 'ETD': etd, 'DAY': safe_str(day, '')}
 
 def find_station_index(stations, current_code, current_name, pos_str):
-    if not stations:
-        return -1, "none"
-    if current_code:
-        current_code = current_code.upper().strip()
-    if current_name:
-        current_name = current_name.upper().strip()
+    if not stations: return -1, "none"
+    if current_code: current_code = current_code.upper().strip()
+    if current_name: current_name = current_name.upper().strip()
     if current_code:
         for i, s in enumerate(stations):
-            if s.get('SC','').upper().strip() == current_code:
-                return i, "code_exact"
+            if s.get('SC','').upper().strip() == current_code: return i, "code_exact"
     if current_code and len(current_code) >= 3:
         for i, s in enumerate(stations):
             sc = s.get('SC','').upper().strip()
-            if sc and (current_code in sc or sc in current_code):
-                return i, "code_contains"
+            if sc and (current_code in sc or sc in current_code): return i, "code_contains"
     if current_name:
         for i, s in enumerate(stations):
             sn = s.get('SN','').upper().strip()
-            if sn == current_name:
-                return i, "name_exact"
+            if sn == current_name: return i, "name_exact"
     if current_name:
         for i, s in enumerate(stations):
             sn = s.get('SN','').upper().strip()
-            if sn and (current_name in sn or sn in current_name):
-                return i, "name_contain"
+            if sn and (current_name in sn or sn in current_name): return i, "name_contain"
     if current_name:
         current_words = set(re.findall(r'[A-Z]{3,}', current_name))
         for i, s in enumerate(stations):
             sn = s.get('SN','').upper().strip()
-            if current_words.intersection(set(re.findall(r'[A-Z]{3,}', sn))):
-                return i, "name_word"
+            if current_words.intersection(set(re.findall(r'[A-Z]{3,}', sn))): return i, "name_word"
     return -1, "none"
 
 def find_nearest_stoppage(stations, current_code, current_name, pos_str):
-    if not stations:
-        return -1, "none"
+    if not stations: return -1, "none"
     idx, _ = find_station_index(stations, current_code, current_name, pos_str)
-    if idx >= 0:
-        return idx, "direct"
+    if idx >= 0: return idx, "direct"
     pos_lower = pos_str.lower()
     if 'between' in pos_lower:
         match = re.search(r'between\s+([A-Z]+)\s+and\s+([A-Z]+)', pos_str, re.IGNORECASE)
         if match:
             next_code = match.group(2).upper()
             for i, s in enumerate(stations):
-                if s.get('SC','').upper().strip() == next_code:
-                    return i, "between"
+                if s.get('SC','').upper().strip() == next_code: return i, "between"
     patterns = [r'after\s+([A-Z]+)\s+before\s+([A-Z]+)', r'from\s+([A-Z]+)\s+to\s+([A-Z]+)']
     for pattern in patterns:
         match = re.search(pattern, pos_str, re.IGNORECASE)
         if match:
             next_code = match.group(2).upper()
             for i, s in enumerate(stations):
-                if s.get('SC','').upper().strip() == next_code:
-                    return i, "pattern"
+                if s.get('SC','').upper().strip() == next_code: return i, "pattern"
     return -1, "none"
 
 def get_full_schedule(train_number):
@@ -991,124 +851,87 @@ def get_full_schedule(train_number):
         return [normalize_station(s) for s in safe_list(ntes_client.schedule(train_number), 'stations')
                 if (s.get('STA') and s.get('STA') != 'N/A') or (s.get('STD') and s.get('STD') != 'N/A')
                 or s.get('STA') == 'Source' or s.get('STD') == 'Dest']
-    except Exception:
-        return []
+    except Exception: return []
 
 def get_pnr_status(pnr):
-    if not NTES_AVAILABLE:
-        return {"error": "NTES library not installed"}
+    if not NTES_AVAILABLE: return {"error": "NTES library not installed"}
     try:
         response = ntes_client.pnr_status(pnr)
-        if not response:
-            return {"error": "NO_DATA", "message": "Empty response from NTES server"}
+        if not response: return {"error": "NO_DATA", "message": "Empty response from NTES server"}
         err_msg = response.get('errorMessage', '')
-        if err_msg and 'FLUSHED' in str(err_msg).upper():
-            return {"error": "FLUSHED_PNR"}
-        if not response.get('pnrNumber'):
-            return {"error": "NO_DATA", "message": "Invalid PNR or server error"}
+        if err_msg and 'FLUSHED' in str(err_msg).upper(): return {"error": "FLUSHED_PNR"}
+        if not response.get('pnrNumber'): return {"error": "NO_DATA", "message": "Invalid PNR or server error"}
         passengers = []
         for p in safe_list(response, 'passengerList'):
-            passengers.append({
-                'booking_status': safe_str(p.get('bookingStatusDetails'), 'N/A'),
-                'current_status': safe_str(p.get('currentStatusDetails'), 'N/A')
-            })
-        return {
-            "pnr": safe_str(response.get('pnrNumber')),
-            "train_number": safe_str(response.get('trainNumber')),
-            "train_name": safe_str(response.get('trainName')),
-            "journey_date": safe_str(response.get('dateOfJourney')),
-            "class": safe_str(response.get('journeyClass')),
-            "quota": safe_str(response.get('quota')),
+            passengers.append({'booking_status': safe_str(p.get('bookingStatusDetails'), 'N/A'),
+                'current_status': safe_str(p.get('currentStatusDetails'), 'N/A')})
+        return {"pnr": safe_str(response.get('pnrNumber')), "train_number": safe_str(response.get('trainNumber')),
+            "train_name": safe_str(response.get('trainName')), "journey_date": safe_str(response.get('dateOfJourney')),
+            "class": safe_str(response.get('journeyClass')), "quota": safe_str(response.get('quota')),
             "chart_status": safe_str(response.get('chartStatus'), 'Not Prepared'),
-            "boarding_point": safe_str(response.get('boardingPoint')),
-            "destination": safe_str(response.get('destinationStation')),
-            "passengers": passengers
-        }
+            "boarding_point": safe_str(response.get('boardingPoint')), "destination": safe_str(response.get('destinationStation')),
+            "passengers": passengers}
     except requests.exceptions.ConnectTimeout:
-        return {"error": "TIMEOUT", "message": "NTES server is not responding. Indian Railways server may be down or blocking requests. Please try again later."}
+        return {"error": "TIMEOUT", "message": "NTES server is not responding."}
     except requests.exceptions.ConnectionError:
-        return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server. Check your internet connection or try using a VPN."}
+        return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server."}
     except Exception as e:
         err_str = str(e)
         if "timeout" in err_str.lower() or "connection" in err_str.lower():
-            return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}. The Indian Railways server may be temporarily unavailable."}
+            return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}."}
         return {"error": "API_ERROR", "message": err_str[:200]}
 
 def get_confirmation_prediction(passengers, chart_status):
-    if "prepared" in str(chart_status).lower() or not passengers:
-        return None
+    if "prepared" in str(chart_status).lower() or not passengers: return None
     confirmed = 0
     for p in passengers:
         status = str(p.get('current_status', '')).upper()
-        if 'CNF' in status:
-            confirmed += 1
-        elif 'RAC' in status:
-            confirmed += 0.5
+        if 'CNF' in status: confirmed += 1
+        elif 'RAC' in status: confirmed += 0.5
         elif 'PQWL' in status or 'WL' in status:
             try:
-                if '/' in status:
-                    confirmed += 0.7 if int(status.split('/')[-1]) <= 3 else 0.4 if int(status.split('/')[-1]) <= 5 else 0.1
-            except:
-                confirmed += 0.2
+                if '/' in status: confirmed += 0.7 if int(status.split('/')[-1]) <= 3 else 0.4 if int(status.split('/')[-1]) <= 5 else 0.1
+            except: confirmed += 0.2
     base = (confirmed / len(passengers)) * 100
-    if confirmed / len(passengers) < 0.5:
-        base += 10
+    if confirmed / len(passengers) < 0.5: base += 10
     return min(100, max(0, round(base)))
 
 def get_status_icon(status, chart_status=None):
     status_upper = str(status).upper()
-    if 'CAN' in status_upper:
-        return "❌"
-    if 'CNF' in status_upper:
-        return "✅"
-    if 'RAC' in status_upper:
-        return "🟡"
+    if 'CAN' in status_upper: return "❌"
+    if 'CNF' in status_upper: return "✅"
+    if 'RAC' in status_upper: return "🟡"
     if 'PQWL' in status_upper or 'WL' in status_upper:
         return "🔴" if chart_status and "prepared" in str(chart_status).lower() else "⏱️"
     return "ℹ️"
 
 def get_status_note(status, chart_status):
     status_upper = str(status).upper()
-    if 'CAN' in status_upper:
-        return "❌ Ticket Cancelled!"
-    if 'CNF' in status_upper:
-        return "✅ Confirmed!"
+    if 'CAN' in status_upper: return "❌ Ticket Cancelled!"
+    if 'CNF' in status_upper: return "✅ Confirmed!"
     if 'RAC' in status_upper:
         return "🟡 RAC - May get confirmed" if "prepared" in str(chart_status).lower() else "🟡 RAC - Chance of confirmation"
     if 'PQWL' in status_upper:
-        if "prepared" in str(chart_status).lower():
-            return "🔴 PQWL - Chart ready, waiting"
-        try:
-            num = int(status.split('/')[-1]) if '/' in status else 0
-        except:
-            num = 0
-        if num <= 3:
-            return "⏱️ PQWL - Good chance!"
-        elif num <= 5:
-            return "⏱️ PQWL - May confirm"
+        if "prepared" in str(chart_status).lower(): return "🔴 PQWL - Chart ready, waiting"
+        try: num = int(status.split('/')[-1]) if '/' in status else 0
+        except: num = 0
+        if num <= 3: return "⏱️ PQWL - Good chance!"
+        elif num <= 5: return "⏱️ PQWL - May confirm"
         return "⏱️ PQWL - Low chance"
     if 'WL' in status_upper:
-        if "prepared" in str(chart_status).lower():
-            return "🔴 WL - Chart ready, waiting"
-        try:
-            num = int(status.split('/')[-1]) if '/' in status else 0
-        except:
-            num = 0
-        if num <= 5:
-            return "⏱️ WL - Good chance!"
-        elif num <= 10:
-            return "⏱️ WL - May confirm"
+        if "prepared" in str(chart_status).lower(): return "🔴 WL - Chart ready, waiting"
+        try: num = int(status.split('/')[-1]) if '/' in status else 0
+        except: num = 0
+        if num <= 5: return "⏱️ WL - Good chance!"
+        elif num <= 10: return "⏱️ WL - May confirm"
         return "⏱️ WL - Low chance"
     return "ℹ️ Check status"
 
 def format_pnr_result(data):
-    if not data:
-        return "❌ PNR not found."
+    if not data: return "❌ PNR not found."
     if isinstance(data, dict) and data.get('error'):
-        if data['error'] == "FLUSHED_PNR":
-            return "❌ FLUSHED PNR / PNR NOT YET GENERATED\n\nPlease check the PNR number and try again."
+        if data['error'] == "FLUSHED_PNR": return "❌ FLUSHED PNR / PNR NOT YET GENERATED\n\nPlease check the PNR number and try again."
         return f"❌ Error: {data['error']}"
-
     pnr = data.get('pnr', 'N/A')
     train_no = data.get('train_number', 'N/A')
     train_name = data.get('train_name', 'N/A')
@@ -1119,19 +942,15 @@ def format_pnr_result(data):
     boarding = data.get('boarding_point', 'N/A')
     destination = data.get('destination', 'N/A')
     passengers = data.get('passengers', [])
-
     is_cancelled = any('CAN' in str(p.get('current_status', '')).upper() for p in passengers)
     chart_prepared = "prepared" in str(chart_status).lower()
     chart_icon = "✅" if chart_prepared else "❌"
     chart_text = "Chart Prepared" if chart_prepared else "Chart Not Prepared"
-
     msg = f"🎟️ PNR: {pnr}\n🚃 Train Number: {train_no}\n🚇 Train Name: {train_name}\n📍 {boarding} ➡️ {destination}\n🗓️ Journey Date: {journey_date}\n😎 Class & Quota: {class_code} ({quota})\n📋 Chart Status: {chart_text} {chart_icon}\n"
-
     if not chart_prepared and not is_cancelled:
         pred = get_confirmation_prediction(passengers, chart_status)
         if pred is not None:
             msg += f"🎯 Confirmation: {'🟢' if pred >= 80 else '🟡' if pred >= 50 else '🔴'} {pred}% {'High' if pred >= 80 else 'Medium' if pred >= 50 else 'Low'} Chance\n"
-
     msg += "\n👫 Passenger List 👫\n"
     circles = ["❶", "❷", "❸", "❹", "❺", "❻", "❼", "❽", "❾", "❿"]
     for i, p in enumerate(passengers, 1):
@@ -1142,28 +961,21 @@ def format_pnr_result(data):
         current_icon = get_status_icon(current, chart_status)
         note = get_status_note(current, chart_status)
         msg += f"\n{circle}\nBooking Status: {booking} {booking_icon}\nCurrent Status: {current} {current_icon}\nStatus Note: {note}\n"
-
     msg += f"\n\n📌 Last Updated @ {now_ist().strftime('%d %b %H:%M:%S')}"
     return msg
 
 def get_live_train_status(train_number, date_str=None):
-    if not NTES_AVAILABLE:
-        return {"error": "NTES library not installed"}
+    if not NTES_AVAILABLE: return {"error": "NTES library not installed"}
     try:
-        if date_str is None:
-            date_str = datetime.now().strftime("%d-%b-%Y")
+        if date_str is None: date_str = datetime.now().strftime("%d-%b-%Y")
         date_formats = [date_str, date_str.replace('-', ' '), date_str.replace('-', '/')]
         response = None
         for fmt in date_formats:
             try:
                 response = ntes_client.live_status(train_number, fmt)
-                if response and response.get('CPOS'):
-                    break
-            except Exception:
-                continue
-        if not response or not response.get('CPOS'):
-            return {"error": "NO_DATA", "message": "No live data available for this train/date"}
-
+                if response and response.get('CPOS'): break
+            except Exception: continue
+        if not response or not response.get('CPOS'): return {"error": "NO_DATA", "message": "No live data available for this train/date"}
         train_name = safe_str(response.get('TNM'), 'N/A')
         source = safe_str(response.get('SRCN', response.get('DFROM')), 'N/A')
         destination = safe_str(response.get('DSTNN', response.get('DTO')), 'N/A')
@@ -1172,50 +984,37 @@ def get_live_train_status(train_number, date_str=None):
         current_pos = safe_str(response.get('CPOS'), 'N/A')
         delay = safe_str(response.get('LDEL'), '0')
         excpt = safe_str(response.get('EXCP'), '')
-
         pos_str = str(current_pos)
         pos_lower = pos_str.lower()
         is_completed = any(k in pos_lower for k in ["reached destination", "journey completed", "terminated", "destination reached", "arrived at destination", "train completed", "train reached", "journey ended", "train terminated", "has terminated", "run terminated"])
         is_not_started = any(k in pos_lower for k in ["not started", "yet to start", "scheduled", "at source", "will start", "starts from", "origin", "before departure"])
-
         if not is_completed and destination != 'N/A':
             dest_upper = destination.upper()
             if any(w in pos_lower for w in ['arrived', 'reached', 'terminated', 'completed', 'ended']):
                 dest_words = [w for w in dest_upper.split() if len(w) >= 3]
                 for word in dest_words:
-                    if word in pos_str.upper():
-                        is_completed = True
-                        break
-
+                    if word in pos_str.upper(): is_completed = True; break
         current_code = None
         current_name = None
         m = re.search(r'\(([A-Z]{2,5})\)', pos_str)
-        if m:
-            current_code = m.group(1).upper()
+        if m: current_code = m.group(1).upper()
         if not current_code:
             for pattern in [r'from\s+([A-Z]{2,5})\b', r'at\s+([A-Z]{2,5})\b', r'(?:departed|arrived|left|reached)\s+(?:from\s+|at\s+)?([A-Z]{2,5})\b']:
                 m = re.search(pattern, pos_str, re.IGNORECASE)
-                if m:
-                    current_code = m.group(1).upper()
-                    break
+                if m: current_code = m.group(1).upper(); break
         if not current_name:
             for pattern in [r'(?:from|at|departed|arrived|left|reached)\s+([A-Z][A-Z\s]+?)(?:\s*\(|$)', r'(?:has|is)\s+([A-Z][A-Z\s]+?)\s+(?:station|junction|jn)']:
                 m = re.search(pattern, pos_str, re.IGNORECASE)
-                if m:
-                    current_name = re.sub(r'\s+(JUNCTION|JN|ROAD|RD|CITY|CANTT|NAGAR|NG)$', '', m.group(1).strip().upper())
-                    break
-
+                if m: current_name = re.sub(r'\s+(JUNCTION|JN|ROAD|RD|CITY|CANTT|NAGAR|NG)$', '', m.group(1).strip().upper()); break
         live_stations_map = {}
         stations_raw = safe_list(response, 'STNSD')
-        if not stations_raw:
-            stations_raw = safe_list(response, 'STNS')
+        if not stations_raw: stations_raw = safe_list(response, 'STNS')
         all_live = []
         for s in stations_raw:
             ns = normalize_station(s)
             if ns['SC'] != 'N/A':
                 live_stations_map[ns['SC'].upper()] = ns
                 all_live.append(ns)
-
         full_stations = get_full_schedule(train_number)
         merged_stations = []
         for s in full_stations:
@@ -1224,36 +1023,26 @@ def get_live_train_status(train_number, date_str=None):
                 live = live_stations_map[sc]
                 merged = s.copy()
                 for k in ['ETA','ETD','DAY','STA','STD']:
-                    if live.get(k):
-                        merged[k] = live[k]
+                    if live.get(k): merged[k] = live[k]
                 merged_stations.append(merged)
-            else:
-                merged_stations.append(s)
-
+            else: merged_stations.append(s)
         upcoming = []
         mapped_idx = -1
         is_non_stoppage = False
-
-        if is_completed:
-            upcoming = []
-        elif is_not_started:
-            upcoming = merged_stations[:8]
+        if is_completed: upcoming = []
+        elif is_not_started: upcoming = merged_stations[:8]
         else:
             if merged_stations:
                 curr_idx, match_type = find_station_index(merged_stations, current_code, current_name, pos_str)
                 if curr_idx >= 0:
-                    if curr_idx + 1 < len(merged_stations):
-                        upcoming = merged_stations[curr_idx+1:curr_idx+9]
-                    else:
-                        is_completed = True
+                    if curr_idx + 1 < len(merged_stations): upcoming = merged_stations[curr_idx+1:curr_idx+9]
+                    else: is_completed = True
                 else:
                     is_non_stoppage = True
                     mapped_idx, map_type = find_nearest_stoppage(merged_stations, current_code, current_name, pos_str)
                     if mapped_idx >= 0:
-                        if mapped_idx + 1 < len(merged_stations):
-                            upcoming = merged_stations[mapped_idx+1:mapped_idx+9]
-                        else:
-                            is_completed = True
+                        if mapped_idx + 1 < len(merged_stations): upcoming = merged_stations[mapped_idx+1:mapped_idx+9]
+                        else: is_completed = True
                     elif all_live and (current_code or current_name):
                         live_idx, _ = find_station_index(all_live, current_code, current_name, pos_str)
                         if live_idx >= 0 and live_idx + 1 < len(all_live):
@@ -1262,77 +1051,47 @@ def get_live_train_status(train_number, date_str=None):
                                 if ms.get('SC','').upper() == next_code:
                                     upcoming = merged_stations[i:i+8]
                                     break
-                            if not upcoming:
-                                upcoming = all_live[live_idx+1:live_idx+9]
-                    if not upcoming:
-                        return {"error": "NO_DATA", "message": "Train position unclear for this date"}
+                            if not upcoming: upcoming = all_live[live_idx+1:live_idx+9]
+                    if not upcoming: return {"error": "NO_DATA", "message": "Train position unclear for this date"}
             elif all_live:
                 curr_idx, _ = find_station_index(all_live, current_code, current_name, pos_str)
-                if curr_idx >= 0:
-                    upcoming = all_live[curr_idx+1:curr_idx+9]
-                else:
-                    return {"error": "NO_DATA", "message": "Train position unclear for this date"}
-
-        if not upcoming and not is_completed and merged_stations:
-            upcoming = merged_stations[:8]
-
-        return {
-            "train_number": train_number,
-            "train_name": train_name,
-            "current_station": current_pos,
-            "source": source,
-            "destination": destination,
-            "journey_date": journey_date,
-            "delay": delay,
-            "excpt": excpt,
-            "state": "completed" if is_completed else ("not_started" if is_not_started else "running"),
-            "stations": upcoming[:8],
-            "last_updated": datetime.now().strftime('%d %b %H:%M:%S'),
-            "query_date": date_str,
-            "current_code": current_code,
-            "current_name": current_name,
-            "is_non_stoppage": is_non_stoppage,
-            "mapped_idx": mapped_idx
-        }
+                if curr_idx >= 0: upcoming = all_live[curr_idx+1:curr_idx+9]
+                else: return {"error": "NO_DATA", "message": "Train position unclear for this date"}
+        if not upcoming and not is_completed and merged_stations: upcoming = merged_stations[:8]
+        return {"train_number": train_number, "train_name": train_name, "current_station": current_pos,
+            "source": source, "destination": destination, "journey_date": journey_date,
+            "delay": delay, "excpt": excpt, "state": "completed" if is_completed else ("not_started" if is_not_started else "running"),
+            "stations": upcoming[:8], "last_updated": datetime.now().strftime('%d %b %H:%M:%S'),
+            "query_date": date_str, "current_code": current_code, "current_name": current_name,
+            "is_non_stoppage": is_non_stoppage, "mapped_idx": mapped_idx}
     except requests.exceptions.ConnectTimeout:
-        return {"error": "TIMEOUT", "message": "NTES server is not responding. Indian Railways server may be down or blocking requests. Please try again later."}
+        return {"error": "TIMEOUT", "message": "NTES server is not responding."}
     except requests.exceptions.ConnectionError:
-        return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server. Check your internet connection or try using a VPN."}
+        return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server."}
     except Exception as e:
         err_str = str(e)
         if "timeout" in err_str.lower() or "connection" in err_str.lower():
-            return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}. The Indian Railways server may be temporarily unavailable."}
+            return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}."}
         return {"error": "API_ERROR", "message": err_str[:200]}
 
 def format_live_train_result(data):
-    if not data:
-        return "❌ Train not found. Please check the train number.", None
-    if isinstance(data, dict) and data.get('error'):
-        return f"❌ {data.get('error')}: {data.get('message', 'Unknown error')}", None
-
+    if not data: return "❌ Train not found. Please check the train number.", None
+    if isinstance(data, dict) and data.get('error'): return f"❌ {data.get('error')}: {data.get('message', 'Unknown error')}", None
     train_no = data.get('train_number', 'N/A')
     query_date = data.get('query_date', datetime.now().strftime("%d-%b-%Y"))
     journey_state = data.get('state', 'running')
-
     current_offset = 0
     for offset in range(5):
-        if query_date == get_date_for_offset(offset):
-            current_offset = offset
-            break
+        if query_date == get_date_for_offset(offset): current_offset = offset; break
     date_label = get_date_label(current_offset)
-
     msg = f"## 🚂 LIVE TRAIN STATUS — {date_label.upper()}\n\n"
     msg += f"**Train:** {data.get('train_name', 'N/A')} ({train_no})\n"
     msg += f"**From:** {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
     msg += f"**Date:** {data.get('journey_date', 'N/A')}\n"
-
     delay = data.get('delay', '0')
     msg += f"**Delay:** {'✅ On Time' if str(delay) == '0' else f'⏰ {delay} mins late'}\n"
     msg += f"**Current Status:** {data.get('current_station', 'N/A')}\n"
-
-    if data.get('excpt'):
-        msg += f"\n⚠️ **Exception:** {data.get('excpt')}\n"
-
+    if data.get('excpt'): msg += f"\n⚠️ **Exception:** {data.get('excpt')}\n"
     if journey_state == "completed":
         msg += "\n🏁 **JOURNEY COMPLETED**\n✅ Train has reached its destination.\n"
     elif journey_state == "not_started":
@@ -1343,11 +1102,9 @@ def format_live_train_result(data):
             for i, s in enumerate(stations[:8], 1):
                 msg += f"{i}. **{s.get('SC', 'N/A')}** — {s.get('SN', 'N/A')}\n"
                 msg += f"   Arr: {format_station_time(s.get('STA', 'N/A'))} | Dep: {format_station_time(s.get('STD', 'N/A'))}"
-                if s.get('DAY'):
-                    msg += f" | Day: {s.get('DAY', '')}"
+                if s.get('DAY'): msg += f" | Day: {s.get('DAY', '')}"
                 msg += "\n"
-        else:
-            msg += "\n📋 No schedule available.\n"
+        else: msg += "\n📋 No schedule available.\n"
     else:
         stations = data.get('stations', [])
         if stations:
@@ -1357,48 +1114,33 @@ def format_live_train_result(data):
                 departure = s.get('ETD', '') or s.get('STD', 'N/A')
                 msg += f"{i}. **{s.get('SC', 'N/A')}** — {s.get('SN', 'N/A')}\n"
                 msg += f"   Arr: {format_station_time(arrival)} | Dep: {format_station_time(departure)}"
-                if s.get('DAY'):
-                    msg += f" | Day: {s.get('DAY', '')}"
+                if s.get('DAY'): msg += f" | Day: {s.get('DAY', '')}"
                 msg += "\n"
-        else:
-            msg += "\n📋 No upcoming stations available.\n"
-
+        else: msg += "\n📋 No upcoming stations available.\n"
     msg += f"\n_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
     return msg, None
 
 def search_trains(query):
-    if not NTES_AVAILABLE:
-        return {"error": "NTES library not installed"}
+    if not NTES_AVAILABLE: return {"error": "NTES library not installed"}
     try:
         response = ntes_client.search(query)
-        if not response or not response.get('trains'):
-            return None
+        if not response or not response.get('trains'): return None
         trains = []
         for t in safe_list(response, 'trains')[:15]:
-            trains.append({
-                'train_number': safe_str(t.get('train_number')),
-                'train_name': safe_str(t.get('train_name')),
-                'source': safe_str(t.get('source')),
-                'destination': safe_str(t.get('destination'))
-            })
+            trains.append({'train_number': safe_str(t.get('train_number')), 'train_name': safe_str(t.get('train_name')),
+                'source': safe_str(t.get('source')), 'destination': safe_str(t.get('destination'))})
         return {"query": query, "trains": trains, "last_updated": datetime.now().strftime('%d %b %H:%M:%S')}
-    except requests.exceptions.ConnectTimeout:
-        return {"error": "TIMEOUT", "message": "NTES server is not responding."}
-    except requests.exceptions.ConnectionError:
-        return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server."}
+    except requests.exceptions.ConnectTimeout: return {"error": "TIMEOUT", "message": "NTES server is not responding."}
+    except requests.exceptions.ConnectionError: return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server."}
     except Exception as e:
         err_str = str(e)
-        if "timeout" in err_str.lower() or "connection" in err_str.lower():
-            return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}"}
+        if "timeout" in err_str.lower() or "connection" in err_str.lower(): return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}"}
         return {"error": "API_ERROR", "message": err_str[:200]}
 
 def format_train_search(data):
-    if not data:
-        return "❌ No trains found. Please try again."
-    if isinstance(data, dict) and data.get('error'):
-        return f"❌ {data['error']}"
-    msg = f"## 🔍 TRAIN SEARCH RESULTS\n\n"
-    msg += f"**Query:** {data.get('query', 'N/A')}\n\n"
+    if not data: return "❌ No trains found. Please try again."
+    if isinstance(data, dict) and data.get('error'): return f"❌ {data['error']}"
+    msg = f"## 🔍 TRAIN SEARCH RESULTS\n\n**Query:** {data.get('query', 'N/A')}\n\n"
     for t in data.get('trains', [])[:10]:
         msg += f"🚂 **{t.get('train_number', 'N/A')}** — {t.get('train_name', 'N/A')}\n"
         msg += f"   Route: {t.get('source', 'N/A')} → {t.get('destination', 'N/A')}\n\n"
@@ -1406,100 +1148,62 @@ def format_train_search(data):
     return msg
 
 def get_train_schedule(train_number):
-    if not NTES_AVAILABLE:
-        return {"error": "NTES library not installed"}
+    if not NTES_AVAILABLE: return {"error": "NTES library not installed"}
     try:
         response = ntes_client.schedule(train_number)
-        if not response:
-            return None
+        if not response: return None
         stations = []
         for s in safe_list(response, 'stations'):
             sta = s.get('STA', '')
             std = s.get('STD', '')
             if (sta and sta != 'N/A') or (std and std != 'N/A') or sta == 'Source' or std == 'Dest':
-                stations.append({
-                    'code': safe_str(s.get('StationCode')),
-                    'name': safe_str(s.get('StationName')),
-                    'arrival': sta if sta else 'Source',
-                    'departure': std if std else 'Dest',
-                    'day': safe_str(s.get('Day'))
-                })
-        return {
-            "train_number": train_number,
-            "train_name": safe_str(response.get('TrainName')),
-            "source": safe_str(response.get('Source')),
-            "destination": safe_str(response.get('Destination')),
-            "stations": stations,
-            "last_updated": datetime.now().strftime('%d %b %H:%M:%S')
-        }
-    except requests.exceptions.ConnectTimeout:
-        return {"error": "TIMEOUT", "message": "NTES server is not responding."}
-    except requests.exceptions.ConnectionError:
-        return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server."}
+                stations.append({'code': safe_str(s.get('StationCode')), 'name': safe_str(s.get('StationName')),
+                    'arrival': sta if sta else 'Source', 'departure': std if std else 'Dest', 'day': safe_str(s.get('Day'))})
+        return {"train_number": train_number, "train_name": safe_str(response.get('TrainName')),
+            "source": safe_str(response.get('Source')), "destination": safe_str(response.get('Destination')),
+            "stations": stations, "last_updated": datetime.now().strftime('%d %b %H:%M:%S')}
+    except requests.exceptions.ConnectTimeout: return {"error": "TIMEOUT", "message": "NTES server is not responding."}
+    except requests.exceptions.ConnectionError: return {"error": "CONNECTION_ERROR", "message": "Cannot connect to NTES server."}
     except Exception as e:
         err_str = str(e)
-        if "timeout" in err_str.lower() or "connection" in err_str.lower():
-            return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}"}
+        if "timeout" in err_str.lower() or "connection" in err_str.lower(): return {"error": "NETWORK_ERROR", "message": f"Network issue: {err_str[:200]}"}
         return {"error": "API_ERROR", "message": err_str[:200]}
 
 def format_schedule_result(data, start=0, chunk=20):
-    if not data:
-        return "❌ Schedule not found.", None
-    if isinstance(data, dict) and data.get('error'):
-        return f"❌ {data['error']}", None
-    if isinstance(data, dict) and 'stations' not in data:
-        return "❌ Invalid schedule data.", None
-
+    if not data: return "❌ Schedule not found.", None
+    if isinstance(data, dict) and data.get('error'): return f"❌ {data['error']}", None
+    if isinstance(data, dict) and 'stations' not in data: return "❌ Invalid schedule data.", None
     stations = data.get('stations', [])
     total = len(stations)
     end = min(start + chunk, total)
-    if start >= total:
-        start = max(0, total - chunk)
-        end = total
-
+    if start >= total: start = max(0, total - chunk); end = total
     msg = f"**Train:** {data.get('train_number', 'N/A')} - {data.get('train_name', 'N/A')}\n"
     msg += f"**From:** {data.get('source', 'N/A')} → {data.get('destination', 'N/A')}\n"
     msg += f"**Showing {start+1} to {end} of {total}**\n\n"
-
     for i in range(start, end):
         s = stations[i]
         msg += f"{i+1}. **{s['code']}** - {s['name']}\n"
         msg += f"   🕐 Arr: {s['arrival']}  |  🕐 Dep: {s['departure']}"
-        if s.get('day') and s.get('day') != 'N/A':
-            msg += f"  |  Day: {s['day']}"
+        if s.get('day') and s.get('day') != 'N/A': msg += f"  |  Day: {s['day']}"
         msg += "\n\n"
-
     msg += f"_Last updated: {data.get('last_updated', datetime.now().strftime('%d %b %H:%M:%S'))}_"
     return msg, (start, end, total)
 
-# ------------------------------------------------------------------
-# Passport Photo Processing
-# ------------------------------------------------------------------
 def remove_background(image_data):
     key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
-    if not key:
-        key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
-    if not key and "remove_bg_key" in st.session_state:
-        key = str(st.session_state.remove_bg_key).strip()
-    if not key:
-        return None
+    if not key: key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
+    if not key and "remove_bg_key" in st.session_state: key = str(st.session_state.remove_bg_key).strip()
+    if not key: return None
     try:
-        r = requests.post(
-            "https://api.remove.bg/v1.0/removebg",
-            files={"image_file": ("image.jpg", image_data, "image/jpeg")},
-            data={"size": "auto", "format": "png"},
-            headers={"X-Api-Key": key},
-            timeout=30
-        )
+        r = requests.post("https://api.remove.bg/v1.0/removebg", files={"image_file": ("image.jpg", image_data, "image/jpeg")},
+            data={"size": "auto", "format": "png"}, headers={"X-Api-Key": key}, timeout=30)
         return r.content if r.status_code == 200 else None
-    except Exception:
-        return None
+    except Exception: return None
 
 def add_border(image_data):
     try:
         img = Image.open(io.BytesIO(image_data))
-        if img.mode != "RGBA":
-            img = img.convert("RGBA")
+        if img.mode != "RGBA": img = img.convert("RGBA")
         w, h = img.size
         PW, PH = 413, 531
         BS = 8
@@ -1511,10 +1215,8 @@ def add_border(image_data):
         new_h = int(h * scale)
         img_resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
         img_bg = Image.new("RGB", (new_w, new_h), "white")
-        if img_resized.mode == "RGBA":
-            img_bg.paste(img_resized, (0, 0), img_resized)
-        else:
-            img_bg.paste(img_resized, (0, 0))
+        if img_resized.mode == "RGBA": img_bg.paste(img_resized, (0, 0), img_resized)
+        else: img_bg.paste(img_resized, (0, 0))
         x = (target_w - new_w) // 2 + BS
         y = (target_h - new_h) // 2 + BS
         new_img.paste(img_bg, (x, y))
@@ -1525,64 +1227,29 @@ def add_border(image_data):
         new_img.save(output, format="PNG", quality=100)
         output.seek(0)
         return output.getvalue()
-    except Exception as e:
-        return None
+    except Exception: return None
 
 def process_passport_image(data):
     no_bg = remove_background(data)
-    if no_bg is None:
-        return None
+    if no_bg is None: return None
     final = add_border(no_bg)
     return final if final else no_bg
 
-# ------------------------------------------------------------------
-# Theme application
-# ------------------------------------------------------------------
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
-        bg = "#f8fafc"
-        card_bg = "#ffffff"
-        text_color = "#1e293b"
-        text_secondary = "#64748b"
-        border = "#e2e8f0"
-        input_bg = "#ffffff"
-        accent = "#2563eb"
-        accent_hover = "#1d4ed8"
-        success = "#16a34a"
-        danger = "#dc2626"
-        button_bg = "#f1f5f9"
-        button_text = "#1e293b"
-        button_border = "#cbd5e1"
-        button_hover_bg = accent
-        button_hover_text = "white"
-        button_hover_border = accent
-        number_color = "#2563eb"
-        table_header_bg = "#1e293b"
-        table_header_text = "#ffffff"
-        table_alt_row = "#f8fafc"
-        chart_bg = "rgba(0,0,0,0)"
+        bg = "#f8fafc"; card_bg = "#ffffff"; text_color = "#1e293b"; text_secondary = "#64748b"
+        border = "#e2e8f0"; input_bg = "#ffffff"; accent = "#2563eb"; accent_hover = "#1d4ed8"
+        success = "#16a34a"; danger = "#dc2626"; button_bg = "#f1f5f9"; button_text = "#1e293b"
+        button_border = "#cbd5e1"; button_hover_bg = accent; button_hover_text = "white"; button_hover_border = accent
+        number_color = "#2563eb"; table_header_bg = "#1e293b"; table_header_text = "#ffffff"
+        table_alt_row = "#f8fafc"; chart_bg = "rgba(0,0,0,0)"
     elif theme == 'Dark':
-        bg = "#0f172a"
-        card_bg = "#1e293b"
-        text_color = "#f1f5f9"
-        text_secondary = "#94a3b8"
-        border = "#334155"
-        input_bg = "#0f172a"
-        accent = "#60a5fa"
-        accent_hover = "#93c5fd"
-        success = "#4ade80"
-        danger = "#f87171"
-        button_bg = "#334155"
-        button_text = "#f1f5f9"
-        button_border = "#475569"
-        button_hover_bg = accent
-        button_hover_text = "white"
-        button_hover_border = accent
-        number_color = "#60a5fa"
-        table_header_bg = "#2563eb"
-        table_header_text = "#ffffff"
-        table_alt_row = "#1e293b"
-        chart_bg = "rgba(0,0,0,0)"
+        bg = "#0f172a"; card_bg = "#1e293b"; text_color = "#f1f5f9"; text_secondary = "#94a3b8"
+        border = "#334155"; input_bg = "#0f172a"; accent = "#60a5fa"; accent_hover = "#93c5fd"
+        success = "#4ade80"; danger = "#f87171"; button_bg = "#334155"; button_text = "#f1f5f9"
+        button_border = "#475569"; button_hover_bg = accent; button_hover_text = "white"; button_hover_border = accent
+        number_color = "#60a5fa"; table_header_bg = "#2563eb"; table_header_text = "#ffffff"
+        table_alt_row = "#1e293b"; chart_bg = "rgba(0,0,0,0)"
     else:
         bg = custom_bg if custom_bg else "#ffffff"
         def is_dark_color(hex_color):
@@ -1591,29 +1258,16 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
                 r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
                 brightness = (r * 299 + g * 587 + b * 114) / 1000
                 return brightness < 128
-            except:
-                return False
+            except: return False
         is_dark = is_dark_color(bg)
-        card_bg = bg
-        text_color = custom_text if custom_text else ("#f1f5f9" if is_dark else "#1e293b")
-        text_secondary = text_color
-        border = "#475569" if is_dark else "#e2e8f0"
-        input_bg = bg
-        accent = "#60a5fa" if is_dark else "#2563eb"
-        accent_hover = "#93c5fd" if is_dark else "#1d4ed8"
-        success = "#4ade80" if is_dark else "#16a34a"
-        danger = "#f87171" if is_dark else "#dc2626"
-        button_bg = bg
-        button_text = text_color
-        button_border = border
-        button_hover_bg = accent
-        button_hover_text = "white"
-        button_hover_border = accent
-        number_color = accent
-        table_header_bg = "#2563eb" if is_dark else "#1e293b"
-        table_header_text = "#ffffff"
-        table_alt_row = "#1e293b" if is_dark else "#f8fafc"
-        chart_bg = "rgba(0,0,0,0)"
+        card_bg = bg; text_color = custom_text if custom_text else ("#f1f5f9" if is_dark else "#1e293b")
+        text_secondary = text_color; border = "#475569" if is_dark else "#e2e8f0"; input_bg = bg
+        accent = "#60a5fa" if is_dark else "#2563eb"; accent_hover = "#93c5fd" if is_dark else "#1d4ed8"
+        success = "#4ade80" if is_dark else "#16a34a"; danger = "#f87171" if is_dark else "#dc2626"
+        button_bg = bg; button_text = text_color; button_border = border; button_hover_bg = accent
+        button_hover_text = "white"; button_hover_border = accent; number_color = accent
+        table_header_bg = "#2563eb" if is_dark else "#1e293b"; table_header_text = "#ffffff"
+        table_alt_row = "#1e293b" if is_dark else "#f8fafc"; chart_bg = "rgba(0,0,0,0)"
 
     css = f"""
     <style>
@@ -1634,15 +1288,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
 
         [data-testid="stSidebar"] > div:first-child {{ padding-top: 0 !important; }}
-
-        .metric-card {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 16px; color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }}
-        .metric-card h3 {{ margin: 0; font-size: 2em; font-weight: bold; }}
-        .metric-card p {{ margin: 4px 0 0 0; font-size: 0.9em; opacity: 0.9; }}
-
-        .chart-container {{ background: {card_bg}; border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 16px; border: 1px solid {border}; }}
-
-        .block-container {{ padding-top: 0.5rem !important; padding-bottom: 1rem !important; }}
-        .stApp {{ background-color: {bg} !important; }}
         [data-testid="stSidebar"] {{ background-color: {card_bg} !important; border-right: 1px solid {border} !important; }}
         [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown div,
         [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
@@ -1659,37 +1304,27 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
         .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea,
         .stSelectbox > div > div > div {{
-            background-color: {input_bg} !important;
-            color: {text_color} !important;
-            border: 1px solid {border} !important;
-            border-radius: 8px !important;
+            background-color: {input_bg} !important; color: {text_color} !important;
+            border: 1px solid {border} !important; border-radius: 8px !important;
         }}
         .stButton > button {{
-            background-color: {button_bg} !important;
-            color: {button_text} !important;
-            border: 1px solid {button_border} !important;
-            border-radius: 8px !important;
-            font-weight: 500 !important;
-            transition: all 0.15s ease !important;
+            background-color: {button_bg} !important; color: {button_text} !important;
+            border: 1px solid {button_border} !important; border-radius: 8px !important;
+            font-weight: 500 !important; transition: all 0.15s ease !important;
         }}
         .stButton > button:hover {{
-            background-color: {button_hover_bg} !important;
-            color: {button_hover_text} !important;
+            background-color: {button_hover_bg} !important; color: {button_hover_text} !important;
             border-color: {button_hover_border} !important;
         }}
         .stButton > button:disabled {{ opacity: 0.45 !important; cursor: not-allowed !important; }}
         .stButton > button[kind="primary"] {{
-            background-color: {accent} !important;
-            color: white !important;
-            border-color: {accent} !important;
+            background-color: {accent} !important; color: white !important; border-color: {accent} !important;
         }}
         .stButton > button[kind="primary"]:hover {{
-            background-color: {accent_hover} !important;
-            border-color: {accent_hover} !important;
+            background-color: {accent_hover} !important; border-color: {accent_hover} !important;
         }}
         .stFileUploader {{
-            background-color: {input_bg} !important;
-            border: 2px dashed {border} !important;
+            background-color: {input_bg} !important; border: 2px dashed {border} !important;
             border-radius: 12px !important; padding: 16px !important;
         }}
         .stFileUploader:hover {{ border-color: {accent} !important; }}
@@ -1698,22 +1333,18 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stDataFrame, [data-testid="stDataFrame"], .stDataEditor, [data-testid="stDataEditor"],
         .stDataFrame table, .stDataEditor table, .stDataFrame th, .stDataEditor th,
         .stDataFrame td, .stDataEditor td, .stDataEditor input, .stDataEditor textarea {{
-            background-color: {card_bg} !important;
-            color: {text_color} !important;
+            background-color: {card_bg} !important; color: {text_color} !important;
             border-color: {border} !important;
         }}
-        .stDataFrame th, .stDataEditor th {{ 
-            background-color: {table_header_bg} !important;
-            color: {table_header_text} !important;
-            border-bottom: 2px solid {border} !important; 
-            font-weight: 600 !important; 
+        .stDataFrame th, .stDataEditor th {{
+            background-color: {table_header_bg} !important; color: {table_header_text} !important;
+            border-bottom: 2px solid {border} !important; font-weight: 600 !important;
         }}
         .stDataFrame tr:nth-child(even) td, .stDataEditor tr:nth-child(even) td {{
             background-color: {table_alt_row} !important;
         }}
-        .stDataFrame td, .stDataEditor td {{ 
-            text-align: center !important;
-            border: 1px solid {border} !important;
+        .stDataFrame td, .stDataEditor td {{
+            text-align: center !important; border: 1px solid {border} !important;
         }}
 
         .js-plotly-plot .plotly text {{ fill: {text_color} !important; }}
@@ -1721,10 +1352,12 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
 
         .stExpander {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 8px !important; }}
         .streamlit-expanderHeader {{ color: {text_color} !important; font-weight: 600 !important; }}
-        .stChatMessage {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important; }}
+        .stChatMessage {{ background-color: {card_bg} !important; border: 1px solid {border} !important;
+            border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important; }}
         .stChatInput {{ background-color: {input_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; }}
         .stChatInput input {{ color: {text_color} !important; }}
-        [data-testid="stMetric"] {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 10px !important; padding: 14px !important; }}
+        [data-testid="stMetric"] {{ background-color: {card_bg} !important; border: 1px solid {border} !important;
+            border-radius: 10px !important; padding: 14px !important; }}
         .stTabs [data-baseweb="tab-list"] {{ background-color: {card_bg} !important; border-bottom: 1px solid {border} !important; }}
         .stTabs [data-baseweb="tab"] {{ color: {text_secondary} !important; }}
         .stTabs [data-baseweb="tab-highlight"] {{ background-color: {accent} !important; }}
@@ -1744,7 +1377,8 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .file-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 14px; margin: 10px 0; }}
         .file-card-title {{ color: {text_color}; font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }}
         .file-card-meta {{ color: {text_secondary}; font-size: 0.8rem; margin-bottom: 10px; }}
-        .pro-footer {{ color: {text_secondary} !important; border-top: 1px solid {border} !important; text-align: center !important; padding: 18px 0 8px !important; margin-top: 28px !important; font-size: 0.85rem !important; }}
+        .pro-footer {{ color: {text_secondary} !important; border-top: 1px solid {border} !important;
+            text-align: center !important; padding: 18px 0 8px !important; margin-top: 28px !important; font-size: 0.85rem !important; }}
         .sheet-link-btn {{
             display: inline-block !important; padding: 9px 16px !important;
             background: {button_bg} !important; color: {accent} !important;
@@ -1757,90 +1391,38 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .status-live {{ background: rgba(63, 185, 80, 0.15); color: {success}; border: 1px solid {success}; }}
         .train-count-container {{ display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; margin: 10px 0; }}
         .train-count-card {{
-            border: 1px solid {border};
-            border-radius: 10px;
-            padding: 8px 16px;
-            min-width: 80px;
-            text-align: center;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-            transition: transform 0.15s ease, box-shadow 0.15s ease;
-            background: {card_bg};
+            border: 1px solid {border}; border-radius: 10px; padding: 8px 16px;
+            min-width: 80px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            transition: transform 0.15s ease, box-shadow 0.15s ease; background: {card_bg};
         }}
         .train-count-card:hover {{ transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.12); border-color: {accent}; }}
-        .train-count-number {{ 
-            color: {number_color};
-            font-weight: 800;
-            font-size: 1.8rem;
-            line-height: 1.2;
-            letter-spacing: -0.5px;
+        .train-count-number {{
+            color: {number_color}; font-weight: 800; font-size: 1.8rem; line-height: 1.2; letter-spacing: -0.5px;
         }}
-        .train-count-badge {{ 
-            display: inline-block;
-            background: {accent};
-            color: white;
-            font-size: 0.9rem;
-            font-weight: 700;
-            padding: 2px 10px;
-            border-radius: 20px;
-            margin-top: 2px;
+        .train-count-badge {{
+            display: inline-block; background: {accent}; color: white; font-size: 0.9rem;
+            font-weight: 700; padding: 2px 10px; border-radius: 20px; margin-top: 2px;
         }}
-        .train-total-card {{ 
-            border: 2px solid {success};
-            border-radius: 12px;
-            padding: 8px 20px;
-            min-width: 120px;
-            text-align: center;
-            background: {card_bg};
+        .train-total-card {{
+            border: 2px solid {success}; border-radius: 12px; padding: 8px 20px;
+            min-width: 120px; text-align: center; background: {card_bg};
         }}
-        .train-total-number {{ 
-            color: {success};
-            font-weight: 800;
-            font-size: 1.5rem;
-            line-height: 1.2;
-        }}
-        .train-total-label {{ 
-            color: {text_secondary};
-            font-size: 0.75rem;
-            margin-top: 2px;
-        }}
+        .train-total-number {{ color: {success}; font-weight: 800; font-size: 1.5rem; line-height: 1.2; }}
+        .train-total-label {{ color: {text_secondary}; font-size: 0.75rem; margin-top: 2px; }}
         .weather-card {{
-            background: {card_bg};
-            border: 1px solid {border};
-            border-radius: 16px;
-            padding: 20px;
-            margin: 10px 0;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            background: {card_bg}; border: 1px solid {border}; border-radius: 16px;
+            padding: 20px; margin: 10px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         }}
-        .weather-temp {{
-            font-size: 3.5rem;
-            font-weight: 700;
-            color: {number_color};
-        }}
-        .weather-desc {{
-            font-size: 1.2rem;
-            color: {text_color};
-        }}
-        .weather-detail {{
-            font-size: 0.95rem;
-            color: {text_secondary};
-            padding: 4px 0;
-        }}
+        .weather-temp {{ font-size: 3.5rem; font-weight: 700; color: {number_color}; }}
+        .weather-desc {{ font-size: 1.2rem; color: {text_color}; }}
+        .weather-detail {{ font-size: 0.95rem; color: {text_secondary}; padding: 4px 0; }}
         .result-box {{
-            background: {card_bg};
-            border: 2px solid {accent};
-            border-radius: 12px;
-            padding: 20px;
-            margin: 15px 0;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            background: {card_bg}; border: 2px solid {accent}; border-radius: 12px;
+            padding: 20px; margin: 15px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }}
         .result-box pre {{
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-family: inherit;
-            font-size: 0.95rem;
-            line-height: 1.6;
-            margin: 0;
-            color: {text_color};
+            white-space: pre-wrap; word-wrap: break-word; font-family: inherit;
+            font-size: 0.95rem; line-height: 1.6; margin: 0; color: {text_color};
         }}
         .print-only {{ display: none; }}
         @media print {{
@@ -1854,28 +1436,19 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             .print-only {{ display: block !important; }}
             .print-only h2 {{ color: #000 !important; font-size: 18pt !important; margin-top: 0 !important; }}
             .print-only p {{ color: #333 !important; }}
-            .print-only table {{ 
-                width: 100% !important; 
-                border-collapse: collapse !important; 
-                font-size: 8pt !important;
+            .print-only table {{
+                width: 100% !important; border-collapse: collapse !important; font-size: 8pt !important;
                 page-break-inside: auto !important;
             }}
             .print-only tr {{ page-break-inside: avoid !important; }}
             .print-only thead {{ display: table-header-group !important; }}
-            .print-only th {{ 
-                background: #333 !important; 
-                color: white !important; 
-                padding: 5px 6px !important;
-                border: 1px solid #333 !important;
-                font-size: 8pt !important;
-                text-align: center !important;
+            .print-only th {{
+                background: #333 !important; color: white !important; padding: 5px 6px !important;
+                border: 1px solid #333 !important; font-size: 8pt !important; text-align: center !important;
             }}
-            .print-only td {{ 
-                border: 1px solid #999 !important; 
-                padding: 3px 5px !important;
-                font-size: 8pt !important;
-                color: #000 !important;
-                word-wrap: break-word !important;
+            .print-only td {{
+                border: 1px solid #999 !important; padding: 3px 5px !important;
+                font-size: 8pt !important; color: #000 !important; word-wrap: break-word !important;
             }}
             .print-only tr:nth-child(even) {{ background: #f5f5f5 !important; }}
         }}
@@ -1883,16 +1456,12 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
         .stDataFrame [data-testid="stDataFrameResizable"] {{
-            border: 1px solid {border} !important;
-            border-radius: 8px !important;
+            border: 1px solid {border} !important; border-radius: 8px !important;
         }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
 
-# ------------------------------------------------------------------
-# PDF, image, WhatsApp helpers
-# ------------------------------------------------------------------
 def generate_pdf(df, title, full=True):
     if df.empty:
         pdf = FPDF('L', 'mm', 'A4')
@@ -1903,13 +1472,9 @@ def generate_pdf(df, title, full=True):
         pdf.cell(0, 10, f"Generated: {format_datetime()} IST", ln=True, align='C')
         pdf.cell(0, 10, "No data available for this sheet.", ln=True, align='C')
         output = pdf.output(dest='S')
-        if isinstance(output, bytearray):
-            return bytes(output)
-        elif isinstance(output, str):
-            return output.encode('latin-1')
-        else:
-            return output
-
+        if isinstance(output, bytearray): return bytes(output)
+        elif isinstance(output, str): return output.encode('latin-1')
+        else: return output
     pdf = FPDF('L', 'mm', 'A4')
     pdf.add_page()
     pdf.set_font("Arial", 'B', 12)
@@ -1918,10 +1483,8 @@ def generate_pdf(df, title, full=True):
     pdf.cell(0, 6, f"Generated: {format_datetime()} IST | Rows: {len(df)}", ln=True, align='C')
     pdf.ln(3)
     cols = list(df.columns)
-    if '_sheet_row' in cols:
-        cols.remove('_sheet_row')
-    if len(cols) > 15:
-        cols = cols[:15]
+    if '_sheet_row' in cols: cols.remove('_sheet_row')
+    if len(cols) > 15: cols = cols[:15]
     col_width = min(25, 277 / max(len(cols), 1))
     pdf.set_font("Arial", 'B', 7)
     for c in cols:
@@ -1945,21 +1508,15 @@ def generate_pdf(df, title, full=True):
             pdf.ln()
             pdf.set_font("Arial", '', 6)
     output = pdf.output(dest='S')
-    if isinstance(output, bytearray):
-        return bytes(output)
-    elif isinstance(output, str):
-        return output.encode('latin-1')
-    else:
-        return output
+    if isinstance(output, bytearray): return bytes(output)
+    elif isinstance(output, str): return output.encode('latin-1')
+    else: return output
 
 def create_table_image(df, title):
-    if df.empty:
-        return None
+    if df.empty: return None
     cols = list(df.columns)
-    if '_sheet_row' in cols:
-        cols.remove('_sheet_row')
-    if len(cols) > 10:
-        cols = cols[:10]
+    if '_sheet_row' in cols: cols.remove('_sheet_row')
+    if len(cols) > 10: cols = cols[:10]
     data = df[cols].head(50).values
     n_rows = min(len(df), 50)
     n_cols = len(cols)
@@ -2002,17 +1559,14 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
         lines.append(f"   • Total Records in Sheet: *{total_rows}*")
         if pnrs:
             pnr_list = ", ".join(str(p) for p in pnrs[:8])
-            if len(pnrs) > 8:
-                pnr_list += f" (+{len(pnrs)-8} more)"
+            if len(pnrs) > 8: pnr_list += f" (+{len(pnrs)-8} more)"
             lines.append(f"   • Selected PNRs: {pnr_list}")
-    else:
-        lines.append(f"   • Total Records: *{total_rows}*")
+    else: lines.append(f"   • Total Records: *{total_rows}*")
     lines.append("")
     train_col = None
     for c in df.columns:
         if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
-            train_col = c
-            break
+            train_col = c; break
     if train_col and not df.empty:
         train_counts = df[train_col].value_counts().to_dict()
         if train_counts:
@@ -2024,14 +1578,11 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
                 berth_col = next((c for c in df.columns if 'BERTH' in c.upper()), None)
                 berth_count = 0
                 if berth_col:
-                    try:
-                        berth_count = int(pd.to_numeric(train_df[berth_col], errors='coerce').sum())
-                    except:
-                        pass
+                    try: berth_count = int(pd.to_numeric(train_df[berth_col], errors='coerce').sum())
+                    except: pass
                 berth_str = f" ({berth_count} berths)" if berth_count > 0 else ""
                 lines.append(f"   {i}. Train *{train}* → {count} request{berth_str}")
-            if len(sorted_trains) > 15:
-                lines.append(f"   ... and {len(sorted_trains)-15} more trains")
+            if len(sorted_trains) > 15: lines.append(f"   ... and {len(sorted_trains)-15} more trains")
             lines.append("")
     class_col = next((c for c in df.columns if 'CLASS' in c.upper()), None)
     if class_col and not df.empty:
@@ -2055,8 +1606,7 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     if doj_col and not df.empty:
         try:
             doj_dates = pd.to_datetime(df[doj_col], format='%d-%m-%Y', errors='coerce')
-            if doj_dates.isna().all():
-                doj_dates = pd.to_datetime(df[doj_col], errors='coerce')
+            if doj_dates.isna().all(): doj_dates = pd.to_datetime(df[doj_col], errors='coerce')
             valid_dates = doj_dates.dropna()
             if len(valid_dates) > 0:
                 min_doj = valid_dates.min().strftime('%d-%m-%Y')
@@ -2064,15 +1614,13 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
                 today_str = now_ist().strftime('%d-%m-%Y')
                 lines.append("📅 *DATE INFORMATION:*")
                 lines.append(f"   • Date Range: {min_doj} to {max_doj}")
-                lines.append(f"   • Today\'s Date: {today_str}")
+                lines.append(f"   • Today's Date: {today_str}")
                 upcoming = sum(1 for d in valid_dates if d >= pd.Timestamp(now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)))
                 expired = len(valid_dates) - upcoming
                 lines.append(f"   • Upcoming Journeys: *{upcoming}*")
-                if expired > 0:
-                    lines.append(f"   • Past Journeys: {expired}")
+                if expired > 0: lines.append(f"   • Past Journeys: {expired}")
                 lines.append("")
-        except:
-            pass
+        except: pass
     from_col = next((c for c in df.columns if c.upper() == 'FROM'), None)
     to_col = next((c for c in df.columns if c.upper() == 'TO'), None)
     if from_col and to_col and not df.empty:
@@ -2084,8 +1632,7 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
                 for i, ((frm, to), count) in enumerate(sorted_routes, 1):
                     lines.append(f"   {i}. {frm} → {to}: *{count}* request(s)")
                 lines.append("")
-        except:
-            pass
+        except: pass
     berth_col = next((c for c in df.columns if 'BERTH' in c.upper()), None)
     if berth_col and not df.empty:
         try:
@@ -2096,8 +1643,7 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
                 avg_berths = total_berths / len(df) if len(df) > 0 else 0
                 lines.append(f"   • Average per Record: {avg_berths:.1f}")
                 lines.append("")
-        except:
-            pass
+        except: pass
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append(f"🔗 *Sheet Link:*")
     lines.append(f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit")
@@ -2106,15 +1652,204 @@ def build_whatsapp_message(sheet_name, selected_count, pnrs, total_rows, df):
     return "\n".join(lines)
 
 def get_pnr_status_url(pnr):
-    if not pnr or len(str(pnr)) != 10:
-        return None
+    if not pnr or len(str(pnr)) != 10: return None
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
 
-# ------------------------------------------------------------------
-# Main function
-# ------------------------------------------------------------------
 def main():
-    # Clean JavaScript - only back-to-top button, no scroll hijacking
+    # Background Train Animation - Railway Engine on Track with Lights
+    train_animation_css = """
+    <style>
+    .train-bg-container {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 120px;
+        z-index: 0;
+        pointer-events: none;
+        overflow: hidden;
+        opacity: 0.12;
+    }
+    .train-track {
+        position: absolute;
+        bottom: 30px;
+        left: 0;
+        width: 100%;
+        height: 8px;
+        background: repeating-linear-gradient(90deg, #555 0px, #555 20px, transparent 20px, transparent 30px);
+    }
+    .train-track::before {
+        content: '';
+        position: absolute;
+        top: -4px;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background: #777;
+    }
+    .train-track::after {
+        content: '';
+        position: absolute;
+        bottom: -4px;
+        left: 0;
+        width: 100%;
+        height: 2px;
+        background: #777;
+    }
+    .train-engine {
+        position: absolute;
+        bottom: 38px;
+        left: -200px;
+        width: 180px;
+        height: 60px;
+        animation: train-move 25s linear infinite;
+    }
+    @keyframes train-move {
+        0% { left: -200px; }
+        100% { left: 110%; }
+    }
+    .engine-body {
+        position: absolute;
+        bottom: 0;
+        left: 40px;
+        width: 100px;
+        height: 45px;
+        background: linear-gradient(180deg, #c0392b 0%, #a93226 100%);
+        border-radius: 8px 8px 4px 4px;
+        border: 2px solid #7b241c;
+    }
+    .engine-cabin {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 45px;
+        height: 55px;
+        background: linear-gradient(180deg, #c0392b 0%, #a93226 100%);
+        border-radius: 8px 4px 4px 4px;
+        border: 2px solid #7b241c;
+    }
+    .engine-window {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        width: 22px;
+        height: 18px;
+        background: #85c1e9;
+        border-radius: 3px;
+        border: 1px solid #5dade2;
+    }
+    .engine-chimney {
+        position: absolute;
+        top: -20px;
+        left: 70px;
+        width: 16px;
+        height: 25px;
+        background: linear-gradient(180deg, #5d6d7e 0%, #34495e 100%);
+        border-radius: 4px 4px 0 0;
+    }
+    .engine-wheel {
+        position: absolute;
+        bottom: -12px;
+        width: 22px;
+        height: 22px;
+        background: #2c3e50;
+        border-radius: 50%;
+        border: 3px solid #f39c12;
+        animation: wheel-spin 0.8s linear infinite;
+    }
+    .engine-wheel:nth-child(5) { left: 10px; }
+    .engine-wheel:nth-child(6) { left: 55px; }
+    .engine-wheel:nth-child(7) { left: 100px; }
+    @keyframes wheel-spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    .engine-light {
+        position: absolute;
+        top: 15px;
+        right: 5px;
+        width: 12px;
+        height: 12px;
+        background: radial-gradient(circle, #f1c40f 0%, #f39c12 50%, transparent 70%);
+        border-radius: 50%;
+        animation: light-pulse 1s ease-in-out infinite alternate;
+        box-shadow: 0 0 15px 5px rgba(241, 196, 15, 0.6);
+    }
+    @keyframes light-pulse {
+        0% { opacity: 0.6; transform: scale(1); }
+        100% { opacity: 1; transform: scale(1.3); box-shadow: 0 0 25px 10px rgba(241, 196, 15, 0.8); }
+    }
+    .engine-smoke {
+        position: absolute;
+        top: -35px;
+        left: 75px;
+        width: 10px;
+        height: 10px;
+        background: rgba(149, 165, 166, 0.4);
+        border-radius: 50%;
+        animation: smoke-rise 2s ease-out infinite;
+    }
+    .engine-smoke:nth-child(9) { animation-delay: 0.3s; left: 80px; }
+    .engine-smoke:nth-child(10) { animation-delay: 0.6s; left: 70px; }
+    @keyframes smoke-rise {
+        0% { opacity: 0.6; transform: scale(1) translateY(0); }
+        100% { opacity: 0; transform: scale(3) translateY(-40px); }
+    }
+    .track-light {
+        position: absolute;
+        bottom: 50px;
+        width: 6px;
+        height: 6px;
+        background: #f1c40f;
+        border-radius: 50%;
+        animation: track-light-blink 1.5s ease-in-out infinite;
+        box-shadow: 0 0 8px 2px rgba(241, 196, 15, 0.5);
+    }
+    .track-light:nth-child(1) { left: 10%; animation-delay: 0s; }
+    .track-light:nth-child(2) { left: 30%; animation-delay: 0.3s; }
+    .track-light:nth-child(3) { left: 50%; animation-delay: 0.6s; }
+    .track-light:nth-child(4) { left: 70%; animation-delay: 0.9s; }
+    .track-light:nth-child(5) { left: 90%; animation-delay: 1.2s; }
+    @keyframes track-light-blink {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 1; box-shadow: 0 0 12px 4px rgba(241, 196, 15, 0.8); }
+    }
+    [data-testid="stMain"] {
+        position: relative;
+        z-index: 1;
+    }
+    [data-testid="stSidebar"] {
+        position: relative;
+        z-index: 2;
+    }
+    </style>
+    <div class="train-bg-container">
+        <div class="train-track"></div>
+        <div class="track-light"></div>
+        <div class="track-light"></div>
+        <div class="track-light"></div>
+        <div class="track-light"></div>
+        <div class="track-light"></div>
+        <div class="train-engine">
+            <div class="engine-cabin">
+                <div class="engine-window"></div>
+            </div>
+            <div class="engine-body">
+                <div class="engine-chimney"></div>
+                <div class="engine-light"></div>
+            </div>
+            <div class="engine-wheel"></div>
+            <div class="engine-wheel"></div>
+            <div class="engine-wheel"></div>
+            <div class="engine-smoke"></div>
+            <div class="engine-smoke"></div>
+            <div class="engine-smoke"></div>
+        </div>
+    </div>
+    """
+    st.markdown(train_animation_css, unsafe_allow_html=True)
+
+    # Clean JavaScript - back-to-top button
     components.html("""
     <script>
     (function() {
@@ -2157,14 +1892,11 @@ def main():
         st.session_state.theme = qp_theme
     qp_bg = st.query_params.get('__bg')
     qp_tx = st.query_params.get('__tx')
-    if qp_bg and st.session_state.custom_bg != qp_bg:
-        st.session_state.custom_bg = qp_bg
-    if qp_tx and st.session_state.custom_text != qp_tx:
-        st.session_state.custom_text = qp_tx
+    if qp_bg and st.session_state.custom_bg != qp_bg: st.session_state.custom_bg = qp_bg
+    if qp_tx and st.session_state.custom_text != qp_tx: st.session_state.custom_text = qp_tx
     view_options = ["📋 Data Table", "📊 Dashboard", "💬 Chat", "🚂 Railway", "🌤️ Weather"]
     qp_view = st.query_params.get('__view')
-    if qp_view in view_options and st.session_state.view_mode != qp_view:
-        st.session_state.view_mode = qp_view
+    if qp_view in view_options and st.session_state.view_mode != qp_view: st.session_state.view_mode = qp_view
 
     theme_choice = st.sidebar.selectbox("🎨 Theme", theme_options,
         index=theme_options.index(st.session_state.theme) if st.session_state.theme in theme_options else 0,
@@ -2195,10 +1927,9 @@ def main():
     apply_theme(effective_theme, custom_bg, custom_text)
 
     # =====================================================================
-    # SIDEBAR - Greeting at ABSOLUTE TOP
+    # SIDEBAR - Fixed styling, no black scrolling
     # =====================================================================
     with st.sidebar:
-        # ABSOLUTE FIRST ELEMENT - Greeting
         st.markdown("""
         <div style="background:linear-gradient(135deg,#FF9933 0%,#FFFFFF 50%,#138808 100%);padding:16px;border-radius:12px;margin-bottom:12px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.15);">
             <h2 style="margin:0;font-size:1.4em;color:#1e293b;font-weight:700;">🙏 Namaste</h2>
@@ -2211,20 +1942,17 @@ def main():
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
-        # Weather widget in sidebar
         with st.expander("🌤️ Quick Weather", expanded=False):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city")
-            if city != st.session_state.weather_city:
-                st.session_state.weather_city = city
+            if city != st.session_state.weather_city: st.session_state.weather_city = city
             if st.button("🌤️ Get Weather", key="sidebar_weather_btn", use_container_width=True):
                 if city:
-                    with st.spinner(f"Fetching..."):
+                    with st.spinner("Fetching..."):
                         data = get_weather(city)
                         if data and 'error' not in data:
                             st.session_state.weather_data = data
                             st.rerun()
-                        else:
-                            st.error(data.get('error', 'Error'))
+                        else: st.error(data.get('error', 'Error'))
             if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
                 data = st.session_state.weather_data
                 st.markdown(f"""
@@ -2246,7 +1974,6 @@ def main():
         sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
 
-        # PRINT SHEET button
         st.markdown("---")
         st.markdown("### 🖨️ Print Options")
         components.html("""
@@ -2302,29 +2029,22 @@ def main():
                 text_data = st.text_area("📝 Paste text", height=150,
                     placeholder="Messy text yahan paste karein...",
                     label_visibility="collapsed", key=f"text_input_area_{st.session_state.text_input_key}")
-                if text_data:
-                    st.caption(f"✓ {len(text_data)} characters ready")
+                if text_data: st.caption(f"✓ {len(text_data)} characters ready")
             else:
                 st.caption("🎤 Mic se record karein")
                 audio_data = st.audio_input("Record", label_visibility="collapsed", key=f"audio_recorder_{st.session_state.audio_recorder_key}")
                 uploaded = st.file_uploader("Ya file upload", type=["mp3","wav","ogg","m4a"],
                     label_visibility="collapsed", key=f"audio_file_uploader_{st.session_state.audio_uploader_key}")
-                if audio_data:
-                    st.audio(audio_data, format='audio/wav')
-                elif uploaded:
-                    st.audio(uploaded, format='audio/mp3')
+                if audio_data: st.audio(audio_data, format='audio/wav')
+                elif uploaded: st.audio(uploaded, format='audio/mp3')
 
             if st.button("🚀 Process & Save", type="primary", use_container_width=True, key="process_save_btn"):
-                if mode == "📝 Text" and not text_data.strip():
-                    st.warning("Text daalein")
-                elif mode != "📝 Text" and not uploaded and not audio_data:
-                    st.warning("File select karein")
+                if mode == "📝 Text" and not text_data.strip(): st.warning("Text daalein")
+                elif mode != "📝 Text" and not uploaded and not audio_data: st.warning("File select karein")
                 else:
                     prog = st.progress(0)
                     status = st.empty()
-                    def upd(v, m):
-                        prog.progress(v)
-                        status.text(m)
+                    def upd(v, m): prog.progress(v); status.text(m)
                     try:
                         if mode == "📝 Text":
                             res = gemini_universal_parser(text_data, "text", None, upd)
@@ -2430,23 +2150,19 @@ def main():
             if st.session_state.activity_log:
                 for log in reversed(st.session_state.activity_log[-20:]):
                     st.caption(f"{log.get('timestamp', '')} — {log.get('action', '')}")
-            else:
-                st.caption("No activity yet")
+            else: st.caption("No activity yet")
         st.markdown("---")
 
-        # Sheet selection in sidebar
         st.markdown("### 📑 Sheet Selection")
         sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()),
             index=list(SHEET_CONFIG.keys()).index(st.session_state.selected_sheet)
-            if st.session_state.selected_sheet in SHEET_CONFIG else 0,
-            key="sheet_select")
+            if st.session_state.selected_sheet in SHEET_CONFIG else 0, key="sheet_select")
         if sheet_choice != st.session_state.selected_sheet:
             st.session_state.selected_sheet = sheet_choice
             st.session_state.current_page = 1
             st.cache_data.clear()
             st.rerun()
 
-        # Filters (skip for NOTE sheet)
         if sheet_choice != "NOTE":
             st.markdown("### 🔍 Filters")
             config = SHEET_CONFIG[sheet_choice]
@@ -2521,7 +2237,6 @@ def main():
                 filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
             filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
 
-    # View mode
     view = st.session_state.view_mode
 
     # Top bar
@@ -2551,7 +2266,7 @@ def main():
     st.markdown("---")
 
     # =====================================================================
-    # VIEW: 📋 DATA TABLE - Advanced with all facilities
+    # VIEW: 📋 DATA TABLE - Attractive Look
     # =====================================================================
     if view == "📋 Data Table":
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
@@ -2560,7 +2275,7 @@ def main():
         if not filtered_df.empty and sheet_choice != "NOTE":
             search_col1, search_col2 = st.columns([4, 1])
             with search_col1:
-                global_search = st.text_input("🔍 Global Search (searches all columns)", 
+                global_search = st.text_input("🔍 Global Search (searches all columns)",
                     value=st.session_state.global_search,
                     placeholder="Type to search across all columns...",
                     key="global_search_input")
@@ -2574,7 +2289,6 @@ def main():
                     st.session_state.current_page = 1
                     st.rerun()
 
-            # Apply global search
             if st.session_state.global_search:
                 search_term = st.session_state.global_search.lower()
                 mask = pd.Series([False] * len(filtered_df))
@@ -2583,9 +2297,10 @@ def main():
                         mask = mask | filtered_df[col].astype(str).str.lower().str.contains(search_term, na=False)
                 filtered_df = filtered_df[mask]
 
-        # Advanced filter panel
+        # Advanced filter panel - Sheet wise monitoring
         if not filtered_df.empty and sheet_choice != "NOTE":
             with st.expander("🔍 Advanced Filters & Column Search", expanded=False):
+                st.markdown(f"**📊 Monitoring: {sheet_choice} Sheet**")
                 af1, af2, af3, af4 = st.columns(4)
                 with af1:
                     adv_pnr = st.text_input("🔎 PNR", value=st.session_state.pnr_val, key="adv_pnr")
@@ -2661,11 +2376,9 @@ def main():
             if sort_col and sort_col in filtered_df.columns:
                 try:
                     filtered_df = filtered_df.sort_values(by=sort_col, ascending=sort_asc, key=lambda col: col.astype(str))
-                except:
-                    pass
+                except: pass
 
-            # Rows per page selector
-            page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200], 
+            page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200],
                 index=[15, 25, 50, 100, 200].index(st.session_state.rows_per_page) if st.session_state.rows_per_page in [15,25,50,100,200] else 1,
                 key="page_size_select")
             if page_size != st.session_state.rows_per_page:
@@ -2674,10 +2387,8 @@ def main():
                 st.rerun()
 
             total_pages = max(1, math.ceil(len(filtered_df) / page_size))
-            if st.session_state.current_page > total_pages:
-                st.session_state.current_page = total_pages
-            if st.session_state.current_page < 1:
-                st.session_state.current_page = 1
+            if st.session_state.current_page > total_pages: st.session_state.current_page = total_pages
+            if st.session_state.current_page < 1: st.session_state.current_page = 1
 
             nav1, nav2, nav3 = st.columns([1, 2, 1])
             with nav1:
@@ -2711,16 +2422,12 @@ def main():
                         st.rerun()
                 with sort_cols[1]:
                     if st.session_state.sort_column:
-                        sort_dir = st.selectbox("Direction", ['Ascending', 'Descending'], 
+                        sort_dir = st.selectbox("Direction", ['Ascending', 'Descending'],
                             index=0 if st.session_state.sort_ascending else 1, key="sort_dir_select")
                         new_asc = sort_dir == 'Ascending'
                         if new_asc != st.session_state.sort_ascending:
                             st.session_state.sort_ascending = new_asc
                             st.rerun()
-                with sort_cols[2]:
-                    st.write("")
-                with sort_cols[3]:
-                    st.write("")
 
             # Print-only table (all filtered data)
             print_export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
@@ -2757,8 +2464,7 @@ def main():
                     try:
                         pos = list(page_df.index).index(idx)
                         selected_sheet_rows.append(sheet_rows[pos])
-                    except (ValueError, IndexError):
-                        pass
+                    except (ValueError, IndexError): pass
 
             pnr_col = next((c for c in edited_page.columns if 'PNR' in str(c).upper()), None)
             selected_pnrs = edited_page.loc[selected_indices, pnr_col].tolist() if pnr_col and selected_indices else []
@@ -2788,13 +2494,10 @@ def main():
                             st.session_state.last_refresh = time.time()
                             time.sleep(0.3)
                             st.rerun()
-                        else:
-                            st.warning("Nothing to save")
+                        else: st.warning("Nothing to save")
                     except Exception as e:
-                        if "429" in str(e):
-                            st.error("Write quota exceeded. Wait 1 minute.")
-                        else:
-                            st.error(f"Save error: {e}")
+                        if "429" in str(e): st.error("Write quota exceeded. Wait 1 minute.")
+                        else: st.error(f"Save error: {e}")
                         log_activity(f"❌ Save: {str(e)[:40]}")
             with a2:
                 if st.button("➕ Add Row", use_container_width=True, key="add_row_btn"):
@@ -2806,8 +2509,7 @@ def main():
                         start_row = config["start_row"]
                         num_cols = len(all_data[0]) if all_data else 1
                         blank_row = [''] * num_cols
-                        if len(all_data) >= start_row:
-                            blank_row[0] = len(all_data) - start_row + 2
+                        if len(all_data) >= start_row: blank_row[0] = len(all_data) - start_row + 2
                         sheet.append_row(blank_row)
                         st.toast("✅ Row added", icon="➕")
                         log_activity(f"➕ Added row in {sheet_choice}")
@@ -2893,8 +2595,7 @@ def main():
                         st.download_button("Download Selected Image", data=sel_img_bytes,
                             file_name=f"{sheet_choice}_selected.png", mime="image/png",
                             use_container_width=True, key="wa_sel_img_download")
-                else:
-                    st.info("Select rows to generate image")
+                else: st.info("Select rows to generate image")
             with wa_col3:
                 if not filtered_df.empty:
                     img_bytes = create_table_image(filtered_df, f"{sheet_choice} Data")
@@ -2915,13 +2616,10 @@ def main():
                     st.download_button("PDF (All)", data=pdf_bytes,
                         file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.pdf",
                         mime="application/pdf", use_container_width=True, key="pdf_all_download")
-                except Exception as e:
-                    st.warning(f"PDF error: {e}")
+                except Exception as e: st.warning(f"PDF error: {e}")
             with e2:
-                if selected_indices:
-                    export_sel = filtered_df.iloc[selected_indices].drop(columns=['_sheet_row'], errors='ignore')
-                else:
-                    export_sel = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
+                if selected_indices: export_sel = filtered_df.iloc[selected_indices].drop(columns=['_sheet_row'], errors='ignore')
+                else: export_sel = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
                 csv_sel = export_sel.to_csv(index=False).encode('utf-8')
                 st.download_button("CSV (Selected)" if selected_indices else "CSV (All)", data=csv_sel,
                     file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}_selected.csv",
@@ -2963,32 +2661,30 @@ def main():
                     st.markdown("**🚆 Train Analysis**")
                     if train_col_metric and not filtered_df.empty:
                         most_common = filtered_df[train_col_metric].mode()
-                        if not most_common.empty:
-                            st.caption(f"Most frequent train: {most_common.iloc[0]}")
+                        if not most_common.empty: st.caption(f"Most frequent train: {most_common.iloc[0]}")
                         if pnr_col:
                             dupes = filtered_df[pnr_col].value_counts()
                             dupes = dupes[dupes > 1]
-                            if not dupes.empty:
-                                st.warning(f"⚠️ {len(dupes)} duplicate PNR(s) found!")
-                            else:
-                                st.success("✅ No duplicate PNRs")
+                            if not dupes.empty: st.warning(f"⚠️ {len(dupes)} duplicate PNR(s) found!")
+                            else: st.success("✅ No duplicate PNRs")
                     st.markdown("**⌨️ Shortcuts**")
                     st.caption("D: Toggle Theme | Refresh button for data sync")
             st.markdown('</div>', unsafe_allow_html=True)
 
     # =====================================================================
-    # VIEW: 📊 DASHBOARD - Fixed errors
+    # VIEW: 📊 DASHBOARD - 6 Different Graphs per Sheet
     # =====================================================================
     elif view == "📊 Dashboard":
         st.subheader("📊 Analytics Dashboard")
 
-        # Sheet selector for dashboard
         dash_sheet_options = ["EQ", "DATA", "FINAL", "DATA2", "EMAIL_DATA"]
         dash_sheet = st.selectbox("📋 Select Sheet for Dashboard", dash_sheet_options,
-            index=dash_sheet_options.index(sheet_choice) if sheet_choice in dash_sheet_options else 0,
+            index=dash_sheet_options.index(st.session_state.dashboard_sheet) if st.session_state.dashboard_sheet in dash_sheet_options else 0,
             key="dashboard_sheet_select")
+        if dash_sheet != st.session_state.dashboard_sheet:
+            st.session_state.dashboard_sheet = dash_sheet
+            st.rerun()
 
-        # Load data for selected dashboard sheet
         dash_df_raw = load_sheet_data_cached(dash_sheet, SHEET_ID)
         dash_df = dash_df_raw.copy() if not dash_df_raw.empty else pd.DataFrame()
 
@@ -3009,146 +2705,180 @@ def main():
                 col_name = dash_df.columns[doj_col_idx]
                 try:
                     dash_df['_temp'] = pd.to_datetime(dash_df[col_name], format='%d-%m-%Y', errors='coerce')
-                    if dash_df['_temp'].isna().all():
-                        dash_df['_temp'] = pd.to_datetime(dash_df[col_name], errors='coerce')
-                except:
-                    dash_df['_temp'] = pd.to_datetime(dash_df[col_name], errors='coerce')
-                if st.session_state.from_val:
-                    dash_df = dash_df[dash_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
-                if st.session_state.to_val:
-                    dash_df = dash_df[dash_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
+                    if dash_df['_temp'].isna().all(): dash_df['_temp'] = pd.to_datetime(dash_df[col_name], errors='coerce')
+                except: dash_df['_temp'] = pd.to_datetime(dash_df[col_name], errors='coerce')
+                if st.session_state.from_val: dash_df = dash_df[dash_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
+                if st.session_state.to_val: dash_df = dash_df[dash_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
                 dash_df = dash_df.drop('_temp', axis=1, errors='ignore')
 
-        # Show active filters
         active_filters = []
         if st.session_state.pnr_val: active_filters.append(f"PNR: {st.session_state.pnr_val}")
         if st.session_state.train_val: active_filters.append(f"Train: {st.session_state.train_val}")
         if st.session_state.from_val: active_filters.append(f"From: {st.session_state.from_val.strftime('%d-%m-%Y')}")
         if st.session_state.to_val: active_filters.append(f"To: {st.session_state.to_val.strftime('%d-%m-%Y')}")
-        if active_filters:
-            st.caption(f"🔍 Active Filters: {' | '.join(active_filters)}")
+        if active_filters: st.caption(f"🔍 Active Filters: {' | '.join(active_filters)}")
 
-        # KPI Cards
         st.markdown("### Key Metrics")
         kcol1, kcol2, kcol3, kcol4, kcol5 = st.columns(5)
-
         total_records = len(dash_df) if not dash_df.empty else 0
-        with kcol1:
-            st.markdown(f'<div class="metric-card"><h3>{total_records}</h3><p>Total Records</p></div>', unsafe_allow_html=True)
+        with kcol1: st.markdown(f'<div class="metric-card"><h3>{total_records}</h3><p>Total Records</p></div>', unsafe_allow_html=True)
 
         train_col_dash = None
         for c in dash_df.columns:
             if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
-                train_col_dash = c
-                break
-
+                train_col_dash = c; break
         if train_col_dash and not dash_df.empty:
             unique_trains = dash_df[train_col_dash].nunique()
-            with kcol2:
-                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#11998e,#38ef7d)"><h3>{unique_trains}</h3><p>Unique Trains</p></div>', unsafe_allow_html=True)
+            with kcol2: st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#11998e,#38ef7d)"><h3>{unique_trains}</h3><p>Unique Trains</p></div>', unsafe_allow_html=True)
 
         vip_col_dash = next((c for c in dash_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
         if vip_col_dash and not dash_df.empty:
             vip_count = dash_df[vip_col_dash].astype(str).str.strip().ne('').sum()
-            with kcol3:
-                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#f093fb,#f5576c)"><h3>{vip_count}</h3><p>VIP Records</p></div>', unsafe_allow_html=True)
+            with kcol3: st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#f093fb,#f5576c)"><h3>{vip_count}</h3><p>VIP Records</p></div>', unsafe_allow_html=True)
 
         class_col_dash = next((c for c in dash_df.columns if 'CLASS' in c.upper()), None)
         if class_col_dash and not dash_df.empty:
             class_counts = dash_df[class_col_dash].value_counts()
             top_class = class_counts.index[0] if len(class_counts) > 0 else "N/A"
-            with kcol4:
-                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#4facfe,#00f2fe)"><h3>{top_class}</h3><p>Top Class</p></div>', unsafe_allow_html=True)
+            with kcol4: st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#4facfe,#00f2fe)"><h3>{top_class}</h3><p>Top Class</p></div>', unsafe_allow_html=True)
 
         doj_col_dash = next((c for c in dash_df.columns if 'DOJ' in c.upper()), None)
         if doj_col_dash and not dash_df.empty:
             upcoming = sum(1 for _, r in dash_df.iterrows() if not is_expired(r.get(doj_col_dash, '')))
-            with kcol5:
-                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#fa709a,#fee140)"><h3>{upcoming}</h3><p>Upcoming</p></div>', unsafe_allow_html=True)
+            with kcol5: st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#fa709a,#fee140)"><h3>{upcoming}</h3><p>Upcoming</p></div>', unsafe_allow_html=True)
 
         st.divider()
 
         if dash_df.empty:
             st.info("No data for charts. Adjust filters or choose another sheet.")
         else:
-            # Row 1: Train + Class
-            r1c1, r1c2 = st.columns(2)
-            with r1c1:
-                if train_col_dash:
-                    train_counts = dash_df[train_col_dash].value_counts().head(15).reset_index()
-                    train_counts.columns = ['Train', 'Count']
-                    fig = px.bar(train_counts, x='Train', y='Count', title="Train-wise Distribution",
-                        color='Count', color_continuous_scale='Viridis', text='Count')
-                    fig.update_traces(textposition='outside')
-                    fig.update_layout(height=350, showlegend=False, margin=dict(l=20,r=20,t=40,b=20),
-                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig, use_container_width=True)
+            # Graph 1: Train-wise Distribution (Vertical Bar with detailed values)
+            st.markdown("### 1️⃣ Train-wise Distribution")
+            if train_col_dash:
+                train_counts = dash_df[train_col_dash].value_counts().head(15).reset_index()
+                train_counts.columns = ['Train', 'Count']
+                fig1 = px.bar(train_counts, x='Train', y='Count', title="Train-wise Request Count",
+                    color='Count', color_continuous_scale='Viridis', text='Count',
+                    labels={'Train': 'Train Number', 'Count': 'Total Requests'})
+                fig1.update_traces(textposition='outside', textfont_size=12)
+                fig1.update_layout(height=400, showlegend=False, margin=dict(l=20,r=20,t=50,b=20),
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(size=12), title_font_size=16)
+                st.plotly_chart(fig1, use_container_width=True)
 
-            with r1c2:
-                if class_col_dash:
-                    class_counts = dash_df[class_col_dash].value_counts().reset_index()
-                    class_counts.columns = ['Class', 'Count']
-                    fig = px.pie(class_counts, names='Class', values='Count', title="Class-wise Distribution",
-                        hole=0.4, color_discrete_sequence=px.colors.sequential.RdBu)
-                    fig.update_layout(height=350, showlegend=True, margin=dict(l=20,r=20,t=40,b=20),
-                        paper_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig, use_container_width=True)
+            # Graph 2: Class-wise Distribution (Round Pie/Donut with detailed values)
+            st.markdown("### 2️⃣ Class-wise Distribution")
+            if class_col_dash:
+                class_counts = dash_df[class_col_dash].value_counts().reset_index()
+                class_counts.columns = ['Class', 'Count']
+                fig2 = px.pie(class_counts, names='Class', values='Count', title="Class-wise Breakdown",
+                    hole=0.5, color_discrete_sequence=px.colors.sequential.RdBu)
+                fig2.update_traces(textinfo='label+percent+value', textfont_size=12,
+                    pull=[0.05 if i == 0 else 0 for i in range(len(class_counts))])
+                fig2.update_layout(height=400, showlegend=True, margin=dict(l=20,r=20,t=50,b=20),
+                    paper_bgcolor='rgba(0,0,0,0)', font=dict(size=12), title_font_size=16)
+                st.plotly_chart(fig2, use_container_width=True)
 
-            # Row 2: VIP + DOJ Timeline
-            r2c1, r2c2 = st.columns(2)
-            with r2c1:
-                if vip_col_dash:
-                    vip_counts = dash_df[vip_col_dash].value_counts().reset_index()
-                    vip_counts.columns = ['Status', 'Count']
-                    vip_counts = vip_counts[vip_counts['Status'].astype(str).str.strip() != '']
-                    if not vip_counts.empty:
-                        fig = px.bar(vip_counts, x='Status', y='Count', title="VIP Status Distribution",
-                            color='Count', color_continuous_scale='Plasma', text='Count')
-                        fig.update_traces(textposition='outside')
-                        fig.update_layout(height=350, showlegend=False, margin=dict(l=20,r=20,t=40,b=20),
-                            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig, use_container_width=True)
-
-            with r2c2:
-                if doj_col_dash:
-                    try:
-                        dash_df['_date'] = pd.to_datetime(dash_df[doj_col_dash], format='%d-%m-%Y', errors='coerce')
-                        if dash_df['_date'].isna().all():
-                            dash_df['_date'] = pd.to_datetime(dash_df[doj_col_dash], errors='coerce')
-                        daily = dash_df.groupby('_date').size().reset_index(name='count')
-                        if not daily.empty:
-                            fig = px.line(daily, x='_date', y='count', title="DOJ Timeline",
-                                markers=True, labels={'_date': 'Date', 'count': 'Records'})
-                            fig.update_layout(height=350, margin=dict(l=20,r=20,t=40,b=20),
-                                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                            st.plotly_chart(fig, use_container_width=True)
-                    except:
-                        pass
-
-            # Row 3: Top Routes
+            # Graph 3: Route-wise Distribution (Horizontal Bar with detailed values)
+            st.markdown("### 3️⃣ Route-wise Distribution")
             from_col_dash = next((c for c in dash_df.columns if c.upper() == 'FROM'), None)
             to_col_dash = next((c for c in dash_df.columns if c.upper() == 'TO'), None)
             if from_col_dash and to_col_dash:
                 dash_df['ROUTE'] = dash_df[from_col_dash].astype(str) + " → " + dash_df[to_col_dash].astype(str)
-                route_counts = dash_df['ROUTE'].value_counts().head(10).reset_index()
+                route_counts = dash_df['ROUTE'].value_counts().head(12).reset_index()
                 route_counts.columns = ['Route', 'Count']
-                if not route_counts.empty:
-                    fig = px.bar(route_counts, y='Route', x='Count', orientation='h', title="Top Routes",
-                        color='Count', color_continuous_scale='Cividis', text='Count')
-                    fig.update_traces(textposition='outside')
-                    fig.update_layout(height=400, showlegend=False, margin=dict(l=20,r=20,t=40,b=20),
-                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig, use_container_width=True)
+                fig3 = px.bar(route_counts, y='Route', x='Count', orientation='h', title="Top Routes",
+                    color='Count', color_continuous_scale='Cividis', text='Count',
+                    labels={'Route': 'Route (From → To)', 'Count': 'Total Requests'})
+                fig3.update_traces(textposition='outside', textfont_size=11)
+                fig3.update_layout(height=450, showlegend=False, margin=dict(l=20,r=20,t=50,b=20),
+                    paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                    font=dict(size=11), title_font_size=16)
+                st.plotly_chart(fig3, use_container_width=True)
 
-            # Row 4: Train x Class Heatmap
+            # Graph 4: Train × Class Heatmap (Detailed values in cells)
+            st.markdown("### 4️⃣ Train × Class Heatmap")
             if train_col_dash and class_col_dash:
                 tc_df = dash_df.groupby([train_col_dash, class_col_dash]).size().reset_index(name='Count')
                 if not tc_df.empty:
                     pivot = tc_df.pivot(index=train_col_dash, columns=class_col_dash, values='Count').fillna(0)
-                    fig = px.imshow(pivot, text_auto=True, aspect="auto", title="Train x Class Heatmap",
-                        color_continuous_scale='YlOrRd')
-                    fig.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)')
-                    st.plotly_chart(fig, use_container_width=True)
+                    fig4 = px.imshow(pivot, text_auto=True, aspect="auto", title="Train vs Class Demand Matrix",
+                        color_continuous_scale='YlOrRd', labels={'color': 'Requests'})
+                    fig4.update_traces(textfont_size=11)
+                    fig4.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)',
+                        font=dict(size=11), title_font_size=16)
+                    st.plotly_chart(fig4, use_container_width=True)
+
+            # Graph 5: Train × Route Grouped Bar (Detailed values)
+            st.markdown("### 5️⃣ Train × Route Analysis")
+            if train_col_dash and from_col_dash and to_col_dash:
+                tr_df = dash_df.groupby([train_col_dash, 'ROUTE']).size().reset_index(name='Count')
+                if not tr_df.empty:
+                    top_routes = dash_df['ROUTE'].value_counts().head(6).index.tolist()
+                    tr_df_filtered = tr_df[tr_df['ROUTE'].isin(top_routes)]
+                    fig5 = px.bar(tr_df_filtered, x=train_col_dash, y='Count', color='ROUTE',
+                        title="Train vs Top Routes", barmode='group', text='Count',
+                        color_discrete_sequence=px.colors.qualitative.Set2)
+                    fig5.update_traces(textposition='outside', textfont_size=10)
+                    fig5.update_layout(height=450, margin=dict(l=20,r=20,t=50,b=20),
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                        font=dict(size=11), title_font_size=16, legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1))
+                    st.plotly_chart(fig5, use_container_width=True)
+
+            # Graph 6: Rush Comparison - High Demand vs Low Demand (Line + Bar combo)
+            st.markdown("### 6️⃣ Rush Comparison — High Demand vs Low Demand")
+            if train_col_dash:
+                train_demand = dash_df[train_col_dash].value_counts().reset_index()
+                train_demand.columns = ['Train', 'Count']
+                if len(train_demand) > 0:
+                    median_demand = train_demand['Count'].median()
+                    train_demand['Demand'] = train_demand['Count'].apply(lambda x: 'High Demand 🔥' if x >= median_demand else 'Low Demand ❄️')
+                    demand_summary = train_demand.groupby('Demand').agg({'Count': 'sum', 'Train': 'count'}).reset_index()
+                    demand_summary.columns = ['Demand Category', 'Total Requests', 'Number of Trains']
+
+                    fig6 = make_subplots(rows=1, cols=2, specs=[[{"type": "bar"}, {"type": "pie"}]],
+                        subplot_titles=("Total Requests by Demand", "Train Count by Demand"))
+
+                    fig6.add_trace(go.Bar(x=demand_summary['Demand Category'], y=demand_summary['Total Requests'],
+                        text=demand_summary['Total Requests'], textposition='outside', marker_color=['#e74c3c', '#3498db'],
+                        name='Requests'), row=1, col=1)
+
+                    fig6.add_trace(go.Pie(labels=demand_summary['Demand Category'], values=demand_summary['Number of Trains'],
+                        hole=0.4, marker_colors=['#e74c3c', '#3498db'], textinfo='label+percent+value',
+                        name='Trains'), row=1, col=2)
+
+                    fig6.update_layout(height=450, showlegend=False, margin=dict(l=20,r=20,t=60,b=20),
+                        paper_bgcolor='rgba(0,0,0,0)', font=dict(size=12), title_font_size=16)
+                    st.plotly_chart(fig6, use_container_width=True)
+
+                    # Detailed table
+                    with st.expander("📋 Detailed Demand Breakdown", expanded=False):
+                        high_demand = train_demand[train_demand['Demand'] == 'High Demand 🔥'].sort_values('Count', ascending=False)
+                        low_demand = train_demand[train_demand['Demand'] == 'Low Demand ❄️'].sort_values('Count', ascending=True)
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            st.markdown("**🔥 High Demand Trains**")
+                            st.dataframe(high_demand[['Train', 'Count']].rename(columns={'Count': 'Requests'}), use_container_width=True, hide_index=True)
+                        with c2:
+                            st.markdown("**❄️ Low Demand Trains**")
+                            st.dataframe(low_demand[['Train', 'Count']].rename(columns={'Count': 'Requests'}), use_container_width=True, hide_index=True)
+
+            # DOJ Timeline
+            st.markdown("### 📅 DOJ Timeline")
+            if doj_col_dash:
+                try:
+                    dash_df['_date'] = pd.to_datetime(dash_df[doj_col_dash], format='%d-%m-%Y', errors='coerce')
+                    if dash_df['_date'].isna().all(): dash_df['_date'] = pd.to_datetime(dash_df[doj_col_dash], errors='coerce')
+                    daily = dash_df.groupby('_date').size().reset_index(name='count')
+                    if not daily.empty:
+                        fig_timeline = px.line(daily, x='_date', y='count', title="Daily Journey Volume",
+                            markers=True, labels={'_date': 'Date', 'count': 'Records'})
+                        fig_timeline.update_traces(line=dict(width=3), marker=dict(size=8))
+                        fig_timeline.update_layout(height=350, margin=dict(l=20,r=20,t=50,b=20),
+                            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                            font=dict(size=12), title_font_size=16)
+                        st.plotly_chart(fig_timeline, use_container_width=True)
+                except: pass
 
     # =====================================================================
     # VIEW: 💬 CHAT
@@ -3158,8 +2888,7 @@ def main():
         st.caption("Ask about EQ data, trains, quota, PNR or anything else.")
         if prompt := st.chat_input("Type your question...", key="chat_input"):
             st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
+            with st.chat_message("user"): st.markdown(prompt)
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
                     response = chat_with_gemini(prompt, st.session_state.messages)
@@ -3167,8 +2896,7 @@ def main():
             st.session_state.messages.append({"role": "assistant", "content": response})
             st.rerun()
         for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]):
-                st.markdown(msg["content"])
+            with st.chat_message(msg["role"]): st.markdown(msg["content"])
         st.markdown("**Quick questions**")
         sugg_cols = st.columns(3)
         for i, suggestion in enumerate(st.session_state.chat_suggestions):
@@ -3184,7 +2912,7 @@ def main():
             st.rerun()
 
     # =====================================================================
-    # VIEW: 🚂 RAILWAY - Search Train tab REMOVED
+    # VIEW: 🚂 RAILWAY
     # =====================================================================
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real-time Info")
@@ -3192,26 +2920,22 @@ def main():
         if not NTES_AVAILABLE:
             st.error("❌ 'ntes-client' library not installed. Please run: `pip install ntes-client`")
             st.info("💡 Using alternative web-based PNR and train status services...")
-
             st.markdown("### 🔍 PNR Status (via ConfirmTkt)")
             pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr_alt")
             if pnr_input and len(pnr_input) == 10 and pnr_input.isdigit():
                 pnr_url = f"https://www.confirmtkt.com/pnr-status/{pnr_input}"
                 st.link_button("🔍 Check PNR Status", pnr_url, use_container_width=True)
-
             st.markdown("### 🚂 Live Train Status (via RailYatri)")
             train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train_alt")
             if train_no and train_no.isdigit() and (3 <= len(train_no) <= 5):
                 train_url = f"https://www.railyatri.in/live-train-status/{train_no}"
                 st.link_button("🚂 Check Live Status", train_url, use_container_width=True)
-
             st.markdown("### 📋 Train Schedule (via RailYatri)")
             train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch_alt")
             if train_no_sch and train_no_sch.isdigit() and (3 <= len(train_no_sch) <= 5):
                 sch_url = f"https://www.railyatri.in/train-schedule/{train_no_sch}"
                 st.link_button("📋 View Schedule", sch_url, use_container_width=True)
         else:
-            # REMOVED Search Train tab - only 4 tabs now
             tab1, tab2, tab3, tab4 = st.tabs(["🔍 PNR Status", "🚂 Live Train", "📋 Train Schedule", "📸 Passport Photo"])
 
             with tab1:
@@ -3226,29 +2950,23 @@ def main():
                             with st.spinner("Fetching PNR details..."):
                                 data = get_pnr_status(pnr_input)
                                 if data and isinstance(data, dict) and data.get('error'):
-                                    if data['error'] == "FLUSHED_PNR":
-                                        st.error("❌ FLUSHED PNR / PNR NOT YET GENERATED")
-                                    else:
-                                        st.error(f"❌ {data['error']}")
+                                    if data['error'] == "FLUSHED_PNR": st.error("❌ FLUSHED PNR / PNR NOT YET GENERATED")
+                                    else: st.error(f"❌ {data['error']}")
                                 elif data:
                                     st.session_state.pnr_result = data
                                     st.rerun()
-                                else:
-                                    st.error("❌ PNR not found or flushed.")
+                                else: st.error("❌ PNR not found or flushed.")
                 with c2:
                     if st.button("🔄 Refresh PNR", key="refresh_pnr", use_container_width=True):
                         if pnr_input and len(pnr_input) == 10 and pnr_input.isdigit():
                             with st.spinner("Refreshing PNR..."):
                                 data = get_pnr_status(pnr_input)
-                                if data and isinstance(data, dict) and data.get('error'):
-                                    st.error(f"❌ {data['error']}")
+                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
                                 elif data:
                                     st.session_state.pnr_result = data
                                     st.rerun()
-                                else:
-                                    st.error("❌ PNR not found or flushed.")
-                        else:
-                            st.warning("Please enter a valid PNR first.")
+                                else: st.error("❌ PNR not found or flushed.")
+                        else: st.warning("Please enter a valid PNR first.")
 
                 if st.session_state.pnr_result:
                     with st.container():
@@ -3263,9 +2981,7 @@ def main():
                 date_choice = st.selectbox("Select Date", date_options, index=0, key="rail_date")
                 offset = 0
                 for i in range(5):
-                    if get_date_label(i) in date_choice:
-                        offset = i
-                        break
+                    if get_date_label(i) in date_choice: offset = i; break
                 c1, c2 = st.columns(2)
                 with c1:
                     if st.button("Get Live Status", key="train_live", use_container_width=True):
@@ -3280,8 +2996,7 @@ def main():
                                 elif data:
                                     st.session_state.train_result = data
                                     st.rerun()
-                                else:
-                                    st.error("❌ No data available.")
+                                else: st.error("❌ No data available.")
                 with c2:
                     if st.button("🔄 Refresh Live Status", key="refresh_live", use_container_width=True):
                         if train_no and train_no.isdigit() and (3 <= len(train_no) <= 5):
@@ -3293,10 +3008,8 @@ def main():
                                 elif data:
                                     st.session_state.train_result = data
                                     st.rerun()
-                                else:
-                                    st.error("❌ No data available.")
-                        else:
-                            st.warning("Please enter a valid train number first.")
+                                else: st.error("❌ No data available.")
+                        else: st.warning("Please enter a valid train number first.")
 
                 if st.session_state.train_result:
                     with st.container():
@@ -3308,8 +3021,7 @@ def main():
             with tab3:
                 st.markdown("### Train Schedule / Route")
                 train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch")
-                if 'sch_start' not in st.session_state:
-                    st.session_state.sch_start = 0
+                if 'sch_start' not in st.session_state: st.session_state.sch_start = 0
                 c1, c2 = st.columns(2)
                 with c1:
                     if st.button("Get Schedule", key="train_sch", use_container_width=True):
@@ -3318,29 +3030,24 @@ def main():
                         else:
                             with st.spinner("Fetching schedule..."):
                                 data = get_train_schedule(train_no_sch)
-                                if data and isinstance(data, dict) and data.get('error'):
-                                    st.error(f"❌ {data['error']}")
+                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
                                 elif data:
                                     st.session_state.sch_data = data
                                     st.session_state.sch_start = 0
                                     st.rerun()
-                                else:
-                                    st.error("❌ Schedule not found.")
+                                else: st.error("❌ Schedule not found.")
                 with c2:
                     if st.button("🔄 Refresh Schedule", key="refresh_sch", use_container_width=True):
                         if train_no_sch and train_no_sch.isdigit() and (3 <= len(train_no_sch) <= 5):
                             with st.spinner("Refreshing schedule..."):
                                 data = get_train_schedule(train_no_sch)
-                                if data and isinstance(data, dict) and data.get('error'):
-                                    st.error(f"❌ {data['error']}")
+                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
                                 elif data:
                                     st.session_state.sch_data = data
                                     st.session_state.sch_start = 0
                                     st.rerun()
-                                else:
-                                    st.error("❌ Schedule not found.")
-                        else:
-                            st.warning("Please enter a valid train number first.")
+                                else: st.error("❌ Schedule not found.")
+                        else: st.warning("Please enter a valid train number first.")
 
                 if st.session_state.sch_data:
                     data = st.session_state.sch_data
@@ -3360,24 +3067,20 @@ def main():
                                         if st.button("◀ Previous", key="sch_prev"):
                                             st.session_state.sch_start = max(0, start - chunk)
                                             st.rerun()
-                                with col2:
-                                    st.write(f"Showing {start+1}-{end} of {total}")
+                                with col2: st.write(f"Showing {start+1}-{end} of {total}")
                                 with col3:
                                     if end < total:
                                         if st.button("Next ▶", key="sch_next"):
                                             st.session_state.sch_start = end
                                             st.rerun()
-                    else:
-                        st.info("No schedule data available.")
+                    else: st.info("No schedule data available.")
 
             with tab4:
                 st.markdown("### 📸 Passport Photo Maker")
                 st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
                 api_key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
-                if not api_key:
-                    api_key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
-                if not api_key and "remove_bg_key" in st.session_state:
-                    api_key = str(st.session_state.remove_bg_key).strip()
+                if not api_key: api_key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
+                if not api_key and "remove_bg_key" in st.session_state: api_key = str(st.session_state.remove_bg_key).strip()
                 if not api_key:
                     st.error("❌ REMOVE_BG_API_KEY not found.")
                     st.info("Add to secrets.toml or .env")
@@ -3387,8 +3090,7 @@ def main():
                         st.success("Key saved. Refreshing...")
                         st.rerun()
                     st.stop()
-                else:
-                    st.success(f"✅ API Key ready: {api_key[:4]}...{api_key[-4:]}")
+                else: st.success(f"✅ API Key ready: {api_key[:4]}...{api_key[-4:]}")
 
                 photo_file = st.file_uploader("Upload Photo", type=["png", "jpg", "jpeg"], key="passport_photo_uploader")
                 if photo_file:
@@ -3404,21 +3106,52 @@ def main():
                                     st.download_button("📥 Download Passport Photo", data=result,
                                         file_name=f"passport_{now_ist().strftime('%Y%m%d_%H%M%S')}.png",
                                         mime="image/png", use_container_width=True)
-                                else:
-                                    st.error("❌ Failed to process photo.")
-                            except Exception as e:
-                                st.error(f"❌ Error: {str(e)[:200]}")
+                                else: st.error("❌ Failed to process photo.")
+                            except Exception as e: st.error(f"❌ Error: {str(e)[:200]}")
 
     # =====================================================================
-    # VIEW: 🌤️ WEATHER - Fixed HTML structure
+    # VIEW: 🌤️ WEATHER - Detailed with animations, location fix
     # =====================================================================
     elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
 
-        city = st.text_input("🏙️ Enter City Name", value=st.session_state.weather_city, 
+        # Location detection using browser geolocation + IP fallback
+        components.html("""
+        <script>
+        (function() {
+            var P = window.parent;
+            if (!P.__weatherLocDone) {
+                P.__weatherLocDone = true;
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        function(pos) {
+                            var url = new URL(P.location.href);
+                            url.searchParams.set('__lat', pos.coords.latitude);
+                            url.searchParams.set('__lon', pos.coords.longitude);
+                            P.location.href = url.toString();
+                        },
+                        function(err) {
+                            console.log('Geolocation denied or failed');
+                        },
+                        {timeout: 8000, enableHighAccuracy: true}
+                    );
+                }
+            }
+        })();
+        </script>
+        """, height=0)
+
+        qp_lat = st.query_params.get('__lat')
+        qp_lon = st.query_params.get('__lon')
+        if qp_lat and qp_lon:
+            try:
+                st.session_state.weather_lat = float(qp_lat)
+                st.session_state.weather_lon = float(qp_lon)
+            except: pass
+
+        city = st.text_input("🏙️ Enter City Name", value=st.session_state.weather_city,
                             placeholder="e.g., Tinsukia, New Delhi, Mumbai", key="weather_city_input")
-        if city != st.session_state.weather_city:
-            st.session_state.weather_city = city
+        if city != st.session_state.weather_city: st.session_state.weather_city = city
 
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -3429,13 +3162,10 @@ def main():
                         forecast = get_weather_forecast(city)
                         if data and 'error' not in data:
                             st.session_state.weather_data = data
-                            if forecast and 'error' not in forecast:
-                                st.session_state.weather_forecast = forecast
+                            if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
                             st.rerun()
-                        else:
-                            st.error(data.get('error', 'Error fetching weather'))
-                else:
-                    st.warning("Please enter a city name.")
+                        else: st.error(data.get('error', 'Error fetching weather'))
+                else: st.warning("Please enter a city name.")
         with col2:
             if st.button("🔄 Refresh", key="refresh_weather", use_container_width=True):
                 if city:
@@ -3444,53 +3174,135 @@ def main():
                         forecast = get_weather_forecast(city)
                         if data and 'error' not in data:
                             st.session_state.weather_data = data
-                            if forecast and 'error' not in forecast:
-                                st.session_state.weather_forecast = forecast
+                            if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
+                            st.rerun()
+                        else: st.error(data.get('error', 'Error fetching weather'))
+                else: st.warning("Please enter a city name.")
+        with col3:
+            if st.button("📍 Detect My Location", key="weather_location", use_container_width=True):
+                with st.spinner("Detecting your location..."):
+                    # Try browser coords first if available
+                    if st.session_state.weather_lat and st.session_state.weather_lon:
+                        data = get_weather_by_coords(st.session_state.weather_lat, st.session_state.weather_lon)
+                        forecast = get_forecast_by_coords(st.session_state.weather_lat, st.session_state.weather_lon)
+                        if data and 'error' not in data:
+                            st.session_state.weather_city = data.get('city', 'Unknown')
+                            st.session_state.weather_data = data
+                            if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
+                            st.success(f"📍 Location detected: {data.get('city', 'Unknown')}, {data.get('country', '')}")
                             st.rerun()
                         else:
-                            st.error(data.get('error', 'Error fetching weather'))
-                else:
-                    st.warning("Please enter a city name.")
-        with col3:
-            if st.button("📍 Use My Location", key="weather_location", use_container_width=True):
-                with st.spinner("Detecting your location..."):
-                    ip_loc = get_location_from_ip()
-                    if ip_loc and ip_loc.get('city'):
-                        st.session_state.weather_city = ip_loc['city']
-                        st.success(f"📍 Detected: {ip_loc['city']}, {ip_loc.get('country', '')}")
-                        data = get_weather(ip_loc['city'])
-                        forecast = get_weather_forecast(ip_loc['city'])
-                        if data and 'error' not in data:
-                            st.session_state.weather_data = data
-                            if forecast and 'error' not in forecast:
-                                st.session_state.weather_forecast = forecast
-                        st.rerun()
+                            # Fallback to IP
+                            ip_loc = get_location_from_ip()
+                            if ip_loc and ip_loc.get('city'):
+                                st.session_state.weather_city = ip_loc['city']
+                                data = get_weather(ip_loc['city'])
+                                forecast = get_weather_forecast(ip_loc['city'])
+                                if data and 'error' not in data:
+                                    st.session_state.weather_data = data
+                                    if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
+                                st.success(f"📍 IP Location: {ip_loc['city']}, {ip_loc.get('country', '')}")
+                                st.rerun()
+                            else: st.error("❌ Could not detect location.")
                     else:
-                        st.error("❌ Could not detect location automatically. Please enter city manually.")
+                        ip_loc = get_location_from_ip()
+                        if ip_loc and ip_loc.get('city'):
+                            st.session_state.weather_city = ip_loc['city']
+                            data = get_weather(ip_loc['city'])
+                            forecast = get_weather_forecast(ip_loc['city'])
+                            if data and 'error' not in data:
+                                st.session_state.weather_data = data
+                                if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
+                            st.success(f"📍 IP Location: {ip_loc['city']}, {ip_loc.get('country', '')}")
+                            st.rerun()
+                        else: st.error("❌ Could not detect location automatically.")
 
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
 
-            # Current Weather Card - FIXED: proper HTML structure, no broken divs
+            # Animated Weather Card
             weather_html = f"""
-            <div class="weather-card">
-                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+            <style>
+            @keyframes weather-float {{
+                0%, 100% {{ transform: translateY(0px); }}
+                50% {{ transform: translateY(-8px); }}
+            }}
+            @keyframes weather-glow {{
+                0%, 100% {{ box-shadow: 0 4px 20px rgba(37, 99, 235, 0.15); }}
+                50% {{ box-shadow: 0 8px 40px rgba(37, 99, 235, 0.3); }}
+            }}
+            @keyframes sun-pulse {{
+                0%, 100% {{ transform: scale(1); opacity: 0.8; }}
+                50% {{ transform: scale(1.15); opacity: 1; }}
+            }}
+            .weather-main-card {{
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 24px; padding: 30px; color: white;
+                box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
+                animation: weather-float 4s ease-in-out infinite, weather-glow 3s ease-in-out infinite;
+                position: relative; overflow: hidden;
+            }}
+            .weather-main-card::before {{
+                content: ''; position: absolute; top: -50%; right: -50%;
+                width: 200%; height: 200%;
+                background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+                animation: rotate 20s linear infinite;
+            }}
+            @keyframes rotate {{ from {{ transform: rotate(0deg); }} to {{ transform: rotate(360deg); }} }}
+            .weather-temp-big {{ font-size: 4.5rem; font-weight: 800; line-height: 1; text-shadow: 0 4px 20px rgba(0,0,0,0.3); }}
+            .weather-city {{ font-size: 1.8rem; font-weight: 700; margin-bottom: 4px; }}
+            .weather-desc {{ font-size: 1.3rem; opacity: 0.95; }}
+            .weather-detail-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 20px; }}
+            .weather-detail-item {{
+                background: rgba(255,255,255,0.15); border-radius: 12px; padding: 12px;
+                text-align: center; backdrop-filter: blur(10px);
+            }}
+            .weather-detail-icon {{ font-size: 1.5rem; margin-bottom: 4px; }}
+            .weather-detail-label {{ font-size: 0.8rem; opacity: 0.8; }}
+            .weather-detail-value {{ font-size: 1.1rem; font-weight: 700; }}
+            .sunrise-sunset {{
+                display: flex; justify-content: center; gap: 40px; margin-top: 16px;
+                padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.2);
+            }}
+            .sun-item {{ text-align: center; }}
+            .sun-icon {{ font-size: 2rem; animation: sun-pulse 2s ease-in-out infinite; }}
+            .sun-time {{ font-size: 1.2rem; font-weight: 700; }}
+            .sun-label {{ font-size: 0.85rem; opacity: 0.8; }}
+            </style>
+            <div class="weather-main-card">
+                <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; position: relative; z-index: 1;">
                     <div>
-                        <h2 style="margin: 0; font-size: 1.8rem; color: inherit;">{data['city']}, {data['country']}</h2>
+                        <div class="weather-city">{data['city']}, {data['country']}</div>
                         <div class="weather-desc">{data['weather'].title()}</div>
-                        <div style="font-size: 0.85rem; color: inherit; opacity: 0.7; margin-top: 4px;">Updated: {format_datetime()}</div>
+                        <div style="font-size: 0.9rem; opacity: 0.7; margin-top: 6px;">Updated: {format_datetime()}</div>
                     </div>
                     <div style="text-align: center;">
-                        <div class="weather-temp">{data['temp']}°C</div>
-                        <div style="font-size: 0.9rem; opacity: 0.7;">Feels like {data['feels_like']}°C</div>
+                        <div class="weather-temp-big">{data['temp']}°C</div>
+                        <div style="font-size: 1rem; opacity: 0.9;">Feels like {data['feels_like']}°C</div>
                     </div>
                 </div>
-                <hr style="margin: 14px 0; border-color: rgba(128,128,128,0.3);">
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;">
-                    <div class="weather-detail">💧 Humidity: <b>{data['humidity']}%</b></div>
-                    <div class="weather-detail">🌬️ Wind Speed: <b>{data['wind_speed']} m/s</b></div>
-                    <div class="weather-detail">📊 Pressure: <b>{data['pressure']} hPa</b></div>
-                    <div class="weather-detail">🌡️ Feels Like: <b>{data['feels_like']}°C</b></div>
+                <div class="weather-detail-row">
+                    <div class="weather-detail-item">
+                        <div class="weather-detail-icon">💧</div>
+                        <div class="weather-detail-label">Humidity</div>
+                        <div class="weather-detail-value">{data['humidity']}%</div>
+                    </div>
+                    <div class="weather-detail-item">
+                        <div class="weather-detail-icon">🌬️</div>
+                        <div class="weather-detail-label">Wind</div>
+                        <div class="weather-detail-value">{data['wind_speed']} m/s</div>
+                    </div>
+                    <div class="weather-detail-item">
+                        <div class="weather-detail-icon">📊</div>
+                        <div class="weather-detail-label">Pressure</div>
+                        <div class="weather-detail-value">{data['pressure']} hPa</div>
+                    </div>
+                    <div class="weather-detail-item">
+                        <div class="weather-detail-icon">🌡️</div>
+                        <div class="weather-detail-label">Feels Like</div>
+                        <div class="weather-detail-value">{data['feels_like']}°C</div>
+                    </div>
+                </div>
             """
 
             if data.get('sunrise') and data.get('sunrise') != 'N/A':
@@ -3498,16 +3310,22 @@ def main():
                     sunrise = datetime.fromtimestamp(data['sunrise']).strftime('%I:%M %p')
                     sunset = datetime.fromtimestamp(data['sunset']).strftime('%I:%M %p')
                     weather_html += f"""
-                    <div class="weather-detail">🌅 Sunrise: <b>{sunrise}</b></div>
-                    <div class="weather-detail">🌇 Sunset: <b>{sunset}</b></div>
-                    """
-                except:
-                    pass
-
-            weather_html += """
+                <div class="sunrise-sunset">
+                    <div class="sun-item">
+                        <div class="sun-icon">🌅</div>
+                        <div class="sun-time">{sunrise}</div>
+                        <div class="sun-label">Sunrise</div>
+                    </div>
+                    <div class="sun-item">
+                        <div class="sun-icon">🌇</div>
+                        <div class="sun-time">{sunset}</div>
+                        <div class="sun-label">Sunset</div>
+                    </div>
                 </div>
-            </div>
-            """
+                    """
+                except: pass
+
+            weather_html += "</div>"
             st.markdown(weather_html, unsafe_allow_html=True)
 
             if data.get('icon'):
@@ -3516,7 +3334,7 @@ def main():
                 with c2:
                     st.image(icon_url, caption=data['weather'].title(), width=120)
 
-            # 5-Day Forecast
+            # 5-Day Forecast with animation
             if st.session_state.weather_forecast and 'error' not in st.session_state.weather_forecast:
                 forecast = st.session_state.weather_forecast
                 st.markdown("---")
@@ -3532,12 +3350,23 @@ def main():
                             icon_url = f"https://openweathermap.org/img/wn/{day['icon']}@2x.png" if day.get('icon') else ""
 
                             st.markdown(f"""
-                            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                                border-radius: 16px; padding: 16px; text-align: center; color: white;
-                                box-shadow: 0 4px 15px rgba(0,0,0,0.2); margin-bottom: 10px;">
+                            <style>
+                            @keyframes forecast-bounce {{
+                                0%, 100% {{ transform: translateY(0); }}
+                                50% {{ transform: translateY(-5px); }}
+                            }}
+                            .forecast-card-{idx} {{
+                                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                border-radius: 20px; padding: 18px; text-align: center; color: white;
+                                box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+                                animation: forecast-bounce 3s ease-in-out infinite;
+                                animation-delay: {idx * 0.3}s;
+                            }}
+                            </style>
+                            <div class="forecast-card-{idx}">
                                 <div style="font-size: 0.9rem; font-weight: 600; margin-bottom: 8px;">{day_name}</div>
                                 <img src="{icon_url}" style="width: 60px; height: 60px; margin: 5px 0;">
-                                <div style="font-size: 1.6rem; font-weight: 700;">{day['temp']}°C</div>
+                                <div style="font-size: 1.8rem; font-weight: 700;">{day['temp']}°C</div>
                                 <div style="font-size: 0.75rem; margin: 4px 0;">{day['description']}</div>
                                 <div style="font-size: 0.8rem; margin-top: 8px; opacity: 0.9;">
                                     🔺 {day['max_temp']}° / 🔻 {day['min_temp']}°
@@ -3552,16 +3381,19 @@ def main():
                     fig_forecast = go.Figure()
                     dates = [datetime.strptime(d['date'], '%Y-%m-%d').strftime('%d %b') for d in forecast_data]
                     fig_forecast.add_trace(go.Scatter(x=dates, y=[d['max_temp'] for d in forecast_data],
-                        mode='lines+markers', name='Max Temp', line=dict(color='#ff6b6b', width=3)))
+                        mode='lines+markers', name='Max Temp', line=dict(color='#ff6b6b', width=3),
+                        marker=dict(size=10)))
                     fig_forecast.add_trace(go.Scatter(x=dates, y=[d['min_temp'] for d in forecast_data],
-                        mode='lines+markers', name='Min Temp', line=dict(color='#4ecdc4', width=3)))
+                        mode='lines+markers', name='Min Temp', line=dict(color='#4ecdc4', width=3),
+                        marker=dict(size=10)))
                     fig_forecast.add_trace(go.Scatter(x=dates, y=[d['temp'] for d in forecast_data],
-                        mode='lines+markers', name='Avg Temp', line=dict(color='#ffe66d', width=3)))
+                        mode='lines+markers', name='Avg Temp', line=dict(color='#ffe66d', width=3),
+                        marker=dict(size=10)))
                     fig_forecast.update_layout(
-                        title="📈 5-Day Temperature Trend",
-                        height=400, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
-                    )
+                        title="📈 5-Day Temperature Trend", height=400,
+                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+                        font=dict(size=12), title_font_size=16)
                     st.plotly_chart(fig_forecast, use_container_width=True)
 
                     # Detailed forecast table
@@ -3574,7 +3406,7 @@ def main():
         elif st.session_state.weather_data and 'error' in st.session_state.weather_data:
             st.error(st.session_state.weather_data['error'])
         else:
-            st.info("Enter a city name and click 'Get Weather' or 'Use My Location' to see detailed weather information.")
+            st.info("Enter a city name and click 'Get Weather' or 'Detect My Location' to see detailed weather information.")
 
     # Footer
     st.markdown("""
