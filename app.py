@@ -1,4 +1,3 @@
-
 import os
 import streamlit as st
 import streamlit.components.v1 as components
@@ -1451,7 +1450,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
-        [data-testid="stSidebar"] { display: flex !important; visibility: visible !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; }
+        [data-testid="stSidebar"] {{ display: flex !important; visibility: visible !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; }}
         .metric-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s ease; }}
         .metric-card:hover {{ transform: translateY(-3px); box-shadow: 0 4px 16px rgba(0,0,0,0.1); }}
         .metric-card h3 {{ margin: 0; font-size: 2.2rem; color: {accent}; font-weight: 800; }}
