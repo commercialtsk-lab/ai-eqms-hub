@@ -1,4 +1,3 @@
-
 import os
 import streamlit as st
 import streamlit.components.v1 as components
@@ -2071,14 +2070,17 @@ def main():
 
         with st.expander("🌤️ Quick Weather", expanded=False):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city")
-            if city != st.session_state.weather_city: st.session_state.weather_city = city            if st.button("🌤️ Get Weather", key="sidebar_weather_btn", use_container_width=True):
+            if city != st.session_state.weather_city: 
+                st.session_state.weather_city = city
+            if st.button("🌤️ Get Weather", key="sidebar_weather_btn", use_container_width=True):
                 if city:
                     with st.spinner("Fetching..."):
                         data = get_weather(city)
                         if data and 'error' not in data:
                             st.session_state.weather_data = data
                             st.rerun()
-                        else: st.error(data.get('error', 'Error'))
+                        else: 
+                            st.error(data.get('error', 'Error'))
             if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
                 data = st.session_state.weather_data
                 st.markdown(f"""
@@ -2165,12 +2167,16 @@ def main():
                 elif uploaded: st.audio(uploaded, format='audio/mp3')
 
             if st.button("🚀 Process & Save", type="primary", use_container_width=True, key="process_save_btn"):
-                if mode == "📝 Text" and not text_data.strip(): st.warning("Text daalein")
-                elif mode != "📝 Text" and not uploaded and not audio_data: st.warning("File select karein")
+                if mode == "📝 Text" and not text_data.strip(): 
+                    st.warning("Text daalein")
+                elif mode != "📝 Text" and not uploaded and not audio_data: 
+                    st.warning("File select karein")
                 else:
                     prog = st.progress(0)
                     status = st.empty()
-                    def upd(v, m): prog.progress(v); status.text(m)
+                    def upd(v, m): 
+                        prog.progress(v); 
+                        status.text(m)
                     try:
                         if mode == "📝 Text":
                             res = gemini_universal_parser(text_data, "text", None, upd)
@@ -2276,7 +2282,8 @@ def main():
             if st.session_state.activity_log:
                 for log in reversed(st.session_state.activity_log[-20:]):
                     st.caption(f"{log.get('timestamp', '')} — {log.get('action', '')}")
-            else: st.caption("No activity yet")
+            else: 
+                st.caption("No activity yet")
         st.markdown("---")
 
         st.markdown("### 📑 Sheet Selection")
@@ -2527,7 +2534,8 @@ def main():
             if sort_col and sort_col in filtered_df.columns:
                 try:
                     filtered_df = filtered_df.sort_values(by=sort_col, ascending=sort_asc, key=lambda col: col.astype(str))
-                except: pass
+                except: 
+                    pass
 
             page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200],
                 index=[15, 25, 50, 100, 200].index(st.session_state.rows_per_page) if st.session_state.rows_per_page in [15,25,50,100,200] else 1,
@@ -2538,8 +2546,10 @@ def main():
                 st.rerun()
 
             total_pages = max(1, math.ceil(len(filtered_df) / page_size))
-            if st.session_state.current_page > total_pages: st.session_state.current_page = total_pages
-            if st.session_state.current_page < 1: st.session_state.current_page = 1
+            if st.session_state.current_page > total_pages: 
+                st.session_state.current_page = total_pages
+            if st.session_state.current_page < 1: 
+                st.session_state.current_page = 1
 
             nav1, nav2, nav3 = st.columns([1, 2, 1])
             with nav1:
@@ -2615,7 +2625,8 @@ def main():
                     try:
                         pos = list(page_df.index).index(idx)
                         selected_sheet_rows.append(sheet_rows[pos])
-                    except (ValueError, IndexError): pass
+                    except (ValueError, IndexError): 
+                        pass
 
             pnr_col = next((c for c in edited_page.columns if 'PNR' in str(c).upper()), None)
             selected_pnrs = edited_page.loc[selected_indices, pnr_col].tolist() if pnr_col and selected_indices else []
@@ -2645,10 +2656,13 @@ def main():
                             st.session_state.last_refresh = time.time()
                             time.sleep(0.3)
                             st.rerun()
-                        else: st.warning("Nothing to save")
+                        else: 
+                            st.warning("Nothing to save")
                     except Exception as e:
-                        if "429" in str(e): st.error("Write quota exceeded. Wait 1 minute.")
-                        else: st.error(f"Save error: {e}")
+                        if "429" in str(e): 
+                            st.error("Write quota exceeded. Wait 1 minute.")
+                        else: 
+                            st.error(f"Save error: {e}")
                         log_activity(f"❌ Save: {str(e)[:40]}")
             with a2:
                 if st.button("➕ Add Row", use_container_width=True, key="add_row_btn"):
@@ -2660,7 +2674,8 @@ def main():
                         start_row = config["start_row"]
                         num_cols = len(all_data[0]) if all_data else 1
                         blank_row = [''] * num_cols
-                        if len(all_data) >= start_row: blank_row[0] = len(all_data) - start_row + 2
+                        if len(all_data) >= start_row: 
+                            blank_row[0] = len(all_data) - start_row + 2
                         sheet.append_row(blank_row)
                         st.toast("✅ Row added", icon="➕")
                         log_activity(f"➕ Added row in {sheet_choice}")
@@ -2746,7 +2761,8 @@ def main():
                         st.download_button("Download Selected Image", data=sel_img_bytes,
                             file_name=f"{sheet_choice}_selected.png", mime="image/png",
                             use_container_width=True, key="wa_sel_img_download")
-                else: st.info("Select rows to generate image")
+                else: 
+                    st.info("Select rows to generate image")
             with wa_col3:
                 if not filtered_df.empty:
                     img_bytes = create_table_image(filtered_df, f"{sheet_choice} Data")
@@ -2767,10 +2783,13 @@ def main():
                     st.download_button("PDF (All)", data=pdf_bytes,
                         file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.pdf",
                         mime="application/pdf", use_container_width=True, key="pdf_all_download")
-                except Exception as e: st.warning(f"PDF error: {e}")
+                except Exception as e: 
+                    st.warning(f"PDF error: {e}")
             with e2:
-                if selected_indices: export_sel = filtered_df.iloc[selected_indices].drop(columns=['_sheet_row'], errors='ignore')
-                else: export_sel = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
+                if selected_indices: 
+                    export_sel = filtered_df.iloc[selected_indices].drop(columns=['_sheet_row'], errors='ignore')
+                else: 
+                    export_sel = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
                 csv_sel = export_sel.to_csv(index=False).encode('utf-8')
                 st.download_button("CSV (Selected)" if selected_indices else "CSV (All)", data=csv_sel,
                     file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}_selected.csv",
@@ -2812,12 +2831,15 @@ def main():
                     st.markdown("**🚆 Train Analysis**")
                     if train_col_metric and not filtered_df.empty:
                         most_common = filtered_df[train_col_metric].mode()
-                        if not most_common.empty: st.caption(f"Most frequent train: {most_common.iloc[0]}")
+                        if not most_common.empty: 
+                            st.caption(f"Most frequent train: {most_common.iloc[0]}")
                         if pnr_col:
                             dupes = filtered_df[pnr_col].value_counts()
                             dupes = dupes[dupes > 1]
-                            if not dupes.empty: st.warning(f"⚠️ {len(dupes)} duplicate PNR(s) found!")
-                            else: st.success("✅ No duplicate PNRs")
+                            if not dupes.empty: 
+                                st.warning(f"⚠️ {len(dupes)} duplicate PNR(s) found!")
+                            else: 
+                                st.success("✅ No duplicate PNRs")
                     st.markdown("**⌨️ Shortcuts**")
                     st.caption("D: Toggle Theme | Refresh button for data sync")
             st.markdown('</div>', unsafe_allow_html=True)
@@ -2861,18 +2883,27 @@ def main():
                 col_name = dash_df.columns[doj_col_idx]
                 try:
                     dash_df['_temp'] = pd.to_datetime(dash_df[col_name], format='%d-%m-%Y', errors='coerce')
-                    if dash_df['_temp'].isna().all(): dash_df['_temp'] = pd.to_datetime(dash_df[col_name], errors='coerce')
-                except: dash_df['_temp'] = pd.to_datetime(dash_df[col_name], errors='coerce')
-                if st.session_state.from_val: dash_df = dash_df[dash_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
-                if st.session_state.to_val: dash_df = dash_df[dash_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
+                    if dash_df['_temp'].isna().all(): 
+                        dash_df['_temp'] = pd.to_datetime(dash_df[col_name], errors='coerce')
+                except: 
+                    dash_df['_temp'] = pd.to_datetime(dash_df[col_name], errors='coerce')
+                if st.session_state.from_val: 
+                    dash_df = dash_df[dash_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
+                if st.session_state.to_val: 
+                    dash_df = dash_df[dash_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
                 dash_df = dash_df.drop('_temp', axis=1, errors='ignore')
 
         active_filters = []
-        if st.session_state.pnr_val: active_filters.append(f"PNR: {st.session_state.pnr_val}")
-        if st.session_state.train_val: active_filters.append(f"Train: {st.session_state.train_val}")
-        if st.session_state.from_val: active_filters.append(f"From: {st.session_state.from_val.strftime('%d-%m-%Y')}")
-        if st.session_state.to_val: active_filters.append(f"To: {st.session_state.to_val.strftime('%d-%m-%Y')}")
-        if active_filters: st.caption(f"🔍 Active Filters: {' | '.join(active_filters)}")
+        if st.session_state.pnr_val: 
+            active_filters.append(f"PNR: {st.session_state.pnr_val}")
+        if st.session_state.train_val: 
+            active_filters.append(f"Train: {st.session_state.train_val}")
+        if st.session_state.from_val: 
+            active_filters.append(f"From: {st.session_state.from_val.strftime('%d-%m-%Y')}")
+        if st.session_state.to_val: 
+            active_filters.append(f"To: {st.session_state.to_val.strftime('%d-%m-%Y')}")
+        if active_filters: 
+            st.caption(f"🔍 Active Filters: {' | '.join(active_filters)}")
 
         st.markdown("### Key Metrics")
         kcol1, kcol2, kcol3, kcol4, kcol5 = st.columns(5)
@@ -3056,7 +3087,8 @@ def main():
             if doj_col_dash:
                 try:
                     dash_df['_date'] = pd.to_datetime(dash_df[doj_col_dash], format='%d-%m-%Y', errors='coerce')
-                    if dash_df['_date'].isna().all(): dash_df['_date'] = pd.to_datetime(dash_df[doj_col_dash], errors='coerce')
+                    if dash_df['_date'].isna().all(): 
+                        dash_df['_date'] = pd.to_datetime(dash_df[doj_col_dash], errors='coerce')
                     daily = dash_df.groupby('_date').size().reset_index(name='count')
                     if not daily.empty:
                         fig_timeline = px.line(daily, x='_date', y='count', title="Daily Journey Volume",
@@ -3066,7 +3098,8 @@ def main():
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                             font=dict(size=12), title_font_size=16)
                         st.plotly_chart(fig_timeline, use_container_width=True)
-                except: pass
+                except: 
+                    pass
 
     # =====================================================================
     # VIEW: 💬 CHAT
@@ -3076,7 +3109,8 @@ def main():
         st.caption("Ask about EQ data, trains, quota, PNR or anything else.")
         if prompt := st.chat_input("Type your question...", key="chat_input"):
             st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"): st.markdown(prompt)
+            with st.chat_message("user"): 
+                st.markdown(prompt)
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
                     response = chat_with_gemini(prompt, st.session_state.messages)
@@ -3084,7 +3118,8 @@ def main():
             st.session_state.messages.append({"role": "assistant", "content": response})
             st.rerun()
         for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]): st.markdown(msg["content"])
+            with st.chat_message(msg["role"]): 
+                st.markdown(msg["content"])
         st.markdown("**Quick questions**")
         sugg_cols = st.columns(3)
         for i, suggestion in enumerate(st.session_state.chat_suggestions):
@@ -3138,23 +3173,29 @@ def main():
                             with st.spinner("Fetching PNR details..."):
                                 data = get_pnr_status(pnr_input)
                                 if data and isinstance(data, dict) and data.get('error'):
-                                    if data['error'] == "FLUSHED_PNR": st.error("❌ FLUSHED PNR / PNR NOT YET GENERATED")
-                                    else: st.error(f"❌ {data['error']}")
+                                    if data['error'] == "FLUSHED_PNR": 
+                                        st.error("❌ FLUSHED PNR / PNR NOT YET GENERATED")
+                                    else: 
+                                        st.error(f"❌ {data['error']}")
                                 elif data:
                                     st.session_state.pnr_result = data
                                     st.rerun()
-                                else: st.error("❌ PNR not found or flushed.")
+                                else: 
+                                    st.error("❌ PNR not found or flushed.")
                 with c2:
                     if st.button("🔄 Refresh PNR", key="refresh_pnr", use_container_width=True):
                         if pnr_input and len(pnr_input) == 10 and pnr_input.isdigit():
                             with st.spinner("Refreshing PNR..."):
                                 data = get_pnr_status(pnr_input)
-                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
+                                if data and isinstance(data, dict) and data.get('error'): 
+                                    st.error(f"❌ {data['error']}")
                                 elif data:
                                     st.session_state.pnr_result = data
                                     st.rerun()
-                                else: st.error("❌ PNR not found or flushed.")
-                        else: st.warning("Please enter a valid PNR first.")
+                                else: 
+                                    st.error("❌ PNR not found or flushed.")
+                        else: 
+                            st.warning("Please enter a valid PNR first.")
 
                 if st.session_state.pnr_result:
                     with st.container():
@@ -3169,7 +3210,8 @@ def main():
                 date_choice = st.selectbox("Select Date", date_options, index=0, key="rail_date")
                 offset = 0
                 for i in range(5):
-                    if get_date_label(i) in date_choice: offset = i; break
+                    if get_date_label(i) in date_choice: 
+                        offset = i; break
                 c1, c2 = st.columns(2)
                 with c1:
                     if st.button("Get Live Status", key="train_live", use_container_width=True):
@@ -3184,7 +3226,8 @@ def main():
                                 elif data:
                                     st.session_state.train_result = data
                                     st.rerun()
-                                else: st.error("❌ No data available.")
+                                else: 
+                                    st.error("❌ No data available.")
                 with c2:
                     if st.button("🔄 Refresh Live Status", key="refresh_live", use_container_width=True):
                         if train_no and train_no.isdigit() and (3 <= len(train_no) <= 5):
@@ -3196,8 +3239,10 @@ def main():
                                 elif data:
                                     st.session_state.train_result = data
                                     st.rerun()
-                                else: st.error("❌ No data available.")
-                        else: st.warning("Please enter a valid train number first.")
+                                else: 
+                                    st.error("❌ No data available.")
+                        else: 
+                            st.warning("Please enter a valid train number first.")
 
                 if st.session_state.train_result:
                     with st.container():
@@ -3209,7 +3254,8 @@ def main():
             with tab3:
                 st.markdown("### Train Schedule / Route")
                 train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch")
-                if 'sch_start' not in st.session_state: st.session_state.sch_start = 0
+                if 'sch_start' not in st.session_state: 
+                    st.session_state.sch_start = 0
                 c1, c2 = st.columns(2)
                 with c1:
                     if st.button("Get Schedule", key="train_sch", use_container_width=True):
@@ -3218,24 +3264,29 @@ def main():
                         else:
                             with st.spinner("Fetching schedule..."):
                                 data = get_train_schedule(train_no_sch)
-                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
+                                if data and isinstance(data, dict) and data.get('error'): 
+                                    st.error(f"❌ {data['error']}")
                                 elif data:
                                     st.session_state.sch_data = data
                                     st.session_state.sch_start = 0
                                     st.rerun()
-                                else: st.error("❌ Schedule not found.")
+                                else: 
+                                    st.error("❌ Schedule not found.")
                 with c2:
                     if st.button("🔄 Refresh Schedule", key="refresh_sch", use_container_width=True):
                         if train_no_sch and train_no_sch.isdigit() and (3 <= len(train_no_sch) <= 5):
                             with st.spinner("Refreshing schedule..."):
                                 data = get_train_schedule(train_no_sch)
-                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
+                                if data and isinstance(data, dict) and data.get('error'): 
+                                    st.error(f"❌ {data['error']}")
                                 elif data:
                                     st.session_state.sch_data = data
                                     st.session_state.sch_start = 0
                                     st.rerun()
-                                else: st.error("❌ Schedule not found.")
-                        else: st.warning("Please enter a valid train number first.")
+                                else: 
+                                    st.error("❌ Schedule not found.")
+                        else: 
+                            st.warning("Please enter a valid train number first.")
 
                 if st.session_state.sch_data:
                     data = st.session_state.sch_data
@@ -3255,20 +3306,24 @@ def main():
                                         if st.button("◀ Previous", key="sch_prev"):
                                             st.session_state.sch_start = max(0, start - chunk)
                                             st.rerun()
-                                with col2: st.write(f"Showing {start+1}-{end} of {total}")
+                                with col2: 
+                                    st.write(f"Showing {start+1}-{end} of {total}")
                                 with col3:
                                     if end < total:
                                         if st.button("Next ▶", key="sch_next"):
                                             st.session_state.sch_start = end
                                             st.rerun()
-                    else: st.info("No schedule data available.")
+                    else: 
+                        st.info("No schedule data available.")
 
             with tab4:
                 st.markdown("### 📸 Passport Photo Maker")
                 st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
                 api_key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
-                if not api_key: api_key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
-                if not api_key and "remove_bg_key" in st.session_state: api_key = str(st.session_state.remove_bg_key).strip()
+                if not api_key: 
+                    api_key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
+                if not api_key and "remove_bg_key" in st.session_state: 
+                    api_key = str(st.session_state.remove_bg_key).strip()
                 if not api_key:
                     st.error("❌ REMOVE_BG_API_KEY not found.")
                     st.info("Add to secrets.toml or .env")
@@ -3278,7 +3333,8 @@ def main():
                         st.success("Key saved. Refreshing...")
                         st.rerun()
                     st.stop()
-                else: st.success(f"✅ API Key ready: {api_key[:4]}...{api_key[-4:]}")
+                else: 
+                    st.success(f"✅ API Key ready: {api_key[:4]}...{api_key[-4:]}")
 
                 photo_file = st.file_uploader("Upload Photo", type=["png", "jpg", "jpeg"], key="passport_photo_uploader")
                 if photo_file:
@@ -3294,8 +3350,10 @@ def main():
                                     st.download_button("📥 Download Passport Photo", data=result,
                                         file_name=f"passport_{now_ist().strftime('%Y%m%d_%H%M%S')}.png",
                                         mime="image/png", use_container_width=True)
-                                else: st.error("❌ Failed to process photo.")
-                            except Exception as e: st.error(f"❌ Error: {str(e)[:200]}")
+                                else: 
+                                    st.error("❌ Failed to process photo.")
+                            except Exception as e: 
+                                st.error(f"❌ Error: {str(e)[:200]}")
 
     # =====================================================================
     # VIEW: 🌤️ WEATHER - Detailed with animations, location fix
@@ -3311,11 +3369,13 @@ def main():
             try:
                 st.session_state.weather_lat = float(qp_lat)
                 st.session_state.weather_lon = float(qp_lon)
-            except: pass
+            except: 
+                pass
 
         city = st.text_input("🏙️ Enter City Name", value=st.session_state.weather_city,
                             placeholder="e.g., Tinsukia, New Delhi, Mumbai", key="weather_city_input")
-        if city != st.session_state.weather_city: st.session_state.weather_city = city
+        if city != st.session_state.weather_city: 
+            st.session_state.weather_city = city
 
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -3326,10 +3386,13 @@ def main():
                         forecast = get_weather_forecast(city)
                         if data and 'error' not in data:
                             st.session_state.weather_data = data
-                            if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
+                            if forecast and 'error' not in forecast: 
+                                st.session_state.weather_forecast = forecast
                             st.rerun()
-                        else: st.error(data.get('error', 'Error fetching weather'))
-                else: st.warning("Please enter a city name.")
+                        else: 
+                            st.error(data.get('error', 'Error fetching weather'))
+                else: 
+                    st.warning("Please enter a city name.")
         with col2:
             if st.button("🔄 Refresh", key="refresh_weather", use_container_width=True):
                 if city:
@@ -3338,10 +3401,13 @@ def main():
                         forecast = get_weather_forecast(city)
                         if data and 'error' not in data:
                             st.session_state.weather_data = data
-                            if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
+                            if forecast and 'error' not in forecast: 
+                                st.session_state.weather_forecast = forecast
                             st.rerun()
-                        else: st.error(data.get('error', 'Error fetching weather'))
-                else: st.warning("Please enter a city name.")
+                        else: 
+                            st.error(data.get('error', 'Error fetching weather'))
+                else: 
+                    st.warning("Please enter a city name.")
         with col3:
             st.empty()  # Removed Detect My Location button as requested
 
@@ -3451,7 +3517,8 @@ def main():
                     </div>
                 </div>
                     """
-                except: pass
+                except: 
+                    pass
 
             weather_html += "</div>"
             st.markdown(weather_html, unsafe_allow_html=True)
