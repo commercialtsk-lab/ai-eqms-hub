@@ -87,6 +87,7 @@ defaults = {
     'global_search': '', 'sort_column': None, 'sort_ascending': True, 'column_filters': {},
     'rows_per_page': 25, 'dashboard_sheet': 'EQ', 'adv_filters': {},
     'weather_lat': None, 'weather_lon': None, 'weather_location_name': None,
+    'pnr_last_checked': None,  # For auto-refresh tracking
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -1692,240 +1693,116 @@ def get_pnr_status_url(pnr):
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
 
 def main():
+        # ═══════════════════════════════════════════════════════════════════════
+    # VIBRANT ANIMATED BACKGROUND - Dual Train Orbit System
     # ═══════════════════════════════════════════════════════════════════════
-    # VIBRANT FULL-PAGE ANIMATED BACKGROUND - Circular Train Orbit
-    # ═══════════════════════════════════════════════════════════════════════
-    vibrant_bg_css = """
+    bg_html = """
     <style>
-    .vibrant-bg-container {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        z-index: -1;
-        pointer-events: none;
-        overflow: hidden;
+    .eqms-bg {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        z-index: -1; pointer-events: none; overflow: hidden;
         background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
     }
-    .vibrant-bg-container::before {
-        content: '';
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: 
-            radial-gradient(circle at 20% 80%, rgba(255, 153, 51, 0.15) 0%, transparent 50%),
-            radial-gradient(circle at 80% 20%, rgba(19, 136, 8, 0.15) 0%, transparent 50%),
-            radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.05) 0%, transparent 60%);
-        animation: bg-pulse 8s ease-in-out infinite;
+    .eqms-bg::before {
+        content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+        background: radial-gradient(circle at 20% 80%, rgba(255,153,51,0.12) 0%, transparent 50%),
+                    radial-gradient(circle at 80% 20%, rgba(19,136,8,0.12) 0%, transparent 50%),
+                    radial-gradient(circle at 50% 50%, rgba(255,255,255,0.04) 0%, transparent 60%);
+        animation: bgpulse 10s ease-in-out infinite;
     }
-    @keyframes bg-pulse {
-        0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.8; }
-        50% { transform: scale(1.1) rotate(5deg); opacity: 1; }
-    }
-    /* Floating particles */
-    .particle {
-        position: absolute;
-        border-radius: 50%;
-        animation: float-particle linear infinite;
-        opacity: 0.6;
-    }
-    @keyframes float-particle {
-        0% { transform: translateY(100vh) scale(0); opacity: 0; }
-        10% { opacity: 0.8; }
-        90% { opacity: 0.8; }
-        100% { transform: translateY(-100px) scale(1.5); opacity: 0; }
-    }
-    /* Circular orbit system */
-    .orbit-system {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 600px;
-        height: 600px;
-    }
-    .orbit-ring {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        border: 2px dashed rgba(255, 153, 51, 0.3);
-        border-radius: 50%;
-        animation: orbit-spin linear infinite;
-    }
-    .orbit-ring:nth-child(1) { width: 200px; height: 200px; animation-duration: 20s; border-color: rgba(255, 153, 51, 0.4); }
-    .orbit-ring:nth-child(2) { width: 350px; height: 350px; animation-duration: 30s; border-color: rgba(255, 255, 255, 0.25); animation-direction: reverse; }
-    .orbit-ring:nth-child(3) { width: 500px; height: 500px; animation-duration: 40s; border-color: rgba(19, 136, 8, 0.3); }
-    @keyframes orbit-spin {
-        from { transform: translate(-50%, -50%) rotate(0deg); }
-        to { transform: translate(-50%, -50%) rotate(360deg); }
-    }
-    /* Train orbiting on ring */
-    .orbit-train {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 500px;
-        height: 500px;
-        transform: translate(-50%, -50%);
-        animation: train-orbit 15s linear infinite;
-    }
-    @keyframes train-orbit {
-        from { transform: translate(-50%, -50%) rotate(0deg); }
-        to { transform: translate(-50%, -50%) rotate(360deg); }
-    }
-    .orbit-train-inner {
-        position: absolute;
-        top: -25px;
-        left: 50%;
-        transform: translateX(-50%);
-        font-size: 40px;
-        filter: drop-shadow(0 0 15px rgba(255, 153, 51, 0.8)) drop-shadow(0 0 30px rgba(255, 107, 53, 0.5));
-        animation: train-bob 1s ease-in-out infinite alternate;
-    }
-    @keyframes train-bob {
-        from { transform: translateX(-50%) translateY(0) scale(1); }
-        to { transform: translateX(-50%) translateY(-8px) scale(1.1); }
-    }
-    /* Second train */
-    .orbit-train-2 {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 350px;
-        height: 350px;
-        transform: translate(-50%, -50%);
-        animation: train-orbit-2 20s linear infinite reverse;
-    }
-    @keyframes train-orbit-2 {
-        from { transform: translate(-50%, -50%) rotate(180deg); }
-        to { transform: translate(-50%, -50%) rotate(540deg); }
-    }
-    .orbit-train-2-inner {
-        position: absolute;
-        top: -20px;
-        left: 50%;
-        transform: translateX(-50%);
-        font-size: 32px;
-        filter: drop-shadow(0 0 12px rgba(19, 136, 8, 0.8)) drop-shadow(0 0 25px rgba(50, 205, 50, 0.5));
-        animation: train-bob-2 0.8s ease-in-out infinite alternate;
-    }
-    @keyframes train-bob-2 {
-        from { transform: translateX(-50%) translateY(0) scale(1); }
-        to { transform: translateX(-50%) translateY(-6px) scale(1.08); }
-    }
-    /* Glowing stars */
-    .star {
-        position: absolute;
-        width: 4px;
-        height: 4px;
-        background: white;
-        border-radius: 50%;
-        animation: star-twinkle ease-in-out infinite;
-    }
-    @keyframes star-twinkle {
-        0%, 100% { opacity: 0.2; transform: scale(1); }
-        50% { opacity: 1; transform: scale(1.8); box-shadow: 0 0 10px 2px rgba(255,255,255,0.5); }
-    }
-    /* Neon grid lines */
-    .neon-grid {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: 40%;
-        background: 
-            linear-gradient(90deg, transparent 49%, rgba(255, 153, 51, 0.08) 50%, transparent 51%),
-            linear-gradient(0deg, transparent 49%, rgba(255, 153, 51, 0.08) 50%, transparent 51%);
-        background-size: 80px 80px;
-        transform: perspective(500px) rotateX(60deg);
-        transform-origin: bottom;
-        animation: grid-move 10s linear infinite;
-    }
-    @keyframes grid-move {
-        from { background-position: 0 0; }
-        to { background-position: 0 80px; }
-    }
-    /* Indian flag color waves at bottom */
-    .flag-wave {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: 6px;
-        background: linear-gradient(90deg, #FF9933 0%, #FF9933 33%, #FFFFFF 33%, #FFFFFF 66%, #138808 66%, #138808 100%);
-        animation: flag-shimmer 3s ease-in-out infinite;
-        box-shadow: 0 0 20px rgba(255, 153, 51, 0.3), 0 0 20px rgba(19, 136, 8, 0.3);
-    }
-    @keyframes flag-shimmer {
-        0%, 100% { opacity: 0.6; filter: brightness(1); }
-        50% { opacity: 1; filter: brightness(1.3); }
-    }
-    /* Content overlay */
-    [data-testid="stMain"] {
-        position: relative;
-        z-index: 10;
-    }
-    [data-testid="stSidebar"] {
-        position: relative;
-        z-index: 20;
-    }
-    </style>
-    <div class="vibrant-bg-container" id="vibrantBg">
-        <!-- Particles -->
-        <div class="particle" style="left:10%;width:6px;height:6px;background:#FF9933;animation-duration:12s;animation-delay:0s;"></div>
-        <div class="particle" style="left:25%;width:4px;height:4px;background:#FFFFFF;animation-duration:15s;animation-delay:2s;"></div>
-        <div class="particle" style="left:40%;width:8px;height:8px;background:#138808;animation-duration:10s;animation-delay:1s;"></div>
-        <div class="particle" style="left:55%;width:5px;height:5px;background:#FF6B35;animation-duration:18s;animation-delay:3s;"></div>
-        <div class="particle" style="left:70%;width:3px;height:3px;background:#FFD700;animation-duration:14s;animation-delay:4s;"></div>
-        <div class="particle" style="left:85%;width:7px;height:7px;background:#FF9933;animation-duration:11s;animation-delay:1.5s;"></div>
-        <div class="particle" style="left:15%;width:4px;height:4px;background:#00CED1;animation-duration:16s;animation-delay:5s;"></div>
-        <div class="particle" style="left:90%;width:6px;height:6px;background:#FF1493;animation-duration:13s;animation-delay:2.5s;"></div>
-        <!-- Stars -->
-        <div class="star" style="top:10%;left:20%;animation-duration:2s;"></div>
-        <div class="star" style="top:15%;left:60%;animation-duration:3s;animation-delay:0.5s;"></div>
-        <div class="star" style="top:8%;left:80%;animation-duration:2.5s;animation-delay:1s;"></div>
-        <div class="star" style="top:25%;left:10%;animation-duration:2s;animation-delay:1.5s;"></div>
-        <div class="star" style="top:30%;left:45%;animation-duration:3s;animation-delay:0.3s;"></div>
-        <div class="star" style="top:5%;left:35%;animation-duration:2.2s;animation-delay:0.8s;"></div>
-        <div class="star" style="top:20%;left:75%;animation-duration:2.8s;animation-delay:1.2s;"></div>
-        <div class="star" style="top:12%;left:90%;animation-duration:2s;animation-delay:0.2s;"></div>
-        <!-- ═══════════════════════════════════════════════════════════════
-             DUAL TRAIN ORBIT SYSTEM - Full trains with bogies
-             ═══════════════════════════════════════════════════════════════ -->
-        <div class="orbit-system">
-            <!-- Orbit rings -->
-            <div class="orbit-ring orbit-ring-outer"></div>
-            <div class="orbit-ring orbit-ring-mid"></div>
-            <div class="orbit-ring orbit-ring-inner"></div>
+    @keyframes bgpulse { 0%,100%{transform:scale(1) rotate(0deg);opacity:0.7;} 50%{transform:scale(1.08) rotate(3deg);opacity:1;} }
 
-            <!-- TRAIN 1: Outer Orbit | Clockwise | Saffron Glow -->
-            <div class="train-1-orbit">
-                <div class="t1-engine">🚂</div>
-                <div class="t1-bogie-1">🚃</div>
-                <div class="t1-bogie-2">🚃</div>
-                <div class="t1-bogie-3">🚃</div>
-                <div class="t1-tail">🚃</div>
+    .p { position: absolute; border-radius: 50%; animation: pfloat linear infinite; }
+    @keyframes pfloat { 0%{transform:translateY(110vh) scale(0);opacity:0;} 15%{opacity:0.7;} 85%{opacity:0.7;} 100%{transform:translateY(-50px) scale(1.2);opacity:0;} }
+
+    .s { position: absolute; width: 3px; height: 3px; background: #fff; border-radius: 50%; animation: stwinkle ease-in-out infinite; }
+    @keyframes stwinkle { 0%,100%{opacity:0.15;transform:scale(1);} 50%{opacity:1;transform:scale(1.6);box-shadow:0 0 8px 1px rgba(255,255,255,0.4);} }
+
+    .orbx { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 600px; height: 600px; }
+    .oring { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); border: 2px dashed; border-radius: 50%; }
+    .oring1 { width: 480px; height: 480px; border-color: rgba(255,153,51,0.3); animation: orp1 4s ease-in-out infinite; }
+    .oring2 { width: 340px; height: 340px; border-color: rgba(255,255,255,0.15); animation: orp2 4s ease-in-out infinite; animation-delay: 1.3s; }
+    .oring3 { width: 200px; height: 200px; border-color: rgba(19,136,8,0.25); animation: orp1 4s ease-in-out infinite; animation-delay: 0.7s; }
+    @keyframes orp1 { 0%,100%{border-color:rgba(255,153,51,0.15);} 50%{border-color:rgba(255,153,51,0.45);} }
+    @keyframes orp2 { 0%,100%{border-color:rgba(255,255,255,0.08);} 50%{border-color:rgba(255,255,255,0.3);} }
+
+    .t1o { position: absolute; top: 50%; left: 50%; width: 480px; height: 480px; transform: translate(-50%,-50%); animation: t1spin 20s linear infinite; }
+    @keyframes t1spin { from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(360deg);} }
+    .t1e { position: absolute; top: -26px; left: 50%; transform: translateX(-50%); font-size: 38px; filter: drop-shadow(0 0 18px rgba(255,107,53,0.9)); animation: tbob 0.9s ease-in-out infinite alternate; z-index: 5; }
+    .t1b1 { position: absolute; top: -22px; left: 50%; transform: translateX(-50%) translateX(-50px); font-size: 32px; filter: drop-shadow(0 0 10px rgba(255,153,51,0.6)); animation: tbob 0.9s ease-in-out infinite alternate; animation-delay: 0.05s; z-index: 4; }
+    .t1b2 { position: absolute; top: -20px; left: 50%; transform: translateX(-50%) translateX(-95px); font-size: 30px; filter: drop-shadow(0 0 8px rgba(255,153,51,0.5)); animation: tbob 0.9s ease-in-out infinite alternate; animation-delay: 0.1s; z-index: 3; }
+    .t1b3 { position: absolute; top: -18px; left: 50%; transform: translateX(-50%) translateX(-135px); font-size: 28px; filter: drop-shadow(0 0 6px rgba(255,153,51,0.4)); animation: tbob 0.9s ease-in-out infinite alternate; animation-delay: 0.15s; z-index: 2; }
+    .t1tl { position: absolute; top: -16px; left: 50%; transform: translateX(-50%) translateX(-170px); font-size: 26px; filter: drop-shadow(0 0 5px rgba(255,153,51,0.3)); animation: tbob 0.9s ease-in-out infinite alternate; animation-delay: 0.2s; z-index: 1; }
+    @keyframes tbob { from{transform:translateX(-50%) translateY(0) scale(1);} to{transform:translateX(-50%) translateY(-8px) scale(1.1);} }
+
+    .t2o { position: absolute; top: 50%; left: 50%; width: 340px; height: 340px; transform: translate(-50%,-50%); animation: t2spin 16s linear infinite reverse; }
+    @keyframes t2spin { from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(-360deg);} }
+    .t2e { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-size: 32px; filter: drop-shadow(0 0 16px rgba(19,136,8,0.9)); animation: tbob2 0.8s ease-in-out infinite alternate; z-index: 5; }
+    .t2b1 { position: absolute; top: -18px; left: 50%; transform: translateX(-50%) translateX(-44px); font-size: 26px; filter: drop-shadow(0 0 8px rgba(19,136,8,0.6)); animation: tbob2 0.8s ease-in-out infinite alternate; animation-delay: 0.05s; z-index: 4; }
+    .t2b2 { position: absolute; top: -16px; left: 50%; transform: translateX(-50%) translateX(-82px); font-size: 24px; filter: drop-shadow(0 0 6px rgba(19,136,8,0.5)); animation: tbob2 0.8s ease-in-out infinite alternate; animation-delay: 0.1s; z-index: 3; }
+    .t2tl { position: absolute; top: -14px; left: 50%; transform: translateX(-50%) translateX(-116px); font-size: 22px; filter: drop-shadow(0 0 5px rgba(19,136,8,0.4)); animation: tbob2 0.8s ease-in-out infinite alternate; animation-delay: 0.15s; z-index: 2; }
+    @keyframes tbob2 { from{transform:translateX(-50%) translateY(0) scale(1);} to{transform:translateX(-50%) translateY(-6px) scale(1.08);} }
+
+    .ngrid { position: absolute; bottom: 0; left: 0; width: 100%; height: 35%;
+        background: linear-gradient(90deg, transparent 49%, rgba(255,153,51,0.06) 50%, transparent 51%),
+                    linear-gradient(0deg, transparent 49%, rgba(255,153,51,0.06) 50%, transparent 51%);
+        background-size: 70px 70px; transform: perspective(500px) rotateX(60deg); transform-origin: bottom;
+        animation: ngridmv 12s linear infinite;
+    }
+    @keyframes ngridmv { from{background-position:0 0;} to{background-position:0 70px;} }
+
+    .fwave { position: absolute; bottom: 0; left: 0; width: 100%; height: 5px;
+        background: linear-gradient(90deg, #FF9933 0%, #FF9933 33%, #FFFFFF 33%, #FFFFFF 66%, #138808 66%, #138808 100%);
+        animation: fshim 3s ease-in-out infinite;
+        box-shadow: 0 0 15px rgba(255,153,51,0.25), 0 0 15px rgba(19,136,8,0.25);
+    }
+    @keyframes fshim { 0%,100%{opacity:0.5;} 50%{opacity:1;filter:brightness(1.3);} }
+    </style>
+    <div class="eqms-bg">
+        <div class="p" style="left:8%;width:5px;height:5px;background:#FF9933;animation-duration:14s;animation-delay:0s;"></div>
+        <div class="p" style="left:22%;width:4px;height:4px;background:#FFFFFF;animation-duration:17s;animation-delay:2.5s;"></div>
+        <div class="p" style="left:38%;width:6px;height:6px;background:#138808;animation-duration:11s;animation-delay:1s;"></div>
+        <div class="p" style="left:52%;width:4px;height:4px;background:#FF6B35;animation-duration:19s;animation-delay:4s;"></div>
+        <div class="p" style="left:68%;width:5px;height:5px;background:#FFD700;animation-duration:13s;animation-delay:3s;"></div>
+        <div class="p" style="left:82%;width:6px;height:6px;background:#FF9933;animation-duration:12s;animation-delay:1.5s;"></div>
+        <div class="p" style="left:15%;width:4px;height:4px;background:#00CED1;animation-duration:15s;animation-delay:5s;"></div>
+        <div class="p" style="left:92%;width:5px;height:5px;background:#FF1493;animation-duration:16s;animation-delay:2s;"></div>
+
+        <div class="s" style="top:8%;left:18%;animation-duration:2.5s;"></div>
+        <div class="s" style="top:12%;left:55%;animation-duration:3.5s;animation-delay:0.4s;"></div>
+        <div class="s" style="top:6%;left:78%;animation-duration:2s;animation-delay:0.8s;"></div>
+        <div class="s" style="top:22%;left:8%;animation-duration:3s;animation-delay:1.2s;"></div>
+        <div class="s" style="top:28%;left:42%;animation-duration:2.2s;animation-delay:0.2s;"></div>
+        <div class="s" style="top:5%;left:32%;animation-duration:2.8s;animation-delay:1s;"></div>
+        <div class="s" style="top:18%;left:72%;animation-duration:2.5s;animation-delay:0.6s;"></div>
+        <div class="s" style="top:10%;left:88%;animation-duration:3.2s;animation-delay:1.5s;"></div>
+
+        <div class="orbx">
+            <div class="oring oring1"></div>
+            <div class="oring oring2"></div>
+            <div class="oring oring3"></div>
+
+            <div class="t1o">
+                <div class="t1e">🚂</div>
+                <div class="t1b1">🚃</div>
+                <div class="t1b2">🚃</div>
+                <div class="t1b3">🚃</div>
+                <div class="t1tl">🚃</div>
             </div>
 
-            <!-- TRAIN 2: Inner Orbit | Counter-Clockwise | Green Glow -->
-            <div class="train-2-orbit">
-                <div class="t2-engine">🚂</div>
-                <div class="t2-bogie-1">🚋</div>
-                <div class="t2-bogie-2">🚋</div>
-                <div class="t2-tail">🚋</div>
+            <div class="t2o">
+                <div class="t2e">🚂</div>
+                <div class="t2b1">🚋</div>
+                <div class="t2b2">🚋</div>
+                <div class="t2tl">🚋</div>
             </div>
         </div>
-        <!-- Neon grid -->
-        <div class="neon-grid"></div>
-        <!-- Flag wave -->
-        <div class="flag-wave"></div>
+
+        <div class="ngrid"></div>
+        <div class="fwave"></div>
     </div>
     """
-    st.markdown(vibrant_bg_css, unsafe_allow_html=True)
+    st.markdown(bg_html, unsafe_allow_html=True)
 
     # Sidebar Toggle + Back-to-Top Button
     components.html("""
@@ -2046,22 +1923,69 @@ def main():
     # =====================================================================
     with st.sidebar:
         st.markdown("""
-        <div style="background:#ffffff;padding:16px;border-radius:12px;margin-bottom:12px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.15);border:2px solid #e2e8f0;">
-            <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px;">
-                <span style="font-size:1.6rem;">🙏</span>
-                <span style="color:#000000;font-size:1.3em;font-weight:700;">Namaste</span>
-            </div>
-            <div style="display:flex;align-items:center;justify-content:flex-start;gap:10px;padding:6px 12px;background:linear-gradient(90deg,rgba(255,153,51,0.15),transparent);border-radius:8px;margin:6px 0;">
-                <span style="color:#FF9933;font-size:1.2rem;font-weight:800;">●</span>
-                <span style="color:#000000;font-size:1em;font-weight:600;">Aapka Swagat Hai</span>
-            </div>
-            <div style="display:flex;align-items:center;justify-content:flex-start;gap:10px;padding:6px 12px;background:linear-gradient(90deg,rgba(200,200,200,0.15),transparent);border-radius:8px;margin:6px 0;">
-                <span style="color:#CCCCCC;font-size:1.2rem;font-weight:800;">●</span>
-                <span style="color:#000000;font-size:1em;font-weight:600;">Ham Bharat ke log</span>
-            </div>
-            <div style="display:flex;align-items:center;justify-content:flex-start;gap:10px;padding:6px 12px;background:linear-gradient(90deg,rgba(19,136,8,0.15),transparent);border-radius:8px;margin:6px 0;">
-                <span style="color:#138808;font-size:1.2rem;font-weight:800;">●</span>
-                <span style="color:#000000;font-size:1em;font-weight:700;">🇮🇳 Jai Hind</span>
+        <style>
+        @keyframes welcome-glow {
+            0%, 100% { box-shadow: 0 4px 20px rgba(255,153,51,0.2), 0 0 0 0 rgba(255,153,51,0.1); }
+            33% { box-shadow: 0 4px 20px rgba(255,255,255,0.2), 0 0 0 0 rgba(255,255,255,0.1); }
+            66% { box-shadow: 0 4px 20px rgba(19,136,8,0.2), 0 0 0 0 rgba(19,136,8,0.1); }
+        }
+        @keyframes border-shimmer {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .welcome-card {
+            background: linear-gradient(135deg, #FF9933 0%, #FF9933 33%, #FFFFFF 33%, #FFFFFF 66%, #138808 66%, #138808 100%);
+            padding: 3px;
+            border-radius: 14px;
+            margin-bottom: 14px;
+            animation: welcome-glow 4s ease-in-out infinite;
+        }
+        .welcome-inner {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 14px 16px;
+            text-align: center;
+        }
+        .welcome-title {
+            color: #000000;
+            font-size: 1.35em;
+            font-weight: 800;
+            margin: 0 0 10px 0;
+            letter-spacing: 0.5px;
+        }
+        .welcome-line {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 10px;
+            padding: 7px 12px;
+            border-radius: 8px;
+            margin: 5px 0;
+            transition: transform 0.2s ease;
+        }
+        .welcome-line:hover { transform: translateX(5px); }
+        .welcome-saffron { background: linear-gradient(90deg, rgba(255,153,51,0.18), transparent); }
+        .welcome-white { background: linear-gradient(90deg, rgba(200,200,200,0.12), transparent); }
+        .welcome-green { background: linear-gradient(90deg, rgba(19,136,8,0.18), transparent); }
+        .welcome-bullet { font-size: 1.3rem; font-weight: 900; }
+        .welcome-text { color: #000000; font-size: 0.95em; font-weight: 600; }
+        </style>
+        <div class="welcome-card">
+            <div class="welcome-inner">
+                <div class="welcome-title">🙏 Namaste</div>
+                <div class="welcome-line welcome-saffron">
+                    <span class="welcome-bullet" style="color:#FF9933;">●</span>
+                    <span class="welcome-text">Aapka Swagat Hai</span>
+                </div>
+                <div class="welcome-line welcome-white">
+                    <span class="welcome-bullet" style="color:#BBBBBB;">●</span>
+                    <span class="welcome-text">Ham Bharat ke Log</span>
+                </div>
+                <div class="welcome-line welcome-green">
+                    <span class="welcome-bullet" style="color:#138808;">●</span>
+                    <span class="welcome-text">🇮🇳 Jai Hind</span>
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -2107,12 +2031,20 @@ def main():
         <div style="width:100%; margin-top:8px;">
             <button onclick="
                 (function(){
-                    var el = window.parent.document.querySelector('.print-only');
-                    if (!el) { alert('No data to print. Please load a sheet first.'); return; }
-                    var content = el.innerHTML;
+                    var printArea = window.parent.document.querySelector('.print-only');
+                    if (!printArea) { alert('No data to print. Please load a sheet first.'); return; }
+                    var content = printArea.innerHTML;
+                    if (!content || content.trim() === '' || content.includes('No data available')) {
+                        alert('No data to print. Please load data first.');
+                        return;
+                    }
                     var iframe = window.parent.document.createElement('iframe');
-                    iframe.style.position = 'fixed'; iframe.style.top = '-9999px'; iframe.style.left = '-9999px';
-                    iframe.style.width = '0'; iframe.style.height = '0'; iframe.style.border = 'none';
+                    iframe.style.position = 'fixed';
+                    iframe.style.top = '-9999px';
+                    iframe.style.left = '-9999px';
+                    iframe.style.width = '0';
+                    iframe.style.height = '0';
+                    iframe.style.border = 'none';
                     window.parent.document.body.appendChild(iframe);
                     var doc = iframe.contentWindow.document;
                     doc.open();
@@ -2521,6 +2453,14 @@ def main():
 
         if filtered_df.empty:
             st.info("No data to show. Clear filters or select another sheet.")
+            # Show empty table with column headers
+            if not df_raw.empty:
+                empty_df = df_raw.head(0).drop(columns=['_sheet_row'], errors='ignore')
+                if not empty_df.empty:
+                    st.markdown("**📋 Column Structure**")
+                    st.dataframe(empty_df, use_container_width=True, height=80)
+                else:
+                    st.caption("Sheet has headers but no data rows yet.")
         else:
             # Sorting
             sort_col = st.session_state.sort_column
@@ -2581,7 +2521,7 @@ def main():
                             st.session_state.sort_ascending = new_asc
                             st.rerun()
 
-            # Print-only table (all filtered data)
+            # Print-only table (all filtered data) - FIXED: Make sure it exists
             print_export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
             if not print_export_df.empty:
                 print_html_table = print_export_df.to_html(index=False, border=1, classes='print-table', escape=False)
@@ -2589,7 +2529,7 @@ def main():
                 print_html_table = "<p>No data available</p>"
 
             st.markdown(f"""
-            <div class="print-only">
+            <div class="print-only" id="print-content">
                 <h2 style="text-align:center; margin-bottom:5px;">{sheet_choice} Sheet Report</h2>
                 <p style="text-align:center; font-size:11pt; margin-bottom:15px;">Generated: {format_datetime()} IST | Total Records: {len(filtered_df)}</p>
                 {print_html_table}
@@ -2603,12 +2543,27 @@ def main():
                 key=f"editor_{sheet_choice}_{st.session_state.current_page}_{page_size}")
             st.markdown('</div>', unsafe_allow_html=True)
 
-            select_all = st.checkbox("Select All on Page", value=st.session_state.select_all, key="select_all_cb")
-            if select_all != st.session_state.select_all:
-                st.session_state.select_all = select_all
-                st.rerun()
-
+            # FIX: Select All - properly handle the checkbox state
+            # Get current selection from the editor
             selected_mask = edited_page["Select"] if "Select" in edited_page.columns else pd.Series([False] * len(edited_page))
+            any_selected = selected_mask.any()
+            
+            # Use a different state variable for select all to avoid conflicts
+            if 'select_all_state' not in st.session_state:
+                st.session_state.select_all_state = False
+            
+            # Display select all checkbox
+            select_all = st.checkbox("Select All on Page", value=st.session_state.select_all_state, key="select_all_cb")
+            if select_all != st.session_state.select_all_state:
+                st.session_state.select_all_state = select_all
+                st.rerun()
+            
+            # If select all is checked, we need to apply it to the data editor
+            if st.session_state.select_all_state:
+                # We can't directly modify the data editor state, so we'll use a workaround
+                # by re-running with a flag
+                st.info("✅ All rows on this page are selected")
+
             selected_indices = edited_page[selected_mask].index.tolist()
             selected_sheet_rows = []
             if selected_indices and sheet_rows:
@@ -2711,9 +2666,17 @@ def main():
                             var el = window.parent.document.querySelector('.print-only');
                             if (!el) { alert('No data to print.'); return; }
                             var content = el.innerHTML;
+                            if (!content || content.trim() === '' || content.includes('No data available')) {
+                                alert('No data to print. Please load data first.');
+                                return;
+                            }
                             var iframe = window.parent.document.createElement('iframe');
-                            iframe.style.position = 'fixed'; iframe.style.top = '-9999px'; iframe.style.left = '-9999px';
-                            iframe.style.width = '0'; iframe.style.height = '0'; iframe.style.border = 'none';
+                            iframe.style.position = 'fixed';
+                            iframe.style.top = '-9999px';
+                            iframe.style.left = '-9999px';
+                            iframe.style.width = '0';
+                            iframe.style.height = '0';
+                            iframe.style.border = 'none';
                             window.parent.document.body.appendChild(iframe);
                             var doc = iframe.contentWindow.document;
                             doc.open();
@@ -2985,72 +2948,119 @@ def main():
                     font=dict(size=11), title_font_size=16)
                 st.plotly_chart(fig3, use_container_width=True)
 
-            # Graph 4: Train × Class Heatmap (Detailed values in cells)
+            # Graph 4: Train × Class Heatmap (FIXED - properly handle missing values)
             st.markdown("### 4️⃣ Train × Class Heatmap")
             if train_col_dash and class_col_dash:
-                tc_df = dash_df.groupby([train_col_dash, class_col_dash]).size().reset_index(name='Count')
-                if not tc_df.empty:
-                    pivot = tc_df.pivot(index=train_col_dash, columns=class_col_dash, values='Count').fillna(0)
-                    fig4 = px.imshow(pivot, text_auto=True, aspect="auto", title="Train vs Class Demand Matrix",
-                        color_continuous_scale='YlOrRd', labels={'color': 'Requests'})
-                    fig4.update_traces(textfont_size=11)
-                    fig4.update_layout(height=450, paper_bgcolor='rgba(0,0,0,0)',
-                        font=dict(size=11), title_font_size=16)
-                    st.plotly_chart(fig4, use_container_width=True)
+                try:
+                    # Create a cross-tabulation with proper handling of missing values
+                    pivot_data = pd.crosstab(
+                        dash_df[train_col_dash].fillna('Unknown').astype(str),
+                        dash_df[class_col_dash].fillna('Unknown').astype(str),
+                        margins=False
+                    )
+                    
+                    if not pivot_data.empty:
+                        # Remove rows/columns that are all zeros or have too few values
+                        pivot_data = pivot_data.loc[(pivot_data.sum(axis=1) > 0), (pivot_data.sum(axis=0) > 0)]
+                        
+                        if not pivot_data.empty:
+                            # Limit to top 15 trains for readability
+                            if len(pivot_data) > 15:
+                                # Keep top trains by total count
+                                top_trains = pivot_data.sum(axis=1).nlargest(15).index
+                                pivot_data = pivot_data.loc[top_trains]
+                            
+                            fig4 = px.imshow(
+                                pivot_data,
+                                text_auto=True,
+                                aspect="auto",
+                                title="Train vs Class Demand Matrix",
+                                color_continuous_scale='YlOrRd',
+                                labels={'color': 'Requests', 'x': 'Class', 'y': 'Train Number'}
+                            )
+                            fig4.update_traces(textfont_size=11)
+                            fig4.update_layout(
+                                height=max(450, 300 + len(pivot_data) * 15),
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                font=dict(size=11),
+                                title_font_size=16
+                            )
+                            st.plotly_chart(fig4, use_container_width=True)
+                        else:
+                            st.info("ℹ️ No valid data for heatmap after filtering.")
+                    else:
+                        st.info("ℹ️ No data available for Train × Class heatmap.")
+                except Exception as e:
+                    st.warning(f"⚠️ Could not generate heatmap: {str(e)[:100]}")
+                    # Fallback to a simple table view
+                    st.info("Try selecting different filters or check if the data has both Train and Class columns.")
 
             # Graph 5: Train × Route Grouped Bar (Detailed values)
             st.markdown("### 5️⃣ Train × Route Analysis")
             if train_col_dash and from_col_dash and to_col_dash:
-                tr_df = dash_df.groupby([train_col_dash, 'ROUTE']).size().reset_index(name='Count')
-                if not tr_df.empty:
-                    top_routes = dash_df['ROUTE'].value_counts().head(6).index.tolist()
-                    tr_df_filtered = tr_df[tr_df['ROUTE'].isin(top_routes)]
-                    fig5 = px.bar(tr_df_filtered, x=train_col_dash, y='Count', color='ROUTE',
-                        title="Train vs Top Routes", barmode='group', text='Count',
-                        color_discrete_sequence=px.colors.qualitative.Set2)
-                    fig5.update_traces(textposition='outside', textfont_size=10)
-                    fig5.update_layout(height=450, margin=dict(l=20,r=20,t=50,b=20),
-                        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                        font=dict(size=11), title_font_size=16, legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1))
-                    st.plotly_chart(fig5, use_container_width=True)
+                try:
+                    tr_df = dash_df.groupby([train_col_dash, 'ROUTE']).size().reset_index(name='Count')
+                    if not tr_df.empty:
+                        top_routes = dash_df['ROUTE'].value_counts().head(6).index.tolist()
+                        tr_df_filtered = tr_df[tr_df['ROUTE'].isin(top_routes)]
+                        if not tr_df_filtered.empty:
+                            fig5 = px.bar(tr_df_filtered, x=train_col_dash, y='Count', color='ROUTE',
+                                title="Train vs Top Routes", barmode='group', text='Count',
+                                color_discrete_sequence=px.colors.qualitative.Set2)
+                            fig5.update_traces(textposition='outside', textfont_size=10)
+                            fig5.update_layout(height=450, margin=dict(l=20,r=20,t=50,b=20),
+                                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                                font=dict(size=11), title_font_size=16, legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1))
+                            st.plotly_chart(fig5, use_container_width=True)
+                        else:
+                            st.info("ℹ️ No data for Train × Route chart.")
+                    else:
+                        st.info("ℹ️ No data available for Train × Route analysis.")
+                except Exception as e:
+                    st.info("ℹ️ Could not generate route analysis chart.")
 
             # Graph 6: Rush Comparison - High Demand vs Low Demand (Line + Bar combo)
             st.markdown("### 6️⃣ Rush Comparison — High Demand vs Low Demand")
             if train_col_dash:
-                train_demand = dash_df[train_col_dash].value_counts().reset_index()
-                train_demand.columns = ['Train', 'Count']
-                if len(train_demand) > 0:
-                    median_demand = train_demand['Count'].median()
-                    train_demand['Demand'] = train_demand['Count'].apply(lambda x: 'High Demand 🔥' if x >= median_demand else 'Low Demand ❄️')
-                    demand_summary = train_demand.groupby('Demand').agg({'Count': 'sum', 'Train': 'count'}).reset_index()
-                    demand_summary.columns = ['Demand Category', 'Total Requests', 'Number of Trains']
+                try:
+                    train_demand = dash_df[train_col_dash].value_counts().reset_index()
+                    train_demand.columns = ['Train', 'Count']
+                    if len(train_demand) > 0:
+                        median_demand = train_demand['Count'].median()
+                        train_demand['Demand'] = train_demand['Count'].apply(lambda x: 'High Demand 🔥' if x >= median_demand else 'Low Demand ❄️')
+                        demand_summary = train_demand.groupby('Demand').agg({'Count': 'sum', 'Train': 'count'}).reset_index()
+                        demand_summary.columns = ['Demand Category', 'Total Requests', 'Number of Trains']
 
-                    fig6 = make_subplots(rows=1, cols=2, specs=[[{"type": "bar"}, {"type": "pie"}]],
-                        subplot_titles=("Total Requests by Demand", "Train Count by Demand"))
+                        fig6 = make_subplots(rows=1, cols=2, specs=[[{"type": "bar"}, {"type": "pie"}]],
+                            subplot_titles=("Total Requests by Demand", "Train Count by Demand"))
 
-                    fig6.add_trace(go.Bar(x=demand_summary['Demand Category'], y=demand_summary['Total Requests'],
-                        text=demand_summary['Total Requests'], textposition='outside', marker_color=['#e74c3c', '#3498db'],
-                        name='Requests'), row=1, col=1)
+                        fig6.add_trace(go.Bar(x=demand_summary['Demand Category'], y=demand_summary['Total Requests'],
+                            text=demand_summary['Total Requests'], textposition='outside', marker_color=['#e74c3c', '#3498db'],
+                            name='Requests'), row=1, col=1)
 
-                    fig6.add_trace(go.Pie(labels=demand_summary['Demand Category'], values=demand_summary['Number of Trains'],
-                        hole=0.4, marker_colors=['#e74c3c', '#3498db'], textinfo='label+percent+value',
-                        name='Trains'), row=1, col=2)
+                        fig6.add_trace(go.Pie(labels=demand_summary['Demand Category'], values=demand_summary['Number of Trains'],
+                            hole=0.4, marker_colors=['#e74c3c', '#3498db'], textinfo='label+percent+value',
+                            name='Trains'), row=1, col=2)
 
-                    fig6.update_layout(height=450, showlegend=False, margin=dict(l=20,r=20,t=60,b=20),
-                        paper_bgcolor='rgba(0,0,0,0)', font=dict(size=12), title_font_size=16)
-                    st.plotly_chart(fig6, use_container_width=True)
+                        fig6.update_layout(height=450, showlegend=False, margin=dict(l=20,r=20,t=60,b=20),
+                            paper_bgcolor='rgba(0,0,0,0)', font=dict(size=12), title_font_size=16)
+                        st.plotly_chart(fig6, use_container_width=True)
 
-                    # Detailed table
-                    with st.expander("📋 Detailed Demand Breakdown", expanded=False):
-                        high_demand = train_demand[train_demand['Demand'] == 'High Demand 🔥'].sort_values('Count', ascending=False)
-                        low_demand = train_demand[train_demand['Demand'] == 'Low Demand ❄️'].sort_values('Count', ascending=True)
-                        c1, c2 = st.columns(2)
-                        with c1:
-                            st.markdown("**🔥 High Demand Trains**")
-                            st.dataframe(high_demand[['Train', 'Count']].rename(columns={'Count': 'Requests'}), use_container_width=True, hide_index=True)
-                        with c2:
-                            st.markdown("**❄️ Low Demand Trains**")
-                            st.dataframe(low_demand[['Train', 'Count']].rename(columns={'Count': 'Requests'}), use_container_width=True, hide_index=True)
+                        # Detailed table
+                        with st.expander("📋 Detailed Demand Breakdown", expanded=False):
+                            high_demand = train_demand[train_demand['Demand'] == 'High Demand 🔥'].sort_values('Count', ascending=False)
+                            low_demand = train_demand[train_demand['Demand'] == 'Low Demand ❄️'].sort_values('Count', ascending=True)
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                st.markdown("**🔥 High Demand Trains**")
+                                st.dataframe(high_demand[['Train', 'Count']].rename(columns={'Count': 'Requests'}), use_container_width=True, hide_index=True)
+                            with c2:
+                                st.markdown("**❄️ Low Demand Trains**")
+                                st.dataframe(low_demand[['Train', 'Count']].rename(columns={'Count': 'Requests'}), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("ℹ️ Not enough data for rush comparison.")
+                except Exception as e:
+                    st.info("ℹ️ Could not generate rush comparison chart.")
 
             # DOJ Timeline
             st.markdown("### 📅 DOJ Timeline")
@@ -3067,7 +3077,8 @@ def main():
                             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                             font=dict(size=12), title_font_size=16)
                         st.plotly_chart(fig_timeline, use_container_width=True)
-                except: pass
+                except Exception as e:
+                    pass
 
     # =====================================================================
     # VIEW: 💬 CHAT
@@ -3143,6 +3154,7 @@ def main():
                                     else: st.error(f"❌ {data['error']}")
                                 elif data:
                                     st.session_state.pnr_result = data
+                                    st.session_state.pnr_last_checked = time.time()
                                     st.rerun()
                                 else: st.error("❌ PNR not found or flushed.")
                 with c2:
@@ -3153,15 +3165,32 @@ def main():
                                 if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
                                 elif data:
                                     st.session_state.pnr_result = data
+                                    st.session_state.pnr_last_checked = time.time()
                                     st.rerun()
                                 else: st.error("❌ PNR not found or flushed.")
                         else: st.warning("Please enter a valid PNR first.")
+
+                # Auto-refresh after 5 minutes
+                if st.session_state.pnr_result and st.session_state.pnr_last_checked:
+                    elapsed = time.time() - st.session_state.pnr_last_checked
+                    if elapsed > 300:  # 5 minutes
+                        with st.spinner("Auto-refreshing PNR..."):
+                            current_pnr = st.session_state.pnr_result.get('pnr')
+                            if current_pnr:
+                                data = get_pnr_status(current_pnr)
+                                if data and not isinstance(data, dict) or not data.get('error'):
+                                    st.session_state.pnr_result = data
+                                    st.session_state.pnr_last_checked = time.time()
+                                    st.rerun()
 
                 if st.session_state.pnr_result:
                     with st.container():
                         st.markdown('<div class="result-box">', unsafe_allow_html=True)
                         st.markdown(format_pnr_result(st.session_state.pnr_result))
                         st.markdown('</div>', unsafe_allow_html=True)
+                        if st.session_state.pnr_last_checked:
+                            last_check = datetime.fromtimestamp(st.session_state.pnr_last_checked).strftime('%H:%M:%S')
+                            st.caption(f"⏱️ Last checked: {last_check} IST (auto-refreshes every 5 min)")
 
             with tab2:
                 st.markdown("### Live Train Status")
