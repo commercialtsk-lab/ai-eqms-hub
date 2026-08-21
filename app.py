@@ -87,7 +87,8 @@ defaults = {
     'global_search': '', 'sort_column': None, 'sort_ascending': True, 'column_filters': {},
     'rows_per_page': 25, 'dashboard_sheet': 'EQ', 'adv_filters': {},
     'weather_lat': None, 'weather_lon': None, 'weather_location_name': None,
-    'pnr_last_checked': None,  # For auto-refresh tracking
+    'pnr_last_checked': None,
+    'select_all_state': False,
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -741,23 +742,6 @@ def get_forecast_by_coords(lat, lon):
             return {'forecast': result, 'city': data.get('city', {}).get('name', 'Unknown'), 'country': data.get('city', {}).get('country', '')}
         else: return {'error': 'Forecast not available'}
     except Exception as e: return {'error': f'Error: {str(e)}'}
-
-def get_location_from_ip():
-    services = [
-        {"url": "https://ipapi.co/json/", "parser": lambda d: {'city': d.get('city', ''), 'lat': d.get('latitude'), 'lon': d.get('longitude'), 'country': d.get('country_name', '')}},
-        {"url": "https://ip-api.com/json/", "parser": lambda d: {'city': d.get('city', ''), 'lat': d.get('lat'), 'lon': d.get('lon'), 'country': d.get('country', '')} if d.get('status') == 'success' else None},
-        {"url": "https://ipinfo.io/json", "parser": lambda d: {'city': d.get('city', '').replace(', India', '').strip(), 'lat': float(d.get('loc','').split(',')[0]) if d.get('loc') else None, 'lon': float(d.get('loc','').split(',')[1]) if d.get('loc') and len(d.get('loc','').split(','))>1 else None, 'country': d.get('country', '')}}
-    ]
-    for svc in services:
-        try:
-            resp = requests.get(svc["url"], timeout=8)
-            if resp.status_code == 200:
-                data = resp.json()
-                result = svc["parser"](data)
-                if result and result.get('city'):
-                    return result
-        except Exception: continue
-    return None
 
 def safe_list(data, key):
     val = data.get(key) if data else None
@@ -1693,113 +1677,294 @@ def get_pnr_status_url(pnr):
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
 
 def main():
-        # ═══════════════════════════════════════════════════════════════════════
-    # VIBRANT ANIMATED BACKGROUND - Dual Train Orbit System
+    # ═══════════════════════════════════════════════════════════════════════
+    # SOLAR SYSTEM ANIMATED BACKGROUND - Sun Center + Dual Train Orbits
     # ═══════════════════════════════════════════════════════════════════════
     bg_html = """
     <style>
     .eqms-bg {
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
         z-index: -1; pointer-events: none; overflow: hidden;
-        background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+        background: radial-gradient(ellipse at center, #0a0a1a 0%, #000000 70%);
     }
-    .eqms-bg::before {
-        content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-        background: radial-gradient(circle at 20% 80%, rgba(255,153,51,0.12) 0%, transparent 50%),
-                    radial-gradient(circle at 80% 20%, rgba(19,136,8,0.12) 0%, transparent 50%),
-                    radial-gradient(circle at 50% 50%, rgba(255,255,255,0.04) 0%, transparent 60%);
-        animation: bgpulse 10s ease-in-out infinite;
+
+    /* Twinkling Stars */
+    .star {
+        position: absolute;
+        background: white;
+        border-radius: 50%;
+        animation: twinkle ease-in-out infinite;
     }
-    @keyframes bgpulse { 0%,100%{transform:scale(1) rotate(0deg);opacity:0.7;} 50%{transform:scale(1.08) rotate(3deg);opacity:1;} }
-
-    .p { position: absolute; border-radius: 50%; animation: pfloat linear infinite; }
-    @keyframes pfloat { 0%{transform:translateY(110vh) scale(0);opacity:0;} 15%{opacity:0.7;} 85%{opacity:0.7;} 100%{transform:translateY(-50px) scale(1.2);opacity:0;} }
-
-    .s { position: absolute; width: 3px; height: 3px; background: #fff; border-radius: 50%; animation: stwinkle ease-in-out infinite; }
-    @keyframes stwinkle { 0%,100%{opacity:0.15;transform:scale(1);} 50%{opacity:1;transform:scale(1.6);box-shadow:0 0 8px 1px rgba(255,255,255,0.4);} }
-
-    .orbx { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 600px; height: 600px; }
-    .oring { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); border: 2px dashed; border-radius: 50%; }
-    .oring1 { width: 480px; height: 480px; border-color: rgba(255,153,51,0.3); animation: orp1 4s ease-in-out infinite; }
-    .oring2 { width: 340px; height: 340px; border-color: rgba(255,255,255,0.15); animation: orp2 4s ease-in-out infinite; animation-delay: 1.3s; }
-    .oring3 { width: 200px; height: 200px; border-color: rgba(19,136,8,0.25); animation: orp1 4s ease-in-out infinite; animation-delay: 0.7s; }
-    @keyframes orp1 { 0%,100%{border-color:rgba(255,153,51,0.15);} 50%{border-color:rgba(255,153,51,0.45);} }
-    @keyframes orp2 { 0%,100%{border-color:rgba(255,255,255,0.08);} 50%{border-color:rgba(255,255,255,0.3);} }
-
-    .t1o { position: absolute; top: 50%; left: 50%; width: 480px; height: 480px; transform: translate(-50%,-50%); animation: t1spin 20s linear infinite; }
-    @keyframes t1spin { from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(360deg);} }
-    .t1e { position: absolute; top: -26px; left: 50%; transform: translateX(-50%); font-size: 38px; filter: drop-shadow(0 0 18px rgba(255,107,53,0.9)); animation: tbob 0.9s ease-in-out infinite alternate; z-index: 5; }
-    .t1b1 { position: absolute; top: -22px; left: 50%; transform: translateX(-50%) translateX(-50px); font-size: 32px; filter: drop-shadow(0 0 10px rgba(255,153,51,0.6)); animation: tbob 0.9s ease-in-out infinite alternate; animation-delay: 0.05s; z-index: 4; }
-    .t1b2 { position: absolute; top: -20px; left: 50%; transform: translateX(-50%) translateX(-95px); font-size: 30px; filter: drop-shadow(0 0 8px rgba(255,153,51,0.5)); animation: tbob 0.9s ease-in-out infinite alternate; animation-delay: 0.1s; z-index: 3; }
-    .t1b3 { position: absolute; top: -18px; left: 50%; transform: translateX(-50%) translateX(-135px); font-size: 28px; filter: drop-shadow(0 0 6px rgba(255,153,51,0.4)); animation: tbob 0.9s ease-in-out infinite alternate; animation-delay: 0.15s; z-index: 2; }
-    .t1tl { position: absolute; top: -16px; left: 50%; transform: translateX(-50%) translateX(-170px); font-size: 26px; filter: drop-shadow(0 0 5px rgba(255,153,51,0.3)); animation: tbob 0.9s ease-in-out infinite alternate; animation-delay: 0.2s; z-index: 1; }
-    @keyframes tbob { from{transform:translateX(-50%) translateY(0) scale(1);} to{transform:translateX(-50%) translateY(-8px) scale(1.1);} }
-
-    .t2o { position: absolute; top: 50%; left: 50%; width: 340px; height: 340px; transform: translate(-50%,-50%); animation: t2spin 16s linear infinite reverse; }
-    @keyframes t2spin { from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(-360deg);} }
-    .t2e { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); font-size: 32px; filter: drop-shadow(0 0 16px rgba(19,136,8,0.9)); animation: tbob2 0.8s ease-in-out infinite alternate; z-index: 5; }
-    .t2b1 { position: absolute; top: -18px; left: 50%; transform: translateX(-50%) translateX(-44px); font-size: 26px; filter: drop-shadow(0 0 8px rgba(19,136,8,0.6)); animation: tbob2 0.8s ease-in-out infinite alternate; animation-delay: 0.05s; z-index: 4; }
-    .t2b2 { position: absolute; top: -16px; left: 50%; transform: translateX(-50%) translateX(-82px); font-size: 24px; filter: drop-shadow(0 0 6px rgba(19,136,8,0.5)); animation: tbob2 0.8s ease-in-out infinite alternate; animation-delay: 0.1s; z-index: 3; }
-    .t2tl { position: absolute; top: -14px; left: 50%; transform: translateX(-50%) translateX(-116px); font-size: 22px; filter: drop-shadow(0 0 5px rgba(19,136,8,0.4)); animation: tbob2 0.8s ease-in-out infinite alternate; animation-delay: 0.15s; z-index: 2; }
-    @keyframes tbob2 { from{transform:translateX(-50%) translateY(0) scale(1);} to{transform:translateX(-50%) translateY(-6px) scale(1.08);} }
-
-    .ngrid { position: absolute; bottom: 0; left: 0; width: 100%; height: 35%;
-        background: linear-gradient(90deg, transparent 49%, rgba(255,153,51,0.06) 50%, transparent 51%),
-                    linear-gradient(0deg, transparent 49%, rgba(255,153,51,0.06) 50%, transparent 51%);
-        background-size: 70px 70px; transform: perspective(500px) rotateX(60deg); transform-origin: bottom;
-        animation: ngridmv 12s linear infinite;
+    @keyframes twinkle {
+        0%, 100% { opacity: 0.2; transform: scale(0.8); }
+        50% { opacity: 1; transform: scale(1.3); box-shadow: 0 0 6px 2px rgba(255,255,255,0.6); }
     }
-    @keyframes ngridmv { from{background-position:0 0;} to{background-position:0 70px;} }
 
-    .fwave { position: absolute; bottom: 0; left: 0; width: 100%; height: 5px;
-        background: linear-gradient(90deg, #FF9933 0%, #FF9933 33%, #FFFFFF 33%, #FFFFFF 66%, #138808 66%, #138808 100%);
-        animation: fshim 3s ease-in-out infinite;
-        box-shadow: 0 0 15px rgba(255,153,51,0.25), 0 0 15px rgba(19,136,8,0.25);
+    /* Shooting Stars */
+    .shooting-star {
+        position: absolute;
+        width: 100px;
+        height: 2px;
+        background: linear-gradient(90deg, rgba(255,255,255,1), transparent);
+        animation: shoot linear infinite;
+        opacity: 0;
     }
-    @keyframes fshim { 0%,100%{opacity:0.5;} 50%{opacity:1;filter:brightness(1.3);} }
+    @keyframes shoot {
+        0% { transform: translateX(0) translateY(0) rotate(-45deg); opacity: 1; }
+        100% { transform: translateX(500px) translateY(500px) rotate(-45deg); opacity: 0; }
+    }
+
+    /* Central Sun */
+    .sun-container {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 120px;
+        height: 120px;
+    }
+    .sun {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 80px;
+        height: 80px;
+        background: radial-gradient(circle, #FFD700 0%, #FF8C00 40%, #FF4500 70%, transparent 100%);
+        border-radius: 50%;
+        box-shadow: 0 0 60px 20px rgba(255, 140, 0, 0.5), 0 0 100px 40px rgba(255, 69, 0, 0.2);
+        animation: sun-pulse 3s ease-in-out infinite;
+    }
+    @keyframes sun-pulse {
+        0%, 100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 60px 20px rgba(255, 140, 0, 0.5), 0 0 100px 40px rgba(255, 69, 0, 0.2); }
+        50% { transform: translate(-50%, -50%) scale(1.1); box-shadow: 0 0 80px 30px rgba(255, 140, 0, 0.7), 0 0 120px 50px rgba(255, 69, 0, 0.3); }
+    }
+    .sun-rays {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 120px;
+        height: 120px;
+        animation: sun-rays-rotate 20s linear infinite;
+    }
+    @keyframes sun-rays-rotate {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .sun-ray {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 60px;
+        height: 3px;
+        background: linear-gradient(90deg, rgba(255, 200, 0, 0.8), transparent);
+        transform-origin: 0 50%;
+        border-radius: 2px;
+    }
+
+    /* Orbit Rings */
+    .orbit-ring {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        border: 1px dashed rgba(255, 255, 255, 0.15);
+        border-radius: 50%;
+    }
+    .orbit-ring-1 {
+        width: 280px;
+        height: 280px;
+        animation: ring-pulse-1 4s ease-in-out infinite;
+    }
+    .orbit-ring-2 {
+        width: 420px;
+        height: 420px;
+        animation: ring-pulse-2 4s ease-in-out infinite;
+        animation-delay: 2s;
+    }
+    @keyframes ring-pulse-1 {
+        0%, 100% { border-color: rgba(255, 153, 51, 0.2); }
+        50% { border-color: rgba(255, 153, 51, 0.5); }
+    }
+    @keyframes ring-pulse-2 {
+        0%, 100% { border-color: rgba(19, 136, 8, 0.2); }
+        50% { border-color: rgba(19, 136, 8, 0.5); }
+    }
+
+    /* Train Orbit System 1 - Clockwise (Saffron Train) */
+    .orbit-1 {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 280px;
+        height: 280px;
+        transform: translate(-50%, -50%);
+        animation: orbit-spin-1 25s linear infinite;
+    }
+    @keyframes orbit-spin-1 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .train-1 {
+        position: absolute;
+        top: -22px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 32px;
+        filter: drop-shadow(0 0 15px rgba(255, 153, 51, 0.9));
+        animation: train-bob-1 1s ease-in-out infinite alternate;
+    }
+    .train-1-bogie {
+        position: absolute;
+        top: -18px;
+        left: 50%;
+        font-size: 26px;
+        filter: drop-shadow(0 0 8px rgba(255, 153, 51, 0.6));
+        animation: train-bob-1 1s ease-in-out infinite alternate;
+    }
+    @keyframes train-bob-1 {
+        from { transform: translateX(-50%) translateY(0) scale(1); }
+        to { transform: translateX(-50%) translateY(-6px) scale(1.08); }
+    }
+
+    /* Train Orbit System 2 - Counter-Clockwise (Green Train) */
+    .orbit-2 {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 420px;
+        height: 420px;
+        transform: translate(-50%, -50%);
+        animation: orbit-spin-2 35s linear infinite reverse;
+    }
+    @keyframes orbit-spin-2 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .train-2 {
+        position: absolute;
+        top: -20px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 30px;
+        filter: drop-shadow(0 0 15px rgba(19, 136, 8, 0.9));
+        animation: train-bob-2 1.2s ease-in-out infinite alternate;
+    }
+    .train-2-bogie {
+        position: absolute;
+        top: -16px;
+        left: 50%;
+        font-size: 24px;
+        filter: drop-shadow(0 0 8px rgba(19, 136, 8, 0.6));
+        animation: train-bob-2 1.2s ease-in-out infinite alternate;
+    }
+    @keyframes train-bob-2 {
+        from { transform: translateX(-50%) translateY(0) scale(1); }
+        to { transform: translateX(-50%) translateY(-5px) scale(1.06); }
+    }
+
+    /* Planet decorations */
+    .planet {
+        position: absolute;
+        border-radius: 50%;
+        animation: planet-float 6s ease-in-out infinite;
+    }
+    @keyframes planet-float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
+    }
+
+    /* Nebula clouds */
+    .nebula {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(60px);
+        opacity: 0.15;
+        animation: nebula-drift 15s ease-in-out infinite;
+    }
+    @keyframes nebula-drift {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        33% { transform: translate(30px, -20px) scale(1.1); }
+        66% { transform: translate(-20px, 30px) scale(0.9); }
+    }
     </style>
     <div class="eqms-bg">
-        <div class="p" style="left:8%;width:5px;height:5px;background:#FF9933;animation-duration:14s;animation-delay:0s;"></div>
-        <div class="p" style="left:22%;width:4px;height:4px;background:#FFFFFF;animation-duration:17s;animation-delay:2.5s;"></div>
-        <div class="p" style="left:38%;width:6px;height:6px;background:#138808;animation-duration:11s;animation-delay:1s;"></div>
-        <div class="p" style="left:52%;width:4px;height:4px;background:#FF6B35;animation-duration:19s;animation-delay:4s;"></div>
-        <div class="p" style="left:68%;width:5px;height:5px;background:#FFD700;animation-duration:13s;animation-delay:3s;"></div>
-        <div class="p" style="left:82%;width:6px;height:6px;background:#FF9933;animation-duration:12s;animation-delay:1.5s;"></div>
-        <div class="p" style="left:15%;width:4px;height:4px;background:#00CED1;animation-duration:15s;animation-delay:5s;"></div>
-        <div class="p" style="left:92%;width:5px;height:5px;background:#FF1493;animation-duration:16s;animation-delay:2s;"></div>
+        <!-- Nebula effects -->
+        <div class="nebula" style="top: 20%; left: 15%; width: 200px; height: 200px; background: radial-gradient(circle, rgba(255,100,100,0.3), transparent);"></div>
+        <div class="nebula" style="top: 60%; right: 10%; width: 250px; height: 250px; background: radial-gradient(circle, rgba(100,100,255,0.2), transparent); animation-delay: -5s;"></div>
+        <div class="nebula" style="bottom: 20%; left: 30%; width: 180px; height: 180px; background: radial-gradient(circle, rgba(100,255,100,0.2), transparent); animation-delay: -10s;"></div>
 
-        <div class="s" style="top:8%;left:18%;animation-duration:2.5s;"></div>
-        <div class="s" style="top:12%;left:55%;animation-duration:3.5s;animation-delay:0.4s;"></div>
-        <div class="s" style="top:6%;left:78%;animation-duration:2s;animation-delay:0.8s;"></div>
-        <div class="s" style="top:22%;left:8%;animation-duration:3s;animation-delay:1.2s;"></div>
-        <div class="s" style="top:28%;left:42%;animation-duration:2.2s;animation-delay:0.2s;"></div>
-        <div class="s" style="top:5%;left:32%;animation-duration:2.8s;animation-delay:1s;"></div>
-        <div class="s" style="top:18%;left:72%;animation-duration:2.5s;animation-delay:0.6s;"></div>
-        <div class="s" style="top:10%;left:88%;animation-duration:3.2s;animation-delay:1.5s;"></div>
+        <!-- Stars - generated via JS for better distribution -->
+        <script>
+        (function() {
+            var bg = document.querySelector('.eqms-bg');
+            if (!bg) return;
+            // Create 80 twinkling stars
+            for (var i = 0; i < 80; i++) {
+                var star = document.createElement('div');
+                star.className = 'star';
+                var size = Math.random() * 3 + 1;
+                star.style.width = size + 'px';
+                star.style.height = size + 'px';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.animationDuration = (Math.random() * 3 + 1.5) + 's';
+                star.style.animationDelay = (Math.random() * 3) + 's';
+                bg.appendChild(star);
+            }
+            // Create 5 shooting stars
+            for (var j = 0; j < 5; j++) {
+                var shooting = document.createElement('div');
+                shooting.className = 'shooting-star';
+                shooting.style.top = Math.random() * 50 + '%';
+                shooting.style.left = Math.random() * 50 + '%';
+                shooting.style.animationDuration = (Math.random() * 3 + 4) + 's';
+                shooting.style.animationDelay = (Math.random() * 10) + 's';
+                bg.appendChild(shooting);
+            }
+        })();
+        </script>
 
-        <div class="orbx">
-            <div class="oring oring1"></div>
-            <div class="oring oring2"></div>
-            <div class="oring oring3"></div>
-
-            <div class="t1o">
-                <div class="t1e">🚂</div>
-                <div class="t1b1">🚃</div>
-                <div class="t1b2">🚃</div>
-                <div class="t1b3">🚃</div>
-                <div class="t1tl">🚃</div>
+        <!-- Central Sun -->
+        <div class="sun-container">
+            <div class="sun-rays">
+                <div class="sun-ray" style="transform: rotate(0deg);"></div>
+                <div class="sun-ray" style="transform: rotate(45deg);"></div>
+                <div class="sun-ray" style="transform: rotate(90deg);"></div>
+                <div class="sun-ray" style="transform: rotate(135deg);"></div>
+                <div class="sun-ray" style="transform: rotate(180deg);"></div>
+                <div class="sun-ray" style="transform: rotate(225deg);"></div>
+                <div class="sun-ray" style="transform: rotate(270deg);"></div>
+                <div class="sun-ray" style="transform: rotate(315deg);"></div>
             </div>
-
-            <div class="t2o">
-                <div class="t2e">🚂</div>
-                <div class="t2b1">🚋</div>
-                <div class="t2b2">🚋</div>
-                <div class="t2tl">🚋</div>
-            </div>
+            <div class="sun"></div>
         </div>
 
-        <div class="ngrid"></div>
-        <div class="fwave"></div>
+        <!-- Orbit Rings -->
+        <div class="orbit-ring orbit-ring-1"></div>
+        <div class="orbit-ring orbit-ring-2"></div>
+
+        <!-- Train Orbit 1 (Inner, Clockwise, Saffron) -->
+        <div class="orbit-1">
+            <div class="train-1" style="transform: translateX(-50%) rotate(0deg);">🚂</div>
+            <div class="train-1-bogie" style="transform: translateX(-50%) translateX(-42px) rotate(0deg); animation-delay: 0.05s;">🚃</div>
+            <div class="train-1-bogie" style="transform: translateX(-50%) translateX(-78px) rotate(0deg); animation-delay: 0.1s;">🚃</div>
+            <div class="train-1-bogie" style="transform: translateX(-50%) translateX(-110px) rotate(0deg); animation-delay: 0.15s;">🚃</div>
+        </div>
+
+        <!-- Train Orbit 2 (Outer, Counter-Clockwise, Green) -->
+        <div class="orbit-2">
+            <div class="train-2" style="transform: translateX(-50%) rotate(0deg);">🚂</div>
+            <div class="train-2-bogie" style="transform: translateX(-50%) translateX(-40px) rotate(0deg); animation-delay: 0.05s;">🚋</div>
+            <div class="train-2-bogie" style="transform: translateX(-50%) translateX(-74px) rotate(0deg); animation-delay: 0.1s;">🚋</div>
+            <div class="train-2-bogie" style="transform: translateX(-50%) translateX(-104px) rotate(0deg); animation-delay: 0.15s;">🚋</div>
+        </div>
+
+        <!-- Decorative Planets -->
+        <div class="planet" style="top: 15%; right: 20%; width: 20px; height: 20px; background: radial-gradient(circle, #ff6b6b, #c92a2a); box-shadow: 0 0 20px rgba(255,107,107,0.4);"></div>
+        <div class="planet" style="bottom: 25%; left: 12%; width: 15px; height: 15px; background: radial-gradient(circle, #4ecdc4, #087f5b); box-shadow: 0 0 15px rgba(78,205,196,0.4); animation-delay: -2s;"></div>
+        <div class="planet" style="top: 70%; right: 15%; width: 25px; height: 25px; background: radial-gradient(circle, #ffe66d, #f59f00); box-shadow: 0 0 25px rgba(255,230,109,0.4); animation-delay: -4s;"></div>
     </div>
     """
     st.markdown(bg_html, unsafe_allow_html=True)
@@ -1968,8 +2133,8 @@ def main():
         .welcome-saffron { background: linear-gradient(90deg, rgba(255,153,51,0.18), transparent); }
         .welcome-white { background: linear-gradient(90deg, rgba(200,200,200,0.12), transparent); }
         .welcome-green { background: linear-gradient(90deg, rgba(19,136,8,0.18), transparent); }
-        .welcome-bullet { font-size: 1.3rem; font-weight: 900; }
-        .welcome-text { color: #000000; font-size: 0.95em; font-weight: 600; }
+        .welcome-bullet { font-size: 1.3rem; font-weight: 900; color: inherit !important; }
+        .welcome-text { color: #000000 !important; font-size: 0.95em; font-weight: 600; }
         </style>
         <div class="welcome-card">
             <div class="welcome-inner">
@@ -2452,15 +2617,17 @@ def main():
             st.rerun()
 
         if filtered_df.empty:
-            st.info("No data to show. Clear filters or select another sheet.")
+            st.info("📭 No data to show. Clear filters or select another sheet.")
             # Show empty table with column headers
-            if not df_raw.empty:
-                empty_df = df_raw.head(0).drop(columns=['_sheet_row'], errors='ignore')
-                if not empty_df.empty:
-                    st.markdown("**📋 Column Structure**")
-                    st.dataframe(empty_df, use_container_width=True, height=80)
-                else:
-                    st.caption("Sheet has headers but no data rows yet.")
+            empty_df = df_raw.drop(columns=['_sheet_row'], errors='ignore') if not df_raw.empty else pd.DataFrame()
+            if not empty_df.empty and len(empty_df.columns) > 0:
+                st.markdown("**📋 Column Structure**")
+                # Create empty display with same columns
+                display_empty = empty_df.head(0).copy()
+                display_empty.insert(0, "Select", False)
+                st.dataframe(display_empty, use_container_width=True, height=80)
+            else:
+                st.caption("Sheet has headers but no data rows yet.")
         else:
             # Sorting
             sort_col = st.session_state.sort_column
@@ -3328,12 +3495,10 @@ def main():
                             except Exception as e: st.error(f"❌ Error: {str(e)[:200]}")
 
     # =====================================================================
-    # VIEW: 🌤️ WEATHER - Detailed with animations, location fix
+    # VIEW: 🌤️ WEATHER - Detailed with animations
     # =====================================================================
     elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
-
-        # Location auto-detection removed as per request
 
         qp_lat = st.query_params.get('__lat')
         qp_lon = st.query_params.get('__lon')
@@ -3347,7 +3512,7 @@ def main():
                             placeholder="e.g., Tinsukia, New Delhi, Mumbai", key="weather_city_input")
         if city != st.session_state.weather_city: st.session_state.weather_city = city
 
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         with col1:
             if st.button("🌤️ Get Weather", key="weather_btn", use_container_width=True):
                 if city:
@@ -3372,8 +3537,6 @@ def main():
                             st.rerun()
                         else: st.error(data.get('error', 'Error fetching weather'))
                 else: st.warning("Please enter a city name.")
-        with col3:
-            st.empty()  # Removed Detect My Location button as requested
 
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
@@ -3465,8 +3628,11 @@ def main():
 
             if data.get('sunrise') and data.get('sunrise') != 'N/A':
                 try:
-                    sunrise = datetime.fromtimestamp(data['sunrise']).strftime('%I:%M %p')
-                    sunset = datetime.fromtimestamp(data['sunset']).strftime('%I:%M %p')
+                    from datetime import timezone as dt_timezone
+                    sunrise_dt = datetime.fromtimestamp(data['sunrise'], tz=dt_timezone.utc).astimezone(IST)
+                    sunset_dt = datetime.fromtimestamp(data['sunset'], tz=dt_timezone.utc).astimezone(IST)
+                    sunrise = sunrise_dt.strftime('%I:%M %p')
+                    sunset = sunset_dt.strftime('%I:%M %p')
                     weather_html += f"""
                 <div class="sunrise-sunset">
                     <div class="sun-item">
