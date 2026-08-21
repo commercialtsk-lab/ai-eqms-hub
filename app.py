@@ -1,3 +1,5 @@
+[file name]: ai_eqms_hub_pro_v2_complete.py
+[file content begin]
 import os
 import streamlit as st
 import streamlit.components.v1 as components
@@ -798,53 +800,22 @@ def get_weather(city_name):
     except Exception as e:
         return {'error': f'Error fetching weather: {str(e)}'}
 
-
-def get_weather_forecast(city_name):
-    if not city_name:
-        return {'error': 'Please enter a city name'}
+def get_location_from_ip():
+    """Get approximate location from IP address as fallback for browser geolocation"""
     try:
-        url = f"https://api.openweathermap.org/data/2.5/forecast?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            forecast_list = data.get('list', [])
-            daily_forecast = {}
-            for item in forecast_list:
-                date = item.get('dt_txt', '')[:10]
-                if date not in daily_forecast:
-                    daily_forecast[date] = {
-                        'temps': [], 'weather': item['weather'][0]['main'] if item.get('weather') else 'N/A',
-                        'icon': item['weather'][0]['icon'] if item.get('weather') else '',
-                        'humidity': item['main']['humidity'],
-                        'wind': item['wind']['speed'],
-                        'pressure': item['main']['pressure'],
-                        'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'
-                    }
-                daily_forecast[date]['temps'].append(item['main']['temp'])
-
-            result = []
-            for date, info in list(daily_forecast.items())[:5]:
-                result.append({
-                    'date': date,
-                    'temp': round(sum(info['temps'])/len(info['temps']), 1),
-                    'min_temp': round(min(info['temps']), 1),
-                    'max_temp': round(max(info['temps']), 1),
-                    'weather': info['weather'],
-                    'description': info['description'].title(),
-                    'icon': info['icon'],
-                    'humidity': info['humidity'],
-                    'wind': info['wind'],
-                    'pressure': info['pressure']
-                })
-            return {'forecast': result, 'city': data.get('city', {}).get('name', city_name), 'country': data.get('city', {}).get('country', '')}
-        else:
-            return {'error': f'City not found. Please check the name.'}
-    except Exception as e:
-        return {'error': f'Error fetching forecast: {str(e)}'}
-
-# ------------------------------------------------------------------
-# NTES-based railway functions (DITTO from Telegram Bot + improvements)
-# ------------------------------------------------------------------
+        resp = requests.get("https://ip-api.com/json/", timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get('status') == 'success':
+                return {
+                    'city': data.get('city', ''),
+                    'lat': data.get('lat'),
+                    'lon': data.get('lon'),
+                    'country': data.get('country', '')
+                }
+    except Exception:
+        pass
+    return None
 
 def safe_list(data, key):
     val = data.get(key) if data else None
@@ -856,15 +827,6 @@ def safe_list(data, key):
 
 def safe_str(val, default='N/A'):
     return str(val) if val is not None else default
-
-def get_date_label(offset):
-    target = datetime.now() - timedelta(days=offset)
-    day = target.day
-    suffix = {1:'st', 2:'nd', 3:'rd'}.get(day%10 if day not in [11,12,13] else 0, 'th')
-    return f"{day}{suffix} {target.strftime('%b')}"
-
-def get_date_for_offset(offset):
-    return (datetime.now() - timedelta(days=offset)).strftime("%d-%b-%Y")
 
 def format_station_time(time_str):
     if not time_str or time_str in ['N/A', 'Source', 'Dest']:
@@ -1594,8 +1556,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         chart_bg = "rgba(0,0,0,0)"
 
     css = f"""
-    <style>
-        /* === FIXES: Hide clutter === */
+    <style>        /* === FIXES: Hide clutter === */
         #MainMenu {{visibility: hidden !important;}}
         footer {{visibility: hidden !important;}}
         header {{visibility: hidden !important;}}
@@ -1884,7 +1845,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
     """
     st.markdown(css, unsafe_allow_html=True)
 
-
 # ------------------------------------------------------------------
 # PDF, image, WhatsApp helpers
 # ------------------------------------------------------------------
@@ -2129,23 +2089,6 @@ def get_pnr_status_url(pnr):
         return None
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
 
-def get_location_from_ip():
-    """Get approximate location from IP address as fallback for browser geolocation"""
-    try:
-        resp = requests.get("https://ip-api.com/json/", timeout=5)
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get('status') == 'success':
-                return {
-                    'city': data.get('city', ''),
-                    'lat': data.get('lat'),
-                    'lon': data.get('lon'),
-                    'country': data.get('country', '')
-                }
-    except Exception:
-        pass
-    return None
-
 # ------------------------------------------------------------------
 # Main function - COMPLETELY REWRITTEN with all fixes
 # ------------------------------------------------------------------
@@ -2155,6 +2098,8 @@ def main():
     <script>
     (function() {
         try {
+            var P = window.parent;
+            var doc = P.document;
             var P = window.parent;
             var doc = P.document;
             // Theme persistence
@@ -3075,6 +3020,7 @@ def main():
 
         vip_col_dash = next((c for c in dash_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
         if vip_col_dash and not dash_df.empty:
+            # Fix: Use dash_df instead of dash_col_dash
             vip_count = dash_df[dash_df[vip_col_dash].astype(str).str.strip() != ''].shape[0]
             with kcol3:
                 st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#f093fb,#f5576c)"><h3>{vip_count}</h3><p>VIP Records</p></div>', unsafe_allow_html=True)
@@ -3632,3 +3578,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+[file content end]
