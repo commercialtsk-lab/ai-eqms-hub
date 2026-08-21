@@ -1,3 +1,4 @@
+
 import os
 import streamlit as st
 import streamlit.components.v1 as components
@@ -1450,7 +1451,34 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
-        [data-testid="stSidebar"] {{ display: flex !important; visibility: visible !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; }}
+        [data-testid="stSidebar"] {{ display: flex !important; visibility: visible !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: all 0.3s ease !important; }}
+        [data-testid="stSidebar"][aria-expanded="false"] {{ margin-left: -320px !important; }}
+        .sidebar-toggle-btn {{
+            position: fixed !important;
+            top: 12px !important;
+            left: 12px !important;
+            z-index: 999999 !important;
+            width: 42px !important;
+            height: 42px !important;
+            border-radius: 50% !important;
+            background: linear-gradient(135deg, #FF9933, #FF6B35) !important;
+            border: none !important;
+            color: white !important;
+            font-size: 20px !important;
+            cursor: pointer !important;
+            box-shadow: 0 4px 15px rgba(255, 107, 53, 0.4) !important;
+            transition: all 0.3s ease !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }}
+        .sidebar-toggle-btn:hover {{
+            transform: scale(1.1) rotate(90deg) !important;
+            box-shadow: 0 6px 25px rgba(255, 107, 53, 0.6) !important;
+        }}
+        .sidebar-toggle-btn.collapsed {{
+            background: linear-gradient(135deg, #138808, #0d6e05) !important;
+        }}
         .metric-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s ease; }}
         .metric-card:hover {{ transform: translateY(-3px); box-shadow: 0 4px 16px rgba(0,0,0,0.1); }}
         .metric-card h3 {{ margin: 0; font-size: 2.2rem; color: {accent}; font-weight: 800; }}
@@ -1665,224 +1693,228 @@ def get_pnr_status_url(pnr):
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
 
 def main():
-    # Background Train Animation - Railway Engine on Track with Lights
-    train_animation_css = """
+    # ═══════════════════════════════════════════════════════════════════════
+    # VIBRANT FULL-PAGE ANIMATED BACKGROUND - Circular Train Orbit
+    # ═══════════════════════════════════════════════════════════════════════
+    vibrant_bg_css = """
     <style>
-    .train-bg-container {
+    .vibrant-bg-container {
         position: fixed;
-        bottom: 0;
+        top: 0;
         left: 0;
-        width: 100%;
-        height: 140px;
+        width: 100vw;
+        height: 100vh;
         z-index: 0;
         pointer-events: none;
         overflow: hidden;
-        opacity: 0.25;
+        background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
     }
-    .train-track {
-        position: absolute;
-        bottom: 30px;
-        left: 0;
-        width: 100%;
-        height: 8px;
-        background: repeating-linear-gradient(90deg, #555 0px, #555 20px, transparent 20px, transparent 30px);
-    }
-    .train-track::before {
+    .vibrant-bg-container::before {
         content: '';
         position: absolute;
-        top: -4px;
-        left: 0;
-        width: 100%;
-        height: 2px;
-        background: #777;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: 
+            radial-gradient(circle at 20% 80%, rgba(255, 153, 51, 0.15) 0%, transparent 50%),
+            radial-gradient(circle at 80% 20%, rgba(19, 136, 8, 0.15) 0%, transparent 50%),
+            radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.05) 0%, transparent 60%);
+        animation: bg-pulse 8s ease-in-out infinite;
     }
-    .train-track::after {
-        content: '';
+    @keyframes bg-pulse {
+        0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.8; }
+        50% { transform: scale(1.1) rotate(5deg); opacity: 1; }
+    }
+    /* Floating particles */
+    .particle {
         position: absolute;
-        bottom: -4px;
-        left: 0;
-        width: 100%;
-        height: 2px;
-        background: #777;
+        border-radius: 50%;
+        animation: float-particle linear infinite;
+        opacity: 0.6;
     }
-    .train-engine {
+    @keyframes float-particle {
+        0% { transform: translateY(100vh) scale(0); opacity: 0; }
+        10% { opacity: 0.8; }
+        90% { opacity: 0.8; }
+        100% { transform: translateY(-100px) scale(1.5); opacity: 0; }
+    }
+    /* Circular orbit system */
+    .orbit-system {
         position: absolute;
-        bottom: 38px;
-        left: -200px;
-        width: 180px;
-        height: 60px;
-        animation: train-move 18s linear infinite;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 600px;
+        height: 600px;
     }
-    .train-engine-2 {
+    .orbit-ring {
         position: absolute;
-        bottom: 38px;
-        left: -200px;
-        width: 180px;
-        height: 60px;
-        animation: train-move 18s linear infinite;
-        animation-delay: 9s;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        border: 2px dashed rgba(255, 153, 51, 0.3);
+        border-radius: 50%;
+        animation: orbit-spin linear infinite;
     }
-    @keyframes train-move {
-        0% { left: -200px; }
-        100% { left: 110%; }
+    .orbit-ring:nth-child(1) { width: 200px; height: 200px; animation-duration: 20s; border-color: rgba(255, 153, 51, 0.4); }
+    .orbit-ring:nth-child(2) { width: 350px; height: 350px; animation-duration: 30s; border-color: rgba(255, 255, 255, 0.25); animation-direction: reverse; }
+    .orbit-ring:nth-child(3) { width: 500px; height: 500px; animation-duration: 40s; border-color: rgba(19, 136, 8, 0.3); }
+    @keyframes orbit-spin {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
     }
-    .engine-body {
+    /* Train orbiting on ring */
+    .orbit-train {
         position: absolute;
-        bottom: 0;
-        left: 40px;
-        width: 100px;
-        height: 45px;
-        background: linear-gradient(180deg, #c0392b 0%, #a93226 100%);
-        border-radius: 8px 8px 4px 4px;
-        border: 2px solid #7b241c;
+        top: 50%;
+        left: 50%;
+        width: 500px;
+        height: 500px;
+        transform: translate(-50%, -50%);
+        animation: train-orbit 15s linear infinite;
     }
-    .engine-cabin {
+    @keyframes train-orbit {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .orbit-train-inner {
         position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 45px;
-        height: 55px;
-        background: linear-gradient(180deg, #c0392b 0%, #a93226 100%);
-        border-radius: 8px 4px 4px 4px;
-        border: 2px solid #7b241c;
+        top: -25px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 40px;
+        filter: drop-shadow(0 0 15px rgba(255, 153, 51, 0.8)) drop-shadow(0 0 30px rgba(255, 107, 53, 0.5));
+        animation: train-bob 1s ease-in-out infinite alternate;
     }
-    .engine-window {
+    @keyframes train-bob {
+        from { transform: translateX(-50%) translateY(0) scale(1); }
+        to { transform: translateX(-50%) translateY(-8px) scale(1.1); }
+    }
+    /* Second train */
+    .orbit-train-2 {
         position: absolute;
-        top: 8px;
-        left: 8px;
-        width: 22px;
-        height: 18px;
-        background: #85c1e9;
-        border-radius: 3px;
-        border: 1px solid #5dade2;
+        top: 50%;
+        left: 50%;
+        width: 350px;
+        height: 350px;
+        transform: translate(-50%, -50%);
+        animation: train-orbit-2 20s linear infinite reverse;
     }
-    .engine-chimney {
+    @keyframes train-orbit-2 {
+        from { transform: translate(-50%, -50%) rotate(180deg); }
+        to { transform: translate(-50%, -50%) rotate(540deg); }
+    }
+    .orbit-train-2-inner {
         position: absolute;
         top: -20px;
-        left: 70px;
-        width: 16px;
-        height: 25px;
-        background: linear-gradient(180deg, #5d6d7e 0%, #34495e 100%);
-        border-radius: 4px 4px 0 0;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 32px;
+        filter: drop-shadow(0 0 12px rgba(19, 136, 8, 0.8)) drop-shadow(0 0 25px rgba(50, 205, 50, 0.5));
+        animation: train-bob-2 0.8s ease-in-out infinite alternate;
     }
-    .engine-wheel {
+    @keyframes train-bob-2 {
+        from { transform: translateX(-50%) translateY(0) scale(1); }
+        to { transform: translateX(-50%) translateY(-6px) scale(1.08); }
+    }
+    /* Glowing stars */
+    .star {
         position: absolute;
-        bottom: -12px;
-        width: 22px;
-        height: 22px;
-        background: #2c3e50;
+        width: 4px;
+        height: 4px;
+        background: white;
         border-radius: 50%;
-        border: 3px solid #f39c12;
-        animation: wheel-spin 0.8s linear infinite;
+        animation: star-twinkle ease-in-out infinite;
     }
-    .engine-wheel:nth-child(5) { left: 10px; }
-    .engine-wheel:nth-child(6) { left: 55px; }
-    .engine-wheel:nth-child(7) { left: 100px; }
-    @keyframes wheel-spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
+    @keyframes star-twinkle {
+        0%, 100% { opacity: 0.2; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.8); box-shadow: 0 0 10px 2px rgba(255,255,255,0.5); }
     }
-    .engine-light {
+    /* Neon grid lines */
+    .neon-grid {
         position: absolute;
-        top: 15px;
-        right: 5px;
-        width: 12px;
-        height: 12px;
-        background: radial-gradient(circle, #f1c40f 0%, #f39c12 50%, transparent 70%);
-        border-radius: 50%;
-        animation: light-pulse 1s ease-in-out infinite alternate;
-        box-shadow: 0 0 15px 5px rgba(241, 196, 15, 0.6);
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 40%;
+        background: 
+            linear-gradient(90deg, transparent 49%, rgba(255, 153, 51, 0.08) 50%, transparent 51%),
+            linear-gradient(0deg, transparent 49%, rgba(255, 153, 51, 0.08) 50%, transparent 51%);
+        background-size: 80px 80px;
+        transform: perspective(500px) rotateX(60deg);
+        transform-origin: bottom;
+        animation: grid-move 10s linear infinite;
     }
-    @keyframes light-pulse {
-        0% { opacity: 0.6; transform: scale(1); }
-        100% { opacity: 1; transform: scale(1.3); box-shadow: 0 0 25px 10px rgba(241, 196, 15, 0.8); }
+    @keyframes grid-move {
+        from { background-position: 0 0; }
+        to { background-position: 0 80px; }
     }
-    .engine-smoke {
+    /* Indian flag color waves at bottom */
+    .flag-wave {
         position: absolute;
-        top: -35px;
-        left: 75px;
-        width: 10px;
-        height: 10px;
-        background: rgba(149, 165, 166, 0.4);
-        border-radius: 50%;
-        animation: smoke-rise 2s ease-out infinite;
-    }
-    .engine-smoke:nth-child(9) { animation-delay: 0.3s; left: 80px; }
-    .engine-smoke:nth-child(10) { animation-delay: 0.6s; left: 70px; }
-    @keyframes smoke-rise {
-        0% { opacity: 0.6; transform: scale(1) translateY(0); }
-        100% { opacity: 0; transform: scale(3) translateY(-40px); }
-    }
-    .track-light {
-        position: absolute;
-        bottom: 50px;
-        width: 6px;
+        bottom: 0;
+        left: 0;
+        width: 100%;
         height: 6px;
-        background: #f1c40f;
-        border-radius: 50%;
-        animation: track-light-blink 1.5s ease-in-out infinite;
-        box-shadow: 0 0 8px 2px rgba(241, 196, 15, 0.5);
+        background: linear-gradient(90deg, #FF9933 0%, #FF9933 33%, #FFFFFF 33%, #FFFFFF 66%, #138808 66%, #138808 100%);
+        animation: flag-shimmer 3s ease-in-out infinite;
+        box-shadow: 0 0 20px rgba(255, 153, 51, 0.3), 0 0 20px rgba(19, 136, 8, 0.3);
     }
-    .track-light:nth-child(1) { left: 10%; animation-delay: 0s; }
-    .track-light:nth-child(2) { left: 30%; animation-delay: 0.3s; }
-    .track-light:nth-child(3) { left: 50%; animation-delay: 0.6s; }
-    .track-light:nth-child(4) { left: 70%; animation-delay: 0.9s; }
-    .track-light:nth-child(5) { left: 90%; animation-delay: 1.2s; }
-    @keyframes track-light-blink {
-        0%, 100% { opacity: 0.3; }
-        50% { opacity: 1; box-shadow: 0 0 12px 4px rgba(241, 196, 15, 0.8); }
+    @keyframes flag-shimmer {
+        0%, 100% { opacity: 0.6; filter: brightness(1); }
+        50% { opacity: 1; filter: brightness(1.3); }
     }
+    /* Content overlay */
     [data-testid="stMain"] {
         position: relative;
-        z-index: 1;
+        z-index: 10;
     }
     [data-testid="stSidebar"] {
         position: relative;
-        z-index: 2;
+        z-index: 20;
     }
     </style>
-    <div class="train-bg-container">
-        <div class="train-track"></div>
-        <div class="track-light"></div>
-        <div class="track-light"></div>
-        <div class="track-light"></div>
-        <div class="track-light"></div>
-        <div class="track-light"></div>
-        <div class="train-engine">
-            <div class="engine-cabin">
-                <div class="engine-window"></div>
+    <div class="vibrant-bg-container" id="vibrantBg">
+        <!-- Particles -->
+        <div class="particle" style="left:10%;width:6px;height:6px;background:#FF9933;animation-duration:12s;animation-delay:0s;"></div>
+        <div class="particle" style="left:25%;width:4px;height:4px;background:#FFFFFF;animation-duration:15s;animation-delay:2s;"></div>
+        <div class="particle" style="left:40%;width:8px;height:8px;background:#138808;animation-duration:10s;animation-delay:1s;"></div>
+        <div class="particle" style="left:55%;width:5px;height:5px;background:#FF6B35;animation-duration:18s;animation-delay:3s;"></div>
+        <div class="particle" style="left:70%;width:3px;height:3px;background:#FFD700;animation-duration:14s;animation-delay:4s;"></div>
+        <div class="particle" style="left:85%;width:7px;height:7px;background:#FF9933;animation-duration:11s;animation-delay:1.5s;"></div>
+        <div class="particle" style="left:15%;width:4px;height:4px;background:#00CED1;animation-duration:16s;animation-delay:5s;"></div>
+        <div class="particle" style="left:90%;width:6px;height:6px;background:#FF1493;animation-duration:13s;animation-delay:2.5s;"></div>
+        <!-- Stars -->
+        <div class="star" style="top:10%;left:20%;animation-duration:2s;"></div>
+        <div class="star" style="top:15%;left:60%;animation-duration:3s;animation-delay:0.5s;"></div>
+        <div class="star" style="top:8%;left:80%;animation-duration:2.5s;animation-delay:1s;"></div>
+        <div class="star" style="top:25%;left:10%;animation-duration:2s;animation-delay:1.5s;"></div>
+        <div class="star" style="top:30%;left:45%;animation-duration:3s;animation-delay:0.3s;"></div>
+        <div class="star" style="top:5%;left:35%;animation-duration:2.2s;animation-delay:0.8s;"></div>
+        <div class="star" style="top:20%;left:75%;animation-duration:2.8s;animation-delay:1.2s;"></div>
+        <div class="star" style="top:12%;left:90%;animation-duration:2s;animation-delay:0.2s;"></div>
+        <!-- Orbit rings -->
+        <div class="orbit-system">
+            <div class="orbit-ring"></div>
+            <div class="orbit-ring"></div>
+            <div class="orbit-ring"></div>
+            <div class="orbit-train">
+                <div class="orbit-train-inner">🚂</div>
             </div>
-            <div class="engine-body">
-                <div class="engine-chimney"></div>
-                <div class="engine-light"></div>
+            <div class="orbit-train-2">
+                <div class="orbit-train-2-inner">🚃</div>
             </div>
-            <div class="engine-wheel"></div>
-            <div class="engine-wheel"></div>
-            <div class="engine-wheel"></div>
-            <div class="engine-smoke"></div>
-            <div class="engine-smoke"></div>
-            <div class="engine-smoke"></div>
         </div>
-        <div class="train-engine-2">
-            <div class="engine-cabin">
-                <div class="engine-window"></div>
-            </div>
-            <div class="engine-body">
-                <div class="engine-chimney"></div>
-                <div class="engine-light"></div>
-            </div>
-            <div class="engine-wheel"></div>
-            <div class="engine-wheel"></div>
-            <div class="engine-wheel"></div>
-            <div class="engine-smoke"></div>
-            <div class="engine-smoke"></div>
-            <div class="engine-smoke"></div>
-        </div>
+        <!-- Neon grid -->
+        <div class="neon-grid"></div>
+        <!-- Flag wave -->
+        <div class="flag-wave"></div>
     </div>
     """
-    st.markdown(train_animation_css, unsafe_allow_html=True)
+    st.markdown(vibrant_bg_css, unsafe_allow_html=True)
 
-    # Clean JavaScript - back-to-top button
+    # Sidebar Toggle + Back-to-Top Button
     components.html("""
     <script>
     (function() {
@@ -1891,6 +1923,8 @@ def main():
             var doc = P.document;
             if (!P.__eqmsProInit) {
                 P.__eqmsProInit = true;
+
+                // Keyboard shortcut for theme toggle
                 doc.addEventListener('keydown', function(e) {
                     var t = (e.target.tagName || '').toLowerCase();
                     if (t === 'input' || t === 'textarea' || t === 'select' || e.target.isContentEditable) return;
@@ -1901,12 +1935,50 @@ def main():
                         P.location.href = u.toString();
                     }
                 });
+
+                // Sidebar Toggle Button
+                if (!doc.getElementById('eqms-sidebar-toggle')) {
+                    var toggleBtn = doc.createElement('button');
+                    toggleBtn.id = 'eqms-sidebar-toggle';
+                    toggleBtn.title = 'Toggle Sidebar';
+                    toggleBtn.innerHTML = '☰';
+                    toggleBtn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:999999;width:42px;height:42px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.4);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;';
+                    toggleBtn.onmouseenter = function(){ toggleBtn.style.transform = 'scale(1.1) rotate(90deg)'; toggleBtn.style.boxShadow = '0 6px 25px rgba(255,107,53,0.6)'; };
+                    toggleBtn.onmouseleave = function(){ toggleBtn.style.transform = 'scale(1) rotate(0deg)'; toggleBtn.style.boxShadow = '0 4px 15px rgba(255,107,53,0.4)'; };
+
+                    var sidebarCollapsed = false;
+                    toggleBtn.onclick = function() {
+                        var sidebar = doc.querySelector('[data-testid="stSidebar"]');
+                        var main = doc.querySelector('[data-testid="stMain"]');
+                        if (sidebar) {
+                            sidebarCollapsed = !sidebarCollapsed;
+                            if (sidebarCollapsed) {
+                                sidebar.style.marginLeft = '-320px';
+                                sidebar.style.opacity = '0';
+                                sidebar.style.visibility = 'hidden';
+                                if (main) main.style.marginLeft = '0';
+                                toggleBtn.innerHTML = '☰';
+                                toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                            } else {
+                                sidebar.style.marginLeft = '0';
+                                sidebar.style.opacity = '1';
+                                sidebar.style.visibility = 'visible';
+                                if (main) main.style.marginLeft = '320px';
+                                toggleBtn.innerHTML = '✕';
+                                toggleBtn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                            }
+                        }
+                    };
+                    doc.body.appendChild(toggleBtn);
+                }
+
+                // Back to Top Button
                 if (!doc.getElementById('eqms-top-btn')) {
                     var b = doc.createElement('button');
                     b.id = 'eqms-top-btn';
                     b.title = 'Back to top';
                     b.innerHTML = '⬆';
-                    b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:#2563eb;color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
+                    b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
                     b.onmouseenter = function(){ b.style.opacity = '1'; b.style.transform = 'scale(1.08)'; };
                     b.onmouseleave = function(){ b.style.opacity = '0.85'; b.style.transform = 'scale(1)'; };
                     b.onclick = function(){ window.scrollTo({top:0, behavior:'smooth'}); };
@@ -1964,11 +2036,23 @@ def main():
     # =====================================================================
     with st.sidebar:
         st.markdown("""
-        <div style="background:linear-gradient(135deg,#FF9933 0%,#FFFFFF 50%,#138808 100%);padding:16px;border-radius:12px;margin-bottom:12px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.15);">
-            <h2 style="margin:0;font-size:1.4em;color:#1e293b;font-weight:700;">🙏 Namaste</h2>
-            <p style="margin:6px 0 0 0;font-size:1em;color:#334155;font-weight:600;">Aapka Swagat Hai</p>
-            <p style="margin:4px 0 0 0;font-size:0.95em;color:#475569;font-weight:500;">Ham Bharat ke log</p>
-            <p style="margin:4px 0 0 0;font-size:1em;color:#166534;font-weight:700;">🇮🇳 Jai Hind</p>
+        <div style="background:#ffffff;padding:16px;border-radius:12px;margin-bottom:12px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.15);border:2px solid #e2e8f0;">
+            <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px;">
+                <span style="font-size:1.6rem;">🙏</span>
+                <span style="color:#000000;font-size:1.3em;font-weight:700;">Namaste</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:flex-start;gap:10px;padding:6px 12px;background:linear-gradient(90deg,rgba(255,153,51,0.15),transparent);border-radius:8px;margin:6px 0;">
+                <span style="color:#FF9933;font-size:1.2rem;font-weight:800;">●</span>
+                <span style="color:#000000;font-size:1em;font-weight:600;">Aapka Swagat Hai</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:flex-start;gap:10px;padding:6px 12px;background:linear-gradient(90deg,rgba(200,200,200,0.15),transparent);border-radius:8px;margin:6px 0;">
+                <span style="color:#CCCCCC;font-size:1.2rem;font-weight:800;">●</span>
+                <span style="color:#000000;font-size:1em;font-weight:600;">Ham Bharat ke log</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:flex-start;gap:10px;padding:6px 12px;background:linear-gradient(90deg,rgba(19,136,8,0.15),transparent);border-radius:8px;margin:6px 0;">
+                <span style="color:#138808;font-size:1.2rem;font-weight:800;">●</span>
+                <span style="color:#000000;font-size:1em;font-weight:700;">🇮🇳 Jai Hind</span>
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -2275,7 +2359,7 @@ def main():
     # Top bar
     st.markdown("""
     <div class="eqms-marquee" style="background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); padding: 8px 0; border-radius: 4px; margin-bottom: 10px;">
-        <span style="color: #1e293b !important; text-shadow: 0 0 10px rgba(255,255,255,1), 1px 1px 3px rgba(0,0,0,0.5); font-weight: 700; letter-spacing: 0.5px; font-size: 15px;">🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save</span>
+        <span style="color: #000000 !important; font-weight: 700; letter-spacing: 0.5px; font-size: 15px;">🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -3185,31 +3269,7 @@ def main():
     elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
 
-        # Location detection using browser geolocation + IP fallback
-        components.html("""
-        <script>
-        (function() {
-            var P = window.parent;
-            if (!P.__weatherLocDone) {
-                P.__weatherLocDone = true;
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                        function(pos) {
-                            var url = new URL(P.location.href);
-                            url.searchParams.set('__lat', pos.coords.latitude);
-                            url.searchParams.set('__lon', pos.coords.longitude);
-                            P.location.href = url.toString();
-                        },
-                        function(err) {
-                            console.log('Geolocation denied or failed');
-                        },
-                        {timeout: 8000, enableHighAccuracy: true}
-                    );
-                }
-            }
-        })();
-        </script>
-        """, height=0)
+        # Location auto-detection removed as per request
 
         qp_lat = st.query_params.get('__lat')
         qp_lon = st.query_params.get('__lon')
@@ -3249,43 +3309,7 @@ def main():
                         else: st.error(data.get('error', 'Error fetching weather'))
                 else: st.warning("Please enter a city name.")
         with col3:
-            if st.button("📍 Detect My Location", key="weather_location", use_container_width=True):
-                with st.spinner("Detecting your location..."):
-                    # Try browser coords first if available
-                    if st.session_state.weather_lat and st.session_state.weather_lon:
-                        data = get_weather_by_coords(st.session_state.weather_lat, st.session_state.weather_lon)
-                        forecast = get_forecast_by_coords(st.session_state.weather_lat, st.session_state.weather_lon)
-                        if data and 'error' not in data:
-                            st.session_state.weather_city = data.get('city', 'Unknown')
-                            st.session_state.weather_data = data
-                            if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
-                            st.success(f"📍 Location detected: {data.get('city', 'Unknown')}, {data.get('country', '')}")
-                            st.rerun()
-                        else:
-                            # Fallback to IP
-                            ip_loc = get_location_from_ip()
-                            if ip_loc and ip_loc.get('city'):
-                                st.session_state.weather_city = ip_loc['city']
-                                data = get_weather(ip_loc['city'])
-                                forecast = get_weather_forecast(ip_loc['city'])
-                                if data and 'error' not in data:
-                                    st.session_state.weather_data = data
-                                    if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
-                                st.success(f"📍 IP Location: {ip_loc['city']}, {ip_loc.get('country', '')}")
-                                st.rerun()
-                            else: st.error("❌ Could not detect location.")
-                    else:
-                        ip_loc = get_location_from_ip()
-                        if ip_loc and ip_loc.get('city'):
-                            st.session_state.weather_city = ip_loc['city']
-                            data = get_weather(ip_loc['city'])
-                            forecast = get_weather_forecast(ip_loc['city'])
-                            if data and 'error' not in data:
-                                st.session_state.weather_data = data
-                                if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
-                            st.success(f"📍 IP Location: {ip_loc['city']}, {ip_loc.get('country', '')}")
-                            st.rerun()
-                        else: st.error("❌ Could not detect location automatically.")
+            st.empty()  # Removed Detect My Location button as requested
 
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
@@ -3398,8 +3422,251 @@ def main():
             weather_html += "</div>"
             st.markdown(weather_html, unsafe_allow_html=True)
 
-            # Animated Weather Cartoon Scene
+            # ═══════════════════════════════════════════════════════════════
+            # ANIMATED WEATHER VIDEO BACKGROUND
+            # ═══════════════════════════════════════════════════════════════
             weather_condition = str(data.get('weather', '')).lower()
+
+            # Dynamic weather animation based on condition
+            weather_anim_css = """
+            <style>
+            .weather-anim-container {
+                position: relative;
+                width: 100%;
+                height: 200px;
+                border-radius: 20px;
+                overflow: hidden;
+                margin: 15px 0;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            }
+            .weather-anim-sky {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                top: 0;
+                left: 0;
+            }
+            /* SUNNY ANIMATION */
+            .sunny-sky { background: linear-gradient(180deg, #4facfe 0%, #00f2fe 100%); }
+            .sun {
+                position: absolute;
+                top: 20px;
+                right: 40px;
+                width: 80px;
+                height: 80px;
+                background: radial-gradient(circle, #FFD700 0%, #FFA500 70%, transparent 100%);
+                border-radius: 50%;
+                animation: sun-pulse-weather 3s ease-in-out infinite;
+                box-shadow: 0 0 60px 20px rgba(255, 215, 0, 0.5), 0 0 100px 40px rgba(255, 165, 0, 0.3);
+            }
+            @keyframes sun-pulse-weather {
+                0%, 100% { transform: scale(1); opacity: 0.9; }
+                50% { transform: scale(1.15); opacity: 1; box-shadow: 0 0 80px 30px rgba(255, 215, 0, 0.7), 0 0 120px 50px rgba(255, 165, 0, 0.4); }
+            }
+            .sun-ray {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: 120px;
+                height: 4px;
+                background: linear-gradient(90deg, transparent, #FFD700, transparent);
+                transform-origin: center;
+                animation: ray-spin 8s linear infinite;
+            }
+            @keyframes ray-spin {
+                from { transform: translate(-50%, -50%) rotate(0deg); }
+                to { transform: translate(-50%, -50%) rotate(360deg); }
+            }
+            .cloud-anim {
+                position: absolute;
+                background: rgba(255,255,255,0.9);
+                border-radius: 50px;
+                animation: cloud-float linear infinite;
+            }
+            .cloud-anim::before, .cloud-anim::after {
+                content: '';
+                position: absolute;
+                background: rgba(255,255,255,0.9);
+                border-radius: 50%;
+            }
+            @keyframes cloud-float {
+                from { transform: translateX(-150px); }
+                to { transform: translateX(calc(100vw + 150px)); }
+            }
+            /* RAINY ANIMATION */
+            .rainy-sky { background: linear-gradient(180deg, #2c3e50 0%, #4a5568 100%); }
+            .rain-drop {
+                position: absolute;
+                width: 2px;
+                height: 15px;
+                background: linear-gradient(180deg, transparent, #64b5f6, #2196f3);
+                border-radius: 0 0 2px 2px;
+                animation: rain-fall-anim linear infinite;
+                opacity: 0.7;
+            }
+            @keyframes rain-fall-anim {
+                from { transform: translateY(-20px); opacity: 0; }
+                10% { opacity: 0.8; }
+                90% { opacity: 0.8; }
+                to { transform: translateY(220px); opacity: 0; }
+            }
+            .lightning {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(255,255,255,0);
+                animation: lightning-flash 5s ease-in-out infinite;
+            }
+            @keyframes lightning-flash {
+                0%, 90%, 100% { background: rgba(255,255,255,0); }
+                91% { background: rgba(255,255,255,0.3); }
+                92% { background: rgba(255,255,255,0); }
+                93% { background: rgba(255,255,255,0.5); }
+                94% { background: rgba(255,255,255,0); }
+            }
+            /* CLOUDY ANIMATION */
+            .cloudy-sky { background: linear-gradient(180deg, #7f8c8d 0%, #95a5a6 100%); }
+            /* SNOWY ANIMATION */
+            .snowy-sky { background: linear-gradient(180deg, #e0e7ff 0%, #c7d2fe 100%); }
+            .snowflake {
+                position: absolute;
+                color: white;
+                font-size: 14px;
+                animation: snow-fall linear infinite;
+                text-shadow: 0 0 5px rgba(255,255,255,0.8);
+            }
+            @keyframes snow-fall {
+                from { transform: translateY(-20px) rotate(0deg); opacity: 0; }
+                10% { opacity: 1; }
+                90% { opacity: 1; }
+                to { transform: translateY(220px) rotate(360deg); opacity: 0; }
+            }
+            /* THUNDER ANIMATION */
+            .thunder-sky { background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%); }
+            /* FOGGY ANIMATION */
+            .foggy-sky { background: linear-gradient(180deg, #d5d8dc 0%, #aab7b8 100%); }
+            .fog-layer {
+                position: absolute;
+                width: 200%;
+                height: 60px;
+                background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+                animation: fog-drift linear infinite;
+            }
+            @keyframes fog-drift {
+                from { transform: translateX(-50%); }
+                to { transform: translateX(0%); }
+            }
+            /* Ground */
+            .weather-ground {
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                width: 100%;
+                height: 40px;
+                background: linear-gradient(180deg, #2d5016 0%, #1a3009 100%);
+                border-radius: 50% 50% 0 0 / 20px 20px 0 0;
+            }
+            .weather-trees {
+                position: absolute;
+                bottom: 30px;
+                font-size: 24px;
+                animation: tree-sway 3s ease-in-out infinite;
+            }
+            @keyframes tree-sway {
+                0%, 100% { transform: rotate(-3deg); }
+                50% { transform: rotate(3deg); }
+            }
+            </style>
+            """
+
+            # Build weather animation HTML
+            weather_anim_html = weather_anim_css + '<div class="weather-anim-container">'
+
+            if 'rain' in weather_condition or 'drizz' in weather_condition:
+                weather_anim_html += '<div class="weather-anim-sky rainy-sky">'
+                for i in range(30):
+                    left = (i * 3.5) % 100
+                    delay = (i * 0.15) % 2
+                    dur = 0.5 + (i % 3) * 0.2
+                    weather_anim_html += f'<div class="rain-drop" style="left:{left}%;animation-duration:{dur}s;animation-delay:{delay}s;"></div>'
+                weather_anim_html += '<div class="lightning"></div>'
+                weather_anim_html += '<div class="cloud-anim" style="top:15px;left:10%;width:80px;height:30px;animation-duration:20s;"><div style="position:absolute;top:-15px;left:15px;width:35px;height:35px;border-radius:50%;background:rgba(255,255,255,0.8);"></div><div style="position:absolute;top:-10px;left:40px;width:25px;height:25px;border-radius:50%;background:rgba(255,255,255,0.8);"></div></div>'
+                weather_anim_html += '<div class="cloud-anim" style="top:25px;left:60%;width:100px;height:35px;animation-duration:25s;animation-delay:5s;"><div style="position:absolute;top:-18px;left:20px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.7);"></div><div style="position:absolute;top:-12px;left:50px;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,0.7);"></div></div>'
+
+            elif 'cloud' in weather_condition:
+                weather_anim_html += '<div class="weather-anim-sky cloudy-sky">'
+                weather_anim_html += '<div class="sun" style="opacity:0.4;"></div>'
+                for i in range(5):
+                    left = (i * 25) % 100
+                    delay = i * 3
+                    size = 60 + (i % 3) * 30
+                    weather_anim_html += f'<div class="cloud-anim" style="top:{15 + (i%2)*20}px;left:{left}%;width:{size}px;height:{size*0.4}px;animation-duration:{20 + i*5}s;animation-delay:{delay}s;"><div style="position:absolute;top:-{size*0.3}px;left:{size*0.2}px;width:{size*0.5}px;height:{size*0.5}px;border-radius:50%;background:rgba(255,255,255,0.85);"></div><div style="position:absolute;top:-{size*0.2}px;left:{size*0.45}px;width:{size*0.35}px;height:{size*0.35}px;border-radius:50%;background:rgba(255,255,255,0.85);"></div></div>'
+
+            elif 'clear' in weather_condition or 'sun' in weather_condition:
+                weather_anim_html += '<div class="weather-anim-sky sunny-sky">'
+                weather_anim_html += '<div class="sun">'
+                for angle in range(0, 360, 45):
+                    weather_anim_html += f'<div class="sun-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
+                weather_anim_html += '</div>'
+                for i in range(4):
+                    left = (i * 30) % 100
+                    delay = i * 4
+                    weather_anim_html += f'<div class="cloud-anim" style="top:{20 + i*15}px;left:{left}%;width:70px;height:25px;animation-duration:{25 + i*5}s;animation-delay:{delay}s;opacity:0.7;"><div style="position:absolute;top:-12px;left:12px;width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.9);"></div><div style="position:absolute;top:-8px;left:35px;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.9);"></div></div>'
+
+            elif 'thunder' in weather_condition or 'storm' in weather_condition:
+                weather_anim_html += '<div class="weather-anim-sky thunder-sky">'
+                for i in range(25):
+                    left = (i * 4) % 100
+                    delay = (i * 0.12) % 1.5
+                    dur = 0.3 + (i % 3) * 0.15
+                    weather_anim_html += f'<div class="rain-drop" style="left:{left}%;animation-duration:{dur}s;animation-delay:{delay}s;background:linear-gradient(180deg,transparent,#90caf9,#42a5f5);"></div>'
+                weather_anim_html += '<div class="lightning" style="animation-duration:3s;"></div>'
+                weather_anim_html += '<div class="cloud-anim" style="top:10px;left:5%;width:120px;height:45px;background:#546e7a;animation-duration:30s;"><div style="position:absolute;top:-20px;left:20px;width:50px;height:50px;border-radius:50%;background:#546e7a;"></div><div style="position:absolute;top:-15px;left:55px;width:40px;height:40px;border-radius:50%;background:#546e7a;"></div></div>'
+
+            elif 'snow' in weather_condition or 'frost' in weather_condition or 'freez' in weather_condition:
+                weather_anim_html += '<div class="weather-anim-sky snowy-sky">'
+                snowflakes = ['❄', '❅', '❆', '✻', '✼']
+                for i in range(40):
+                    left = (i * 2.5) % 100
+                    delay = (i * 0.2) % 4
+                    dur = 2 + (i % 4) * 1.5
+                    size = 10 + (i % 4) * 4
+                    flake = snowflakes[i % len(snowflakes)]
+                    weather_anim_html += f'<div class="snowflake" style="left:{left}%;font-size:{size}px;animation-duration:{dur}s;animation-delay:{delay}s;">{flake}</div>'
+                weather_anim_html += '<div class="cloud-anim" style="top:10px;left:20%;width:90px;height:35px;background:rgba(255,255,255,0.8);animation-duration:25s;"><div style="position:absolute;top:-15px;left:15px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.8);"></div></div>'
+
+            elif 'mist' in weather_condition or 'fog' in weather_condition or 'haz' in weather_condition:
+                weather_anim_html += '<div class="weather-anim-sky foggy-sky">'
+                for i in range(6):
+                    top = 20 + i * 25
+                    delay = i * 2
+                    dur = 15 + i * 3
+                    weather_anim_html += f'<div class="fog-layer" style="top:{top}px;animation-duration:{dur}s;animation-delay:{delay}s;opacity:{0.3 + (i%3)*0.2};"></div>'
+
+            else:
+                weather_anim_html += '<div class="weather-anim-sky sunny-sky">'
+                weather_anim_html += '<div class="sun">'
+                for angle in range(0, 360, 45):
+                    weather_anim_html += f'<div class="sun-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
+                weather_anim_html += '</div>'
+                for i in range(3):
+                    left = (i * 35) % 100
+                    delay = i * 5
+                    weather_anim_html += f'<div class="cloud-anim" style="top:{25 + i*10}px;left:{left}%;width:60px;height:22px;animation-duration:{20 + i*5}s;animation-delay:{delay}s;opacity:0.6;"><div style="position:absolute;top:-10px;left:10px;width:25px;height:25px;border-radius:50%;background:rgba(255,255,255,0.85);"></div></div>'
+
+            # Add ground and trees to all
+            weather_anim_html += '<div class="weather-ground"></div>'
+            weather_anim_html += '<div class="weather-trees" style="left:10%;">🌲</div>'
+            weather_anim_html += '<div class="weather-trees" style="left:25%;animation-delay:0.5s;">🌳</div>'
+            weather_anim_html += '<div class="weather-trees" style="left:70%;animation-delay:1s;">🌲</div>'
+            weather_anim_html += '<div class="weather-trees" style="left:85%;animation-delay:1.5s;">🌳</div>'
+            weather_anim_html += '</div></div>'
+
+            st.markdown(weather_anim_html, unsafe_allow_html=True)
+
+            # Animated Weather Cartoon Scene (below the animation)
             cartoon_html = """
             <div class="weather-scene">
             """
