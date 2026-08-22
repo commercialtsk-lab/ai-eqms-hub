@@ -1399,12 +1399,12 @@ def process_passport_image(data):
 # =====================================================================
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == '🟡 Yellow Mood':
-        bg = "transparent"; card_bg = "rgba(255, 215, 0, 0.12)"; text_color = "#fbbf24"; text_secondary = "#f59e0b"
-        border = "rgba(251, 191, 36, 0.4)"; input_bg = "rgba(255, 215, 0, 0.08)"; accent = "#fbbf24"; accent_hover = "#f59e0b"
+        bg = "transparent"; card_bg = "rgba(255, 215, 0, 0.1)"; text_color = "#fbbf24"; text_secondary = "#f59e0b"
+        border = "rgba(251, 191, 36, 0.35)"; input_bg = "rgba(255, 215, 0, 0.08)"; accent = "#fbbf24"; accent_hover = "#f59e0b"
         success = "#84cc16"; danger = "#ef4444"; button_bg = "rgba(251, 191, 36, 0.12)"; button_text = "#fbbf24"
-        button_border = "rgba(251, 191, 36, 0.35)"; button_hover_bg = "#fbbf24"; button_hover_text = "#000000"; button_hover_border = "#fbbf24"
-        number_color = "#fbbf24"; table_header_bg = "rgba(251, 191, 36, 0.5)"; table_header_text = "#000000"
-        table_alt_row = "rgba(255, 215, 0, 0.06)"; chart_bg = "rgba(0,0,0,0)"
+        button_border = "rgba(251, 191, 36, 0.3)"; button_hover_bg = "#fbbf24"; button_hover_text = "#000000"; button_hover_border = "#fbbf24"
+        number_color = "#fbbf24"; table_header_bg = "rgba(251, 191, 36, 0.45)"; table_header_text = "#000000"
+        table_alt_row = "rgba(255, 215, 0, 0.05)"; chart_bg = "rgba(0,0,0,0)"
     elif theme == 'Day':
         bg = "transparent"; card_bg = "rgba(248, 250, 252, 0.15)"; text_color = "#1e293b"; text_secondary = "#475569"
         border = "rgba(148, 163, 184, 0.25)"; input_bg = "rgba(255, 255, 255, 0.12)"; accent = "#2563eb"; accent_hover = "#1d4ed8"
@@ -1765,14 +1765,16 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
         /* Weather Section Input Visibility - Day/Night Adaptive */
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
-        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input {{
-            background-color: rgba(255, 255, 255, 0.92) !important;
+        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input,
+        [data-testid="stMain"] input[key="weather_city_input"],
+        [data-testid="stMain"] input[key="sidebar_weather_city"] {{
+            background-color: rgba(255, 255, 255, 0.95) !important;
             color: #000000 !important;
             -webkit-text-fill-color: #000000 !important;
             caret-color: #000000 !important;
-            border: 2px solid rgba(255, 255, 255, 0.8) !important;
+            border: 2px solid rgba(0, 0, 0, 0.2) !important;
             box-shadow: 0 0 20px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2) !important;
-            font-weight: 600 !important;
+            font-weight: 700 !important;
             font-size: 1.05rem !important;
             border-radius: 12px !important;
             padding: 10px 16px !important;
@@ -2464,9 +2466,14 @@ EARTH_BG_HTML = """
         position: absolute; top: -16px; left: 50%;
         transform: translateX(-50%);
         width: 32px; height: 32px;
-        background: radial-gradient(circle at 35% 35%, #f5f5f5, #c0c0c0, #808080);
+        background: radial-gradient(circle at 35% 35%, #fff9c4, #ffd700, #ff8c00);
         border-radius: 50%;
-        box-shadow: 0 0 25px rgba(255,255,255,0.25), inset -4px -4px 8px rgba(0,0,0,0.4);
+        box-shadow: 0 0 30px 10px rgba(255, 215, 0, 0.5), 0 0 60px 20px rgba(255, 165, 0, 0.25), inset -4px -4px 8px rgba(0,0,0,0.3);
+        animation: moon-glow-pulse 3s ease-in-out infinite alternate;
+    }
+    @keyframes moon-glow-pulse {
+        0% { box-shadow: 0 0 30px 10px rgba(255, 215, 0, 0.4), 0 0 60px 20px rgba(255, 165, 0, 0.2), inset -4px -4px 8px rgba(0,0,0,0.3); }
+        100% { box-shadow: 0 0 40px 15px rgba(255, 215, 0, 0.7), 0 0 80px 30px rgba(255, 165, 0, 0.4), inset -4px -4px 8px rgba(0,0,0,0.3); }
     }
 </style>
 <div class="earth-bg-scene">
@@ -2490,56 +2497,56 @@ OCEAN_BG_HTML = """
 .ocean-bg-scene {
     position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
     z-index: -1; pointer-events: none; overflow: hidden;
-    background: linear-gradient(180deg, #006994 0%, #005073 30%, #00334e 60%, #001a2e 100%);
+    background: linear-gradient(180deg, #006994 0%, #005073 25%, #00334e 50%, #001a2e 75%, #000d1a 100%);
 }
 .ocean-surface {
-    position: absolute; top: 0; left: 0; width: 100%; height: 18%;
-    background: linear-gradient(180deg, #4fc3f7 0%, #29b6f6 30%, #0288d1 70%, #006994 100%);
-    opacity: 0.35;
-    animation: ocean-surface-shimmer 4s ease-in-out infinite alternate;
+    position: absolute; top: 0; left: 0; width: 100%; height: 15%;
+    background: linear-gradient(180deg, #4fc3f7 0%, #29b6f6 40%, #0288d1 80%, transparent 100%);
+    opacity: 0.4;
+    animation: ocean-surface-shimmer 3s ease-in-out infinite alternate;
 }
 @keyframes ocean-surface-shimmer {
-    0% { opacity: 0.3; }
-    100% { opacity: 0.45; }
+    0% { opacity: 0.35; }
+    100% { opacity: 0.5; }
 }
 .ocean-light-ray {
-    position: absolute; top: 0; width: 3px; height: 70vh;
-    background: linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0.05), transparent);
-    animation: ocean-ray-sway 5s ease-in-out infinite alternate;
+    position: absolute; top: 0; width: 3px; height: 65vh;
+    background: linear-gradient(180deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05), transparent);
+    animation: ocean-ray-sway 6s ease-in-out infinite alternate;
     border-radius: 2px;
 }
 @keyframes ocean-ray-sway {
-    0% { transform: translateX(0) rotate(-3deg); opacity: 0.2; }
-    100% { transform: translateX(20px) rotate(3deg); opacity: 0.4; }
+    0% { transform: translateX(0) rotate(-2deg); opacity: 0.15; }
+    100% { transform: translateX(15px) rotate(2deg); opacity: 0.35; }
 }
 .ocean-bubble {
     position: absolute; bottom: -20px;
-    background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.9), rgba(255,255,255,0.4));
+    background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.85), rgba(255,255,255,0.3));
     border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.3);
+    border: 1px solid rgba(255,255,255,0.25);
     animation: ocean-bubble-rise linear infinite;
 }
 @keyframes ocean-bubble-rise {
     0% { transform: translateY(0) scale(1); opacity: 0; }
-    10% { opacity: 0.7; }
-    90% { opacity: 0.5; }
-    100% { transform: translateY(-110vh) scale(1.4); opacity: 0; }
+    8% { opacity: 0.7; }
+    92% { opacity: 0.4; }
+    100% { transform: translateY(-110vh) scale(1.3); opacity: 0; }
 }
 .ocean-fish {
-    position: absolute; font-size: 2.2rem;
+    position: absolute; font-size: 2rem;
     filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
     animation: ocean-fish-swim linear infinite;
     opacity: 0.85;
 }
 @keyframes ocean-fish-swim {
     0% { transform: translateX(-120px) scaleX(1); }
-    49% { transform: translateX(calc(100vw + 120px)) scaleX(1); }
+    48% { transform: translateX(calc(100vw + 120px)) scaleX(1); }
     50% { transform: translateX(calc(100vw + 120px)) scaleX(-1); }
-    99% { transform: translateX(-120px) scaleX(-1); }
+    98% { transform: translateX(-120px) scaleX(-1); }
     100% { transform: translateX(-120px) scaleX(1); }
 }
 .ocean-coral {
-    position: absolute; bottom: 0; font-size: 3rem;
+    position: absolute; bottom: 0; font-size: 2.8rem;
     filter: drop-shadow(0 -2px 6px rgba(0,0,0,0.4));
     animation: ocean-coral-sway 4s ease-in-out infinite alternate;
     transform-origin: bottom center;
@@ -2549,116 +2556,133 @@ OCEAN_BG_HTML = """
     100% { transform: rotate(2deg); }
 }
 .ocean-seaweed {
-    position: absolute; bottom: 0; font-size: 2.5rem;
+    position: absolute; bottom: 0; font-size: 2.2rem;
     animation: ocean-seaweed-sway 3s ease-in-out infinite alternate;
     transform-origin: bottom center;
     opacity: 0.8;
 }
 @keyframes ocean-seaweed-sway {
     0% { transform: rotate(-5deg) scaleY(1); }
-    100% { transform: rotate(5deg) scaleY(1.1); }
+    100% { transform: rotate(5deg) scaleY(1.08); }
 }
 .ocean-jellyfish {
-    position: absolute; font-size: 2.5rem;
-    animation: ocean-jelly-float 8s ease-in-out infinite;
-    opacity: 0.6;
-    filter: drop-shadow(0 0 8px rgba(255,255,255,0.3));
+    position: absolute; font-size: 2.2rem;
+    animation: ocean-jelly-float 10s ease-in-out infinite;
+    opacity: 0.55;
+    filter: drop-shadow(0 0 8px rgba(255,255,255,0.25));
 }
 @keyframes ocean-jelly-float {
     0%, 100% { transform: translateY(0) translateX(0); }
-    25% { transform: translateY(-30px) translateX(15px); }
-    50% { transform: translateY(-10px) translateX(-10px); }
-    75% { transform: translateY(-40px) translateX(5px); }
+    20% { transform: translateY(-25px) translateX(12px); }
+    40% { transform: translateY(-8px) translateX(-8px); }
+    60% { transform: translateY(-35px) translateX(5px); }
+    80% { transform: translateY(-15px) translateX(-12px); }
 }
 .ocean-plankton {
     position: absolute; width: 2px; height: 2px;
-    background: rgba(255,255,255,0.6);
+    background: rgba(255,255,255,0.5);
     border-radius: 50%;
-    animation: ocean-plankton-drift 10s linear infinite;
+    animation: ocean-plankton-drift 12s linear infinite;
 }
 @keyframes ocean-plankton-drift {
     0% { transform: translateY(0) translateX(0); opacity: 0; }
-    20% { opacity: 0.8; }
-    80% { opacity: 0.6; }
-    100% { transform: translateY(-40vh) translateX(30px); opacity: 0; }
+    15% { opacity: 0.7; }
+    85% { opacity: 0.5; }
+    100% { transform: translateY(-50vh) translateX(25px); opacity: 0; }
 }
 .ocean-sand {
-    position: absolute; bottom: 0; left: 0; width: 100%; height: 60px;
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 50px;
     background: linear-gradient(180deg, #c2b280 0%, #a8956b 50%, #8b7355 100%);
-    border-radius: 50% 50% 0 0 / 20px 20px 0 0;
-    opacity: 0.4;
+    border-radius: 50% 50% 0 0 / 15px 15px 0 0;
+    opacity: 0.35;
+}
+.ocean-starfish {
+    position: absolute; bottom: 35px; font-size: 1.2rem;
+    animation: ocean-star-twinkle 3s ease-in-out infinite alternate;
+    opacity: 0.7;
+}
+@keyframes ocean-star-twinkle {
+    0% { opacity: 0.4; transform: scale(1); }
+    100% { opacity: 0.9; transform: scale(1.1); }
+}
+.ocean-shell {
+    position: absolute; bottom: 30px; font-size: 1rem;
+    opacity: 0.6;
+    animation: ocean-shell-bob 4s ease-in-out infinite;
+}
+@keyframes ocean-shell-bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
 }
 </style>
 <div class="ocean-bg-scene">
     <div class="ocean-surface"></div>
-    <!-- Light rays -->
-    <div class="ocean-light-ray" style="left: 10%; animation-delay: 0s; height: 65vh;"></div>
-    <div class="ocean-light-ray" style="left: 25%; animation-delay: 1.2s; height: 55vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 40%; animation-delay: 2.1s; height: 70vh;"></div>
-    <div class="ocean-light-ray" style="left: 60%; animation-delay: 0.8s; height: 50vh; width: 4px;"></div>
-    <div class="ocean-light-ray" style="left: 78%; animation-delay: 1.5s; height: 60vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 90%; animation-delay: 2.8s; height: 68vh;"></div>
-
-    <!-- Bubbles -->
-    <div class="ocean-bubble" style="left: 8%; width: 8px; height: 8px; animation-duration: 6s; animation-delay: 0s;"></div>
-    <div class="ocean-bubble" style="left: 15%; width: 12px; height: 12px; animation-duration: 8s; animation-delay: 1s;"></div>
-    <div class="ocean-bubble" style="left: 22%; width: 6px; height: 6px; animation-duration: 5s; animation-delay: 2.5s;"></div>
-    <div class="ocean-bubble" style="left: 35%; width: 10px; height: 10px; animation-duration: 7s; animation-delay: 0.5s;"></div>
-    <div class="ocean-bubble" style="left: 42%; width: 5px; height: 5px; animation-duration: 9s; animation-delay: 3s;"></div>
-    <div class="ocean-bubble" style="left: 55%; width: 14px; height: 14px; animation-duration: 6.5s; animation-delay: 1.5s;"></div>
-    <div class="ocean-bubble" style="left: 62%; width: 7px; height: 7px; animation-duration: 8s; animation-delay: 0.2s;"></div>
-    <div class="ocean-bubble" style="left: 70%; width: 9px; height: 9px; animation-duration: 5.5s; animation-delay: 2s;"></div>
-    <div class="ocean-bubble" style="left: 78%; width: 11px; height: 11px; animation-duration: 7.5s; animation-delay: 0.8s;"></div>
-    <div class="ocean-bubble" style="left: 85%; width: 6px; height: 6px; animation-duration: 6s; animation-delay: 3.5s;"></div>
-    <div class="ocean-bubble" style="left: 92%; width: 10px; height: 10px; animation-duration: 9s; animation-delay: 1.2s;"></div>
-    <div class="ocean-bubble" style="left: 5%; width: 8px; height: 8px; animation-duration: 7s; animation-delay: 4s;"></div>
-    <div class="ocean-bubble" style="left: 48%; width: 5px; height: 5px; animation-duration: 5s; animation-delay: 2.2s;"></div>
-    <div class="ocean-bubble" style="left: 68%; width: 13px; height: 13px; animation-duration: 8.5s; animation-delay: 3.2s;"></div>
-
-    <!-- Fish swimming -->
-    <div class="ocean-fish" style="top: 25%; animation-duration: 18s; animation-delay: 0s;">🐠</div>
-    <div class="ocean-fish" style="top: 40%; animation-duration: 22s; animation-delay: 3s; font-size: 1.8rem;">🐟</div>
-    <div class="ocean-fish" style="top: 55%; animation-duration: 25s; animation-delay: 6s; font-size: 2.5rem;">🐡</div>
-    <div class="ocean-fish" style="top: 18%; animation-duration: 20s; animation-delay: 9s; font-size: 1.6rem;">🐠</div>
-    <div class="ocean-fish" style="top: 70%; animation-duration: 28s; animation-delay: 2s; font-size: 2rem;">🦈</div>
-    <div class="ocean-fish" style="top: 32%; animation-duration: 24s; animation-delay: 12s; font-size: 1.9rem;">🐬</div>
-    <div class="ocean-fish" style="top: 48%; animation-duration: 19s; animation-delay: 15s; font-size: 1.5rem;">🐟</div>
-    <div class="ocean-fish" style="top: 62%; animation-duration: 26s; animation-delay: 7s; font-size: 2.3rem;">🐠</div>
-
-    <!-- Jellyfish -->
-    <div class="ocean-jellyfish" style="left: 20%; top: 30%; animation-delay: 0s;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 65%; top: 50%; animation-delay: 4s; font-size: 2rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 45%; top: 20%; animation-delay: 8s; font-size: 1.8rem;">🪼</div>
-
-    <!-- Plankton / dust particles -->
-    <div class="ocean-plankton" style="left: 10%; bottom: 30%; animation-delay: 0s; animation-duration: 12s;"></div>
-    <div class="ocean-plankton" style="left: 25%; bottom: 50%; animation-delay: 2s; animation-duration: 15s;"></div>
-    <div class="ocean-plankton" style="left: 40%; bottom: 20%; animation-delay: 5s; animation-duration: 10s;"></div>
-    <div class="ocean-plankton" style="left: 55%; bottom: 60%; animation-delay: 1s; animation-duration: 14s;"></div>
-    <div class="ocean-plankton" style="left: 70%; bottom: 35%; animation-delay: 7s; animation-duration: 11s;"></div>
-    <div class="ocean-plankton" style="left: 85%; bottom: 55%; animation-delay: 3s; animation-duration: 13s;"></div>
-    <div class="ocean-plankton" style="left: 15%; bottom: 70%; animation-delay: 9s; animation-duration: 16s;"></div>
-    <div class="ocean-plankton" style="left: 50%; bottom: 45%; animation-delay: 6s; animation-duration: 9s;"></div>
-
-    <!-- Coral and seaweed at bottom -->
-    <div class="ocean-coral" style="left: 5%;">🪸</div>
-    <div class="ocean-coral" style="left: 18%; font-size: 2.5rem; animation-delay: 0.5s;">🪸</div>
-    <div class="ocean-coral" style="left: 35%; font-size: 3.5rem; animation-delay: 1s;">🪸</div>
-    <div class="ocean-coral" style="left: 55%; font-size: 2.2rem; animation-delay: 1.5s;">🪸</div>
-    <div class="ocean-coral" style="left: 72%; font-size: 3rem; animation-delay: 0.8s;">🪸</div>
-    <div class="ocean-coral" style="left: 88%; font-size: 2.8rem; animation-delay: 2s;">🪸</div>
-
-    <div class="ocean-seaweed" style="left: 12%;">🌿</div>
-    <div class="ocean-seaweed" style="left: 28%; font-size: 3rem; animation-delay: 0.7s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 45%; font-size: 2rem; animation-delay: 1.3s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 62%; font-size: 2.8rem; animation-delay: 0.4s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 80%; font-size: 2.2rem; animation-delay: 1.8s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 95%; font-size: 3.2rem; animation-delay: 1.1s;">🌿</div>
-
+    <div class="ocean-light-ray" style="left: 8%; animation-delay: 0s; height: 60vh; width: 2px;"></div>
+    <div class="ocean-light-ray" style="left: 22%; animation-delay: 1.5s; height: 50vh; width: 3px;"></div>
+    <div class="ocean-light-ray" style="left: 38%; animation-delay: 3s; height: 65vh; width: 2px;"></div>
+    <div class="ocean-light-ray" style="left: 55%; animation-delay: 0.8s; height: 55vh; width: 4px;"></div>
+    <div class="ocean-light-ray" style="left: 72%; animation-delay: 2.2s; height: 58vh; width: 2px;"></div>
+    <div class="ocean-light-ray" style="left: 88%; animation-delay: 4s; height: 62vh; width: 3px;"></div>
+    <div class="ocean-bubble" style="left: 5%; width: 6px; height: 6px; animation-duration: 7s; animation-delay: 0s;"></div>
+    <div class="ocean-bubble" style="left: 12%; width: 10px; height: 10px; animation-duration: 9s; animation-delay: 1s;"></div>
+    <div class="ocean-bubble" style="left: 18%; width: 5px; height: 5px; animation-duration: 6s; animation-delay: 2.5s;"></div>
+    <div class="ocean-bubble" style="left: 28%; width: 8px; height: 8px; animation-duration: 8s; animation-delay: 0.5s;"></div>
+    <div class="ocean-bubble" style="left: 35%; width: 4px; height: 4px; animation-duration: 10s; animation-delay: 3s;"></div>
+    <div class="ocean-bubble" style="left: 42%; width: 12px; height: 12px; animation-duration: 7.5s; animation-delay: 1.5s;"></div>
+    <div class="ocean-bubble" style="left: 48%; width: 6px; height: 6px; animation-duration: 9s; animation-delay: 0.2s;"></div>
+    <div class="ocean-bubble" style="left: 58%; width: 9px; height: 9px; animation-duration: 6.5s; animation-delay: 2s;"></div>
+    <div class="ocean-bubble" style="left: 65%; width: 7px; height: 7px; animation-duration: 8.5s; animation-delay: 0.8s;"></div>
+    <div class="ocean-bubble" style="left: 72%; width: 11px; height: 11px; animation-duration: 7s; animation-delay: 3.5s;"></div>
+    <div class="ocean-bubble" style="left: 78%; width: 5px; height: 5px; animation-duration: 9s; animation-delay: 1.2s;"></div>
+    <div class="ocean-bubble" style="left: 85%; width: 8px; height: 8px; animation-duration: 8s; animation-delay: 4s;"></div>
+    <div class="ocean-bubble" style="left: 92%; width: 6px; height: 6px; animation-duration: 7s; animation-delay: 2.2s;"></div>
+    <div class="ocean-bubble" style="left: 3%; width: 10px; height: 10px; animation-duration: 10s; animation-delay: 5s;"></div>
+    <div class="ocean-bubble" style="left: 50%; width: 5px; height: 5px; animation-duration: 6s; animation-delay: 1.8s;"></div>
+    <div class="ocean-fish" style="top: 22%; animation-duration: 20s; animation-delay: 0s; font-size: 2.2rem;">🐠</div>
+    <div class="ocean-fish" style="top: 38%; animation-duration: 25s; animation-delay: 4s; font-size: 1.8rem;">🐟</div>
+    <div class="ocean-fish" style="top: 52%; animation-duration: 28s; animation-delay: 8s; font-size: 2.5rem;">🐡</div>
+    <div class="ocean-fish" style="top: 16%; animation-duration: 22s; animation-delay: 12s; font-size: 1.6rem;">🐠</div>
+    <div class="ocean-fish" style="top: 68%; animation-duration: 32s; animation-delay: 2s; font-size: 2.8rem;">🦈</div>
+    <div class="ocean-fish" style="top: 30%; animation-duration: 26s; animation-delay: 16s; font-size: 2rem;">🐬</div>
+    <div class="ocean-fish" style="top: 45%; animation-duration: 21s; animation-delay: 6s; font-size: 1.5rem;">🐟</div>
+    <div class="ocean-fish" style="top: 60%; animation-duration: 29s; animation-delay: 10s; font-size: 2.3rem;">🐠</div>
+    <div class="ocean-fish" style="top: 75%; animation-duration: 24s; animation-delay: 14s; font-size: 1.9rem;">🐟</div>
+    <div class="ocean-jellyfish" style="left: 15%; top: 25%; animation-delay: 0s; font-size: 2.5rem;">🪼</div>
+    <div class="ocean-jellyfish" style="left: 60%; top: 45%; animation-delay: 5s; font-size: 2rem;">🪼</div>
+    <div class="ocean-jellyfish" style="left: 40%; top: 18%; animation-delay: 10s; font-size: 1.8rem;">🪼</div>
+    <div class="ocean-jellyfish" style="left: 80%; top: 55%; animation-delay: 3s; font-size: 2.2rem;">🪼</div>
+    <div class="ocean-plankton" style="left: 10%; bottom: 25%; animation-delay: 0s; animation-duration: 14s;"></div>
+    <div class="ocean-plankton" style="left: 25%; bottom: 45%; animation-delay: 2s; animation-duration: 16s;"></div>
+    <div class="ocean-plankton" style="left: 40%; bottom: 20%; animation-delay: 5s; animation-duration: 12s;"></div>
+    <div class="ocean-plankton" style="left: 55%; bottom: 55%; animation-delay: 1s; animation-duration: 15s;"></div>
+    <div class="ocean-plankton" style="left: 70%; bottom: 30%; animation-delay: 7s; animation-duration: 13s;"></div>
+    <div class="ocean-plankton" style="left: 85%; bottom: 50%; animation-delay: 3s; animation-duration: 17s;"></div>
+    <div class="ocean-plankton" style="left: 15%; bottom: 65%; animation-delay: 9s; animation-duration: 11s;"></div>
+    <div class="ocean-plankton" style="left: 50%; bottom: 40%; animation-delay: 6s; animation-duration: 14s;"></div>
+    <div class="ocean-coral" style="left: 3%; font-size: 3rem;">🪸</div>
+    <div class="ocean-coral" style="left: 15%; font-size: 2.4rem; animation-delay: 0.5s;">🪸</div>
+    <div class="ocean-coral" style="left: 30%; font-size: 3.2rem; animation-delay: 1s;">🪸</div>
+    <div class="ocean-coral" style="left: 48%; font-size: 2.2rem; animation-delay: 1.5s;">🪸</div>
+    <div class="ocean-coral" style="left: 62%; font-size: 2.8rem; animation-delay: 0.8s;">🪸</div>
+    <div class="ocean-coral" style="left: 78%; font-size: 3rem; animation-delay: 2s;">🪸</div>
+    <div class="ocean-coral" style="left: 90%; font-size: 2.5rem; animation-delay: 1.2s;">🪸</div>
+    <div class="ocean-seaweed" style="left: 8%;">🌿</div>
+    <div class="ocean-seaweed" style="left: 22%; font-size: 2.8rem; animation-delay: 0.7s;">🌿</div>
+    <div class="ocean-seaweed" style="left: 38%; font-size: 1.9rem; animation-delay: 1.3s;">🌿</div>
+    <div class="ocean-seaweed" style="left: 52%; font-size: 2.6rem; animation-delay: 0.4s;">🌿</div>
+    <div class="ocean-seaweed" style="left: 68%; font-size: 2rem; animation-delay: 1.8s;">🌿</div>
+    <div class="ocean-seaweed" style="left: 82%; font-size: 2.9rem; animation-delay: 1.1s;">🌿</div>
+    <div class="ocean-seaweed" style="left: 95%; font-size: 2.3rem; animation-delay: 0.9s;">🌿</div>
+    <div class="ocean-starfish" style="left: 10%;">⭐</div>
+    <div class="ocean-starfish" style="left: 35%; animation-delay: 1s;">⭐</div>
+    <div class="ocean-starfish" style="left: 58%; animation-delay: 0.5s;">⭐</div>
+    <div class="ocean-starfish" style="left: 82%; animation-delay: 2s;">⭐</div>
+    <div class="ocean-shell" style="left: 20%;">🐚</div>
+    <div class="ocean-shell" style="left: 45%; animation-delay: 1.5s;">🐚</div>
+    <div class="ocean-shell" style="left: 70%; animation-delay: 0.8s;">🐚</div>
     <div class="ocean-sand"></div>
 </div>
 """
-
 
 def main():
     # Always update last_refresh to current time on page load so sync time matches live time
@@ -3091,7 +3115,7 @@ def main():
         # ---- CSS & HTML ----
         bg_style = ""
         elements = ""
-        info_html = ""  # FIX: Initialize to prevent UnboundLocalError
+        info_html = ""  # Initialize to prevent UnboundLocalError
 
         if scene in ('rain', 'night-rain'):
             bg_style = "background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 35%, #2d3a4a 70%, #1a2332 100%);"
@@ -3398,9 +3422,7 @@ def main():
         effective_theme = 'Day' if 6 <= h < 19 else 'Dark'
 
     if effective_theme == '🟡 Yellow Mood':
-        custom_bg = '#1a1500'
-        custom_text = '#fbbf24'
-        apply_theme(effective_theme, custom_bg, custom_text)
+        apply_theme(effective_theme)
     elif effective_theme == 'Custom':
         custom_bg = st.sidebar.color_picker("Background Color", value=st.session_state.custom_bg, key="custom_bg_picker")
         custom_text = st.sidebar.color_picker("Text Color", value=st.session_state.custom_text, key="custom_text_picker")
@@ -3980,41 +4002,42 @@ def main():
                 if st.button("🚀 Apply Filters", use_container_width=True, key="adv_apply"):
                     st.rerun()
 
-        # Train count summary cards — ROBUST for all sheets
+        # Train count summary cards — ROBUST for ALL sheets
         train_col_metric = None
         doj_col = None
         try:
-            # Try find_column on filtered data first
+            # Try to find train column from filtered data first
             if not filtered_df.empty:
                 train_col_metric = find_column(filtered_df, ['T/N', 'T_N', 'TRAIN', 'TRAIN NO', 'TRAIN NUMBER'])
                 doj_col = find_column(filtered_df, ['DOJ', 'DATE OF JOURNEY', 'JOURNEY DATE'])
-            # Fallback: use df_raw (original unfiltered) to detect columns even if filtered is empty
+            # Fallback: use df_raw columns
             if train_col_metric is None and not df_raw.empty:
                 train_col_metric = find_column(df_raw, ['T/N', 'T_N', 'TRAIN', 'TRAIN NO', 'TRAIN NUMBER'])
             if doj_col is None and not df_raw.empty:
                 doj_col = find_column(df_raw, ['DOJ', 'DATE OF JOURNEY', 'JOURNEY DATE'])
-            # Final fallback: SHEET_CONFIG column index
+            # Final fallback: SHEET_CONFIG index
             if train_col_metric is None and sheet_choice in SHEET_CONFIG:
                 cfg = SHEET_CONFIG[sheet_choice]
                 t_idx = cfg.get('train_col')
-                src_df = filtered_df if not filtered_df.empty else df_raw
-                if t_idx is not None and t_idx < len(src_df.columns):
-                    train_col_metric = src_df.columns[t_idx]
+                src = filtered_df if not filtered_df.empty else df_raw
+                if t_idx is not None and src is not None and t_idx < len(src.columns):
+                    train_col_metric = src.columns[t_idx]
             if doj_col is None and sheet_choice in SHEET_CONFIG:
                 cfg = SHEET_CONFIG[sheet_choice]
                 d_idx = cfg.get('doj_col')
-                src_df = filtered_df if not filtered_df.empty else df_raw
-                if d_idx is not None and d_idx < len(src_df.columns):
-                    doj_col = src_df.columns[d_idx]
-        except Exception as e:
+                src = filtered_df if not filtered_df.empty else df_raw
+                if d_idx is not None and src is not None and d_idx < len(src.columns):
+                    doj_col = src.columns[d_idx]
+        except Exception:
             train_col_metric = None
             doj_col = None
 
         if not filtered_df.empty and sheet_choice != "NOTE":
             if train_col_metric and train_col_metric in filtered_df.columns:
                 try:
-                    train_counts_series = filtered_df[train_col_metric].astype(str).str.strip()
-                    train_counts_series = train_counts_series[train_counts_series != ''].value_counts()
+                    tc_series = filtered_df[train_col_metric].astype(str).str.strip()
+                    tc_series = tc_series[tc_series != '']
+                    train_counts_series = tc_series.value_counts()
                     if len(train_counts_series) > 0:
                         st.markdown("**🚆 Train-wise Count**")
                         cards_html = '<div class="train-count-container">'
@@ -4054,37 +4077,43 @@ def main():
                     filtered_df = filtered_df.sort_values(by=sort_col, ascending=sort_asc, key=lambda col: col.astype(str))
                 except: pass
 
+            # Pagination - bulletproof with safe defaults
+            page_size = st.session_state.get('rows_per_page', 25)
+            if page_size not in [15, 25, 50, 100, 200]:
+                page_size = 25
             try:
-                rpp = st.session_state.rows_per_page
-                idx = [15, 25, 50, 100, 200].index(rpp) if rpp in [15,25,50,100,200] else 1
+                idx = [15, 25, 50, 100, 200].index(page_size)
             except Exception:
                 idx = 1
-            page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200],
+            selected_page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200],
                 index=idx, key="page_size_select")
-            if not isinstance(page_size, int) or page_size <= 0:
-                page_size = 25
-            if page_size != st.session_state.rows_per_page:
-                st.session_state.rows_per_page = page_size
+            if not isinstance(selected_page_size, int) or selected_page_size <= 0:
+                selected_page_size = 25
+            if selected_page_size != page_size:
+                st.session_state.rows_per_page = selected_page_size
                 st.session_state.current_page = 1
                 st.rerun()
+            page_size = selected_page_size
 
             total_pages = max(1, math.ceil(len(filtered_df) / page_size))
-            if st.session_state.current_page > total_pages: st.session_state.current_page = total_pages
-            if st.session_state.current_page < 1: st.session_state.current_page = 1
+            current_page = st.session_state.get('current_page', 1)
+            if current_page > total_pages: current_page = total_pages
+            if current_page < 1: current_page = 1
+            st.session_state.current_page = current_page
 
             nav1, nav2, nav3 = st.columns([1, 2, 1])
             with nav1:
-                if st.button("◀ Previous", use_container_width=True, disabled=st.session_state.current_page <= 1, key="prev_page_btn"):
-                    st.session_state.current_page -= 1
+                if st.button("◀ Previous", use_container_width=True, disabled=current_page <= 1, key="prev_page_btn"):
+                    st.session_state.current_page = current_page - 1
                     st.rerun()
             with nav2:
-                st.markdown(f"<div style='text-align:center; padding-top:6px;'><b>Page {st.session_state.current_page} of {total_pages}</b> &nbsp;|&nbsp; <b>{len(filtered_df)} total rows</b></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='text-align:center; padding-top:6px;'><b>Page {current_page} of {total_pages}</b> &nbsp;|&nbsp; <b>{len(filtered_df)} total rows</b></div>", unsafe_allow_html=True)
             with nav3:
-                if st.button("Next ▶", use_container_width=True, disabled=st.session_state.current_page >= total_pages, key="next_page_btn"):
-                    st.session_state.current_page += 1
+                if st.button("Next ▶", use_container_width=True, disabled=current_page >= total_pages, key="next_page_btn"):
+                    st.session_state.current_page = current_page + 1
                     st.rerun()
 
-            page = st.session_state.current_page - 1
+            page = current_page - 1
             start_idx = page * page_size
             end_idx = min(start_idx + page_size, len(filtered_df))
             page_df = filtered_df.iloc[start_idx:end_idx].copy()
@@ -4358,9 +4387,9 @@ def main():
                     st.markdown("**🚆 Train Analysis**")
                     if train_col_metric and train_col_metric in filtered_df.columns and not filtered_df.empty:
                         try:
-                            most_common = filtered_df[train_col_metric].astype(str).str.strip()
-                            most_common = most_common[most_common != ''].mode()
-                            if not most_common.empty: st.caption(f"Most frequent train: {most_common.iloc[0]}")
+                            mc = filtered_df[train_col_metric].astype(str).str.strip()
+                            mc = mc[mc != ''].mode()
+                            if not mc.empty: st.caption(f"Most frequent train: {mc.iloc[0]}")
                         except Exception: pass
                     if pnr_col and pnr_col in filtered_df.columns:
                         try:
