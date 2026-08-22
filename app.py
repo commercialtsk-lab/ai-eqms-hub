@@ -3840,6 +3840,7 @@ def main():
         config = SHEET_CONFIG[sheet_choice]
         pnr_col_idx = config.get("pnr_col")
         train_col_idx = config.get("train_col")
+        class_col_idx = config.get("class_col")
         doj_col_idx = config.get("doj_col")
 
         if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
@@ -4057,6 +4058,11 @@ def main():
             log_activity("🔄 Manual refresh from main")
             st.rerun()
 
+        # Initialize pagination defaults to prevent UnboundLocalError
+        page_size = st.session_state.get('rows_per_page', 25)
+        if page_size not in [15, 25, 50, 100, 200] or not isinstance(page_size, int):
+            page_size = 25
+
         if filtered_df.empty:
             st.info("📭 No data. Clear filters or select another sheet.")
             has_structure = len(df_raw.columns) > 0
@@ -4078,12 +4084,13 @@ def main():
                 except: pass
 
             # Pagination - bulletproof with safe defaults
-            page_size = st.session_state.get('rows_per_page', 25)
-            if page_size not in [15, 25, 50, 100, 200]:
-                page_size = 25
             try:
+                page_size = st.session_state.get('rows_per_page', 25)
+                if page_size not in [15, 25, 50, 100, 200] or not isinstance(page_size, int):
+                    page_size = 25
                 idx = [15, 25, 50, 100, 200].index(page_size)
             except Exception:
+                page_size = 25
                 idx = 1
             selected_page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200],
                 index=idx, key="page_size_select")
@@ -4095,7 +4102,7 @@ def main():
                 st.rerun()
             page_size = selected_page_size
 
-            total_pages = max(1, math.ceil(len(filtered_df) / page_size))
+            total_pages = max(1, math.ceil(len(filtered_df) / page_size)) if len(filtered_df) > 0 else 1
             current_page = st.session_state.get('current_page', 1)
             if current_page > total_pages: current_page = total_pages
             if current_page < 1: current_page = 1
