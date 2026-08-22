@@ -3067,7 +3067,7 @@ def main():
             elements += '<div style="position:absolute;bottom:110px;left:60%;font-size:45px;z-index:5;opacity:0.6;animation:treeSway 6s ease-in-out 3s infinite;">🌲</div>'
             elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#455a64;z-index:6;"></div>'
 
-        loc_detail = city_name
+            loc_detail = city_name
             if st.session_state.weather_data.get('state'):
                 loc_detail += f", {st.session_state.weather_data['state']}"
             if st.session_state.weather_data.get('country'):
