@@ -1826,11 +1826,11 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input,
         [data-testid="stMain"] input[key="weather_city_input"],
         [data-testid="stMain"] input[key="sidebar_weather_city"] {{
-            background-color: rgba(255, 255, 255, 0.95) !important;
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
-            caret-color: #000000 !important;
-            border: 2px solid rgba(0, 0, 0, 0.2) !important;
+            background: rgba(173, 216, 230, 0.25) !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            caret-color: #ffffff !important;
+            border: 2px solid rgba(255, 255, 255, 0.3) !important;
             box-shadow: 0 0 20px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2) !important;
             font-weight: 700 !important;
             font-size: 1.05rem !important;
@@ -2403,9 +2403,8 @@ def render_audio_controls(current_scene):
                 this.nodes.fog = src;
             }}
 
-            playOcean() {{
+            playOcean() {
                 var self = this;
-                // Deep underwater rumble (brown noise, very low)
                 var noise = this.ctx.createBufferSource();
                 noise.buffer = this.noiseBuffer();
                 noise.loop = true;
@@ -2419,8 +2418,6 @@ def render_audio_controls(current_scene):
                 noiseGain.connect(this.master);
                 noise.start();
                 this.nodes.oceanNoise = noise;
-
-                // Gentle water swish (sine LFO modulated)
                 var swish = this.ctx.createOscillator();
                 swish.type = 'sine';
                 swish.frequency.value = 0.18;
@@ -2430,9 +2427,7 @@ def render_audio_controls(current_scene):
                 swishGain.connect(this.master);
                 swish.start();
                 this.nodes.swish = swish;
-
-                // Occasional bubble pops
-                var bubblePop = function() {{
+                var bubblePop = function() {
                     if (self.scene !== 'ocean') return;
                     var t = self.ctx.currentTime;
                     var osc = self.ctx.createOscillator();
@@ -2447,17 +2442,15 @@ def render_audio_controls(current_scene):
                     osc.start(t);
                     osc.stop(t + 0.12);
                     self._chirpTimeout = setTimeout(bubblePop, 800 + Math.random() * 2500);
-                }};
+                };
                 bubblePop();
-            }}
+            }
 
-            playRailway() {{
+            playRailway() {
                 var self = this;
-                // Steam engine chuff-chuff rhythm
-                var chuff = function() {{
+                var chuff = function() {
                     if (self.scene !== 'railway') return;
                     var t = self.ctx.currentTime;
-                    // Chuff 1
                     var osc1 = self.ctx.createOscillator();
                     osc1.type = 'sawtooth';
                     osc1.frequency.value = 55 + Math.random() * 10;
@@ -2468,7 +2461,6 @@ def render_audio_controls(current_scene):
                     g1.connect(self.master);
                     osc1.start(t);
                     osc1.stop(t + 0.15);
-                    // Chuff 2
                     var osc2 = self.ctx.createOscillator();
                     osc2.type = 'sawtooth';
                     osc2.frequency.value = 50 + Math.random() * 8;
@@ -2479,8 +2471,7 @@ def render_audio_controls(current_scene):
                     g2.connect(self.master);
                     osc2.start(t + 0.25);
                     osc2.stop(t + 0.4);
-                    // Whistle occasionally
-                    if (Math.random() < 0.08) {{
+                    if (Math.random() < 0.08) {
                         var wh = self.ctx.createOscillator();
                         wh.type = 'triangle';
                         wh.frequency.setValueAtTime(440, t + 0.5);
@@ -2493,12 +2484,10 @@ def render_audio_controls(current_scene):
                         wg.connect(self.master);
                         wh.start(t + 0.5);
                         wh.stop(t + 1.2);
-                    }}
+                    }
                     self._chirpTimeout = setTimeout(chuff, 900 + Math.random() * 400);
-                }};
+                };
                 chuff();
-
-                // Track rumble (continuous low noise)
                 var trackNoise = this.ctx.createBufferSource();
                 trackNoise.buffer = this.noiseBuffer();
                 trackNoise.loop = true;
@@ -2512,8 +2501,8 @@ def render_audio_controls(current_scene):
                 trackGain.connect(this.master);
                 trackNoise.start();
                 this.nodes.trackNoise = trackNoise;
-            }}
-        }}
+            }
+        }
 
         if (!P.eqmsSoundEngine) {{
             P.eqmsSoundEngine = new SoundEngine();
@@ -4824,149 +4813,44 @@ def main():
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real-time Info")
 
-        # India Map Slideshow - Full Cover Background
+        # India Map Slideshow - Full Cover
         st.markdown("""
         <style>
-        @keyframes india-map-fade-1 {
-            0%, 100% { opacity: 1; }
-            20% { opacity: 1; }
-            25% { opacity: 0; }
-            95% { opacity: 0; }
-        }
-        @keyframes india-map-fade-2 {
-            0%, 24% { opacity: 0; }
-            25% { opacity: 1; }
-            45% { opacity: 1; }
-            50% { opacity: 0; }
-            100% { opacity: 0; }
-        }
-        @keyframes india-map-fade-3 {
-            0%, 49% { opacity: 0; }
-            50% { opacity: 1; }
-            70% { opacity: 1; }
-            75% { opacity: 0; }
-            100% { opacity: 0; }
-        }
-        @keyframes india-map-fade-4 {
-            0%, 74% { opacity: 0; }
-            75% { opacity: 1; }
-            95% { opacity: 1; }
-            100% { opacity: 0; }
-        }
-        @keyframes india-label-glow {
-            0%, 100% { text-shadow: 0 0 10px rgba(255,255,255,0.8), 0 0 20px rgba(255,153,51,0.6); }
-            50% { text-shadow: 0 0 15px rgba(255,255,255,1), 0 0 30px rgba(19,136,8,0.8); }
-        }
-        .india-map-slideshow-container {
-            position: relative;
-            width: 100%;
-            max-width: 1200px;
-            margin: 0 auto 20px auto;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-            border: 2px solid rgba(255,153,51,0.4);
-            background: linear-gradient(135deg, #0a0e27 0%, #1a1a3e 50%, #0d0d1a 100%);
-        }
-        .india-map-slideshow-container::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            border-radius: 16px;
-            padding: 3px;
-            background: linear-gradient(45deg, #FF9933, #FFFFFF, #138808, #FF9933);
-            background-size: 400% 400%;
-            animation: glow-rotate 6s linear infinite;
-            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-            -webkit-mask-composite: xor;
-            mask-composite: exclude;
-            pointer-events: none;
-            z-index: 10;
-        }
-        .india-map-frame {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            object-fit: contain;
-            padding: 8px;
-            box-sizing: border-box;
-        }
-        .india-map-label {
-            position: absolute;
-            bottom: 12px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.75);
-            color: #fff;
-            padding: 8px 24px;
-            border-radius: 30px;
-            font-size: 1rem;
-            font-weight: 700;
-            letter-spacing: 1px;
-            z-index: 5;
-            animation: india-label-glow 3s ease-in-out infinite;
-            border: 1px solid rgba(255,153,51,0.4);
-            white-space: nowrap;
-        }
-        .india-monument-tag {
-            position: absolute;
-            background: rgba(255,153,51,0.9);
-            color: #000;
-            font-size: 0.7rem;
-            font-weight: 700;
-            padding: 2px 8px;
-            border-radius: 12px;
-            border: 1px solid #fff;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-            z-index: 6;
-            animation: monument-pop 2s ease-in-out infinite alternate;
-        }
-        @keyframes monument-pop {
-            0% { transform: scale(1); }
-            100% { transform: scale(1.08); }
-        }
-        .india-map-1 { animation: india-map-fade-1 24s ease-in-out infinite; z-index: 4; }
-        .india-map-2 { animation: india-map-fade-2 24s ease-in-out infinite; z-index: 3; }
-        .india-map-3 { animation: india-map-fade-3 24s ease-in-out infinite; z-index: 2; }
-        .india-map-4 { animation: india-map-fade-4 24s ease-in-out infinite; z-index: 1; }
+        @keyframes india-fade-1 { 0%,100% { opacity: 1; } 20% { opacity: 1; } 25% { opacity: 0; } 95% { opacity: 0; } }
+        @keyframes india-fade-2 { 0%,24% { opacity: 0; } 25% { opacity: 1; } 45% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
+        @keyframes india-fade-3 { 0%,49% { opacity: 0; } 50% { opacity: 1; } 70% { opacity: 1; } 75% { opacity: 0; } 100% { opacity: 0; } }
+        @keyframes india-fade-4 { 0%,74% { opacity: 0; } 75% { opacity: 1; } 95% { opacity: 1; } 100% { opacity: 0; } }
+        @keyframes india-glow { 0%,100% { box-shadow: 0 0 20px rgba(255,153,51,0.3); } 50% { box-shadow: 0 0 40px rgba(19,136,8,0.4); } }
+        .india-map-box { position: relative; width: 100%; max-width: 1200px; margin: 0 auto 20px auto; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 2px solid rgba(255,153,51,0.3); animation: india-glow 4s ease-in-out infinite; background: #0a0e27; }
+        .india-map-box::before { content: ''; position: absolute; inset: 0; border-radius: 16px; padding: 3px; background: linear-gradient(45deg, #FF9933, #FFFFFF, #138808, #FF9933); background-size: 400% 400%; animation: glow-rotate 6s linear infinite; -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; z-index: 10; }
+        .india-map-img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; padding: 8px; box-sizing: border-box; }
+        .india-map-lbl { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 8px 24px; border-radius: 30px; font-size: 1rem; font-weight: 700; letter-spacing: 1px; z-index: 5; border: 1px solid rgba(255,153,51,0.4); white-space: nowrap; }
+        .india-tag { position: absolute; background: rgba(255,153,51,0.9); color: #000; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 12px; border: 1px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.4); z-index: 6; animation: monument-pop 2s ease-in-out infinite alternate; }
+        @keyframes monument-pop { 0% { transform: scale(1); } 100% { transform: scale(1.08); } }
+        .im1 { animation: india-fade-1 24s ease-in-out infinite; z-index: 4; }
+        .im2 { animation: india-fade-2 24s ease-in-out infinite; z-index: 3; }
+        .im3 { animation: india-fade-3 24s ease-in-out infinite; z-index: 2; }
+        .im4 { animation: india-fade-4 24s ease-in-out infinite; z-index: 1; }
         </style>
-        <div class="india-map-slideshow-container" style="aspect-ratio: 4/3;">
-            <!-- Map 1: Political Map with States -->
-            <img class="india-map-frame india-map-1" 
-                src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2e/Political_map_of_India_HI.svg/1024px-Political_map_of_India_HI.svg.png" 
-                alt="India Political Map">
-            <div class="india-map-label india-map-1">🇮🇳 India Political Map — States & UTs</div>
-
-            <!-- Map 2: Physical Map with Mountains & Rivers -->
-            <img class="india-map-frame india-map-2" 
-                src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Physical_Map_of_India.jpg/1024px-Physical_Map_of_India.jpg" 
-                alt="India Physical Map">
-            <div class="india-map-label india-map-2">⛰️ Mountains, Rivers & Peaks</div>
-
-            <!-- Map 3: Monuments & Heritage Sites Overlay -->
-            <img class="india-map-frame india-map-3" 
-                src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/India_Geographic_Map.jpg/1024px-India_Geographic_Map.jpg" 
-                alt="India Monuments Map">
-            <div class="india-map-label india-map-3">🏛️ Famous Monuments & Heritage</div>
-            <!-- Monument tags positioned approximately -->
-            <div class="india-monument-tag india-map-3" style="top: 32%; left: 42%;">🕌 Taj Mahal</div>
-            <div class="india-monument-tag india-map-3" style="top: 22%; left: 28%;">🕍 Golden Temple</div>
-            <div class="india-monument-tag india-map-3" style="top: 55%; left: 48%;">⛩️ Konark Sun Temple</div>
-            <div class="india-monument-tag india-map-3" style="top: 65%; left: 35%;">🗼 Gateway of India</div>
-            <div class="india-monument-tag india-map-3" style="top: 45%; left: 58%;">🏯 Victoria Memorial</div>
-            <div class="india-monument-tag india-map-3" style="top: 72%; left: 45%;">🏛️ Meenakshi Temple</div>
-            <div class="india-monument-tag india-map-3" style="top: 60%; left: 22%;">🕌 Hawa Mahal</div>
-            <div class="india-monument-tag india-map-3" style="top: 38%; left: 55%;">🛕 Mahabodhi Temple</div>
-
-            <!-- Map 4: Simple States Outline -->
-            <img class="india-map-frame india-map-4" 
-                src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Map_of_India.png/1024px-Map_of_India.png" 
-                alt="India Simple Map">
-            <div class="india-map-label india-map-4">🗺️ Simple States Outline</div>
+        <div class="india-map-box" style="aspect-ratio: 4/3;">
+            <img class="india-map-img im1" src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2e/Political_map_of_India_HI.svg/1024px-Political_map_of_India_HI.svg.png" alt="Political">
+            <div class="india-map-lbl im1">🇮🇳 India Political Map — States & UTs</div>
+            <img class="india-map-img im2" src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Physical_Map_of_India.jpg/1024px-Physical_Map_of_India.jpg" alt="Physical">
+            <div class="india-map-lbl im2">⛰️ Mountains, Rivers & Peaks</div>
+            <img class="india-map-img im3" src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/India_Geographic_Map.jpg/1024px-India_Geographic_Map.jpg" alt="Monuments">
+            <div class="india-map-lbl im3">🏛️ Famous Monuments & Heritage</div>
+            <div class="india-tag im3" style="top: 32%; left: 42%;">🕌 Taj Mahal</div>
+            <div class="india-tag im3" style="top: 22%; left: 28%;">🕍 Golden Temple</div>
+            <div class="india-tag im3" style="top: 55%; left: 48%;">⛩️ Konark Sun Temple</div>
+            <div class="india-tag im3" style="top: 65%; left: 35%;">🗼 Gateway of India</div>
+            <div class="india-tag im3" style="top: 45%; left: 58%;">🏯 Victoria Memorial</div>
+            <div class="india-tag im3" style="top: 72%; left: 45%;">🏛️ Meenakshi Temple</div>
+            <div class="india-tag im3" style="top: 60%; left: 22%;">🕌 Hawa Mahal</div>
+            <div class="india-tag im3" style="top: 38%; left: 55%;">🛕 Mahabodhi Temple</div>
+            <img class="india-map-img im4" src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Map_of_India.png/1024px-Map_of_India.png" alt="Simple">
+            <div class="india-map-lbl im4">🗺️ Simple States Outline</div>
         </div>
-        <div style="text-align:center; margin-top:8px; margin-bottom:20px; color:#94a3b8; font-size:0.85rem;">
-            🎬 Maps cycle automatically every 6 seconds • Source: Wikimedia Commons
-        </div>
+        <div style="text-align:center; margin:8px 0 20px 0; color:#94a3b8; font-size:0.85rem;">🎬 Maps cycle every 6 seconds • Source: Wikimedia Commons</div>
         """, unsafe_allow_html=True)
 
         if not NTES_AVAILABLE:
