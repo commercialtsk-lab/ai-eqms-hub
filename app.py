@@ -115,6 +115,7 @@ defaults = {
     'rows_per_page': 25, 'dashboard_sheet': 'EQ', 'adv_filters': {},
     'weather_lat': None, 'weather_lon': None, 'weather_location_name': None,
     'pnr_last_checked': None,
+    'class_val': '',  # Added missing class_val
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -1338,19 +1339,49 @@ def process_passport_image(data):
 # =====================================================================
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
-        bg = "#f8fafc"; card_bg = "rgba(255,255,255,0.85)"; text_color = "#1e293b"; text_secondary = "#64748b"
-        border = "rgba(255,255,255,0.3)"; input_bg = "rgba(255,255,255,0.7)"; accent = "#2563eb"; accent_hover = "#1d4ed8"
-        success = "#16a34a"; danger = "#dc2626"; button_bg = "rgba(255,255,255,0.5)"; button_text = "#1e293b"
-        button_border = "rgba(255,255,255,0.5)"; button_hover_bg = accent; button_hover_text = "white"; button_hover_border = accent
-        number_color = "#2563eb"; table_header_bg = "#1e293b"; table_header_text = "#ffffff"
-        table_alt_row = "rgba(248,250,252,0.6)"; chart_bg = "rgba(0,0,0,0)"
+        bg = "#f8fafc"
+        card_bg = "rgba(255,255,255,0.85)"
+        text_color = "#1e293b"
+        text_secondary = "#64748b"
+        border = "rgba(255,255,255,0.3)"
+        input_bg = "rgba(255,255,255,0.7)"
+        accent = "#2563eb"
+        accent_hover = "#1d4ed8"
+        success = "#16a34a"
+        danger = "#dc2626"
+        button_bg = "rgba(255,255,255,0.5)"
+        button_text = "#1e293b"
+        button_border = "rgba(255,255,255,0.5)"
+        button_hover_bg = accent
+        button_hover_text = "white"
+        button_hover_border = accent
+        number_color = "#2563eb"
+        table_header_bg = "#1e293b"
+        table_header_text = "#ffffff"
+        table_alt_row = "rgba(248,250,252,0.6)"
+        chart_bg = "rgba(0,0,0,0)"
     elif theme == 'Dark':
-        bg = "#0f172a"; card_bg = "rgba(30,41,59,0.85)"; text_color = "#f1f5f9"; text_secondary = "#94a3b8"
-        border = "rgba(51,65,85,0.5)"; input_bg = "rgba(15,23,42,0.7)"; accent = "#60a5fa"; accent_hover = "#93c5fd"
-        success = "#4ade80"; danger = "#f87171"; button_bg = "rgba(51,65,85,0.5)"; button_text = "#f1f5f9"
-        button_border = "rgba(71,85,105,0.5)"; button_hover_bg = accent; button_hover_text = "white"; button_hover_border = accent
-        number_color = "#60a5fa"; table_header_bg = "#2563eb"; table_header_text = "#ffffff"
-        table_alt_row = "rgba(30,41,59,0.6)"; chart_bg = "rgba(0,0,0,0)"
+        bg = "#0f172a"
+        card_bg = "rgba(30,41,59,0.85)"
+        text_color = "#f1f5f9"
+        text_secondary = "#94a3b8"
+        border = "rgba(51,65,85,0.5)"
+        input_bg = "rgba(15,23,42,0.7)"
+        accent = "#60a5fa"
+        accent_hover = "#93c5fd"
+        success = "#4ade80"
+        danger = "#f87171"
+        button_bg = "rgba(51,65,85,0.5)"
+        button_text = "#f1f5f9"
+        button_border = "rgba(71,85,105,0.5)"
+        button_hover_bg = accent
+        button_hover_text = "white"
+        button_hover_border = accent
+        number_color = "#60a5fa"
+        table_header_bg = "#2563eb"
+        table_header_text = "#ffffff"
+        table_alt_row = "rgba(30,41,59,0.6)"
+        chart_bg = "rgba(0,0,0,0)"
     else:
         bg = custom_bg if custom_bg else "#ffffff"
         def is_dark_color(hex_color):
@@ -1363,16 +1394,28 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         is_dark = is_dark_color(bg)
         card_bg = bg if not is_dark else "rgba(30,41,59,0.85)"
         text_color = custom_text if custom_text else ("#f1f5f9" if is_dark else "#1e293b")
-        text_secondary = text_color; border = "#475569" if is_dark else "#e2e8f0"; input_bg = bg
-        accent = "#60a5fa" if is_dark else "#2563eb"; accent_hover = "#93c5fd" if is_dark else "#1d4ed8"
-        success = "#4ade80" if is_dark else "#16a34a"; danger = "#f87171" if is_dark else "#dc2626"
-        button_bg = bg; button_text = text_color; button_border = border; button_hover_bg = accent
-        button_hover_text = "white"; button_hover_border = accent; number_color = accent
-        table_header_bg = "#2563eb" if is_dark else "#1e293b"; table_header_text = "#ffffff"
-        table_alt_row = "rgba(30,41,59,0.6)" if is_dark else "rgba(248,250,252,0.6)"; chart_bg = "rgba(0,0,0,0)"
+        text_secondary = text_color
+        border = "#475569" if is_dark else "#e2e8f0"
+        input_bg = bg
+        accent = "#60a5fa" if is_dark else "#2563eb"
+        accent_hover = "#93c5fd" if is_dark else "#1d4ed8"
+        success = "#4ade80" if is_dark else "#16a34a"
+        danger = "#f87171" if is_dark else "#dc2626"
+        button_bg = bg
+        button_text = text_color
+        button_border = border
+        button_hover_bg = accent
+        button_hover_text = "white"
+        button_hover_border = accent
+        number_color = accent
+        table_header_bg = "#2563eb" if is_dark else "#1e293b"
+        table_header_text = "#ffffff"
+        table_alt_row = "rgba(30,41,59,0.6)" if is_dark else "rgba(248,250,252,0.6)"
+        chart_bg = "rgba(0,0,0,0)"
 
     css = f"""
     <style>
+        /* Hide default elements */
         #MainMenu {{visibility: hidden !important;}}
         footer {{visibility: hidden !important;}}
         header {{visibility: hidden !important;}}
@@ -1380,7 +1423,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .viewerBadge_container__1QSob {{display: none !important;}}
         .stActionButton {{display: none !important;}}
 
-        /* Main container fully transparent to show background */
+        /* Transparent main container */
         .main .block-container {{
             padding-top: 0.5rem !important;
             padding-bottom: 0.5rem !important;
@@ -1388,29 +1431,29 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             min-height: 100vh !important;
             background: transparent !important;
         }}
-        /* All child containers transparent by default */
         .stApp, .stAppViewContainer, .stMain, .stMainBlockContainer, .block-container {{
             background: transparent !important;
         }}
-        /* Make sidebar slightly transparent */
+
+        /* Transparent sidebar with blur */
         [data-testid="stSidebar"] {{
             background: {card_bg} !important;
             backdrop-filter: blur(12px) !important;
             border-right: 1px solid {border} !important;
         }}
-        /* Dataframe/editor with glass effect */
-        div[data-testid="stDataFrame"], div[data-testid="stDataEditor"] {{
+
+        /* Glass effect for dataframes, editors, cards, expanders */
+        div[data-testid="stDataFrame"], div[data-testid="stDataEditor"],
+        .stExpander, .stChatMessage, [data-testid="stMetric"], .action-box, .file-card,
+        .stDataFrame, [data-testid="stDataFrame"], .stDataEditor, [data-testid="stDataEditor"],
+        [data-testid="stDataFrameResizable"], [data-testid="stDataEditorResizable"],
+        .stDataFrame table, .stDataEditor table {{
             background: {card_bg} !important;
             backdrop-filter: blur(8px) !important;
             border: 1px solid {border} !important;
         }}
-        /* Cards and expanders transparent */
-        .stExpander, .stChatMessage, [data-testid="stMetric"], .action-box, .file-card {{
-            background: {card_bg} !important;
-            backdrop-filter: blur(8px) !important;
-            border: 1px solid {border} !important;
-        }}
-        /* Inputs transparent */
+
+        /* Transparent inputs */
         .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea,
         .stSelectbox > div > div > div {{
             background: {input_bg} !important;
@@ -1418,7 +1461,8 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             border: 1px solid {border} !important;
             border-radius: 8px !important;
         }}
-        /* Buttons with glass */
+
+        /* Glass buttons */
         .stButton > button {{
             background: {button_bg} !important;
             backdrop-filter: blur(4px) !important;
@@ -1433,40 +1477,60 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             color: {button_hover_text} !important;
             border-color: {button_hover_border} !important;
         }}
-        /* Fix header, footer, etc. */
+        .stButton > button[kind="primary"] {{
+            background: {accent} !important;
+            color: white !important;
+            border-color: {accent} !important;
+        }}
+        .stButton > button[kind="primary"]:hover {{
+            background: {accent_hover} !important;
+            border-color: {accent_hover} !important;
+        }}
+
+        /* Header with glass */
         header[data-testid="stHeader"] {{
             background: {card_bg} !important;
             backdrop-filter: blur(12px) !important;
             border-bottom: 1px solid {border} !important;
         }}
-        /* Print overrides: remove transparency and background */
-        @media print {{
-            body, .stApp, .stAppViewContainer, .stMain, .block-container,
-            [data-testid="stSidebar"], .stExpander, .stChatMessage,
-            [data-testid="stMetric"], .action-box, .file-card,
-            .stDataFrame, .stDataEditor, .stTextInput input, .stNumberInput input,
-            .stDateInput input, .stTextArea textarea, .stSelectbox > div > div > div,
-            .stButton > button, header[data-testid="stHeader"] {{
-                background: white !important;
-                backdrop-filter: none !important;
-                border-color: #ccc !important;
-                color: black !important;
-            }}
-            .stButton > button {{
-                background: #f0f0f0 !important;
-                color: black !important;
-            }}
+
+        /* Text colors */
+        h1, h2, h3, h4, h5, h6, .stMarkdown p, .stMarkdown div, .stMarkdown span,
+        .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
+        [data-testid="stMetricLabel"], [data-testid="stMetricValue"], .stCaption,
+        label, .stTextInput label, .stSelectbox label, .stDateInput label,
+        .stNumberInput label, .stTextArea label, .stRadio label, .stCheckbox label {{
+            color: {text_color} !important;
         }}
+
+        /* Table headers and cells */
+        .stDataFrame th, .stDataEditor th {{
+            background: {table_header_bg} !important;
+            color: {table_header_text} !important;
+            border-bottom: 2px solid {border} !important;
+            font-weight: 600 !important;
+        }}
+        .stDataFrame tr:nth-child(even) td, .stDataEditor tr:nth-child(even) td {{
+            background: {table_alt_row} !important;
+        }}
+        .stDataFrame td, .stDataEditor td {{
+            text-align: center !important;
+            border: 1px solid {border} !important;
+            color: {text_color} !important;
+        }}
+
         /* Scrollbar */
         ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
         ::-webkit-scrollbar-track {{ background: rgba(0,0,0,0.1); border-radius: 4px; }}
         ::-webkit-scrollbar-thumb {{ background: rgba(255,255,255,0.3); border-radius: 4px; }}
         ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
 
-        /* Other styles as before */
+        /* Status pill */
         .status-pill {{ display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 500; }}
         .status-live {{ background: rgba(63, 185, 80, 0.15); color: {success}; border: 1px solid {success}; animation: live-pulse 2s ease-in-out infinite; }}
         @keyframes live-pulse {{ 0%,100%{{box-shadow:0 0 0 0 rgba(63,185,80,0.4);}} 50%{{box-shadow:0 0 0 8px rgba(63,185,80,0);}} }}
+
+        /* Train count cards */
         .train-count-container {{ display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; margin: 10px 0; }}
         .train-count-card {{
             border: 1px solid {border}; border-radius: 10px; padding: 8px 16px;
@@ -1483,16 +1547,22 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
         .train-total-number {{ color: {success}; font-weight: 800; font-size: 1.5rem; }}
         .train-total-label {{ color: {text_secondary}; font-size: 0.75rem; }}
+
+        /* Weather card */
         .weather-card {{
             background: {card_bg}; border: 1px solid {border}; border-radius: 16px;
             padding: 20px; margin: 10px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
             backdrop-filter: blur(8px);
         }}
+
+        /* Result box */
         .result-box {{
             background: {card_bg}; border: 2px solid {accent}; border-radius: 12px;
             padding: 20px; margin: 15px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             backdrop-filter: blur(8px);
         }}
+
+        /* Footer */
         .pro-footer {{
             color: {text_secondary} !important;
             border-top: 1px solid {border} !important;
@@ -1502,6 +1572,8 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             font-size: 0.85rem !important;
             background: transparent !important;
         }}
+
+        /* Sheet link button */
         .sheet-link-btn {{
             display: inline-block !important; padding: 9px 16px !important;
             background: {button_bg} !important; color: {accent} !important;
@@ -1511,6 +1583,8 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             backdrop-filter: blur(4px);
         }}
         .sheet-link-btn:hover {{ background: {accent} !important; color: white !important; border-color: {accent} !important; }}
+
+        /* Print only */
         .print-only {{ display: none; }}
         @media print {{
             .no-print, header, footer, .stSidebar, .stButton, .stExpander, .stTabs,
@@ -1538,7 +1612,8 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             .print-only tr:nth-child(even) {{ background: #f5f5f5 !important; }}
             body {{ background: white !important; }}
         }}
-        /* Sidebar toggle button style */
+
+        /* Sidebar toggle button */
         .sidebar-toggle-btn {{
             position: fixed !important;
             top: 12px !important;
@@ -1565,40 +1640,74 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .sidebar-toggle-btn.collapsed {{
             background: linear-gradient(135deg, #138808, #0d6e05) !important;
         }}
-        .metric-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s ease; backdrop-filter: blur(8px); }}
+
+        /* Metric card */
+        .metric-card {{
+            background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 16px; text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s ease; backdrop-filter: blur(8px);
+        }}
         .metric-card:hover {{ transform: translateY(-3px); box-shadow: 0 4px 16px rgba(0,0,0,0.1); }}
         .metric-card h3 {{ margin: 0; font-size: 2.2rem; color: {accent}; font-weight: 800; }}
         .metric-card p {{ margin: 4px 0 0 0; color: {text_secondary}; font-size: 0.9rem; font-weight: 500; }}
-        /* Additional glass for popups etc */
-        .stDataFrame, [data-testid="stDataFrame"], .stDataEditor, [data-testid="stDataEditor"],
-        [data-testid="stDataFrameResizable"], [data-testid="stDataEditorResizable"],
-        .stDataFrame table, .stDataEditor table, .stDataFrame th, .stDataEditor th,
-        .stDataFrame td, .stDataEditor td, .stDataEditor input, .stDataEditor textarea {{
-            background: {card_bg} !important;
-            backdrop-filter: blur(8px) !important;
-            color: {text_color} !important;
-            border-color: {border} !important;
+
+        /* File card */
+        .file-card {{
+            background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 14px; margin: 10px 0;
+            backdrop-filter: blur(8px);
         }}
-        /* Ensure text visibility */
-        h1, h2, h3, h4, h5, h6, .stMarkdown p, .stMarkdown div, .stMarkdown span,
-        .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
-        [data-testid="stMetricLabel"], [data-testid="stMetricValue"], .stCaption,
-        label, .stTextInput label, .stSelectbox label, .stDateInput label,
-        .stNumberInput label, .stTextArea label, .stRadio label, .stCheckbox label {{
-            color: {text_color} !important;
-        }}
-        /* Chart background transparent */
+        .file-card-title {{ color: {text_color}; font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }}
+        .file-card-meta {{ color: {text_secondary}; font-size: 0.8rem; margin-bottom: 10px; }}
+
+        /* Plotly chart background */
         .js-plotly-plot .plotly text {{ fill: {text_color} !important; }}
         .js-plotly-plot .plotly .gtitle {{ fill: {text_color} !important; }}
         [data-testid="stMain"] .block-container {{ z-index: 50 !important; position: relative !important; }}
+
         /* Sidebar collapse */
-        [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important; margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important; }}
-        body.sidebar-collapsed [data-testid="stSidebar"] {{ margin-left: -340px !important; opacity: 0 !important; pointer-events: none !important; }}
-        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important; }}
+        [data-testid="stSidebar"] {{
+            display: flex !important; opacity: 1 !important; transform: none !important;
+            min-width: 320px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important;
+            margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important;
+        }}
+        body.sidebar-collapsed [data-testid="stSidebar"] {{
+            margin-left: -340px !important; opacity: 0 !important; pointer-events: none !important;
+        }}
+        body.sidebar-collapsed [data-testid="stMain"] {{
+            margin-left: 0 !important; max-width: 100% !important;
+            transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        }}
         [data-testid="stSidebarCollapseButton"] {{ display: none !important; }}
         [data-testid="collapsedControl"] {{ display: none !important; }}
         button[kind="header"] {{ display: none !important; }}
-        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; }}
+        body.sidebar-collapsed [data-testid="stMain"] {{
+            margin-left: 0 !important; max-width: 100% !important;
+        }}
+
+        /* Marquee */
+        .eqms-marquee-box {{
+            background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808);
+            padding: 10px 0;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            overflow: hidden;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            backdrop-filter: blur(2px);
+        }}
+        .eqms-marquee-box .scroll-text {{
+            display: inline-block;
+            padding-left: 100%;
+            animation: marquee-scroll 25s linear infinite;
+            color: #000000 !important;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            font-size: 15px;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }}
+        @keyframes marquee-scroll {{
+            0% {{ transform: translateX(0); }}
+            100% {{ transform: translateX(-100%); }}
+        }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -1873,7 +1982,7 @@ def main():
     </script>
     """, height=0)
 
-    # Solar System Background with Train Engine and Coaches
+    # Solar System Background with Train Engine and Coaches (full screen)
     bg_html = """
     <style>
     .eqms-bg {
@@ -1898,7 +2007,11 @@ def main():
             70px 650px #fff, 160px 680px #fff, 260px 660px #fff, 360px 700px #fff,
             460px 670px #fff, 560px 710px #fff, 660px 690px #fff, 740px 720px #fff,
             100px 750px #fff, 200px 780px #fff, 300px 760px #fff, 400px 790px #fff,
-            500px 770px #fff, 600px 800px #fff, 700px 740px #fff, 770px 790px #fff;
+            500px 770px #fff, 600px 800px #fff, 700px 740px #fff, 770px 790px #fff,
+            850px 120px #fff, 920px 200px #fff, 1050px 90px #fff, 1150px 300px #fff,
+            1250px 180px #fff, 1350px 400px #fff, 1450px 250px #fff, 1550px 500px #fff,
+            80px 850px #fff, 180px 920px #fff, 280px 880px #fff, 380px 950px #fff,
+            480px 910px #fff, 580px 970px #fff, 680px 930px #fff, 780px 990px #fff;
         animation: twinkle-stars 3s ease-in-out infinite alternate;
     }
     @keyframes twinkle-stars {
@@ -2504,8 +2617,8 @@ def main():
                 st.rerun()
 
             if class_col_idx is not None:
-                class_input = st.text_input("Class (partial)", value=st.session_state.get('class_val', ''), key="class_filter_input")
-                if class_input != st.session_state.get('class_val', ''):
+                class_input = st.text_input("Class (partial)", value=st.session_state.class_val, key="class_filter_input")
+                if class_input != st.session_state.class_val:
                     st.session_state.class_val = class_input
                     st.session_state.current_page = 1
                     st.rerun()
@@ -2573,32 +2686,6 @@ def main():
 
     # Top bar with marquee
     st.markdown("""
-    <style>
-    .eqms-marquee-box { 
-        background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); 
-        padding: 10px 0; 
-        border-radius: 8px; 
-        margin-bottom: 12px;
-        overflow: hidden;
-        white-space: nowrap;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-        backdrop-filter: blur(2px);
-    }
-    .eqms-marquee-box .scroll-text {
-        display: inline-block;
-        padding-left: 100%;
-        animation: marquee-scroll 25s linear infinite;
-        color: #000000 !important;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-        font-size: 15px;
-        font-family: 'Segoe UI', Arial, sans-serif;
-    }
-    @keyframes marquee-scroll {
-        0% { transform: translateX(0); }
-        100% { transform: translateX(-100%); }
-    }
-    </style>
     <div class="eqms-marquee-box">
         <span class="scroll-text">🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save</span>
     </div>
@@ -3679,6 +3766,37 @@ def main():
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
 
+            # Detect weather condition for background
+            weather_condition = str(data.get('weather', '')).lower()
+            temp = data.get('temp', 25)
+            is_night = False
+            try:
+                sunrise_ts = data.get('sunrise')
+                sunset_ts = data.get('sunset')
+                if sunrise_ts and sunset_ts:
+                    now_ts = datetime.now().timestamp()
+                    is_night = not (sunrise_ts <= now_ts <= sunset_ts)
+            except:
+                pass
+
+            # Choose sky class
+            sky_class = "w-sunny"
+            if 'rain' in weather_condition or 'drizz' in weather_condition:
+                sky_class = "w-rainy"
+            elif 'cloud' in weather_condition:
+                sky_class = "w-cloudy"
+            elif 'thunder' in weather_condition or 'storm' in weather_condition:
+                sky_class = "w-thunder"
+            elif 'snow' in weather_condition or 'frost' in weather_condition or 'freez' in weather_condition:
+                sky_class = "w-snowy"
+            elif 'mist' in weather_condition or 'fog' in weather_condition or 'haz' in weather_condition:
+                sky_class = "w-foggy"
+            elif is_night:
+                sky_class = "w-night"
+            elif temp > 30:
+                sky_class = "w-hot"
+
+            # Build main weather card with dynamic class
             weather_html = f"""
             <style>
             @keyframes weather-float {{
@@ -3777,38 +3895,7 @@ def main():
             weather_html += "</div>"
             st.markdown(weather_html, unsafe_allow_html=True)
 
-            # Detailed Animated Weather Scene (Background according to weather)
-            # Detect weather condition
-            weather_condition = str(data.get('weather', '')).lower()
-            temp = data.get('temp', 25)
-            is_night = False
-            try:
-                sunrise_ts = data.get('sunrise')
-                sunset_ts = data.get('sunset')
-                if sunrise_ts and sunset_ts:
-                    now_ts = datetime.now().timestamp()
-                    is_night = not (sunrise_ts <= now_ts <= sunset_ts)
-            except:
-                pass
-
-            # Determine class for background
-            sky_class = "w-sunny"
-            if 'rain' in weather_condition or 'drizz' in weather_condition:
-                sky_class = "w-rainy"
-            elif 'cloud' in weather_condition:
-                sky_class = "w-cloudy"
-            elif 'thunder' in weather_condition or 'storm' in weather_condition:
-                sky_class = "w-thunder"
-            elif 'snow' in weather_condition or 'frost' in weather_condition or 'freez' in weather_condition:
-                sky_class = "w-snowy"
-            elif 'mist' in weather_condition or 'fog' in weather_condition or 'haz' in weather_condition:
-                sky_class = "w-foggy"
-            elif is_night:
-                sky_class = "w-night"
-            elif temp > 30:
-                sky_class = "w-hot"
-
-            # Build enhanced scene with more elements
+            # Detailed Animated Weather Scene (background reflects weather)
             scene_html = f"""
             <style>
             .w-scene-wrap {{
@@ -3889,10 +3976,9 @@ def main():
                 scene_html += '<div class="w-sun" style="opacity:0.35;"></div>'
                 for i in range(5):
                     scene_html += f'<div class="w-cloud" style="top:{12+(i%2)*18}px;left:-100px;width:{70+(i%2)*30}px;height:{28+(i%2)*10}px;animation-duration:{20+i*6}s;animation-delay:{i*4}s;"><div style="position:absolute;top:-{12+(i%2)*6}px;left:{14+(i%2)*6}px;width:{30+(i%2)*12}px;height:{30+(i%2)*12}px;"></div><div style="position:absolute;top:-{8+(i%2)*4}px;left:{36+(i%2)*10}px;width:{22+(i%2)*8}px;height:{22+(i%2)*8}px;"></div></div>'
-            elif 'clear' in weather_condition or 'sun' in weather_condition or (is_night is False and ('clear' in weather_condition or 'sun' in weather_condition)):
+            elif 'clear' in weather_condition or 'sun' in weather_condition:
                 if is_night:
                     scene_html += '<div class="w-moon"></div>'
-                    # stars
                     for i in range(20):
                         scene_html += f'<div style="position:absolute;top:{5+(i*4)%70}%;left:{3+(i*7)%90}%;width:3px;height:3px;background:white;border-radius:50%;box-shadow:0 0 6px rgba(255,255,255,0.8);animation:twinkle-stars {2+(i%3)}s ease-in-out infinite alternate;"></div>'
                 else:
@@ -3922,7 +4008,6 @@ def main():
             elif temp > 30:
                 scene_html += '<div class="w-sun"></div>'
                 scene_html += '<div class="w-haze"></div>'
-                # heat waves effect
                 for i in range(5):
                     scene_html += f'<div style="position:absolute;bottom:{20+i*8}%;left:10%;width:80%;height:4px;background:linear-gradient(90deg,transparent,rgba(255,200,100,0.3),transparent);border-radius:50%;animation:heat-wave {2+i*0.5}s ease-in-out infinite;"></div>'
             else:
@@ -4036,4 +4121,3 @@ def main():
 # =====================================================================
 if __name__ == "__main__":
     main()
-
