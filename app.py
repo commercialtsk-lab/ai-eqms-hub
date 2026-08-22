@@ -1554,7 +1554,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             color: {number_color}; font-weight: 800; font-size: 1.8rem; line-height: 1.2; letter-spacing: -0.5px;
         }}
         .train-count-badge {{
-            display: inline-block; background: {accent}; color: white; font-size: 0.9rem;
+            display: inline-block; background: {accent}; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6); font-size: 0.9rem;
             font-weight: 700; padding: 2px 10px; border-radius: 20px; margin-top: 2px;
         }}
         .train-total-card {{
@@ -2386,15 +2386,15 @@ def main():
             }
             .w-rain-drop {
                 position: absolute; width: 1.5px;
-                background: linear-gradient(180deg, transparent, #64b5f6, #90caf9);
-                border-radius: 0 0 2px 2px; opacity: 0.6;
+                background: linear-gradient(180deg, rgba(100,181,246,0), rgba(100,181,246,0.9), rgba(144,202,249,0.7));
+                border-radius: 0 0 1px 1px; opacity: 0.8;
                 animation: w-rain-fall linear infinite;
+                box-shadow: 0 0 2px rgba(100,181,246,0.5);
             }
             .w-dark-cloud {
-                position: absolute; background: #37474f;
-                border-radius: 50px; opacity: 0.85;
+                position: absolute; background: linear-gradient(180deg, #455a64, #37474f);
+                border-radius: 50px; opacity: 0.9;
                 animation: w-cloud-drift linear infinite;
-                filter: blur(2px);
             }
             .w-lightning-flash {
                 position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -2405,14 +2405,14 @@ def main():
             .w-weather-info {
                 position: absolute; top: 50%; left: 50%;
                 transform: translate(-50%, -50%);
-                text-align: center; color: white;
+                text-align: center; color: #000000;
                 font-family: 'Segoe UI', Arial, sans-serif;
-                text-shadow: 0 4px 20px rgba(0,0,0,0.8);
+                text-shadow: 0 2px 8px rgba(255,255,255,0.9), 0 0 20px rgba(255,255,255,0.5);
                 pointer-events: none;
             }
             .w-weather-info .w-city { font-size: 3.5rem; font-weight: 800; letter-spacing: 2px; }
             .w-weather-info .w-temp { font-size: 8rem; font-weight: 900; line-height: 1; margin: 10px 0; }
-            .w-weather-info .w-desc { font-size: 1.8rem; opacity: 0.9; text-transform: capitalize; }
+            .w-weather-info .w-desc { font-size: 1.8rem; font-weight: 600; text-transform: capitalize; }
             .w-ripple {
                 position: absolute; bottom: 0; left: 0; width: 100%; height: 120px;
                 background: linear-gradient(180deg, transparent, rgba(100,181,246,0.15));
@@ -2564,27 +2564,26 @@ def main():
                 to { transform: translateX(calc(100vw + 250px)); }
             }
             .w-thunder-bolt {
-                position: absolute; top: 0; left: 40%; width: 4px; height: 60vh;
-                background: linear-gradient(180deg, transparent, #fff, #ffeb3b, transparent);
-                filter: blur(1px) drop-shadow(0 0 20px #ffeb3b) drop-shadow(0 0 40px #ff9800);
+                position: absolute; top: 0; left: 40%; width: 3px; height: 60vh;
+                background: linear-gradient(180deg, transparent, #fff, #ffeb3b, #fff, transparent);
+                filter: drop-shadow(0 0 10px #ffeb3b) drop-shadow(0 0 25px #ff9800);
                 animation: w-thunder-bolt 3s ease-in-out infinite;
                 transform: rotate(15deg);
                 opacity: 0;
             }
             .w-thunder-bolt-2 {
-                position: absolute; top: 0; left: 65%; width: 3px; height: 50vh;
-                background: linear-gradient(180deg, transparent, #fff, #90caf9, transparent);
-                filter: blur(1px) drop-shadow(0 0 15px #90caf9) drop-shadow(0 0 30px #42a5f5);
+                position: absolute; top: 0; left: 65%; width: 2px; height: 50vh;
+                background: linear-gradient(180deg, transparent, #fff, #90caf9, #fff, transparent);
+                filter: drop-shadow(0 0 8px #90caf9) drop-shadow(0 0 20px #42a5f5);
                 animation: w-thunder-bolt 4s ease-in-out infinite;
                 animation-delay: 1.5s;
                 transform: rotate(-10deg);
                 opacity: 0;
             }
             .w-storm-cloud {
-                position: absolute; background: #263238;
-                border-radius: 60px; opacity: 0.9;
+                position: absolute; background: linear-gradient(180deg, #37474f, #263238);
+                border-radius: 60px; opacity: 0.95;
                 animation: w-cloud-drift linear infinite;
-                filter: blur(3px);
             }
             .w-rain-drop {
                 position: absolute; width: 2px;
@@ -2595,14 +2594,14 @@ def main():
             .w-weather-info {
                 position: absolute; top: 50%; left: 50%;
                 transform: translate(-50%, -50%);
-                text-align: center; color: white;
+                text-align: center; color: #000000;
                 font-family: 'Segoe UI', Arial, sans-serif;
-                text-shadow: 0 4px 20px rgba(0,0,0,0.9), 0 0 40px rgba(255,235,59,0.3);
+                text-shadow: 0 2px 8px rgba(255,255,255,0.9), 0 0 20px rgba(255,255,255,0.5);
                 pointer-events: none;
             }
             .w-weather-info .w-city { font-size: 3.5rem; font-weight: 800; letter-spacing: 2px; }
             .w-weather-info .w-temp { font-size: 8rem; font-weight: 900; line-height: 1; margin: 10px 0; }
-            .w-weather-info .w-desc { font-size: 1.8rem; opacity: 0.9; text-transform: capitalize; }
+            .w-weather-info .w-desc { font-size: 1.8rem; font-weight: 600; text-transform: capitalize; }
             </style>
             <div class="weather-bg-full">
                 <div class="w-thunder-bolt"></div>
@@ -2700,16 +2699,15 @@ def main():
                 to { transform: translateX(calc(100vw + 100px)); }
             }
             .w-snowflake {
-                position: absolute; color: white;
+                position: absolute; color: #ffffff;
                 animation: w-snow-fall linear infinite;
-                text-shadow: 0 0 8px rgba(255,255,255,0.9), 0 0 16px rgba(144,202,249,0.5);
+                text-shadow: 0 0 4px rgba(255,255,255,0.8);
                 pointer-events: none;
             }
             .w-snow-cloud {
-                position: absolute; background: rgba(255,255,255,0.7);
-                border-radius: 50px; opacity: 0.6;
+                position: absolute; background: rgba(255,255,255,0.5);
+                border-radius: 50px; opacity: 0.5;
                 animation: w-snow-drift linear infinite;
-                filter: blur(4px);
             }
             .w-snow-ground {
                 position: absolute; bottom: 0; left: 0; width: 100%; height: 80px;
@@ -2719,14 +2717,14 @@ def main():
             .w-weather-info {
                 position: absolute; top: 50%; left: 50%;
                 transform: translate(-50%, -50%);
-                text-align: center; color: #1a237e;
+                text-align: center; color: #000000;
                 font-family: 'Segoe UI', Arial, sans-serif;
-                text-shadow: 0 2px 10px rgba(255,255,255,0.8);
+                text-shadow: 0 2px 8px rgba(255,255,255,0.9), 0 0 20px rgba(255,255,255,0.5);
                 pointer-events: none;
             }
             .w-weather-info .w-city { font-size: 3.5rem; font-weight: 800; letter-spacing: 2px; }
             .w-weather-info .w-temp { font-size: 8rem; font-weight: 900; line-height: 1; margin: 10px 0; }
-            .w-weather-info .w-desc { font-size: 1.8rem; opacity: 0.8; text-transform: capitalize; }
+            .w-weather-info .w-desc { font-size: 1.8rem; font-weight: 600; text-transform: capitalize; }
             </style>
             <div class="weather-bg-full">
                 <div class="w-snow-cloud" style="top:5%;width:300px;height:100px;animation-duration:50s;"></div>
@@ -2762,25 +2760,25 @@ def main():
                 position: absolute; width: 200%; height: 150px;
                 background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
                 animation: w-fog-drift linear infinite;
-                filter: blur(15px);
+                filter: blur(4px);
             }
             .w-fog-layer-rev {
                 position: absolute; width: 200%; height: 120px;
                 background: linear-gradient(90deg, transparent, rgba(236,239,241,0.4), transparent);
                 animation: w-fog-drift-rev linear infinite;
-                filter: blur(20px);
+                filter: blur(4px);
             }
             .w-weather-info {
                 position: absolute; top: 50%; left: 50%;
                 transform: translate(-50%, -50%);
-                text-align: center; color: #37474f;
+                text-align: center; color: #000000;
                 font-family: 'Segoe UI', Arial, sans-serif;
-                text-shadow: 0 2px 10px rgba(255,255,255,0.6);
+                text-shadow: 0 2px 8px rgba(255,255,255,0.9), 0 0 20px rgba(255,255,255,0.5);
                 pointer-events: none;
             }
             .w-weather-info .w-city { font-size: 3.5rem; font-weight: 800; letter-spacing: 2px; }
             .w-weather-info .w-temp { font-size: 8rem; font-weight: 900; line-height: 1; margin: 10px 0; }
-            .w-weather-info .w-desc { font-size: 1.8rem; opacity: 0.8; text-transform: capitalize; }
+            .w-weather-info .w-desc { font-size: 1.8rem; font-weight: 600; text-transform: capitalize; }
             </style>
             <div class="weather-bg-full">
                 <div class="w-fog-layer" style="top:10%;animation-duration:25s;"></div>
@@ -2814,10 +2812,9 @@ def main():
                 50% { opacity: 0.5; transform: scale(1.1); }
             }
             .w-cloudy-cloud {
-                position: absolute; background: rgba(255,255,255,0.5);
-                border-radius: 60px; opacity: 0.7;
+                position: absolute; background: rgba(255,255,255,0.4);
+                border-radius: 60px; opacity: 0.6;
                 animation: w-cloud-drift linear infinite;
-                filter: blur(5px);
             }
             .w-cloudy-sun {
                 position: absolute; top: 8%; right: 15%;
@@ -2829,14 +2826,14 @@ def main():
             .w-weather-info {
                 position: absolute; top: 50%; left: 50%;
                 transform: translate(-50%, -50%);
-                text-align: center; color: white;
+                text-align: center; color: #000000;
                 font-family: 'Segoe UI', Arial, sans-serif;
-                text-shadow: 0 4px 20px rgba(0,0,0,0.6);
+                text-shadow: 0 2px 8px rgba(255,255,255,0.9), 0 0 20px rgba(255,255,255,0.5);
                 pointer-events: none;
             }
             .w-weather-info .w-city { font-size: 3.5rem; font-weight: 800; letter-spacing: 2px; }
             .w-weather-info .w-temp { font-size: 8rem; font-weight: 900; line-height: 1; margin: 10px 0; }
-            .w-weather-info .w-desc { font-size: 1.8rem; opacity: 0.9; text-transform: capitalize; }
+            .w-weather-info .w-desc { font-size: 1.8rem; font-weight: 600; text-transform: capitalize; }
             </style>
             <div class="weather-bg-full">
                 <div class="w-cloudy-sun"></div>
@@ -2896,17 +2893,16 @@ def main():
             }
             .w-sunny-ray {
                 position: absolute; top: 8%; right: 12%;
-                width: 300px; height: 4px;
-                background: linear-gradient(90deg, transparent, rgba(255,235,59,0.6), transparent);
+                width: 300px; height: 3px;
+                background: linear-gradient(90deg, transparent, rgba(255,235,59,0.7), rgba(255,235,59,0.3), transparent);
                 transform-origin: center;
                 animation: w-sun-ray-spin 20s linear infinite;
                 margin-top: 68px; margin-right: -150px;
             }
             .w-sunny-cloud {
-                position: absolute; background: rgba(255,255,255,0.7);
-                border-radius: 50px; opacity: 0.8;
+                position: absolute; background: rgba(255,255,255,0.5);
+                border-radius: 50px; opacity: 0.7;
                 animation: w-cloud-drift linear infinite;
-                filter: blur(2px);
             }
             .w-bird {
                 position: absolute; font-size: 18px; opacity: 0.6;
@@ -2915,14 +2911,14 @@ def main():
             .w-weather-info {
                 position: absolute; top: 50%; left: 50%;
                 transform: translate(-50%, -50%);
-                text-align: center; color: white;
+                text-align: center; color: #000000;
                 font-family: 'Segoe UI', Arial, sans-serif;
-                text-shadow: 0 4px 20px rgba(0,0,0,0.4);
+                text-shadow: 0 2px 8px rgba(255,255,255,0.9), 0 0 20px rgba(255,255,255,0.5);
                 pointer-events: none;
             }
             .w-weather-info .w-city { font-size: 3.5rem; font-weight: 800; letter-spacing: 2px; }
             .w-weather-info .w-temp { font-size: 8rem; font-weight: 900; line-height: 1; margin: 10px 0; }
-            .w-weather-info .w-desc { font-size: 1.8rem; opacity: 0.95; text-transform: capitalize; }
+            .w-weather-info .w-desc { font-size: 1.8rem; font-weight: 600; text-transform: capitalize; }
             </style>
             <div class="weather-bg-full">
                 <div class="w-sunny-sun"></div>
@@ -3276,7 +3272,7 @@ def main():
                         setTimeout(function(){ window.parent.document.body.removeChild(iframe); }, 2000);
                     }, 300);
                 })();
-            " style="display: block; width: 100%; padding: 10px 16px; background: #2563eb; color: white; text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT Sheet</button>
+            " style="display: block; width: 100%; padding: 10px 16px; background: #2563eb; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6); text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT Sheet</button>
         </div>
         """, height=50)
 
@@ -3527,6 +3523,8 @@ def main():
         overflow: hidden;
         white-space: nowrap;
         box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
     }
     .eqms-marquee-box .scroll-text {
         display: inline-block;
@@ -3540,6 +3538,11 @@ def main():
         font-size: 15px;
         font-family: 'Segoe UI', Arial, sans-serif;
         text-shadow: none !important;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        transform: translateZ(0);
+        backface-visibility: hidden;
+        will-change: transform;
     }
     @keyframes marquee-scroll {
         0% { transform: translateX(0); }
@@ -3896,7 +3899,7 @@ def main():
                             doc.close();
                             setTimeout(function(){ iframe.contentWindow.focus(); iframe.contentWindow.print(); setTimeout(function(){ window.parent.document.body.removeChild(iframe); }, 2000); }, 300);
                         })();
-                    " style="display: block; width: 100%; padding: 9px 16px; background: #2563eb; color: white; text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 1rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT</button>
+                    " style="display: block; width: 100%; padding: 9px 16px; background: #2563eb; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6); text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 1rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT</button>
                 </div>
                 """, height=45)
             st.markdown('</div>', unsafe_allow_html=True)
@@ -4085,7 +4088,7 @@ def main():
         if train_col_dash and column_has_data(dash_df, train_col_dash):
             unique_trains = dash_df[train_col_dash].dropna().astype(str).str.strip().ne('').nunique()
             with kcol2: 
-                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#11998e,#38ef7d); color: white;"><h3 style="color: white;">{unique_trains}</h3><p style="color: rgba(255,255,255,0.9);">Unique Trains</p></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#11998e,#38ef7d); color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);"><h3 style="color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);">{unique_trains}</h3><p style="color: rgba(255,255,255,0.9);">Unique Trains</p></div>', unsafe_allow_html=True)
         else:
             with kcol2: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Unique Trains</p></div>', unsafe_allow_html=True)
@@ -4094,7 +4097,7 @@ def main():
         if vip_col_dash and column_has_data(dash_df, vip_col_dash):
             vip_count = dash_df[vip_col_dash].astype(str).str.strip().ne('').sum()
             with kcol3: 
-                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#f093fb,#f5576c); color: white;"><h3 style="color: white;">{vip_count}</h3><p style="color: rgba(255,255,255,0.9);">VIP Records</p></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#f093fb,#f5576c); color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);"><h3 style="color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);">{vip_count}</h3><p style="color: rgba(255,255,255,0.9);">VIP Records</p></div>', unsafe_allow_html=True)
         else:
             with kcol3: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>VIP Records</p></div>', unsafe_allow_html=True)
@@ -4105,7 +4108,7 @@ def main():
             class_counts = class_counts[class_counts != ''].value_counts()
             top_class = class_counts.index[0] if len(class_counts) > 0 else "N/A"
             with kcol4: 
-                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#4facfe,#00f2fe); color: white;"><h3 style="color: white;">{top_class}</h3><p style="color: rgba(255,255,255,0.9);">Top Class</p></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#4facfe,#00f2fe); color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);"><h3 style="color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);">{top_class}</h3><p style="color: rgba(255,255,255,0.9);">Top Class</p></div>', unsafe_allow_html=True)
         else:
             with kcol4: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Top Class</p></div>', unsafe_allow_html=True)
@@ -4114,7 +4117,7 @@ def main():
         if doj_col_dash and column_has_data(dash_df, doj_col_dash):
             upcoming = sum(1 for _, r in dash_df.iterrows() if not is_expired(r.get(doj_col_dash, '')))
             with kcol5: 
-                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#fa709a,#fee140); color: white;"><h3 style="color: white;">{upcoming}</h3><p style="color: rgba(255,255,255,0.9);">Upcoming</p></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#fa709a,#fee140); color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);"><h3 style="color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);">{upcoming}</h3><p style="color: rgba(255,255,255,0.9);">Upcoming</p></div>', unsafe_allow_html=True)
         else:
             with kcol5: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Upcoming</p></div>', unsafe_allow_html=True)
@@ -4641,8 +4644,8 @@ def main():
                 50% {{ transform: scale(1.15); opacity: 1; }}
             }}
             .weather-main-card {{
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                border-radius: 24px; padding: 30px; color: white;
+                background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+                border-radius: 24px; padding: 30px; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);
                 box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
                 animation: weather-float 4s ease-in-out infinite, weather-glow 3s ease-in-out infinite;
                 position: relative; overflow: hidden;
@@ -4756,7 +4759,7 @@ def main():
             .w-lightning { position: absolute; top: 0; left: 0; width: 100%; height: 100%; animation: w-lightning 4s ease-in-out infinite; }
 
             @keyframes w-snow-fall { from{transform:translateY(-20px) rotate(0deg);opacity:0;} 10%{opacity:1;} 90%{opacity:1;} to{transform:translateY(240px) rotate(360deg);opacity:0;} }
-            .w-snow { position: absolute; color: white; font-size: 13px; animation: w-snow-fall linear infinite; text-shadow: 0 0 4px rgba(255,255,255,0.8); }
+            .w-snow { position: absolute; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6); font-size: 13px; animation: w-snow-fall linear infinite; text-shadow: 0 0 4px rgba(255,255,255,0.8); }
 
             @keyframes w-fog-drift { from{transform:translateX(-50%);} to{transform:translateX(0%);} }
             .w-fog { position: absolute; width: 200%; height: 50px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent); animation: w-fog-drift linear infinite; }
@@ -4856,8 +4859,8 @@ def main():
                                 50% {{ transform: translateY(-5px); }}
                             }}
                             .forecast-card-{idx} {{
-                                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                                border-radius: 20px; padding: 18px; text-align: center; color: white;
+                                background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+                                border-radius: 20px; padding: 18px; text-align: center; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);
                                 box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
                                 animation: forecast-bounce 3s ease-in-out infinite;
                                 animation-delay: {idx * 0.3}s;
