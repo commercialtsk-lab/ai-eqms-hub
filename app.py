@@ -1743,17 +1743,17 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
 
-        /* Weather Input Stamp Style - BLACK TEXT */
+        /* Weather Input Stamp Style - WHITE TEXT on LIGHT BLUE TRANSPARENT */
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input {{
-            background-color: rgba(255, 255, 255, 0.95) !important;
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
-            border: 2px solid rgba(0, 0, 0, 0.2) !important;
+            background: rgba(173, 216, 230, 0.25) !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            border: 2px solid rgba(255, 255, 255, 0.3) !important;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
             font-weight: 600 !important;
-            backdrop-filter: blur(10px) !important;
-            -webkit-backdrop-filter: blur(10px) !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
             border-radius: 10px !important;
             padding: 6px 14px !important;
             font-size: 0.95rem !important;
@@ -1761,10 +1761,10 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
-            color: #000000 !important;
+            color: #ffffff !important;
             font-weight: 700 !important;
-            text-shadow: none !important;
-            -webkit-text-fill-color: #000000 !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+            -webkit-text-fill-color: #ffffff !important;
             font-size: 0.95rem !important;
         }}
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) > div > div,
@@ -1851,7 +1851,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             background: transparent !important;
         }}
         .weather-input-wrapper {{
-            background: linear-gradient(135deg, rgba(255,153,51,0.15), rgba(255,255,255,0.1), rgba(19,136,8,0.15)) !important;
+            background: rgba(173, 216, 230, 0.15) !important;
             border-radius: 16px !important;
             padding: 12px 16px !important;
             border: 1px solid rgba(255,255,255,0.2) !important;
@@ -2070,8 +2070,8 @@ def render_audio_controls(current_scene):
     scene_map = {
         "📋 Data Table": "solar",
         "📊 Dashboard": "dashboard",
-        "💬 Chat": "solar",
-        "🚂 Railway": "solar",
+        "💬 Chat": "ocean",
+        "🚂 Railway": "railway",
         "🌤️ Weather": "weather-sunny"
     }
     scene = scene_map.get(current_scene, "solar")
@@ -2170,6 +2170,8 @@ def render_audio_controls(current_scene):
                 switch(scene) {{
                     case 'solar': this.playSolar(); break;
                     case 'dashboard': this.playDashboard(); break;
+                    case 'ocean': this.playOcean(); break;
+                    case 'railway': this.playRailway(); break;
                     case 'weather-rain': this.playRain(); break;
                     case 'weather-thunder': this.playThunder(); break;
                     case 'weather-sunny': this.playSunny(); break;
@@ -2400,6 +2402,117 @@ def render_audio_controls(current_scene):
                 src.start();
                 this.nodes.fog = src;
             }}
+
+            playOcean() {{
+                var self = this;
+                // Deep underwater rumble (brown noise, very low)
+                var noise = this.ctx.createBufferSource();
+                noise.buffer = this.noiseBuffer();
+                noise.loop = true;
+                var noiseFilter = this.ctx.createBiquadFilter();
+                noiseFilter.type = 'lowpass';
+                noiseFilter.frequency.value = 120;
+                var noiseGain = this.ctx.createGain();
+                noiseGain.gain.value = 0.25;
+                noise.connect(noiseFilter);
+                noiseFilter.connect(noiseGain);
+                noiseGain.connect(this.master);
+                noise.start();
+                this.nodes.oceanNoise = noise;
+
+                // Gentle water swish (sine LFO modulated)
+                var swish = this.ctx.createOscillator();
+                swish.type = 'sine';
+                swish.frequency.value = 0.18;
+                var swishGain = this.ctx.createGain();
+                swishGain.gain.value = 0.12;
+                swish.connect(swishGain);
+                swishGain.connect(this.master);
+                swish.start();
+                this.nodes.swish = swish;
+
+                // Occasional bubble pops
+                var bubblePop = function() {{
+                    if (self.scene !== 'ocean') return;
+                    var t = self.ctx.currentTime;
+                    var osc = self.ctx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(600 + Math.random() * 400, t);
+                    osc.frequency.exponentialRampToValueAtTime(200, t + 0.08);
+                    var g = self.ctx.createGain();
+                    g.gain.setValueAtTime(0.06, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+                    osc.connect(g);
+                    g.connect(self.master);
+                    osc.start(t);
+                    osc.stop(t + 0.12);
+                    self._chirpTimeout = setTimeout(bubblePop, 800 + Math.random() * 2500);
+                }};
+                bubblePop();
+            }}
+
+            playRailway() {{
+                var self = this;
+                // Steam engine chuff-chuff rhythm
+                var chuff = function() {{
+                    if (self.scene !== 'railway') return;
+                    var t = self.ctx.currentTime;
+                    // Chuff 1
+                    var osc1 = self.ctx.createOscillator();
+                    osc1.type = 'sawtooth';
+                    osc1.frequency.value = 55 + Math.random() * 10;
+                    var g1 = self.ctx.createGain();
+                    g1.gain.setValueAtTime(0.2, t);
+                    g1.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+                    osc1.connect(g1);
+                    g1.connect(self.master);
+                    osc1.start(t);
+                    osc1.stop(t + 0.15);
+                    // Chuff 2
+                    var osc2 = self.ctx.createOscillator();
+                    osc2.type = 'sawtooth';
+                    osc2.frequency.value = 50 + Math.random() * 8;
+                    var g2 = self.ctx.createGain();
+                    g2.gain.setValueAtTime(0.18, t + 0.25);
+                    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+                    osc2.connect(g2);
+                    g2.connect(self.master);
+                    osc2.start(t + 0.25);
+                    osc2.stop(t + 0.4);
+                    // Whistle occasionally
+                    if (Math.random() < 0.08) {{
+                        var wh = self.ctx.createOscillator();
+                        wh.type = 'triangle';
+                        wh.frequency.setValueAtTime(440, t + 0.5);
+                        wh.frequency.linearRampToValueAtTime(520, t + 0.7);
+                        wh.frequency.linearRampToValueAtTime(440, t + 0.9);
+                        var wg = self.ctx.createGain();
+                        wg.gain.setValueAtTime(0.15, t + 0.5);
+                        wg.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+                        wh.connect(wg);
+                        wg.connect(self.master);
+                        wh.start(t + 0.5);
+                        wh.stop(t + 1.2);
+                    }}
+                    self._chirpTimeout = setTimeout(chuff, 900 + Math.random() * 400);
+                }};
+                chuff();
+
+                // Track rumble (continuous low noise)
+                var trackNoise = this.ctx.createBufferSource();
+                trackNoise.buffer = this.noiseBuffer();
+                trackNoise.loop = true;
+                var trackFilter = this.ctx.createBiquadFilter();
+                trackFilter.type = 'lowpass';
+                trackFilter.frequency.value = 200;
+                var trackGain = this.ctx.createGain();
+                trackGain.gain.value = 0.08;
+                trackNoise.connect(trackFilter);
+                trackFilter.connect(trackGain);
+                trackGain.connect(this.master);
+                trackNoise.start();
+                this.nodes.trackNoise = trackNoise;
+            }}
         }}
 
         if (!P.eqmsSoundEngine) {{
@@ -2409,7 +2522,7 @@ def render_audio_controls(current_scene):
         var slider = document.getElementById('eqms-vol');
         var status = document.getElementById('eqms-sound-status');
 
-        var savedVol = P.eqmsVolume || 0;
+        var savedVol = P.eqmsVolume !== undefined ? P.eqmsVolume : 15;
         slider.value = savedVol;
         if (savedVol > 0) {{
             status.textContent = 'Scene: {scene} | Vol: ' + savedVol + '%';
@@ -2551,195 +2664,31 @@ EARTH_BG_HTML = """
 # =====================================================================
 # Ocean Background for Chat View
 # =====================================================================
-OCEAN_BG_HTML = """
+CHAT_VIDEO_BG_HTML = """
 <style>
-.ocean-bg-scene {
+.chat-video-bg {
     position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
     z-index: -1; pointer-events: none; overflow: hidden;
-    background: linear-gradient(180deg, #006994 0%, #005073 25%, #00334e 50%, #001a2e 75%, #000d1a 100%);
 }
-.ocean-surface {
-    position: absolute; top: 0; left: 0; width: 100%; height: 15%;
-    background: linear-gradient(180deg, #4fc3f7 0%, #29b6f6 40%, #0288d1 80%, transparent 100%);
-    opacity: 0.4;
-    animation: ocean-surface-shimmer 3s ease-in-out infinite alternate;
+.chat-video-bg video {
+    position: absolute; top: 50%; left: 50%;
+    min-width: 100%; min-height: 100%;
+    width: auto; height: auto;
+    transform: translate(-50%, -50%);
+    object-fit: cover;
 }
-@keyframes ocean-surface-shimmer {
-    0% { opacity: 0.35; }
-    100% { opacity: 0.5; }
-}
-.ocean-light-ray {
-    position: absolute; top: 0; width: 3px; height: 65vh;
-    background: linear-gradient(180deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05), transparent);
-    animation: ocean-ray-sway 6s ease-in-out infinite alternate;
-    border-radius: 2px;
-}
-@keyframes ocean-ray-sway {
-    0% { transform: translateX(0) rotate(-2deg); opacity: 0.15; }
-    100% { transform: translateX(15px) rotate(2deg); opacity: 0.35; }
-}
-.ocean-bubble {
-    position: absolute; bottom: -20px;
-    background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.85), rgba(255,255,255,0.3));
-    border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.25);
-    animation: ocean-bubble-rise linear infinite;
-}
-@keyframes ocean-bubble-rise {
-    0% { transform: translateY(0) scale(1); opacity: 0; }
-    8% { opacity: 0.7; }
-    92% { opacity: 0.4; }
-    100% { transform: translateY(-110vh) scale(1.3); opacity: 0; }
-}
-.ocean-fish {
-    position: absolute; font-size: 2rem;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-    animation: ocean-fish-swim linear infinite;
-    opacity: 0.85;
-}
-@keyframes ocean-fish-swim {
-    0% { transform: translateX(-120px) scaleX(1); }
-    48% { transform: translateX(calc(100vw + 120px)) scaleX(1); }
-    50% { transform: translateX(calc(100vw + 120px)) scaleX(-1); }
-    98% { transform: translateX(-120px) scaleX(-1); }
-    100% { transform: translateX(-120px) scaleX(1); }
-}
-.ocean-coral {
-    position: absolute; bottom: 0; font-size: 2.8rem;
-    filter: drop-shadow(0 -2px 6px rgba(0,0,0,0.4));
-    animation: ocean-coral-sway 4s ease-in-out infinite alternate;
-    transform-origin: bottom center;
-}
-@keyframes ocean-coral-sway {
-    0% { transform: rotate(-2deg); }
-    100% { transform: rotate(2deg); }
-}
-.ocean-seaweed {
-    position: absolute; bottom: 0; font-size: 2.2rem;
-    animation: ocean-seaweed-sway 3s ease-in-out infinite alternate;
-    transform-origin: bottom center;
-    opacity: 0.8;
-}
-@keyframes ocean-seaweed-sway {
-    0% { transform: rotate(-5deg) scaleY(1); }
-    100% { transform: rotate(5deg) scaleY(1.08); }
-}
-.ocean-jellyfish {
-    position: absolute; font-size: 2.2rem;
-    animation: ocean-jelly-float 10s ease-in-out infinite;
-    opacity: 0.55;
-    filter: drop-shadow(0 0 8px rgba(255,255,255,0.25));
-}
-@keyframes ocean-jelly-float {
-    0%, 100% { transform: translateY(0) translateX(0); }
-    20% { transform: translateY(-25px) translateX(12px); }
-    40% { transform: translateY(-8px) translateX(-8px); }
-    60% { transform: translateY(-35px) translateX(5px); }
-    80% { transform: translateY(-15px) translateX(-12px); }
-}
-.ocean-plankton {
-    position: absolute; width: 2px; height: 2px;
-    background: rgba(255,255,255,0.5);
-    border-radius: 50%;
-    animation: ocean-plankton-drift 12s linear infinite;
-}
-@keyframes ocean-plankton-drift {
-    0% { transform: translateY(0) translateX(0); opacity: 0; }
-    15% { opacity: 0.7; }
-    85% { opacity: 0.5; }
-    100% { transform: translateY(-50vh) translateX(25px); opacity: 0; }
-}
-.ocean-sand {
-    position: absolute; bottom: 0; left: 0; width: 100%; height: 50px;
-    background: linear-gradient(180deg, #c2b280 0%, #a8956b 50%, #8b7355 100%);
-    border-radius: 50% 50% 0 0 / 15px 15px 0 0;
-    opacity: 0.35;
-}
-.ocean-starfish {
-    position: absolute; bottom: 35px; font-size: 1.2rem;
-    animation: ocean-star-twinkle 3s ease-in-out infinite alternate;
-    opacity: 0.7;
-}
-@keyframes ocean-star-twinkle {
-    0% { opacity: 0.4; transform: scale(1); }
-    100% { opacity: 0.9; transform: scale(1.1); }
-}
-.ocean-shell {
-    position: absolute; bottom: 30px; font-size: 1rem;
-    opacity: 0.6;
-    animation: ocean-shell-bob 4s ease-in-out infinite;
-}
-@keyframes ocean-shell-bob {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-3px); }
+.chat-video-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(180deg, rgba(0,30,60,0.45) 0%, rgba(0,15,40,0.35) 50%, rgba(0,30,60,0.45) 100%);
+    pointer-events: none;
 }
 </style>
-<div class="ocean-bg-scene">
-    <div class="ocean-surface"></div>
-    <div class="ocean-light-ray" style="left: 8%; animation-delay: 0s; height: 60vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 22%; animation-delay: 1.5s; height: 50vh; width: 3px;"></div>
-    <div class="ocean-light-ray" style="left: 38%; animation-delay: 3s; height: 65vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 55%; animation-delay: 0.8s; height: 55vh; width: 4px;"></div>
-    <div class="ocean-light-ray" style="left: 72%; animation-delay: 2.2s; height: 58vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 88%; animation-delay: 4s; height: 62vh; width: 3px;"></div>
-    <div class="ocean-bubble" style="left: 5%; width: 6px; height: 6px; animation-duration: 7s; animation-delay: 0s;"></div>
-    <div class="ocean-bubble" style="left: 12%; width: 10px; height: 10px; animation-duration: 9s; animation-delay: 1s;"></div>
-    <div class="ocean-bubble" style="left: 18%; width: 5px; height: 5px; animation-duration: 6s; animation-delay: 2.5s;"></div>
-    <div class="ocean-bubble" style="left: 28%; width: 8px; height: 8px; animation-duration: 8s; animation-delay: 0.5s;"></div>
-    <div class="ocean-bubble" style="left: 35%; width: 4px; height: 4px; animation-duration: 10s; animation-delay: 3s;"></div>
-    <div class="ocean-bubble" style="left: 42%; width: 12px; height: 12px; animation-duration: 7.5s; animation-delay: 1.5s;"></div>
-    <div class="ocean-bubble" style="left: 48%; width: 6px; height: 6px; animation-duration: 9s; animation-delay: 0.2s;"></div>
-    <div class="ocean-bubble" style="left: 58%; width: 9px; height: 9px; animation-duration: 6.5s; animation-delay: 2s;"></div>
-    <div class="ocean-bubble" style="left: 65%; width: 7px; height: 7px; animation-duration: 8.5s; animation-delay: 0.8s;"></div>
-    <div class="ocean-bubble" style="left: 72%; width: 11px; height: 11px; animation-duration: 7s; animation-delay: 3.5s;"></div>
-    <div class="ocean-bubble" style="left: 78%; width: 5px; height: 5px; animation-duration: 9s; animation-delay: 1.2s;"></div>
-    <div class="ocean-bubble" style="left: 85%; width: 8px; height: 8px; animation-duration: 8s; animation-delay: 4s;"></div>
-    <div class="ocean-bubble" style="left: 92%; width: 6px; height: 6px; animation-duration: 7s; animation-delay: 2.2s;"></div>
-    <div class="ocean-bubble" style="left: 3%; width: 10px; height: 10px; animation-duration: 10s; animation-delay: 5s;"></div>
-    <div class="ocean-bubble" style="left: 50%; width: 5px; height: 5px; animation-duration: 6s; animation-delay: 1.8s;"></div>
-    <div class="ocean-fish" style="top: 22%; animation-duration: 20s; animation-delay: 0s; font-size: 2.2rem;">🐠</div>
-    <div class="ocean-fish" style="top: 38%; animation-duration: 25s; animation-delay: 4s; font-size: 1.8rem;">🐟</div>
-    <div class="ocean-fish" style="top: 52%; animation-duration: 28s; animation-delay: 8s; font-size: 2.5rem;">🐡</div>
-    <div class="ocean-fish" style="top: 16%; animation-duration: 22s; animation-delay: 12s; font-size: 1.6rem;">🐠</div>
-    <div class="ocean-fish" style="top: 68%; animation-duration: 32s; animation-delay: 2s; font-size: 2.8rem;">🦈</div>
-    <div class="ocean-fish" style="top: 30%; animation-duration: 26s; animation-delay: 16s; font-size: 2rem;">🐬</div>
-    <div class="ocean-fish" style="top: 45%; animation-duration: 21s; animation-delay: 6s; font-size: 1.5rem;">🐟</div>
-    <div class="ocean-fish" style="top: 60%; animation-duration: 29s; animation-delay: 10s; font-size: 2.3rem;">🐠</div>
-    <div class="ocean-fish" style="top: 75%; animation-duration: 24s; animation-delay: 14s; font-size: 1.9rem;">🐟</div>
-    <div class="ocean-jellyfish" style="left: 15%; top: 25%; animation-delay: 0s; font-size: 2.5rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 60%; top: 45%; animation-delay: 5s; font-size: 2rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 40%; top: 18%; animation-delay: 10s; font-size: 1.8rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 80%; top: 55%; animation-delay: 3s; font-size: 2.2rem;">🪼</div>
-    <div class="ocean-plankton" style="left: 10%; bottom: 25%; animation-delay: 0s; animation-duration: 14s;"></div>
-    <div class="ocean-plankton" style="left: 25%; bottom: 45%; animation-delay: 2s; animation-duration: 16s;"></div>
-    <div class="ocean-plankton" style="left: 40%; bottom: 20%; animation-delay: 5s; animation-duration: 12s;"></div>
-    <div class="ocean-plankton" style="left: 55%; bottom: 55%; animation-delay: 1s; animation-duration: 15s;"></div>
-    <div class="ocean-plankton" style="left: 70%; bottom: 30%; animation-delay: 7s; animation-duration: 13s;"></div>
-    <div class="ocean-plankton" style="left: 85%; bottom: 50%; animation-delay: 3s; animation-duration: 17s;"></div>
-    <div class="ocean-plankton" style="left: 15%; bottom: 65%; animation-delay: 9s; animation-duration: 11s;"></div>
-    <div class="ocean-plankton" style="left: 50%; bottom: 40%; animation-delay: 6s; animation-duration: 14s;"></div>
-    <div class="ocean-coral" style="left: 3%; font-size: 3rem;">🪸</div>
-    <div class="ocean-coral" style="left: 15%; font-size: 2.4rem; animation-delay: 0.5s;">🪸</div>
-    <div class="ocean-coral" style="left: 30%; font-size: 3.2rem; animation-delay: 1s;">🪸</div>
-    <div class="ocean-coral" style="left: 48%; font-size: 2.2rem; animation-delay: 1.5s;">🪸</div>
-    <div class="ocean-coral" style="left: 62%; font-size: 2.8rem; animation-delay: 0.8s;">🪸</div>
-    <div class="ocean-coral" style="left: 78%; font-size: 3rem; animation-delay: 2s;">🪸</div>
-    <div class="ocean-coral" style="left: 90%; font-size: 2.5rem; animation-delay: 1.2s;">🪸</div>
-    <div class="ocean-seaweed" style="left: 8%;">🌿</div>
-    <div class="ocean-seaweed" style="left: 22%; font-size: 2.8rem; animation-delay: 0.7s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 38%; font-size: 1.9rem; animation-delay: 1.3s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 52%; font-size: 2.6rem; animation-delay: 0.4s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 68%; font-size: 2rem; animation-delay: 1.8s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 82%; font-size: 2.9rem; animation-delay: 1.1s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 95%; font-size: 2.3rem; animation-delay: 0.9s;">🌿</div>
-    <div class="ocean-starfish" style="left: 10%;">⭐</div>
-    <div class="ocean-starfish" style="left: 35%; animation-delay: 1s;">⭐</div>
-    <div class="ocean-starfish" style="left: 58%; animation-delay: 0.5s;">⭐</div>
-    <div class="ocean-starfish" style="left: 82%; animation-delay: 2s;">⭐</div>
-    <div class="ocean-shell" style="left: 20%;">🐚</div>
-    <div class="ocean-shell" style="left: 45%; animation-delay: 1.5s;">🐚</div>
-    <div class="ocean-shell" style="left: 70%; animation-delay: 0.8s;">🐚</div>
-    <div class="ocean-sand"></div>
+<div class="chat-video-bg">
+    <video autoplay muted loop playsinline poster="https://images.unsplash.com/photo-1582967788606-a171f1080ca8?w=1920">
+        <source src="https://assets.mixkit.co/videos/preview/mixkit-fish-underwater-7055-large.mp4" type="video/mp4">
+        <source src="https://assets.mixkit.co/videos/preview/mixkit-school-of-fish-1170-large.mp4" type="video/mp4">
+    </video>
+    <div class="chat-video-overlay"></div>
 </div>
 """
 
@@ -3126,7 +3075,7 @@ def main():
     elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         pass  # Weather bg rendered later
     elif view_bg == "💬 Chat":
-        st.markdown(OCEAN_BG_HTML, unsafe_allow_html=True)
+        st.markdown(CHAT_VIDEO_BG_HTML, unsafe_allow_html=True)
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
@@ -4875,6 +4824,151 @@ def main():
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real-time Info")
 
+        # India Map Slideshow - Full Cover Background
+        st.markdown("""
+        <style>
+        @keyframes india-map-fade-1 {
+            0%, 100% { opacity: 1; }
+            20% { opacity: 1; }
+            25% { opacity: 0; }
+            95% { opacity: 0; }
+        }
+        @keyframes india-map-fade-2 {
+            0%, 24% { opacity: 0; }
+            25% { opacity: 1; }
+            45% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 0; }
+        }
+        @keyframes india-map-fade-3 {
+            0%, 49% { opacity: 0; }
+            50% { opacity: 1; }
+            70% { opacity: 1; }
+            75% { opacity: 0; }
+            100% { opacity: 0; }
+        }
+        @keyframes india-map-fade-4 {
+            0%, 74% { opacity: 0; }
+            75% { opacity: 1; }
+            95% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        @keyframes india-label-glow {
+            0%, 100% { text-shadow: 0 0 10px rgba(255,255,255,0.8), 0 0 20px rgba(255,153,51,0.6); }
+            50% { text-shadow: 0 0 15px rgba(255,255,255,1), 0 0 30px rgba(19,136,8,0.8); }
+        }
+        .india-map-slideshow-container {
+            position: relative;
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto 20px auto;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            border: 2px solid rgba(255,153,51,0.4);
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1a3e 50%, #0d0d1a 100%);
+        }
+        .india-map-slideshow-container::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            border-radius: 16px;
+            padding: 3px;
+            background: linear-gradient(45deg, #FF9933, #FFFFFF, #138808, #FF9933);
+            background-size: 400% 400%;
+            animation: glow-rotate 6s linear infinite;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .india-map-frame {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            object-fit: contain;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        .india-map-label {
+            position: absolute;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.75);
+            color: #fff;
+            padding: 8px 24px;
+            border-radius: 30px;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            z-index: 5;
+            animation: india-label-glow 3s ease-in-out infinite;
+            border: 1px solid rgba(255,153,51,0.4);
+            white-space: nowrap;
+        }
+        .india-monument-tag {
+            position: absolute;
+            background: rgba(255,153,51,0.9);
+            color: #000;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 12px;
+            border: 1px solid #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            z-index: 6;
+            animation: monument-pop 2s ease-in-out infinite alternate;
+        }
+        @keyframes monument-pop {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.08); }
+        }
+        .india-map-1 { animation: india-map-fade-1 24s ease-in-out infinite; z-index: 4; }
+        .india-map-2 { animation: india-map-fade-2 24s ease-in-out infinite; z-index: 3; }
+        .india-map-3 { animation: india-map-fade-3 24s ease-in-out infinite; z-index: 2; }
+        .india-map-4 { animation: india-map-fade-4 24s ease-in-out infinite; z-index: 1; }
+        </style>
+        <div class="india-map-slideshow-container" style="aspect-ratio: 4/3;">
+            <!-- Map 1: Political Map with States -->
+            <img class="india-map-frame india-map-1" 
+                src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2e/Political_map_of_India_HI.svg/1024px-Political_map_of_India_HI.svg.png" 
+                alt="India Political Map">
+            <div class="india-map-label india-map-1">🇮🇳 India Political Map — States & UTs</div>
+
+            <!-- Map 2: Physical Map with Mountains & Rivers -->
+            <img class="india-map-frame india-map-2" 
+                src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Physical_Map_of_India.jpg/1024px-Physical_Map_of_India.jpg" 
+                alt="India Physical Map">
+            <div class="india-map-label india-map-2">⛰️ Mountains, Rivers & Peaks</div>
+
+            <!-- Map 3: Monuments & Heritage Sites Overlay -->
+            <img class="india-map-frame india-map-3" 
+                src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/India_Geographic_Map.jpg/1024px-India_Geographic_Map.jpg" 
+                alt="India Monuments Map">
+            <div class="india-map-label india-map-3">🏛️ Famous Monuments & Heritage</div>
+            <!-- Monument tags positioned approximately -->
+            <div class="india-monument-tag india-map-3" style="top: 32%; left: 42%;">🕌 Taj Mahal</div>
+            <div class="india-monument-tag india-map-3" style="top: 22%; left: 28%;">🕍 Golden Temple</div>
+            <div class="india-monument-tag india-map-3" style="top: 55%; left: 48%;">⛩️ Konark Sun Temple</div>
+            <div class="india-monument-tag india-map-3" style="top: 65%; left: 35%;">🗼 Gateway of India</div>
+            <div class="india-monument-tag india-map-3" style="top: 45%; left: 58%;">🏯 Victoria Memorial</div>
+            <div class="india-monument-tag india-map-3" style="top: 72%; left: 45%;">🏛️ Meenakshi Temple</div>
+            <div class="india-monument-tag india-map-3" style="top: 60%; left: 22%;">🕌 Hawa Mahal</div>
+            <div class="india-monument-tag india-map-3" style="top: 38%; left: 55%;">🛕 Mahabodhi Temple</div>
+
+            <!-- Map 4: Simple States Outline -->
+            <img class="india-map-frame india-map-4" 
+                src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Map_of_India.png/1024px-Map_of_India.png" 
+                alt="India Simple Map">
+            <div class="india-map-label india-map-4">🗺️ Simple States Outline</div>
+        </div>
+        <div style="text-align:center; margin-top:8px; margin-bottom:20px; color:#94a3b8; font-size:0.85rem;">
+            🎬 Maps cycle automatically every 6 seconds • Source: Wikimedia Commons
+        </div>
+        """, unsafe_allow_html=True)
+
         if not NTES_AVAILABLE:
             st.error("❌ 'ntes-client' library not installed. Please run: `pip install ntes-client`")
             st.info("💡 Using alternative web-based PNR and train status services...")
@@ -5086,8 +5180,7 @@ def main():
 
     # =====================================================================
     # VIEW: 🌤️ WEATHER
-    # =====================================================================
-    elif view == "🌤️ Weather":
+    # =====================================================================elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
 
         qp_lat = st.query_params.get('__lat')
@@ -5170,9 +5263,9 @@ def main():
             loc_full = data['city'] + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
             day_night_icon = "🌙" if time_of_day in ['night', 'dusk'] else "☀️" if time_of_day == 'day' else "🌅"
             st.markdown(f'''<div style="text-align:center; margin-bottom:15px;">
-                <div style="display:inline-block; background: linear-gradient(135deg, rgba(255,153,51,0.2), rgba(255,255,255,0.1), rgba(19,136,8,0.2)); 
-                    border: 1px solid rgba(0,0,0,0.15); border-radius: 50px; padding: 10px 30px; 
-                    backdrop-filter: blur(12px); color: #000000 !important; text-shadow: none !important; font-weight: 700; font-size: 1.1rem;">
+                <div style="display:inline-block; background: rgba(173, 216, 230, 0.25); 
+                    border: 1px solid rgba(255,255,255,0.25); border-radius: 50px; padding: 10px 30px; 
+                    backdrop-filter: blur(12px); color: #ffffff !important; text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important; font-weight: 700; font-size: 1.1rem;">
                     {day_night_icon} {loc_full} • {time_of_day.title()}
                 </div>
             </div>''', unsafe_allow_html=True)
