@@ -1507,11 +1507,74 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"], .stCaption {{
             color: {text_color} !important;
         }}
-        [data-testid="stMain"] .stMarkdown p, [data-testid="stMain"] .stMarkdown div,
-        [data-testid="stMain"] .stMarkdown span, [data-testid="stMain"] h1,
-        [data-testid="stMain"] h2, [data-testid="stMain"] h3, [data-testid="stMain"] h4 {{
+        /* === HEADINGS & MAIN TEXT (white) === */
+        [data-testid="stMain"] h1, [data-testid="stMain"] h2,
+        [data-testid="stMain"] h3, [data-testid="stMain"] h4,
+        [data-testid="stMain"] h5, [data-testid="stMain"] h6 {{
             color: #f1f5f9 !important;
             text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important;
+        }}
+        /* Main markdown paragraphs - white */
+        [data-testid="stMain"] .stMarkdown p {{
+            color: #f1f5f9 !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important;
+        }}
+        /* === FORM LABELS - ALWAYS BLACK === */
+        [data-testid="stMain"] .stTextInput label,
+        [data-testid="stMain"] .stSelectbox label,
+        [data-testid="stMain"] .stDateInput label,
+        [data-testid="stMain"] .stNumberInput label,
+        [data-testid="stMain"] .stTextArea label,
+        [data-testid="stMain"] .stRadio label,
+        [data-testid="stMain"] .stCheckbox label,
+        [data-testid="stMain"] [data-testid="stWidgetLabel"] {{
+            color: #000000 !important;
+            text-shadow: none !important;
+            -webkit-text-fill-color: #000000 !important;
+            font-weight: 600 !important;
+        }}
+        /* === FORM INPUT VALUES - BLACK === */
+        [data-testid="stMain"] .stTextInput input,
+        [data-testid="stMain"] .stSelectbox > div > div > div,
+        [data-testid="stMain"] .stDateInput input,
+        [data-testid="stMain"] .stNumberInput input {{
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+        }}
+        /* === WEATHER SECTION - ALL TEXT BLACK === */
+        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
+        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
+        [data-testid="stMain"] input[key="weather_city_input"] {{
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+        }}
+        /* === DATA TABLE - HIGH CONTRAST === */
+        .stDataFrame th, .stDataEditor th {{
+            background-color: {table_header_bg} !important;
+            color: {table_header_text} !important;
+            border-bottom: 2px solid {border} !important;
+            font-weight: 700 !important;
+            font-size: 0.9rem !important;
+            text-shadow: none !important;
+        }}
+        .stDataFrame td, .stDataEditor td {{
+            text-align: center !important;
+            border: 1px solid {border} !important;
+            color: {text_color} !important;
+        }}
+        /* === EXPANDER & CAPTION - BLACK === */
+        .streamlit-expanderHeader {{
+            color: #000000 !important;
+            font-weight: 700 !important;
+            text-shadow: none !important;
+            -webkit-text-fill-color: #000000 !important;
+        }}
+        .stCaption, [data-testid="stCaption"] {{
+            color: #000000 !important;
+            text-shadow: none !important;
+            -webkit-text-fill-color: #000000 !important;
         }}
         .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea,
         .stSelectbox > div > div > div {{
@@ -1567,7 +1630,9 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .js-plotly-plot .plotly .gtitle {{ fill: {text_color} !important; }}
 
         .stExpander {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 8px !important; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
-        .streamlit-expanderHeader {{ color: {text_color} !important; font-weight: 600 !important; }}
+        .streamlit-expanderHeader {{ color: #000000 !important; font-weight: 700 !important; text-shadow: none !important; -webkit-text-fill-color: #000000 !important; }}
+        .stCaption {{ color: #000000 !important; text-shadow: none !important; -webkit-text-fill-color: #000000 !important; }}
+        [data-testid="stMain"] .stCaption {{ color: #000000 !important; text-shadow: none !important; }}
         .stChatMessage {{ background-color: {card_bg} !important; border: 1px solid {border} !important;
             border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important;
             backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
@@ -1678,12 +1743,13 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
 
-        /* Weather Input Stamp Style */
+        /* Weather Input Stamp Style - BLACK TEXT */
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input {{
-            background-color: rgba(255, 255, 255, 0.12) !important;
+            background-color: rgba(255, 255, 255, 0.95) !important;
             color: #000000 !important;
-            border: 1px solid rgba(255, 255, 255, 0.35) !important;
+            -webkit-text-fill-color: #000000 !important;
+            border: 2px solid rgba(0, 0, 0, 0.2) !important;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
             font-weight: 600 !important;
             backdrop-filter: blur(10px) !important;
@@ -1695,10 +1761,11 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
-            color: #ffffff !important;
+            color: #000000 !important;
             font-weight: 700 !important;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.9) !important;
-            font-size: 0.9rem !important;
+            text-shadow: none !important;
+            -webkit-text-fill-color: #000000 !important;
+            font-size: 0.95rem !important;
         }}
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) > div > div,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) > div > div {{
@@ -1772,9 +1839,10 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
-            color: #ffffff !important;
+            color: #000000 !important;
             font-weight: 800 !important;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 15px rgba(0,0,0,0.5) !important;
+            text-shadow: none !important;
+            -webkit-text-fill-color: #000000 !important;
             font-size: 1.05rem !important;
             letter-spacing: 0.5px !important;
         }}
