@@ -3422,6 +3422,30 @@ def main():
     # SIDEBAR
     # =====================================================================
     with st.sidebar:
+        # Sidebar background video
+        components.html("""
+        <style>
+        .sidebar-bg-video {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 320px;
+            height: 100vh;
+            object-fit: cover;
+            opacity: 0.35;
+            z-index: -1;
+            pointer-events: none;
+        }
+        @media (max-width: 768px) {
+            .sidebar-bg-video { width: 100vw; }
+        }
+        </style>
+        <video class="sidebar-bg-video" autoplay muted loop playsinline preload="auto">
+            <source src="https://videos.pexels.com/video-files/18855089/18855089-hd_1920_1080_25fps.mp4" type="video/mp4">
+            <source src="https://videos.pexels.com/video-files/18855089/18855089-hd_1280_720_25fps.mp4" type="video/mp4">
+        </video>
+        """, height=0)
+
         st.markdown("""
         <style>
         @keyframes welcome-glow {
@@ -3751,241 +3775,6 @@ def main():
 
         
         st.markdown("---")
-        st.markdown("### 🚂 Live Engine View")
-        components.html("""
-        <style>
-        .sidebar-train-wrap {
-            position: relative;
-            width: 100%;
-            height: 280px;
-            overflow: hidden;
-            border-radius: 16px;
-            margin: 10px 0;
-            background: linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-            border: 2px solid rgba(255,153,51,0.3);
-        }
-        .sidebar-train-video {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 500px;
-            height: 280px;
-            transform: translate(-50%, -50%) rotate(-90deg);
-            object-fit: cover;
-            opacity: 0.95;
-        }
-        .sidebar-train-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(180deg, rgba(255,107,53,0.1) 0%, transparent 30%, transparent 70%, rgba(19,136,8,0.1) 100%);
-            pointer-events: none;
-            z-index: 2;
-        }
-        .sidebar-train-label {
-            position: absolute;
-            bottom: 10px;
-            left: 0;
-            width: 100%;
-            text-align: center;
-            color: #fff;
-            font-weight: 700;
-            font-size: 0.85rem;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.9);
-            z-index: 3;
-            letter-spacing: 1px;
-        }
-        .sidebar-train-glow {
-            position: absolute;
-            top: -2px;
-            left: -2px;
-            right: -2px;
-            bottom: -2px;
-            border-radius: 18px;
-            background: linear-gradient(180deg, #FF9933, #FFFFFF, #138808);
-            background-size: 100% 200%;
-            animation: train-glow-shift 3s linear infinite;
-            z-index: 0;
-            opacity: 0.6;
-        }
-        @keyframes train-glow-shift {
-            0% { background-position: 0% 0%; }
-            100% { background-position: 0% 100%; }
-        }
-        </style>
-        <div class="sidebar-train-wrap">
-            <div class="sidebar-train-glow"></div>
-            <video class="sidebar-train-video" autoplay muted loop playsinline preload="auto">
-                <source src="https://videos.pexels.com/video-files/18855089/18855089-hd_1920_1080_25fps.mp4" type="video/mp4">
-                <source src="https://videos.pexels.com/video-files/18855089/18855089-hd_1280_720_25fps.mp4" type="video/mp4">
-            </video>
-            <div class="sidebar-train-overlay"></div>
-            <div class="sidebar-train-label">🚂 Indian Railways — Bottom to Top</div>
-        </div>
-        """, height=300)
-
-        st.markdown("### 📑 Select Sheet")
-        sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()),
-            index=list(SHEET_CONFIG.keys()).index(st.session_state.selected_sheet)
-            if st.session_state.selected_sheet in SHEET_CONFIG else 0, key="sheet_select")
-        if sheet_choice != st.session_state.selected_sheet:
-            st.session_state.selected_sheet = sheet_choice
-            st.session_state.current_page = 1
-            st.cache_data.clear()
-            st.rerun()
-
-        if sheet_choice != "NOTE":
-            st.markdown("### 🔍 Filters")
-            config = SHEET_CONFIG[sheet_choice]
-            pnr_col_idx = config.get("pnr_col")
-            train_col_idx = config.get("train_col")
-            class_col_idx = config.get("class_col")
-            doj_col_idx = config.get("doj_col")
-
-            pnr_input = st.text_input("PNR (Partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
-            if pnr_input != st.session_state.pnr_val:
-                st.session_state.pnr_val = pnr_input
-                st.session_state.current_page = 1
-                st.rerun()
-
-            train_input = st.text_input("Train (Partial)", value=st.session_state.train_val, key="train_filter_input")
-            if train_input != st.session_state.train_val:
-                st.session_state.train_val = train_input
-                st.session_state.current_page = 1
-                st.rerun()
-
-            if class_col_idx is not None:
-                class_input = st.text_input("Class (Partial)", value=st.session_state.get('class_val', ''), key="class_filter_input")
-                if class_input != st.session_state.get('class_val', ''):
-                    st.session_state.class_val = class_input
-                    st.session_state.current_page = 1
-                    st.rerun()
-
-            c1, c2 = st.columns(2)
-            with c1:
-                from_input = st.date_input("From DOJ", value=st.session_state.from_val,
-                    key="from_date_input", format="DD-MM-YYYY")
-            with c2:
-                to_input = st.date_input("To DOJ", value=st.session_state.to_val,
-                    key="to_date_input", format="DD-MM-YYYY")
-            if from_input != st.session_state.from_val:
-                st.session_state.from_val = from_input
-                st.session_state.current_page = 1
-                st.rerun()
-            if to_input != st.session_state.to_val:
-                st.session_state.to_val = to_input
-                st.session_state.current_page = 1
-                st.rerun()
-
-            if st.button("🧹 Clear All Filters", use_container_width=True, key="clear_filters_btn"):
-                st.session_state.pnr_val = ''
-                st.session_state.train_val = ''
-                st.session_state.class_val = ''
-                st.session_state.from_val = None
-                st.session_state.to_val = None
-                st.session_state.current_page = 1
-                st.rerun()
-
-    # Load data for selected sheet
-    df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
-    filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
-
-    # Apply filters (skip for NOTE sheet)
-    if not filtered_df.empty and sheet_choice != "NOTE":
-        config = SHEET_CONFIG[sheet_choice]
-        pnr_col_idx = config.get("pnr_col")
-        train_col_idx = config.get("train_col")
-        class_col_idx = config.get("class_col")
-        doj_col_idx = config.get("doj_col")
-
-        if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
-            col_name = filtered_df.columns[pnr_col_idx]
-            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.pnr_val, case=False, na=False)]
-        if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
-            col_name = filtered_df.columns[train_col_idx]
-            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
-        if st.session_state.get('class_val', '') and class_col_idx is not None and class_col_idx < len(filtered_df.columns):
-            col_name = filtered_df.columns[class_col_idx]
-            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.get('class_val', ''), case=False, na=False)]
-        if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
-            col_name = filtered_df.columns[doj_col_idx]
-            try:
-                filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
-                if filtered_df['_temp'].isna().all():
-                    filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
-            except Exception:
-                filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
-            if st.session_state.from_val:
-                filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
-            if st.session_state.to_val:
-                filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
-            filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
-
-    view = st.session_state.view_mode
-
-    # Top bar with marquee
-    st.markdown("""
-    <style>
-    .eqms-marquee-box { 
-        background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); 
-        padding: 10px 0; 
-        border-radius: 8px; 
-        margin-bottom: 12px;
-        overflow: hidden;
-        white-space: nowrap;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-    }
-    .eqms-marquee-box .scroll-text {
-        display: inline-block;
-        padding-left: 100%;
-        animation: marquee-scroll 25s linear infinite;
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-        text-fill-color: #000000 !important;
-        font-weight: 800;
-        letter-spacing: 0.5px;
-        font-size: 15px;
-        font-family: 'Segoe UI', Arial, sans-serif;
-        text-shadow: none !important;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        transform: translateZ(0);
-        backface-visibility: hidden;
-        will-change: transform;
-    }
-    @keyframes marquee-scroll {
-        0% { transform: translateX(0); }
-        100% { transform: translateX(-100%); }
-    }
-    </style>
-    <div class="eqms-marquee-box">
-        <span class="scroll-text">🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    top_c1, top_nav, top_c2 = st.columns([2.4, 2.2, 1.2])
-    with top_c1:
-        st.markdown(f"<h1 style='font-size:22px; font-weight:700; margin:0;'>🚂 AI EQMS Hub Pro — {sheet_choice}</h1>", unsafe_allow_html=True)
-    with top_nav:
-        nav_defs = [("📋", "📋 Data Table"), ("📊", "📊 Dashboard"), ("💬", "💬 Chat"), ("🚂", "🚂 Railway"), ("🌤️", "🌤️ Weather")]
-        nav_cols = st.columns(5)
-        for (icon, name), nc in zip(nav_defs, nav_cols):
-            with nc:
-                if st.button(icon, key=f"nav_btn_{name}", help=name, use_container_width=True,
-                             type="primary" if st.session_state.view_mode == name else "secondary"):
-                    st.session_state.view_mode = name
-                    st.query_params['__view'] = name
-                    st.rerun()
-    with top_c2:
-        st.markdown(f"<div style='padding-top:6px; text-align:right;'><span class='status-pill status-live'>● Live</span> &nbsp; <span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span></div>", unsafe_allow_html=True)
-
-    st.caption(f"Enterprise Railway EQ Management  •  {format_date()}  •  {format_time()} IST")
-    st.markdown("---")
 
     # =====================================================================
     # VIEW: 📋 DATA TABLE
@@ -4934,7 +4723,7 @@ def main():
         st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<div style='height:10vh;'></div>", unsafe_allow_html=True)
-elif view == "🌤️ Weather":
+    elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
 
         qp_lat = st.query_params.get('__lat')
