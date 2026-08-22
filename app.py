@@ -1839,10 +1839,10 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
-            color: #000000 !important;
+            color: #ffffff !important;
             font-weight: 800 !important;
-            text-shadow: none !important;
-            -webkit-text-fill-color: #000000 !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+            -webkit-text-fill-color: #ffffff !important;
             font-size: 1.05rem !important;
             letter-spacing: 0.5px !important;
         }}
@@ -5527,6 +5527,14 @@ def main():
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
+    }
+    /* Weather labels - WHITE for dark bg */
+    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label p,
+    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label span {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        font-weight: 700 !important;
     }
     /* === DATA TABLE HEADERS === */
     div[data-testid="stMain"] .stDataFrame th,
