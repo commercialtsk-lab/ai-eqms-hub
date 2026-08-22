@@ -751,22 +751,10 @@ Previous conversation:
 def get_weather(city_name):
     if not city_name: return {'error': 'Please enter a city name'}
     try:
-        # Try direct weather API first
-        url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            return {'city': data.get('name', city_name), 'country': data.get('sys', {}).get('country', ''), 'state': '',
-                'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
-                'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
-                'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
-                'icon': data.get('weather', [{}])[0].get('icon', ''),
-                'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
-                'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
-                'lat': data.get('coord', {}).get('lat'), 'lon': data.get('coord', {}).get('lon')}
-        # Fallback: try geocoding API for small towns/villages
+        # Step 1: Geocode to get lat, lon, name, state, country
         geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=1&appid={WEATHER_API_KEY}"
         geo_resp = requests.get(geo_url, timeout=10)
+        lat, lon, found_name, country, state = None, None, city_name, '', ''
         if geo_resp.status_code == 200:
             geo_data = geo_resp.json()
             if geo_data and len(geo_data) > 0:
@@ -775,19 +763,36 @@ def get_weather(city_name):
                 found_name = geo_data[0].get('name', city_name)
                 country = geo_data[0].get('country', '')
                 state = geo_data[0].get('state', '')
-                if lat and lon:
-                    coord_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
-                    coord_resp = requests.get(coord_url, timeout=10)
-                    if coord_resp.status_code == 200:
-                        data = coord_resp.json()
-                        return {'city': found_name, 'country': country, 'state': state,
-                            'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
-                            'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
-                            'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
-                            'icon': data.get('weather', [{}])[0].get('icon', ''),
-                            'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
-                            'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
-                            'lat': lat, 'lon': lon}
+
+        # Step 2: Get weather by coordinates (most accurate)
+        if lat and lon:
+            coord_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
+            coord_resp = requests.get(coord_url, timeout=10)
+            if coord_resp.status_code == 200:
+                data = coord_resp.json()
+                return {'city': found_name, 'country': country, 'state': state,
+                    'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
+                    'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
+                    'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
+                    'icon': data.get('weather', [{}])[0].get('icon', ''),
+                    'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
+                    'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
+                    'lat': lat, 'lon': lon}
+
+        # Fallback: direct city name API (no state available)
+        url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            return {'city': data.get('name', city_name), 'country': data.get('sys', {}).get('country', ''), 'state': state,
+                'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
+                'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
+                'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
+                'icon': data.get('weather', [{}])[0].get('icon', ''),
+                'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
+                'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
+                'lat': data.get('coord', {}).get('lat'), 'lon': data.get('coord', {}).get('lon')}
+
         return {'error': 'City not found. Try a nearby major city.'}
     except Exception as e: return {'error': f'Error fetching weather: {str(e)}'}
 
@@ -2820,6 +2825,8 @@ def main():
     view_bg = st.session_state.view_mode
     if view_bg == "📊 Dashboard":
         st.markdown(EARTH_BG_HTML, unsafe_allow_html=True)
+    elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
+        pass  # Weather bg rendered later
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
