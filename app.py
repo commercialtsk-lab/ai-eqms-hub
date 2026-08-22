@@ -751,40 +751,11 @@ Previous conversation:
 def get_weather(city_name):
     if not city_name: return {'error': 'Please enter a city name'}
     try:
-        # Step 1: Geocode to get lat, lon, name, state, country
-        geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=1&appid={WEATHER_API_KEY}"
-        geo_resp = requests.get(geo_url, timeout=10)
-        lat, lon, found_name, country, state = None, None, city_name, '', ''
-        if geo_resp.status_code == 200:
-            geo_data = geo_resp.json()
-            if geo_data and len(geo_data) > 0:
-                lat = geo_data[0].get('lat')
-                lon = geo_data[0].get('lon')
-                found_name = geo_data[0].get('name', city_name)
-                country = geo_data[0].get('country', '')
-                state = geo_data[0].get('state', '')
-
-        # Step 2: Get weather by coordinates (most accurate)
-        if lat and lon:
-            coord_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
-            coord_resp = requests.get(coord_url, timeout=10)
-            if coord_resp.status_code == 200:
-                data = coord_resp.json()
-                return {'city': found_name, 'country': country, 'state': state,
-                    'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
-                    'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
-                    'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
-                    'icon': data.get('weather', [{}])[0].get('icon', ''),
-                    'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
-                    'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
-                    'lat': lat, 'lon': lon}
-
-        # Fallback: direct city name API (no state available)
         url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            return {'city': data.get('name', city_name), 'country': data.get('sys', {}).get('country', ''), 'state': state,
+            return {'city': data.get('name', city_name), 'country': data.get('sys', {}).get('country', ''),
                 'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
                 'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
                 'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
@@ -792,8 +763,7 @@ def get_weather(city_name):
                 'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
                 'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
                 'lat': data.get('coord', {}).get('lat'), 'lon': data.get('coord', {}).get('lon')}
-
-        return {'error': 'City not found. Try a nearby major city.'}
+        else: return {'error': 'City not found. Please check the name.'}
     except Exception as e: return {'error': f'Error fetching weather: {str(e)}'}
 
 def get_weather_forecast(city_name):
@@ -820,39 +790,7 @@ def get_weather_forecast(city_name):
                     'weather': info['weather'], 'description': info['description'].title(),
                     'icon': info['icon'], 'humidity': info['humidity'], 'wind': info['wind'], 'pressure': info['pressure']})
             return {'forecast': result, 'city': data.get('city', {}).get('name', city_name), 'country': data.get('city', {}).get('country', '')}
-        # Fallback: geocoding then forecast by coords
-        geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=1&appid={WEATHER_API_KEY}"
-        geo_resp = requests.get(geo_url, timeout=10)
-        if geo_resp.status_code == 200:
-            geo_data = geo_resp.json()
-            if geo_data and len(geo_data) > 0:
-                lat = geo_data[0].get('lat')
-                lon = geo_data[0].get('lon')
-                found_name = geo_data[0].get('name', city_name)
-                country = geo_data[0].get('country', '')
-                if lat and lon:
-                    coord_url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
-                    coord_resp = requests.get(coord_url, timeout=10)
-                    if coord_resp.status_code == 200:
-                        data = coord_resp.json()
-                        forecast_list = data.get('list', [])
-                        daily_forecast = {}
-                        for item in forecast_list:
-                            date = item.get('dt_txt', '')[:10]
-                            if date not in daily_forecast:
-                                daily_forecast[date] = {'temps': [], 'weather': item['weather'][0]['main'] if item.get('weather') else 'N/A',
-                                    'icon': item['weather'][0]['icon'] if item.get('weather') else '', 'humidity': item['main']['humidity'],
-                                    'wind': item['wind']['speed'], 'pressure': item['main']['pressure'],
-                                    'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'}
-                            daily_forecast[date]['temps'].append(item['main']['temp'])
-                        result = []
-                        for date, info in list(daily_forecast.items())[:5]:
-                            result.append({'date': date, 'temp': round(sum(info['temps'])/len(info['temps']), 1),
-                                'min_temp': round(min(info['temps']), 1), 'max_temp': round(max(info['temps']), 1),
-                                'weather': info['weather'], 'description': info['description'].title(),
-                                'icon': info['icon'], 'humidity': info['humidity'], 'wind': info['wind'], 'pressure': info['pressure']})
-                        return {'forecast': result, 'city': found_name, 'country': country}
-        return {'error': 'City not found. Try a nearby major city.'}
+        else: return {'error': 'City not found. Please check the name.'}
     except Exception as e: return {'error': f'Error fetching forecast: {str(e)}'}
 
 def get_weather_by_coords(lat, lon):
@@ -861,7 +799,7 @@ def get_weather_by_coords(lat, lon):
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            return {'city': data.get('name', 'Unknown'), 'country': data.get('sys', {}).get('country', ''), 'state': '',
+            return {'city': data.get('name', 'Unknown'), 'country': data.get('sys', {}).get('country', ''),
                 'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
                 'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
                 'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
@@ -1398,27 +1336,20 @@ def process_passport_image(data):
 # Apply Theme
 # =====================================================================
 def apply_theme(theme, custom_bg=None, custom_text=None):
-    if theme == '🟡 Yellow Mood':
-        bg = "transparent"; card_bg = "rgba(255, 215, 0, 0.1)"; text_color = "#fbbf24"; text_secondary = "#f59e0b"
-        border = "rgba(251, 191, 36, 0.35)"; input_bg = "rgba(255, 215, 0, 0.08)"; accent = "#fbbf24"; accent_hover = "#f59e0b"
-        success = "#84cc16"; danger = "#ef4444"; button_bg = "rgba(251, 191, 36, 0.12)"; button_text = "#fbbf24"
-        button_border = "rgba(251, 191, 36, 0.3)"; button_hover_bg = "#fbbf24"; button_hover_text = "#000000"; button_hover_border = "#fbbf24"
-        number_color = "#fbbf24"; table_header_bg = "rgba(251, 191, 36, 0.45)"; table_header_text = "#000000"
-        table_alt_row = "rgba(255, 215, 0, 0.05)"; chart_bg = "rgba(0,0,0,0)"
-    elif theme == 'Day':
-        bg = "transparent"; card_bg = "rgba(248, 250, 252, 0.15)"; text_color = "#1e293b"; text_secondary = "#475569"
-        border = "rgba(148, 163, 184, 0.25)"; input_bg = "rgba(255, 255, 255, 0.12)"; accent = "#2563eb"; accent_hover = "#1d4ed8"
-        success = "#16a34a"; danger = "#dc2626"; button_bg = "rgba(241, 245, 249, 0.15)"; button_text = "#1e293b"
-        button_border = "rgba(203, 213, 225, 0.3)"; button_hover_bg = accent; button_hover_text = "white"; button_hover_border = accent
-        number_color = "#2563eb"; table_header_bg = "rgba(30, 41, 59, 0.7)"; table_header_text = "#ffffff"
-        table_alt_row = "rgba(248, 250, 252, 0.08)"; chart_bg = "rgba(0,0,0,0)"
+    if theme == 'Day':
+        bg = "transparent"; card_bg = "rgba(248, 250, 252, 0.82)"; text_color = "#1e293b"; text_secondary = "#475569"
+        border = "rgba(148, 163, 184, 0.4)"; input_bg = "rgba(255, 255, 255, 0.9)"; accent = "#2563eb"; accent_hover = "#1d4ed8"
+        success = "#16a34a"; danger = "#dc2626"; button_bg = "rgba(241, 245, 249, 0.85)"; button_text = "#1e293b"
+        button_border = "rgba(203, 213, 225, 0.6)"; button_hover_bg = accent; button_hover_text = "white"; button_hover_border = accent
+        number_color = "#2563eb"; table_header_bg = "#1e293b"; table_header_text = "#ffffff"
+        table_alt_row = "rgba(248, 250, 252, 0.6)"; chart_bg = "rgba(0,0,0,0)"
     elif theme == 'Dark':
-        bg = "transparent"; card_bg = "rgba(30, 41, 59, 0.15)"; text_color = "#f1f5f9"; text_secondary = "#94a3b8"
-        border = "rgba(148, 163, 184, 0.2)"; input_bg = "rgba(15, 23, 42, 0.12)"; accent = "#60a5fa"; accent_hover = "#93c5fd"
-        success = "#4ade80"; danger = "#f87171"; button_bg = "rgba(51, 65, 85, 0.15)"; button_text = "#f1f5f9"
-        button_border = "rgba(148, 163, 184, 0.25)"; button_hover_bg = accent; button_hover_text = "white"; button_hover_border = accent
-        number_color = "#60a5fa"; table_header_bg = "rgba(37, 99, 235, 0.6)"; table_header_text = "#ffffff"
-        table_alt_row = "rgba(30, 41, 59, 0.08)"; chart_bg = "rgba(0,0,0,0)"
+        bg = "transparent"; card_bg = "rgba(30, 41, 59, 0.78)"; text_color = "#f1f5f9"; text_secondary = "#94a3b8"
+        border = "rgba(148, 163, 184, 0.25)"; input_bg = "rgba(15, 23, 42, 0.85)"; accent = "#60a5fa"; accent_hover = "#93c5fd"
+        success = "#4ade80"; danger = "#f87171"; button_bg = "rgba(51, 65, 85, 0.75)"; button_text = "#f1f5f9"
+        button_border = "rgba(148, 163, 184, 0.35)"; button_hover_bg = accent; button_hover_text = "white"; button_hover_border = accent
+        number_color = "#60a5fa"; table_header_bg = "#2563eb"; table_header_text = "#ffffff"
+        table_alt_row = "rgba(30, 41, 59, 0.55)"; chart_bg = "rgba(0,0,0,0)"
     else:
         bg = "transparent"
         def is_dark_color(hex_color):
@@ -1429,17 +1360,17 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
                 return brightness < 128
             except: return False
         is_dark = is_dark_color(custom_bg) if custom_bg else False
-        card_bg = custom_bg if custom_bg else ("rgba(30, 41, 59, 0.15)" if is_dark else "rgba(248, 250, 252, 0.15)")
+        card_bg = custom_bg if custom_bg else ("rgba(30, 41, 59, 0.78)" if is_dark else "rgba(248, 250, 252, 0.82)")
         text_color = custom_text if custom_text else ("#f1f5f9" if is_dark else "#1e293b")
-        text_secondary = text_color; border = "rgba(148, 163, 184, 0.2)" if is_dark else "rgba(148, 163, 184, 0.25)"
-        input_bg = "rgba(15, 23, 42, 0.12)" if is_dark else "rgba(255, 255, 255, 0.12)"
+        text_secondary = text_color; border = "rgba(148, 163, 184, 0.35)" if is_dark else "rgba(148, 163, 184, 0.4)"
+        input_bg = "rgba(15, 23, 42, 0.85)" if is_dark else "rgba(255, 255, 255, 0.9)"
         accent = "#60a5fa" if is_dark else "#2563eb"; accent_hover = "#93c5fd" if is_dark else "#1d4ed8"
         success = "#4ade80" if is_dark else "#16a34a"; danger = "#f87171" if is_dark else "#dc2626"
-        button_bg = "rgba(51, 65, 85, 0.15)" if is_dark else "rgba(241, 245, 249, 0.15)"
+        button_bg = "rgba(51, 65, 85, 0.75)" if is_dark else "rgba(241, 245, 249, 0.85)"
         button_text = text_color; button_border = border; button_hover_bg = accent
         button_hover_text = "white"; button_hover_border = accent; number_color = accent
-        table_header_bg = "rgba(37, 99, 235, 0.6)" if is_dark else "rgba(30, 41, 59, 0.6)"; table_header_text = "#ffffff"
-        table_alt_row = "rgba(30, 41, 59, 0.08)" if is_dark else "rgba(248, 250, 252, 0.08)"; chart_bg = "rgba(0,0,0,0)"
+        table_header_bg = "#2563eb" if is_dark else "#1e293b"; table_header_text = "#ffffff"
+        table_alt_row = "rgba(30, 41, 59, 0.55)" if is_dark else "rgba(248, 250, 252, 0.6)"; chart_bg = "rgba(0,0,0,0)"
 
     css = f"""
     <style>
@@ -1623,7 +1554,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             color: {number_color}; font-weight: 800; font-size: 1.8rem; line-height: 1.2; letter-spacing: -0.5px;
         }}
         .train-count-badge {{
-            display: inline-block; background: {accent}; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6); font-size: 0.9rem;
+            display: inline-block; background: {accent}; color: white; font-size: 0.9rem;
             font-weight: 700; padding: 2px 10px; border-radius: 20px; margin-top: 2px;
         }}
         .train-total-card {{
@@ -1684,36 +1615,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
-        .mood-yellow-glow {{ display: inline-block; font-size: 1.1rem; filter: drop-shadow(0 0 6px #fbbf24) drop-shadow(0 0 12px #f59e0b); animation: mood-yellow-pulse 2s ease-in-out infinite; }}
-        @keyframes mood-yellow-pulse {{ 0%, 100% {{ filter: drop-shadow(0 0 6px #fbbf24) drop-shadow(0 0 12px #f59e0b); transform: scale(1); }} 50% {{ filter: drop-shadow(0 0 12px #fbbf24) drop-shadow(0 0 24px #f59e0b); transform: scale(1.15); }} }}
-
-        /* Weather Input Stamp Style */
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
-        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input {{
-            background-color: rgba(255, 255, 255, 0.12) !important;
-            color: #000000 !important;
-            border: 1px solid rgba(255, 255, 255, 0.35) !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
-            font-weight: 600 !important;
-            backdrop-filter: blur(10px) !important;
-            -webkit-backdrop-filter: blur(10px) !important;
-            border-radius: 10px !important;
-            padding: 6px 14px !important;
-            font-size: 0.95rem !important;
-            min-height: 36px !important;
-        }}
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
-        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
-            color: #ffffff !important;
-            font-weight: 700 !important;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.9) !important;
-            font-size: 0.9rem !important;
-        }}
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) > div > div,
-        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) > div > div {{
-            background: transparent !important;
-        }}
-
         [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important; margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important; }}
         body.sidebar-collapsed [data-testid="stSidebar"] {{ margin-left: -340px !important; opacity: 0 !important; pointer-events: none !important; }}
         body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important; }}
@@ -1762,41 +1663,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         @keyframes weather-bounce {{ 0%,100% {{ transform: translateY(0); }} 50% {{ transform: translateY(-12px); }} }}
         .stDataFrame [data-testid="stDataFrameResizable"] {{
             border: 1px solid {border} !important; border-radius: 8px !important;
-        }}
-        /* Weather Section Input Visibility - Day/Night Adaptive */
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
-        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input,
-        [data-testid="stMain"] input[key="weather_city_input"],
-        [data-testid="stMain"] input[key="sidebar_weather_city"] {{
-            background-color: rgba(255, 255, 255, 0.95) !important;
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
-            caret-color: #000000 !important;
-            border: 2px solid rgba(0, 0, 0, 0.2) !important;
-            box-shadow: 0 0 20px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2) !important;
-            font-weight: 700 !important;
-            font-size: 1.05rem !important;
-            border-radius: 12px !important;
-            padding: 10px 16px !important;
-        }}
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
-        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
-            color: #ffffff !important;
-            font-weight: 800 !important;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 15px rgba(0,0,0,0.5) !important;
-            font-size: 1.05rem !important;
-            letter-spacing: 0.5px !important;
-        }}
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) > div > div,
-        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) > div > div {{
-            background: transparent !important;
-        }}
-        .weather-input-wrapper {{
-            background: linear-gradient(135deg, rgba(255,153,51,0.15), rgba(255,255,255,0.1), rgba(19,136,8,0.15)) !important;
-            border-radius: 16px !important;
-            padding: 12px 16px !important;
-            border: 1px solid rgba(255,255,255,0.2) !important;
-            backdrop-filter: blur(12px) !important;
         }}
     </style>
     """
@@ -2001,689 +1867,6 @@ def get_pnr_status_url(pnr):
 # =====================================================================
 # MAIN FUNCTION
 # =====================================================================
-
-# =====================================================================
-# Audio Engine & Earth Background
-# =====================================================================
-
-def render_audio_controls(current_scene):
-    """Render sidebar audio volume + Web Audio engine."""
-    scene_map = {
-        "📋 Data Table": "solar",
-        "📊 Dashboard": "dashboard",
-        "💬 Chat": "solar",
-        "🚂 Railway": "solar",
-        "🌤️ Weather": "weather-sunny"
-    }
-    scene = scene_map.get(current_scene, "solar")
-
-    if current_scene == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
-        weather_cond = str(st.session_state.weather_data.get('weather', '')).lower()
-        audio_time = 'day'
-        try:
-            now_ts = int(time.time())
-            sunrise = st.session_state.weather_data.get('sunrise')
-            sunset = st.session_state.weather_data.get('sunset')
-            if sunrise and sunset and str(sunrise) not in ['', 'N/A', 'None']:
-                if now_ts < int(sunrise) or now_ts > int(sunset):
-                    audio_time = 'night'
-        except:
-            pass
-        if 'rain' in weather_cond or 'drizz' in weather_cond:
-            scene = 'weather-rain'
-        elif 'thunder' in weather_cond or 'storm' in weather_cond:
-            scene = 'weather-thunder'
-        elif 'snow' in weather_cond or 'frost' in weather_cond or 'freez' in weather_cond:
-            scene = 'weather-snow'
-        elif 'mist' in weather_cond or 'fog' in weather_cond or 'haz' in weather_cond:
-            scene = 'weather-fog'
-        elif 'cloud' in weather_cond:
-            scene = 'weather-cloudy' if audio_time == 'day' else 'weather-night'
-        else:
-            scene = 'weather-night' if audio_time == 'night' else 'weather-sunny'
-
-    components.html(f"""
-    <div style="padding: 10px 0; font-family: inherit;">
-        <div style="color: #f1f5f9; font-weight: 600; margin-bottom: 6px; font-size: 0.95rem;">🔊 Ambient Sound</div>
-        <input type="range" id="eqms-vol" min="0" max="100" value="0" 
-               style="width: 100%; accent-color: #FF9933; cursor: pointer; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1);">
-        <div style="display: flex; justify-content: space-between; color: #94a3b8; font-size: 0.75rem; margin-top: 4px;">
-            <span>Off</span><span>Max</span>
-        </div>
-        <div id="eqms-sound-status" style="color: #64748b; font-size: 0.75rem; margin-top: 6px; font-style: italic;">
-            Move slider to enable sound
-        </div>
-    </div>
-    <script>
-    (function() {{
-        var P = window.parent;
-
-        class SoundEngine {{
-            constructor() {{
-                this.ctx = null;
-                this.master = null;
-                this.nodes = {{}};
-                this.volume = 0;
-                this.scene = null;
-                this.started = false;
-                this._thunderInterval = null;
-                this._chirpTimeout = null;
-                this._lastBrown = 0;
-            }}
-
-            init() {{
-                if (this.ctx) return;
-                var AudioContext = window.AudioContext || window.webkitAudioContext;
-                this.ctx = new AudioContext();
-                this.master = this.ctx.createGain();
-                this.master.gain.value = 0;
-                this.master.connect(this.ctx.destination);
-                this.started = true;
-            }}
-
-            setVolume(v) {{
-                this.volume = v / 100;
-                if (!this.ctx) this.init();
-                if (this.master) {{
-                    this.master.gain.setTargetAtTime(this.volume * 0.35, this.ctx.currentTime, 0.1);
-                }}
-                if (this.volume > 0 && this.ctx && this.ctx.state === 'suspended') {{
-                    this.ctx.resume();
-                }}
-            }}
-
-            stopAll() {{
-                for (var k in this.nodes) {{
-                    try {{ this.nodes[k].stop(); }} catch(e){{}}
-                    try {{ this.nodes[k].disconnect(); }} catch(e){{}}
-                }}
-                this.nodes = {{}};
-                if (this._thunderInterval) {{ clearInterval(this._thunderInterval); this._thunderInterval = null; }}
-                if (this._chirpTimeout) {{ clearTimeout(this._chirpTimeout); this._chirpTimeout = null; }}
-            }}
-
-            setScene(scene) {{
-                if (this.scene === scene) return;
-                this.scene = scene;
-                if (this.volume <= 0) return;
-                this.stopAll();
-                if (!this.ctx) this.init();
-                switch(scene) {{
-                    case 'solar': this.playSolar(); break;
-                    case 'dashboard': this.playDashboard(); break;
-                    case 'weather-rain': this.playRain(); break;
-                    case 'weather-thunder': this.playThunder(); break;
-                    case 'weather-sunny': this.playSunny(); break;
-                    case 'weather-snow': this.playSnow(); break;
-                    case 'weather-cloudy': this.playCloudy(); break;
-                    case 'weather-night': this.playNight(); break;
-                    case 'weather-fog': this.playFog(); break;
-                    default: this.stopAll();
-                }}
-            }}
-
-            noiseBuffer() {{
-                var len = this.ctx.sampleRate * 2;
-                var buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-                var d = buf.getChannelData(0);
-                this._lastBrown = 0;
-                for (var i = 0; i < len; i++) {{
-                    var white = Math.random() * 2 - 1;
-                    this._lastBrown = (this._lastBrown || 0) + (white * 0.02);
-                    d[i] = this._lastBrown * 3.5;
-                }}
-                return buf;
-            }}
-
-            whiteNoiseBuffer() {{
-                var len = this.ctx.sampleRate * 2;
-                var buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-                var d = buf.getChannelData(0);
-                for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-                return buf;
-            }}
-
-            playSolar() {{
-                var noise = this.ctx.createBufferSource();
-                noise.buffer = this.noiseBuffer();
-                noise.loop = true;
-                var noiseFilter = this.ctx.createBiquadFilter();
-                noiseFilter.type = 'lowpass';
-                noiseFilter.frequency.value = 180;
-                var noiseGain = this.ctx.createGain();
-                noiseGain.gain.value = 0.5;
-                noise.connect(noiseFilter);
-                noiseFilter.connect(noiseGain);
-                noiseGain.connect(this.master);
-                noise.start();
-                this.nodes.noise = noise;
-
-                var osc = this.ctx.createOscillator();
-                osc.type = 'sawtooth';
-                osc.frequency.value = 42;
-                var oscGain = this.ctx.createGain();
-                oscGain.gain.value = 0.3;
-                osc.connect(oscGain);
-                oscGain.connect(this.master);
-                osc.start();
-                this.nodes.osc = osc;
-
-                var lfo = this.ctx.createOscillator();
-                lfo.type = 'square';
-                lfo.frequency.value = 3.2;
-                var lfoGain = this.ctx.createGain();
-                lfoGain.gain.value = 0.18;
-                lfo.connect(lfoGain);
-                lfoGain.connect(oscGain.gain);
-                lfo.start();
-                this.nodes.lfo = lfo;
-            }}
-
-            playDashboard() {{
-                var osc = this.ctx.createOscillator();
-                osc.type = 'sine';
-                osc.frequency.value = 55;
-                var g = this.ctx.createGain();
-                g.gain.value = 0.35;
-                osc.connect(g);
-                g.connect(this.master);
-                osc.start();
-                this.nodes.osc = osc;
-
-                var osc2 = this.ctx.createOscillator();
-                osc2.type = 'sine';
-                osc2.frequency.value = 110;
-                var g2 = this.ctx.createGain();
-                g2.gain.value = 0.12;
-                osc2.connect(g2);
-                g2.connect(this.master);
-                osc2.start();
-                this.nodes.osc2 = osc2;
-
-                var osc3 = this.ctx.createOscillator();
-                osc3.type = 'triangle';
-                osc3.frequency.value = 220;
-                var g3 = this.ctx.createGain();
-                g3.gain.value = 0.05;
-                osc3.connect(g3);
-                g3.connect(this.master);
-                osc3.start();
-                this.nodes.osc3 = osc3;
-            }}
-
-            playRain() {{
-                var src = this.ctx.createBufferSource();
-                src.buffer = this.whiteNoiseBuffer();
-                src.loop = true;
-                var filter = this.ctx.createBiquadFilter();
-                filter.type = 'lowpass';
-                filter.frequency.value = 550;
-                var g = this.ctx.createGain();
-                g.gain.value = 0.3;
-                src.connect(filter);
-                filter.connect(g);
-                g.connect(this.master);
-                src.start();
-                this.nodes.rain = src;
-            }}
-
-            playThunder() {{
-                this.playRain();
-                var self = this;
-                var thunderInterval = setInterval(function() {{
-                    if (self.scene !== 'weather-thunder') {{ clearInterval(thunderInterval); return; }}
-                    var burst = self.ctx.createBufferSource();
-                    burst.buffer = self.whiteNoiseBuffer();
-                    var burstFilter = self.ctx.createBiquadFilter();
-                    burstFilter.type = 'lowpass';
-                    burstFilter.frequency.value = 120;
-                    var burstGain = self.ctx.createGain();
-                    burstGain.gain.setValueAtTime(0.55, self.ctx.currentTime);
-                    burstGain.gain.exponentialRampToValueAtTime(0.01, self.ctx.currentTime + 1.8);
-                    burst.connect(burstFilter);
-                    burstFilter.connect(burstGain);
-                    burstGain.connect(self.master);
-                    burst.start();
-                    burst.stop(self.ctx.currentTime + 1.8);
-                }}, 7000 + Math.random() * 8000);
-                this._thunderInterval = thunderInterval;
-            }}
-
-            playSunny() {{
-                var self = this;
-                var chirp = function() {{
-                    if (self.scene !== 'weather-sunny') return;
-                    var t = self.ctx.currentTime;
-                    var osc = self.ctx.createOscillator();
-                    osc.type = 'sine';
-                    var f = 2800 + Math.random() * 2500;
-                    osc.frequency.setValueAtTime(f, t);
-                    osc.frequency.exponentialRampToValueAtTime(f + 1200, t + 0.08);
-                    var g = self.ctx.createGain();
-                    g.gain.setValueAtTime(0.1, t);
-                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-                    osc.connect(g);
-                    g.connect(self.master);
-                    osc.start(t);
-                    osc.stop(t + 0.15);
-                    self._chirpTimeout = setTimeout(chirp, 400 + Math.random() * 1800);
-                }};
-                chirp();
-            }}
-
-            playNight() {{
-                var self = this;
-                var chirp = function() {{
-                    if (self.scene !== 'weather-night') return;
-                    var t = self.ctx.currentTime;
-                    for (var i = 0; i < 3; i++) {{
-                        var osc = self.ctx.createOscillator();
-                        osc.type = 'sine';
-                        osc.frequency.value = 3200 + Math.random() * 600;
-                        var g = self.ctx.createGain();
-                        g.gain.setValueAtTime(0.07, t + i * 0.05);
-                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.05 + 0.04);
-                        osc.connect(g);
-                        g.connect(self.master);
-                        osc.start(t + i * 0.05);
-                        osc.stop(t + i * 0.05 + 0.04);
-                    }}
-                    self._chirpTimeout = setTimeout(chirp, 250 + Math.random() * 900);
-                }};
-                chirp();
-            }}
-
-            playSnow() {{
-                var src = this.ctx.createBufferSource();
-                src.buffer = this.whiteNoiseBuffer();
-                src.loop = true;
-                var filter = this.ctx.createBiquadFilter();
-                filter.type = 'bandpass';
-                filter.frequency.value = 350;
-                filter.Q.value = 0.5;
-                var g = this.ctx.createGain();
-                g.gain.value = 0.18;
-                src.connect(filter);
-                filter.connect(g);
-                g.connect(this.master);
-                src.start();
-                this.nodes.snow = src;
-            }}
-
-            playCloudy() {{
-                var src = this.ctx.createBufferSource();
-                src.buffer = this.whiteNoiseBuffer();
-                src.loop = true;
-                var filter = this.ctx.createBiquadFilter();
-                filter.type = 'bandpass';
-                filter.frequency.value = 280;
-                var g = this.ctx.createGain();
-                g.gain.value = 0.14;
-                src.connect(filter);
-                filter.connect(g);
-                g.connect(this.master);
-                src.start();
-                this.nodes.cloudy = src;
-            }}
-
-            playFog() {{
-                var src = this.ctx.createBufferSource();
-                src.buffer = this.whiteNoiseBuffer();
-                src.loop = true;
-                var filter = this.ctx.createBiquadFilter();
-                filter.type = 'lowpass';
-                filter.frequency.value = 220;
-                var g = this.ctx.createGain();
-                g.gain.value = 0.22;
-                src.connect(filter);
-                filter.connect(g);
-                g.connect(this.master);
-                src.start();
-                this.nodes.fog = src;
-            }}
-        }}
-
-        if (!P.eqmsSoundEngine) {{
-            P.eqmsSoundEngine = new SoundEngine();
-        }}
-        var engine = P.eqmsSoundEngine;
-        var slider = document.getElementById('eqms-vol');
-        var status = document.getElementById('eqms-sound-status');
-
-        var savedVol = P.eqmsVolume || 0;
-        slider.value = savedVol;
-        if (savedVol > 0) {{
-            status.textContent = 'Scene: {scene} | Vol: ' + savedVol + '%';
-            engine.setVolume(savedVol);
-        }}
-
-        slider.addEventListener('input', function() {{
-            var v = parseInt(this.value);
-            P.eqmsVolume = v;
-            engine.setVolume(v);
-            status.textContent = 'Scene: {scene} | Vol: ' + v + '%';
-            if (v > 0) {{
-                engine.setScene('{scene}');
-            }} else {{
-                engine.stopAll();
-                status.textContent = 'Move slider to enable sound';
-            }}
-        }});
-
-        engine.setScene('{scene}');
-    }})();
-    </script>
-    """, height=120)
-
-
-EARTH_BG_HTML = """
-<style>
-.earth-bg-scene {
-    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-    z-index: -1; pointer-events: none; overflow: hidden;
-    background: radial-gradient(ellipse at center, #0a0e27 0%, #000000 70%);
-    display: flex; align-items: center; justify-content: center;
-}
-.earth-wrap {
-    position: relative; width: 520px; height: 520px;
-    animation: earth-float 6s ease-in-out infinite;
-}
-@keyframes earth-float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-15px); }
-}
-.earth-globe {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    border-radius: 50%;
-    background: url('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg');
-    background-size: 1050px 100%;
-    box-shadow: 
-        inset -50px -50px 120px rgba(0,0,0,0.95), 
-        inset 15px 15px 40px rgba(255,255,255,0.15), 
-        0 0 80px rgba(80,120,220,0.25),
-        0 0 160px rgba(80,120,220,0.1);
-    animation: earth-spin 40s linear infinite;
-}
-.earth-globe::after {
-    content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 35%, transparent 30%, rgba(0,0,0,0.7) 75%, rgba(0,0,0,0.95) 100%);
-    pointer-events: none;
-}
-.earth-atmos {
-    position: absolute; top: -25px; left: -25px; right: -25px; bottom: -25px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 35%, rgba(100,160,255,0.12) 0%, transparent 55%);
-    box-shadow: 0 0 100px 30px rgba(100,160,255,0.08);
-    pointer-events: none;
-    animation: atmos-pulse 4s ease-in-out infinite;
-}
-@keyframes earth-spin {
-    from { background-position: 0 center; }
-    to { background-position: 1050px center; }
-}
-@keyframes atmos-pulse {
-    0%, 100% { opacity: 0.7; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.02); }
-}
-.earth-stars {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background-image: 
-        radial-gradient(2px 2px at 20px 30px, #eee, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 40px 70px, #fff, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 50px 160px, #ddd, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 90px 40px, #fff, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 130px 80px, #fff, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 160px 120px, #ddd, rgba(0,0,0,0));
-    background-repeat: repeat;
-    background-size: 200px 200px;
-    animation: twinkle 5s ease-in-out infinite alternate;
-    opacity: 0.6;
-}
-@keyframes twinkle {
-    from { opacity: 0.3; }
-    to { opacity: 0.8; }
-}
-.earth-label {
-    position: absolute; bottom: 8%; left: 50%; transform: translateX(-50%);
-    color: rgba(255,255,255,0.6); font-size: 0.9rem; letter-spacing: 4px;
-    text-transform: uppercase; font-weight: 600;
-    text-shadow: 0 2px 10px rgba(0,0,0,0.8);
-    pointer-events: none;
-}
-    .moon-orbit {
-        position: absolute; top: 50%; left: 50%;
-        width: 640px; height: 640px;
-        transform: translate(-50%, -50%);
-        animation: moon-spin 18s linear infinite;
-        pointer-events: none;
-    }
-    @keyframes moon-spin {
-        from { transform: translate(-50%, -50%) rotate(0deg); }
-        to { transform: translate(-50%, -50%) rotate(360deg); }
-    }
-    .moon {
-        position: absolute; top: -16px; left: 50%;
-        transform: translateX(-50%);
-        width: 32px; height: 32px;
-        background: radial-gradient(circle at 35% 35%, #fff9c4, #ffd700, #ff8c00);
-        border-radius: 50%;
-        box-shadow: 0 0 30px 10px rgba(255, 215, 0, 0.5), 0 0 60px 20px rgba(255, 165, 0, 0.25), inset -4px -4px 8px rgba(0,0,0,0.3);
-        animation: moon-glow-pulse 3s ease-in-out infinite alternate;
-    }
-    @keyframes moon-glow-pulse {
-        0% { box-shadow: 0 0 30px 10px rgba(255, 215, 0, 0.4), 0 0 60px 20px rgba(255, 165, 0, 0.2), inset -4px -4px 8px rgba(0,0,0,0.3); }
-        100% { box-shadow: 0 0 40px 15px rgba(255, 215, 0, 0.7), 0 0 80px 30px rgba(255, 165, 0, 0.4), inset -4px -4px 8px rgba(0,0,0,0.3); }
-    }
-</style>
-<div class="earth-bg-scene">
-    <div class="earth-stars"></div>
-    <div class="earth-wrap">
-        <div class="earth-globe"></div>
-        <div class="earth-atmos"></div>
-    </div>
-    <div class="earth-label">Real-time Earth View</div>
-    <div class="moon-orbit">
-        <div class="moon"></div>
-    </div>
-</div>
-"""
-
-# =====================================================================
-# Ocean Background for Chat View
-# =====================================================================
-OCEAN_BG_HTML = """
-<style>
-.ocean-bg-scene {
-    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-    z-index: -1; pointer-events: none; overflow: hidden;
-    background: linear-gradient(180deg, #006994 0%, #005073 25%, #00334e 50%, #001a2e 75%, #000d1a 100%);
-}
-.ocean-surface {
-    position: absolute; top: 0; left: 0; width: 100%; height: 15%;
-    background: linear-gradient(180deg, #4fc3f7 0%, #29b6f6 40%, #0288d1 80%, transparent 100%);
-    opacity: 0.4;
-    animation: ocean-surface-shimmer 3s ease-in-out infinite alternate;
-}
-@keyframes ocean-surface-shimmer {
-    0% { opacity: 0.35; }
-    100% { opacity: 0.5; }
-}
-.ocean-light-ray {
-    position: absolute; top: 0; width: 3px; height: 65vh;
-    background: linear-gradient(180deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05), transparent);
-    animation: ocean-ray-sway 6s ease-in-out infinite alternate;
-    border-radius: 2px;
-}
-@keyframes ocean-ray-sway {
-    0% { transform: translateX(0) rotate(-2deg); opacity: 0.15; }
-    100% { transform: translateX(15px) rotate(2deg); opacity: 0.35; }
-}
-.ocean-bubble {
-    position: absolute; bottom: -20px;
-    background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.85), rgba(255,255,255,0.3));
-    border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.25);
-    animation: ocean-bubble-rise linear infinite;
-}
-@keyframes ocean-bubble-rise {
-    0% { transform: translateY(0) scale(1); opacity: 0; }
-    8% { opacity: 0.7; }
-    92% { opacity: 0.4; }
-    100% { transform: translateY(-110vh) scale(1.3); opacity: 0; }
-}
-.ocean-fish {
-    position: absolute; font-size: 2rem;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-    animation: ocean-fish-swim linear infinite;
-    opacity: 0.85;
-}
-@keyframes ocean-fish-swim {
-    0% { transform: translateX(-120px) scaleX(1); }
-    48% { transform: translateX(calc(100vw + 120px)) scaleX(1); }
-    50% { transform: translateX(calc(100vw + 120px)) scaleX(-1); }
-    98% { transform: translateX(-120px) scaleX(-1); }
-    100% { transform: translateX(-120px) scaleX(1); }
-}
-.ocean-coral {
-    position: absolute; bottom: 0; font-size: 2.8rem;
-    filter: drop-shadow(0 -2px 6px rgba(0,0,0,0.4));
-    animation: ocean-coral-sway 4s ease-in-out infinite alternate;
-    transform-origin: bottom center;
-}
-@keyframes ocean-coral-sway {
-    0% { transform: rotate(-2deg); }
-    100% { transform: rotate(2deg); }
-}
-.ocean-seaweed {
-    position: absolute; bottom: 0; font-size: 2.2rem;
-    animation: ocean-seaweed-sway 3s ease-in-out infinite alternate;
-    transform-origin: bottom center;
-    opacity: 0.8;
-}
-@keyframes ocean-seaweed-sway {
-    0% { transform: rotate(-5deg) scaleY(1); }
-    100% { transform: rotate(5deg) scaleY(1.08); }
-}
-.ocean-jellyfish {
-    position: absolute; font-size: 2.2rem;
-    animation: ocean-jelly-float 10s ease-in-out infinite;
-    opacity: 0.55;
-    filter: drop-shadow(0 0 8px rgba(255,255,255,0.25));
-}
-@keyframes ocean-jelly-float {
-    0%, 100% { transform: translateY(0) translateX(0); }
-    20% { transform: translateY(-25px) translateX(12px); }
-    40% { transform: translateY(-8px) translateX(-8px); }
-    60% { transform: translateY(-35px) translateX(5px); }
-    80% { transform: translateY(-15px) translateX(-12px); }
-}
-.ocean-plankton {
-    position: absolute; width: 2px; height: 2px;
-    background: rgba(255,255,255,0.5);
-    border-radius: 50%;
-    animation: ocean-plankton-drift 12s linear infinite;
-}
-@keyframes ocean-plankton-drift {
-    0% { transform: translateY(0) translateX(0); opacity: 0; }
-    15% { opacity: 0.7; }
-    85% { opacity: 0.5; }
-    100% { transform: translateY(-50vh) translateX(25px); opacity: 0; }
-}
-.ocean-sand {
-    position: absolute; bottom: 0; left: 0; width: 100%; height: 50px;
-    background: linear-gradient(180deg, #c2b280 0%, #a8956b 50%, #8b7355 100%);
-    border-radius: 50% 50% 0 0 / 15px 15px 0 0;
-    opacity: 0.35;
-}
-.ocean-starfish {
-    position: absolute; bottom: 35px; font-size: 1.2rem;
-    animation: ocean-star-twinkle 3s ease-in-out infinite alternate;
-    opacity: 0.7;
-}
-@keyframes ocean-star-twinkle {
-    0% { opacity: 0.4; transform: scale(1); }
-    100% { opacity: 0.9; transform: scale(1.1); }
-}
-.ocean-shell {
-    position: absolute; bottom: 30px; font-size: 1rem;
-    opacity: 0.6;
-    animation: ocean-shell-bob 4s ease-in-out infinite;
-}
-@keyframes ocean-shell-bob {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-3px); }
-}
-</style>
-<div class="ocean-bg-scene">
-    <div class="ocean-surface"></div>
-    <div class="ocean-light-ray" style="left: 8%; animation-delay: 0s; height: 60vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 22%; animation-delay: 1.5s; height: 50vh; width: 3px;"></div>
-    <div class="ocean-light-ray" style="left: 38%; animation-delay: 3s; height: 65vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 55%; animation-delay: 0.8s; height: 55vh; width: 4px;"></div>
-    <div class="ocean-light-ray" style="left: 72%; animation-delay: 2.2s; height: 58vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 88%; animation-delay: 4s; height: 62vh; width: 3px;"></div>
-    <div class="ocean-bubble" style="left: 5%; width: 6px; height: 6px; animation-duration: 7s; animation-delay: 0s;"></div>
-    <div class="ocean-bubble" style="left: 12%; width: 10px; height: 10px; animation-duration: 9s; animation-delay: 1s;"></div>
-    <div class="ocean-bubble" style="left: 18%; width: 5px; height: 5px; animation-duration: 6s; animation-delay: 2.5s;"></div>
-    <div class="ocean-bubble" style="left: 28%; width: 8px; height: 8px; animation-duration: 8s; animation-delay: 0.5s;"></div>
-    <div class="ocean-bubble" style="left: 35%; width: 4px; height: 4px; animation-duration: 10s; animation-delay: 3s;"></div>
-    <div class="ocean-bubble" style="left: 42%; width: 12px; height: 12px; animation-duration: 7.5s; animation-delay: 1.5s;"></div>
-    <div class="ocean-bubble" style="left: 48%; width: 6px; height: 6px; animation-duration: 9s; animation-delay: 0.2s;"></div>
-    <div class="ocean-bubble" style="left: 58%; width: 9px; height: 9px; animation-duration: 6.5s; animation-delay: 2s;"></div>
-    <div class="ocean-bubble" style="left: 65%; width: 7px; height: 7px; animation-duration: 8.5s; animation-delay: 0.8s;"></div>
-    <div class="ocean-bubble" style="left: 72%; width: 11px; height: 11px; animation-duration: 7s; animation-delay: 3.5s;"></div>
-    <div class="ocean-bubble" style="left: 78%; width: 5px; height: 5px; animation-duration: 9s; animation-delay: 1.2s;"></div>
-    <div class="ocean-bubble" style="left: 85%; width: 8px; height: 8px; animation-duration: 8s; animation-delay: 4s;"></div>
-    <div class="ocean-bubble" style="left: 92%; width: 6px; height: 6px; animation-duration: 7s; animation-delay: 2.2s;"></div>
-    <div class="ocean-bubble" style="left: 3%; width: 10px; height: 10px; animation-duration: 10s; animation-delay: 5s;"></div>
-    <div class="ocean-bubble" style="left: 50%; width: 5px; height: 5px; animation-duration: 6s; animation-delay: 1.8s;"></div>
-    <div class="ocean-fish" style="top: 22%; animation-duration: 20s; animation-delay: 0s; font-size: 2.2rem;">🐠</div>
-    <div class="ocean-fish" style="top: 38%; animation-duration: 25s; animation-delay: 4s; font-size: 1.8rem;">🐟</div>
-    <div class="ocean-fish" style="top: 52%; animation-duration: 28s; animation-delay: 8s; font-size: 2.5rem;">🐡</div>
-    <div class="ocean-fish" style="top: 16%; animation-duration: 22s; animation-delay: 12s; font-size: 1.6rem;">🐠</div>
-    <div class="ocean-fish" style="top: 68%; animation-duration: 32s; animation-delay: 2s; font-size: 2.8rem;">🦈</div>
-    <div class="ocean-fish" style="top: 30%; animation-duration: 26s; animation-delay: 16s; font-size: 2rem;">🐬</div>
-    <div class="ocean-fish" style="top: 45%; animation-duration: 21s; animation-delay: 6s; font-size: 1.5rem;">🐟</div>
-    <div class="ocean-fish" style="top: 60%; animation-duration: 29s; animation-delay: 10s; font-size: 2.3rem;">🐠</div>
-    <div class="ocean-fish" style="top: 75%; animation-duration: 24s; animation-delay: 14s; font-size: 1.9rem;">🐟</div>
-    <div class="ocean-jellyfish" style="left: 15%; top: 25%; animation-delay: 0s; font-size: 2.5rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 60%; top: 45%; animation-delay: 5s; font-size: 2rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 40%; top: 18%; animation-delay: 10s; font-size: 1.8rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 80%; top: 55%; animation-delay: 3s; font-size: 2.2rem;">🪼</div>
-    <div class="ocean-plankton" style="left: 10%; bottom: 25%; animation-delay: 0s; animation-duration: 14s;"></div>
-    <div class="ocean-plankton" style="left: 25%; bottom: 45%; animation-delay: 2s; animation-duration: 16s;"></div>
-    <div class="ocean-plankton" style="left: 40%; bottom: 20%; animation-delay: 5s; animation-duration: 12s;"></div>
-    <div class="ocean-plankton" style="left: 55%; bottom: 55%; animation-delay: 1s; animation-duration: 15s;"></div>
-    <div class="ocean-plankton" style="left: 70%; bottom: 30%; animation-delay: 7s; animation-duration: 13s;"></div>
-    <div class="ocean-plankton" style="left: 85%; bottom: 50%; animation-delay: 3s; animation-duration: 17s;"></div>
-    <div class="ocean-plankton" style="left: 15%; bottom: 65%; animation-delay: 9s; animation-duration: 11s;"></div>
-    <div class="ocean-plankton" style="left: 50%; bottom: 40%; animation-delay: 6s; animation-duration: 14s;"></div>
-    <div class="ocean-coral" style="left: 3%; font-size: 3rem;">🪸</div>
-    <div class="ocean-coral" style="left: 15%; font-size: 2.4rem; animation-delay: 0.5s;">🪸</div>
-    <div class="ocean-coral" style="left: 30%; font-size: 3.2rem; animation-delay: 1s;">🪸</div>
-    <div class="ocean-coral" style="left: 48%; font-size: 2.2rem; animation-delay: 1.5s;">🪸</div>
-    <div class="ocean-coral" style="left: 62%; font-size: 2.8rem; animation-delay: 0.8s;">🪸</div>
-    <div class="ocean-coral" style="left: 78%; font-size: 3rem; animation-delay: 2s;">🪸</div>
-    <div class="ocean-coral" style="left: 90%; font-size: 2.5rem; animation-delay: 1.2s;">🪸</div>
-    <div class="ocean-seaweed" style="left: 8%;">🌿</div>
-    <div class="ocean-seaweed" style="left: 22%; font-size: 2.8rem; animation-delay: 0.7s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 38%; font-size: 1.9rem; animation-delay: 1.3s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 52%; font-size: 2.6rem; animation-delay: 0.4s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 68%; font-size: 2rem; animation-delay: 1.8s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 82%; font-size: 2.9rem; animation-delay: 1.1s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 95%; font-size: 2.3rem; animation-delay: 0.9s;">🌿</div>
-    <div class="ocean-starfish" style="left: 10%;">⭐</div>
-    <div class="ocean-starfish" style="left: 35%; animation-delay: 1s;">⭐</div>
-    <div class="ocean-starfish" style="left: 58%; animation-delay: 0.5s;">⭐</div>
-    <div class="ocean-starfish" style="left: 82%; animation-delay: 2s;">⭐</div>
-    <div class="ocean-shell" style="left: 20%;">🐚</div>
-    <div class="ocean-shell" style="left: 45%; animation-delay: 1.5s;">🐚</div>
-    <div class="ocean-shell" style="left: 70%; animation-delay: 0.8s;">🐚</div>
-    <div class="ocean-sand"></div>
-</div>
-"""
-
 def main():
     # Always update last_refresh to current time on page load so sync time matches live time
     st.session_state.last_refresh = time.time()
@@ -2770,60 +1953,22 @@ def main():
         position: absolute; top: 0; left: 0; width: 2px; height: 2px;
         background: transparent;
         box-shadow:
-            /* Row 1 - evenly spread */
-            3vw 5vh #fff, 8vw 8vh #fff, 13vw 3vh #fff, 18vw 12vh #fff,
-            23vw 6vh #fff, 28vw 15vh #fff, 33vw 4vh #fff, 38vw 10vh #fff,
-            43vw 7vh #fff, 48vw 14vh #fff, 53vw 5vh #fff, 58vw 9vh #fff,
-            63vw 11vh #fff, 68vw 6vh #fff, 73vw 13vh #fff, 78vw 4vh #fff,
-            83vw 8vh #fff, 88vw 15vh #fff, 93vw 7vh #fff, 97vw 11vh #fff,
-            /* Row 2 */
-            5vw 18vh #fff, 10vw 22vh #fff, 15vw 16vh #fff, 20vw 25vh #fff,
-            25vw 19vh #fff, 30vw 24vh #fff, 35vw 17vh #fff, 40vw 21vh #fff,
-            45vw 26vh #fff, 50vw 18vh #fff, 55vw 23vh #fff, 60vw 16vh #fff,
-            65vw 20vh #fff, 70vw 25vh #fff, 75vw 17vh #fff, 80vw 22vh #fff,
-            85vw 19vh #fff, 90vw 24vh #fff, 95vw 16vh #fff, 98vw 21vh #fff,
-            /* Row 3 */
-            2vw 30vh #fff, 7vw 35vh #fff, 12vw 28vh #fff, 17vw 33vh #fff,
-            22vw 29vh #fff, 27vw 34vh #fff, 32vw 31vh #fff, 37vw 36vh #fff,
-            42vw 28vh #fff, 47vw 32vh #fff, 52vw 35vh #fff, 57vw 30vh #fff,
-            62vw 34vh #fff, 67vw 29vh #fff, 72vw 33vh #fff, 77vw 31vh #fff,
-            82vw 35vh #fff, 87vw 28vh #fff, 92vw 32vh #fff, 96vw 30vh #fff,
-            /* Row 4 */
-            4vw 40vh #fff, 9vw 45vh #fff, 14vw 38vh #fff, 19vw 42vh #fff,
-            24vw 46vh #fff, 29vw 39vh #fff, 34vw 44vh #fff, 39vw 37vh #fff,
-            44vw 41vh #fff, 49vw 45vh #fff, 54vw 38vh #fff, 59vw 43vh #fff,
-            64vw 40vh #fff, 69vw 44vh #fff, 74vw 39vh #fff, 79vw 42vh #fff,
-            84vw 46vh #fff, 89vw 38vh #fff, 94vw 41vh #fff, 99vw 45vh #fff,
-            /* Row 5 */
-            6vw 50vh #fff, 11vw 55vh #fff, 16vw 48vh #fff, 21vw 52vh #fff,
-            26vw 56vh #fff, 31vw 49vh #fff, 36vw 54vh #fff, 41vw 47vh #fff,
-            46vw 51vh #fff, 51vw 55vh #fff, 56vw 48vh #fff, 61vw 53vh #fff,
-            66vw 50vh #fff, 71vw 54vh #fff, 76vw 49vh #fff, 81vw 52vh #fff,
-            86vw 56vh #fff, 91vw 48vh #fff, 95vw 51vh #fff, 98vw 55vh #fff,
-            /* Row 6 */
-            1vw 60vh #fff, 6vw 65vh #fff, 11vw 58vh #fff, 16vw 63vh #fff,
-            21vw 59vh #fff, 26vw 64vh #fff, 31vw 61vh #fff, 36vw 66vh #fff,
-            41vw 58vh #fff, 46vw 62vh #fff, 51vw 65vh #fff, 56vw 60vh #fff,
-            61vw 64vh #fff, 66vw 59vh #fff, 71vw 63vh #fff, 76vw 61vh #fff,
-            81vw 65vh #fff, 86vw 58vh #fff, 91vw 62vh #fff, 96vw 60vh #fff,
-            /* Row 7 */
-            3vw 70vh #fff, 8vw 75vh #fff, 13vw 68vh #fff, 18vw 73vh #fff,
-            23vw 77vh #fff, 28vw 69vh #fff, 33vw 74vh #fff, 38vw 71vh #fff,
-            43vw 76vh #fff, 48vw 68vh #fff, 53vw 72vh #fff, 58vw 75vh #fff,
-            63vw 70vh #fff, 68vw 74vh #fff, 73vw 69vh #fff, 78vw 73vh #fff,
-            83vw 77vh #fff, 88vw 70vh #fff, 93vw 74vh #fff, 97vw 71vh #fff,
-            /* Row 8 */
-            5vw 80vh #fff, 10vw 85vh #fff, 15vw 78vh #fff, 20vw 83vh #fff,
-            25vw 87vh #fff, 30vw 79vh #fff, 35vw 84vh #fff, 40vw 81vh #fff,
-            45vw 86vh #fff, 50vw 78vh #fff, 55vw 82vh #fff, 60vw 85vh #fff,
-            65vw 80vh #fff, 70vw 84vh #fff, 75vw 79vh #fff, 80vw 83vh #fff,
-            85vw 87vh #fff, 90vw 80vh #fff, 95vw 84vh #fff, 98vw 81vh #fff,
-            /* Row 9 */
-            2vw 90vh #fff, 7vw 95vh #fff, 12vw 88vh #fff, 17vw 93vh #fff,
-            22vw 89vh #fff, 27vw 94vh #fff, 32vw 91vh #fff, 37vw 96vh #fff,
-            42vw 88vh #fff, 47vw 92vh #fff, 52vw 95vh #fff, 57vw 90vh #fff,
-            62vw 94vh #fff, 67vw 89vh #fff, 72vw 93vh #fff, 77vw 91vh #fff,
-            82vw 95vh #fff, 87vw 88vh #fff, 92vw 92vh #fff, 96vw 90vh #fff;
+            5vw 8vh #fff, 12vw 15vh #fff, 18vw 5vh #fff, 25vw 20vh #fff,
+            32vw 10vh #fff, 38vw 25vh #fff, 45vw 12vh #fff, 52vw 18vh #fff,
+            58vw 6vh #fff, 65vw 22vh #fff, 72vw 9vh #fff, 78vw 16vh #fff,
+            85vw 11vh #fff, 92vw 24vh #fff, 97vw 7vh #fff,
+            8vw 35vh #fff, 15vw 42vh #fff, 22vw 30vh #fff, 28vw 48vh #fff,
+            35vw 38vh #fff, 42vw 52vh #fff, 48vw 33vh #fff, 55vw 46vh #fff,
+            62vw 36vh #fff, 68vw 50vh #fff, 75vw 40vh #fff, 82vw 55vh #fff,
+            88vw 32vh #fff, 95vw 44vh #fff,
+            3vw 58vh #fff, 10vw 65vh #fff, 17vw 55vh #fff, 24vw 70vh #fff,
+            30vw 62vh #fff, 37vw 75vh #fff, 44vw 60vh #fff, 50vw 72vh #fff,
+            57vw 68vh #fff, 64vw 78vh #fff, 70vw 66vh #fff, 77vw 80vh #fff,
+            83vw 58vh #fff, 90vw 74vh #fff, 96vw 64vh #fff,
+            6vw 85vh #fff, 14vw 92vh #fff, 20vw 88vh #fff, 27vw 95vh #fff,
+            34vw 82vh #fff, 41vw 90vh #fff, 47vw 85vh #fff, 54vw 96vh #fff,
+            60vw 89vh #fff, 67vw 94vh #fff, 73vw 86vh #fff, 80vw 93vh #fff,
+            86vw 84vh #fff, 93vw 91vh #fff, 99vw 87vh #fff;
         animation: twinkle-stars 3s ease-in-out infinite alternate;
     }
     @keyframes twinkle-stars {
@@ -3055,245 +2200,7 @@ def main():
         <div class="shooting"></div>
     </div>
     """
-    view_bg = st.session_state.view_mode
-    if view_bg == "📊 Dashboard":
-        st.markdown(EARTH_BG_HTML, unsafe_allow_html=True)
-    elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
-        pass  # Weather bg rendered later
-    elif view_bg == "💬 Chat":
-        st.markdown(OCEAN_BG_HTML, unsafe_allow_html=True)
-    else:
-        st.markdown(bg_html, unsafe_allow_html=True)
-
-    # =====================================================================
-    # WEATHER ANIMATED BACKGROUND (Replaces Solar when Weather is active)
-    # =====================================================================
-    weather_bg_html = ""
-    if st.session_state.weather_data and 'error' not in st.session_state.weather_data and st.session_state.view_mode == "🌤️ Weather":
-        import math
-        weather_cond = str(st.session_state.weather_data.get('weather', '')).lower()
-        city_name = st.session_state.weather_data.get('city', 'Weather')
-        temp = st.session_state.weather_data.get('temp', '--')
-        desc = st.session_state.weather_data.get('weather', '').title()
-
-        # ---- DAY / NIGHT DETECTION ----
-        time_of_day = 'day'
-        try:
-            now_ts = int(time.time())
-            sunrise = st.session_state.weather_data.get('sunrise')
-            sunset = st.session_state.weather_data.get('sunset')
-            if sunrise and sunset and str(sunrise) not in ['', 'N/A', 'None']:
-                sunrise = int(sunrise)
-                sunset = int(sunset)
-                if now_ts < sunrise - 1800:
-                    time_of_day = 'night'
-                elif now_ts < sunrise + 1800:
-                    time_of_day = 'dawn'
-                elif now_ts < sunset - 1800:
-                    time_of_day = 'day'
-                elif now_ts < sunset + 1800:
-                    time_of_day = 'dusk'
-                else:
-                    time_of_day = 'night'
-        except Exception:
-            pass
-
-        # ---- WEATHER TYPE (respects day/night) ----
-        if 'rain' in weather_cond or 'drizz' in weather_cond:
-            scene = 'rain' if time_of_day in ['day', 'dawn', 'dusk'] else 'night-rain'
-        elif 'thunder' in weather_cond or 'storm' in weather_cond:
-            scene = 'thunder'
-        elif 'snow' in weather_cond or 'frost' in weather_cond or 'freez' in weather_cond:
-            scene = 'snow'
-        elif 'mist' in weather_cond or 'fog' in weather_cond or 'haz' in weather_cond:
-            scene = 'fog'
-        elif 'cloud' in weather_cond:
-            scene = 'cloudy' if time_of_day in ['day', 'dawn', 'dusk'] else 'night'
-        else:
-            scene = 'night' if time_of_day in ['night', 'dusk'] else 'sunny'
-
-        # ---- CSS & HTML ----
-        bg_style = ""
-        elements = ""
-        info_html = ""  # Initialize to prevent UnboundLocalError
-
-        if scene in ('rain', 'night-rain'):
-            bg_style = "background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 35%, #2d3a4a 70%, #1a2332 100%);"
-            elements += '<div style="position:absolute;top:0;left:0;width:100%;height:90px;background:linear-gradient(180deg,#1a1a2e 0%,#2d3748 50%,transparent 100%);border-radius:0 0 50% 50% / 0 0 30px 30px;opacity:0.95;z-index:2;"></div>'
-            elements += '<div style="position:absolute;top:-10px;left:10%;width:200px;height:60px;background:#4a5568;border-radius:50px;opacity:0.9;z-index:3;box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>'
-            elements += '<div style="position:absolute;top:5px;left:25%;width:160px;height:50px;background:#4a5568;border-radius:50px;opacity:0.85;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:-5px;left:55%;width:220px;height:65px;background:#4a5568;border-radius:50px;opacity:0.9;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:8px;left:75%;width:180px;height:55px;background:#4a5568;border-radius:50px;opacity:0.85;z-index:3;"></div>'
-            for i in range(60):
-                left = (i * 1.7) % 100
-                delay = (i * 0.08) % 1.5
-                dur = 0.5 + (i % 4) * 0.15
-                height = 15 + (i % 5) * 8
-                elements += f'<div style="position:absolute;left:{left}%;top:60px;width:2px;height:{height}px;background:linear-gradient(180deg,transparent,#64b5f6,#90caf9);border-radius:0 0 2px 2px;opacity:0.7;animation:rainFall {dur}s linear {delay}s infinite;z-index:4;"></div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:120px;background:linear-gradient(180deg,#1a3a4a 0%,#0d1b2a 100%);z-index:5;"></div>'
-            elements += '<div style="position:absolute;bottom:90px;left:0;width:100%;height:30px;background:linear-gradient(180deg,rgba(100,181,246,0.3) 0%,transparent 100%);z-index:6;"></div>'
-            for i in range(8):
-                left = 5 + (i * 12)
-                width = 40 + (i % 3) * 20
-                delay = (i * 0.3) % 2
-                elements += f'<div style="position:absolute;bottom:{15 + (i%2)*10}px;left:{left}%;width:{width}px;height:8px;background:rgba(100,181,246,0.4);border-radius:50%;animation:waterShimmer 2s ease-in-out {delay}s infinite;z-index:7;"></div>'
-            elements += '<div style="position:absolute;bottom:100px;left:5%;font-size:60px;z-index:8;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">🏠</div>'
-            elements += '<div style="position:absolute;bottom:100px;left:15%;font-size:55px;z-index:8;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">🏡</div>'
-            elements += '<div style="position:absolute;bottom:100px;left:70%;font-size:65px;z-index:8;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">🏠</div>'
-            elements += '<div style="position:absolute;bottom:100px;left:82%;font-size:50px;z-index:8;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">🏡</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:25%;font-size:50px;z-index:9;animation:treeSway 3s ease-in-out infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:35%;font-size:55px;z-index:9;animation:treeSway 3s ease-in-out 0.5s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:55%;font-size:48px;z-index:9;animation:treeSway 3s ease-in-out 1s infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:90%;font-size:52px;z-index:9;animation:treeSway 3s ease-in-out 1.5s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#2d3748;z-index:10;"></div>'
-            elements += '<div style="position:absolute;bottom:5px;left:0;width:100%;height:2px;background:rgba(100,181,246,0.3);z-index:11;"></div>'
-
-        elif scene == 'thunder':
-            bg_style = "background: linear-gradient(180deg, #050510 0%, #0d0d1a 35%, #1a0a2e 70%, #0d0d1a 100%);"
-            elements += '<div style="position:absolute;top:0;left:0;width:100%;height:100px;background:linear-gradient(180deg,#1a1a2e 0%,#374151 50%,transparent 100%);border-radius:0 0 50% 50% / 0 0 40px 40px;opacity:0.95;z-index:2;"></div>'
-            elements += '<div style="position:absolute;top:-15px;left:5%;width:250px;height:70px;background:#1f2937;border-radius:50px;opacity:0.95;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:0;left:30%;width:200px;height:60px;background:#1f2937;border-radius:50px;opacity:0.9;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:-10px;left:60%;width:280px;height:75px;background:#1f2937;border-radius:50px;opacity:0.95;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.08);animation:lightning 3s ease-in-out infinite;z-index:4;pointer-events:none;"></div>'
-            elements += '<div style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.05);animation:lightning 3s ease-in-out 1.5s infinite;z-index:4;pointer-events:none;"></div>'
-            for i in range(80):
-                left = (i * 1.3) % 100
-                delay = (i * 0.06) % 1.2
-                dur = 0.3 + (i % 3) * 0.1
-                height = 20 + (i % 6) * 10
-                elements += f'<div style="position:absolute;left:{left}%;top:70px;width:2px;height:{height}px;background:linear-gradient(180deg,transparent,#90caf9,#e3f2fd);border-radius:0 0 2px 2px;opacity:0.8;animation:rainFall {dur}s linear {delay}s infinite;z-index:5;"></div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:120px;background:linear-gradient(180deg,#1a1a2e 0%,#0d0d1a 100%);z-index:6;"></div>'
-            elements += '<div style="position:absolute;bottom:90px;left:0;width:100%;height:30px;background:linear-gradient(180deg,rgba(144,202,249,0.2) 0%,transparent 100%);z-index:7;"></div>'
-            elements += '<div style="position:absolute;bottom:100px;left:8%;font-size:55px;z-index:8;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:100px;left:72%;font-size:60px;z-index:8;">🏡</div>'
-            elements += '<div style="position:absolute;bottom:100px;left:85%;font-size:50px;z-index:8;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:22%;font-size:50px;z-index:9;animation:treeSway 2.5s ease-in-out infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:38%;font-size:52px;z-index:9;animation:treeSway 2.5s ease-in-out 0.7s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:58%;font-size:48px;z-index:9;animation:treeSway 2.5s ease-in-out 1.4s infinite;">🌲</div>'
-            for i in range(6):
-                left = 8 + (i * 15)
-                delay = (i * 0.4) % 2
-                elements += f'<div style="position:absolute;bottom:{12 + (i%2)*8}px;left:{left}%;width:50px;height:6px;background:rgba(144,202,249,0.35);border-radius:50%;animation:waterShimmer 1.5s ease-in-out {delay}s infinite;z-index:10;"></div>'
-
-        elif scene == 'sunny':
-            bg_style = "background: linear-gradient(180deg, #0288d1 0%, #29b6f6 20%, #4fc3f7 40%, #81d4fa 60%, #b3e5fc 80%, #e1f5fe 100%);"
-            elements += '<div style="position:absolute;top:30px;right:80px;width:120px;height:120px;background:radial-gradient(circle,#fff9c4 0%,#ffeb3b 30%,#ffc107 60%,transparent 70%);border-radius:50%;animation:sunPulse 3s ease-in-out infinite;z-index:2;box-shadow:0 0 80px 30px rgba(255,235,59,0.5),0 0 120px 50px rgba(255,193,7,0.3);"></div>'
-            for angle in range(0, 360, 30):
-                elements += f'<div style="position:absolute;top:90px;right:20px;width:180px;height:3px;background:linear-gradient(90deg,transparent,rgba(255,235,59,0.6),transparent);transform-origin:center;transform:translate(-50%,-50%) rotate({angle}deg);animation:raySpin 20s linear infinite;z-index:1;"></div>'
-            elements += '<div style="position:absolute;top:40px;left:10%;width:180px;height:55px;background:rgba(255,255,255,0.85);border-radius:50px;animation:cloudDrift 35s linear infinite;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:50px;left:40%;width:140px;height:45px;background:rgba(255,255,255,0.75);border-radius:50px;animation:cloudDrift 40s linear infinite;animation-delay:-15s;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:35px;left:65%;width:200px;height:60px;background:rgba(255,255,255,0.8);border-radius:50px;animation:cloudDrift 30s linear infinite;animation-delay:-8s;z-index:3;"></div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:130px;background:linear-gradient(180deg,#43a047 0%,#2e7d32 40%,#1b5e20 100%);z-index:4;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
-            elements += '<div style="position:absolute;bottom:110px;left:0;width:100%;height:25px;background:linear-gradient(180deg,rgba(129,199,132,0.5) 0%,transparent 100%);z-index:5;"></div>'
-            elements += '<div style="position:absolute;bottom:110px;left:6%;font-size:60px;z-index:6;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:18%;font-size:55px;z-index:6;">🏡</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:68%;font-size:65px;z-index:6;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:82%;font-size:50px;z-index:6;">🏡</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:30%;font-size:55px;z-index:7;animation:treeSway 4s ease-in-out infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:42%;font-size:60px;z-index:7;animation:treeSway 4s ease-in-out 0.8s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:55%;font-size:52px;z-index:7;animation:treeSway 4s ease-in-out 1.6s infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:92%;font-size:58px;z-index:7;animation:treeSway 4s ease-in-out 2.4s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:18px;background:#795548;z-index:8;"></div>'
-            elements += '<div style="position:absolute;bottom:8px;left:0;width:100%;height:3px;background:rgba(255,255,255,0.2);z-index:9;"></div>'
-            elements += '<div style="position:absolute;top:25%;left:20%;font-size:20px;animation:birdFly 15s linear infinite;z-index:10;">🕊️</div>'
-            elements += '<div style="position:absolute;top:20%;left:50%;font-size:18px;animation:birdFly 18s linear infinite;animation-delay:-5s;z-index:10;">🐦</div>'
-
-        elif scene == 'night':
-            bg_style = "background: linear-gradient(180deg, #000000 0%, #0a0a1a 20%, #1a1a3e 50%, #2d1b4e 80%, #1a1a2e 100%);"
-            for i in range(80):
-                left = (i * 3.7) % 100
-                top = (i * 2.3) % 50
-                delay = (i * 0.2) % 3
-                size = 1 + (i % 3)
-                opacity = 0.3 + (i % 5) * 0.15
-                elements += f'<div style="position:absolute;left:{left}%;top:{top}%;width:{size}px;height:{size}px;background:#fff;border-radius:50%;opacity:{opacity};animation:twinkle 2s ease-in-out {delay}s infinite;z-index:1;"></div>'
-            elements += '<div style="position:absolute;top:40px;right:100px;width:100px;height:100px;background:radial-gradient(circle at 35% 35%,#fff9c4,#f5f5dc,#e0e0e0);border-radius:50%;animation:moonGlow 4s ease-in-out infinite;z-index:2;box-shadow:0 0 60px 20px rgba(245,245,220,0.3),0 0 100px 40px rgba(245,245,220,0.15);"></div>'
-            elements += '<div style="position:absolute;top:55px;right:155px;width:15px;height:15px;background:rgba(200,200,200,0.4);border-radius:50%;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:80px;right:130px;width:10px;height:10px;background:rgba(200,200,200,0.35);border-radius:50%;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:65px;right:115px;width:12px;height:12px;background:rgba(200,200,200,0.3);border-radius:50%;z-index:3;"></div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:130px;background:linear-gradient(180deg,#1a1a2e 0%,#0d0d1a 50%,#000000 100%);z-index:4;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
-            elements += '<div style="position:absolute;bottom:110px;left:8%;font-size:55px;z-index:5;filter:drop-shadow(0 0 10px rgba(255,235,59,0.3));">🏠</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:20%;font-size:50px;z-index:5;filter:drop-shadow(0 0 8px rgba(255,235,59,0.2));">🏡</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:70%;font-size:60px;z-index:5;filter:drop-shadow(0 0 12px rgba(255,235,59,0.3));">🏠</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:85%;font-size:48px;z-index:5;filter:drop-shadow(0 0 8px rgba(255,235,59,0.2));">🏡</div>'
-            elements += '<div style="position:absolute;bottom:140px;left:10%;width:6px;height:6px;background:#ffeb3b;border-radius:1px;animation:windowLight 3s ease-in-out infinite;z-index:6;"></div>'
-            elements += '<div style="position:absolute;bottom:140px;left:13%;width:6px;height:6px;background:#ffeb3b;border-radius:1px;animation:windowLight 3s ease-in-out 1s infinite;z-index:6;"></div>'
-            elements += '<div style="position:absolute;bottom:145px;left:73%;width:6px;height:6px;background:#ffeb3b;border-radius:1px;animation:windowLight 3s ease-in-out 0.5s infinite;z-index:6;"></div>'
-            elements += '<div style="position:absolute;bottom:115px;left:32%;font-size:50px;z-index:7;animation:treeSway 5s ease-in-out infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:45%;font-size:55px;z-index:7;animation:treeSway 5s ease-in-out 1s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:58%;font-size:48px;z-index:7;animation:treeSway 5s ease-in-out 2s infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:92%;font-size:52px;z-index:7;animation:treeSway 5s ease-in-out 3s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#1a1a1a;z-index:8;"></div>'
-
-        elif scene == 'cloudy':
-            bg_style = "background: linear-gradient(180deg, #546e7a 0%, #78909c 30%, #90a4ae 60%, #b0bec5 100%);"
-            elements += '<div style="position:absolute;top:20px;left:5%;width:220px;height:70px;background:rgba(255,255,255,0.6);border-radius:50px;animation:cloudDrift 40s linear infinite;z-index:2;"></div>'
-            elements += '<div style="position:absolute;top:40px;left:35%;width:180px;height:60px;background:rgba(255,255,255,0.5);border-radius:50px;animation:cloudDrift 45s linear infinite;animation-delay:-10s;z-index:2;"></div>'
-            elements += '<div style="position:absolute;top:15px;left:65%;width:250px;height:75px;background:rgba(255,255,255,0.55);border-radius:50px;animation:cloudDrift 35s linear infinite;animation-delay:-20s;z-index:2;"></div>'
-            elements += '<div style="position:absolute;top:50px;left:85%;width:160px;height:55px;background:rgba(255,255,255,0.45);border-radius:50px;animation:cloudDrift 50s linear infinite;animation-delay:-5s;z-index:2;"></div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:120px;background:linear-gradient(180deg,#558b2f 0%,#33691e 50%,#1b5e20 100%);z-index:3;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
-            elements += '<div style="position:absolute;bottom:105px;left:7%;font-size:55px;z-index:4;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:72%;font-size:60px;z-index:4;">🏡</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:85%;font-size:50px;z-index:4;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:22%;font-size:52px;z-index:5;animation:treeSway 4s ease-in-out infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:38%;font-size:58px;z-index:5;animation:treeSway 4s ease-in-out 0.8s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:55%;font-size:50px;z-index:5;animation:treeSway 4s ease-in-out 1.6s infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#5d4037;z-index:6;"></div>'
-
-        elif scene == 'snow':
-            bg_style = "background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 40%, #90caf9 70%, #e1f5fe 100%);"
-            elements += '<div style="position:absolute;top:10px;left:0;width:100%;height:80px;background:linear-gradient(180deg,rgba(255,255,255,0.9) 0%,rgba(255,255,255,0.6) 50%,transparent 100%);border-radius:0 0 50% 50% / 0 0 30px 30px;z-index:2;"></div>'
-            elements += '<div style="position:absolute;top:0;left:15%;width:200px;height:65px;background:rgba(255,255,255,0.85);border-radius:50px;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:5px;left:50%;width:250px;height:70px;background:rgba(255,255,255,0.8);border-radius:50px;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:0;left:75%;width:180px;height:60px;background:rgba(255,255,255,0.85);border-radius:50px;z-index:3;"></div>'
-            snow_chars = ['❄', '❅', '❆', '✻', '✼']
-            for i in range(50):
-                left = (i * 2.1) % 100
-                delay = (i * 0.12) % 3
-                dur = 2 + (i % 4) * 1.5
-                size = 12 + (i % 4) * 4
-                char = snow_chars[i % 5]
-                elements += f'<div style="position:absolute;left:{left}%;top:-20px;font-size:{size}px;color:#fff;opacity:0.8;text-shadow:0 0 4px rgba(255,255,255,0.8);animation:snowFall {dur}s linear {delay}s infinite;z-index:4;">{char}</div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:130px;background:linear-gradient(180deg,#fff 0%,#e3f2fd 40%,#bbdefb 100%);z-index:5;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
-            elements += '<div style="position:absolute;bottom:110px;left:6%;font-size:55px;z-index:6;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:18%;font-size:50px;z-index:6;">🏡</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:70%;font-size:60px;z-index:6;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:84%;font-size:48px;z-index:6;">🏡</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:30%;font-size:55px;z-index:7;animation:treeSway 5s ease-in-out infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:42%;font-size:60px;z-index:7;animation:treeSway 5s ease-in-out 1s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:56%;font-size:52px;z-index:7;animation:treeSway 5s ease-in-out 2s infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:92%;font-size:58px;z-index:7;animation:treeSway 5s ease-in-out 3s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#e0e0e0;z-index:8;"></div>'
-
-        else:  # fog
-            bg_style = "background: linear-gradient(180deg, #cfd8dc 0%, #b0bec5 50%, #90a4ae 100%);"
-            for i in range(6):
-                top = 10 + i * 14
-                delay = (i * 0.5) % 3
-                dur = 20 + i * 5
-                opacity = 0.15 + (i % 3) * 0.1
-                elements += f'<div style="position:absolute;top:{top}%;left:-50%;width:200%;height:60px;background:linear-gradient(90deg,transparent,rgba(255,255,255,{opacity}),transparent);animation:fogDrift {dur}s linear {delay}s infinite;z-index:2;filter:blur(3px);"></div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:120px;background:linear-gradient(180deg,#78909c 0%,#546e7a 50%,#37474f 100%);z-index:3;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
-            elements += '<div style="position:absolute;bottom:105px;left:10%;font-size:50px;z-index:4;opacity:0.7;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:75%;font-size:55px;z-index:4;opacity:0.7;">🏡</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:28%;font-size:48px;z-index:5;opacity:0.6;animation:treeSway 6s ease-in-out infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:45%;font-size:52px;z-index:5;opacity:0.6;animation:treeSway 6s ease-in-out 1.5s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:60%;font-size:45px;z-index:5;opacity:0.6;animation:treeSway 6s ease-in-out 3s infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#455a64;z-index:6;"></div>'
-
-            loc_detail = city_name
-            if st.session_state.weather_data.get('state'):
-                loc_detail += f", {st.session_state.weather_data['state']}"
-            if st.session_state.weather_data.get('country'):
-                loc_detail += f", {st.session_state.weather_data['country']}"
-            info_html = f"""<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:100;pointer-events:none;"><div style="font-size:2.6rem;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);letter-spacing:2px;">{loc_detail}</div><div style="font-size:7rem;font-weight:900;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);line-height:1;margin:10px 0;">{temp}°</div><div style="font-size:1.6rem;font-weight:600;color:#ffffff;text-shadow:0 2px 8px rgba(0,0,0,0.9),0 0 20px rgba(0,0,0,0.5);text-transform:capitalize;">{desc}</div></div>"""
-
-        weather_bg_html = f"""<style>@keyframes rainFall{{from{{transform:translateY(-20px);opacity:0;}}10%{{opacity:0.8;}}90%{{opacity:0.8;}}to{{transform:translateY(110vh);opacity:0;}}}}@keyframes snowFall{{from{{transform:translateY(-20px) rotate(0deg);opacity:0;}}10%{{opacity:1;}}90%{{opacity:1;}}to{{transform:translateY(110vh) rotate(360deg);opacity:0;}}}}@keyframes cloudDrift{{from{{transform:translateX(-300px);}}to{{transform:translateX(calc(100vw + 300px));}}}}@keyframes sunPulse{{0%,100%{{transform:scale(1);opacity:0.9;}}50%{{transform:scale(1.15);opacity:1;}}}}@keyframes raySpin{{from{{transform:translate(-50%,-50%) rotate(0deg);}}to{{transform:translate(-50%,-50%) rotate(360deg);}}}}@keyframes moonGlow{{0%,100%{{box-shadow:0 0 60px 20px rgba(245,245,220,0.3);}}50%{{box-shadow:0 0 80px 30px rgba(245,245,220,0.5);}}}}@keyframes twinkle{{0%,100%{{opacity:0.3;}}50%{{opacity:1;}}}}@keyframes treeSway{{0%,100%{{transform:rotate(-3deg);}}50%{{transform:rotate(3deg);}}}}@keyframes waterShimmer{{0%,100%{{opacity:0.3;transform:scaleX(1);}}50%{{opacity:0.7;transform:scaleX(1.2);}}}}@keyframes lightning{{0%,90%,100%{{opacity:0;}}91%{{opacity:0.3;}}92%{{opacity:0;}}93%{{opacity:0.6;}}94%{{opacity:0;}}}}@keyframes windowLight{{0%,100%{{opacity:0.6;}}50%{{opacity:1;}}}}@keyframes birdFly{{from{{transform:translateX(-50px);}}to{{transform:translateX(calc(100vw + 50px));}}}}@keyframes fogDrift{{from{{transform:translateX(-50%);}}to{{transform:translateX(0%);}}}}</style><div style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;overflow:hidden;{bg_style}">{elements}{info_html}</div>"""
-
-    if weather_bg_html:
-        st.markdown(weather_bg_html, unsafe_allow_html=True)
-
-
+    st.markdown(bg_html, unsafe_allow_html=True)
 
     # Sidebar Toggle + Back-to-Top Button
     components.html("""
@@ -3362,7 +2269,14 @@ def main():
                             toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
                         }
                     } catch(e) {}
-                    // Sidebar state managed by CSS + class toggle only — no polling
+                    setInterval(function(){
+                        var sb = doc.querySelector('[data-testid="stSidebar"]');
+                        var isCollapsed = doc.body.classList.contains('sidebar-collapsed');
+                        if (sb) {
+                            if (isCollapsed) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
+                            else { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
+                        }
+                    }, 2000);
                     doc.body.appendChild(toggleBtn);
                 }
 
@@ -3384,7 +2298,7 @@ def main():
     """, height=0)
 
     # Theme setup
-    theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)', '🟡 Yellow Mood']
+    theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
     qp_theme = st.query_params.get('__theme')
     if qp_theme in theme_options and st.session_state.theme != qp_theme:
         st.session_state.theme = qp_theme
@@ -3421,9 +2335,7 @@ def main():
         h = now_ist().hour
         effective_theme = 'Day' if 6 <= h < 19 else 'Dark'
 
-    if effective_theme == '🟡 Yellow Mood':
-        apply_theme(effective_theme)
-    elif effective_theme == 'Custom':
+    if effective_theme == 'Custom':
         custom_bg = st.sidebar.color_picker("Background Color", value=st.session_state.custom_bg, key="custom_bg_picker")
         custom_text = st.sidebar.color_picker("Text Color", value=st.session_state.custom_text, key="custom_text_picker")
         if custom_bg != st.session_state.custom_bg or custom_text != st.session_state.custom_text:
@@ -3545,11 +2457,8 @@ def main():
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
-        # Audio Volume Control
-        render_audio_controls(st.session_state.view_mode)
-
         with st.expander("🌤️ Quick Weather", expanded=True):
-            city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city", placeholder="Any city...")
+            city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city")
             if city != st.session_state.weather_city: st.session_state.weather_city = city
             if st.button("🌤️ Get Weather", key="sidebar_weather_btn", use_container_width=True):
                 if city:
@@ -3561,10 +2470,8 @@ def main():
                         else: st.error(data.get('error', 'Error'))
             if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
                 data = st.session_state.weather_data
-                loc_display = data['city'] + (f", {data.get('state', '')}" if data.get('state') else "") + (f", {data.get('country', '')}" if data.get('country') else "")
                 st.markdown(f"""
                 <div style="text-align:center; padding: 5px 0;">
-                    <div style="font-size:0.85rem; font-weight:600; color:#f1f5f9; margin-bottom:4px;">{loc_display}</div>
                     <div style="font-size:1.5rem; font-weight:700;">{data['temp']}°C</div>
                     <div>{data['weather'].title()}</div>
                     <div style="font-size:0.8rem; color:#64748b;">💧 {data['humidity']}%  🌬️ {data['wind_speed']} m/s</div>
@@ -3627,7 +2534,7 @@ def main():
                         setTimeout(function(){ window.parent.document.body.removeChild(iframe); }, 2000);
                     }, 300);
                 })();
-            " style="display: block; width: 100%; padding: 10px 16px; background: #2563eb; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6); text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT Sheet</button>
+            " style="display: block; width: 100%; padding: 10px 16px; background: #2563eb; color: white; text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 0.95rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT Sheet</button>
         </div>
         """, height=50)
 
@@ -3871,33 +2778,22 @@ def main():
     st.markdown("""
     <style>
     .eqms-marquee-box { 
-        background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); 
+        background: transparent; 
         padding: 10px 0; 
         border-radius: 8px; 
         margin-bottom: 12px;
         overflow: hidden;
         white-space: nowrap;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
     }
     .eqms-marquee-box .scroll-text {
         display: inline-block;
         padding-left: 100%;
         animation: marquee-scroll 25s linear infinite;
         color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-        text-fill-color: #000000 !important;
-        font-weight: 800;
+        font-weight: 700;
         letter-spacing: 0.5px;
         font-size: 15px;
         font-family: 'Segoe UI', Arial, sans-serif;
-        text-shadow: none !important;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-        transform: translateZ(0);
-        backface-visibility: hidden;
-        will-change: transform;
     }
     @keyframes marquee-scroll {
         0% { transform: translateX(0); }
@@ -3923,7 +2819,7 @@ def main():
                     st.query_params['__view'] = name
                     st.rerun()
     with top_c2:
-        st.markdown(f"<div style='padding-top:6px; text-align:right;'><span class='status-pill status-live'>● Live</span> &nbsp; <span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span> &nbsp; <span class='mood-yellow-glow' title='Mood: Active'>🟡</span></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='padding-top:6px; text-align:right;'><span class='status-pill status-live'>● Live</span> &nbsp; <span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span></div>", unsafe_allow_html=True)
 
     st.caption(f"Enterprise Railway EQ Management  •  {format_date()}  •  {format_time()} IST")
     st.markdown("---")
@@ -4002,54 +2898,22 @@ def main():
                 if st.button("🚀 Apply Filters", use_container_width=True, key="adv_apply"):
                     st.rerun()
 
-        # Train count summary cards — ROBUST for ALL sheets
-        train_col_metric = None
-        doj_col = None
-        try:
-            # Try to find train column from filtered data first
-            if not filtered_df.empty:
-                train_col_metric = find_column(filtered_df, ['T/N', 'T_N', 'TRAIN', 'TRAIN NO', 'TRAIN NUMBER'])
-                doj_col = find_column(filtered_df, ['DOJ', 'DATE OF JOURNEY', 'JOURNEY DATE'])
-            # Fallback: use df_raw columns
-            if train_col_metric is None and not df_raw.empty:
-                train_col_metric = find_column(df_raw, ['T/N', 'T_N', 'TRAIN', 'TRAIN NO', 'TRAIN NUMBER'])
-            if doj_col is None and not df_raw.empty:
-                doj_col = find_column(df_raw, ['DOJ', 'DATE OF JOURNEY', 'JOURNEY DATE'])
-            # Final fallback: SHEET_CONFIG index
-            if train_col_metric is None and sheet_choice in SHEET_CONFIG:
-                cfg = SHEET_CONFIG[sheet_choice]
-                t_idx = cfg.get('train_col')
-                src = filtered_df if not filtered_df.empty else df_raw
-                if t_idx is not None and src is not None and t_idx < len(src.columns):
-                    train_col_metric = src.columns[t_idx]
-            if doj_col is None and sheet_choice in SHEET_CONFIG:
-                cfg = SHEET_CONFIG[sheet_choice]
-                d_idx = cfg.get('doj_col')
-                src = filtered_df if not filtered_df.empty else df_raw
-                if d_idx is not None and src is not None and d_idx < len(src.columns):
-                    doj_col = src.columns[d_idx]
-        except Exception:
-            train_col_metric = None
-            doj_col = None
+        # Train count summary cards
+        train_col_metric = find_column(filtered_df, ['T/N', 'T_N', 'TRAIN', 'TRAIN NO', 'TRAIN NUMBER'])
+        doj_col = find_column(filtered_df, ['DOJ', 'DATE OF JOURNEY', 'JOURNEY DATE'])
 
         if not filtered_df.empty and sheet_choice != "NOTE":
-            if train_col_metric and train_col_metric in filtered_df.columns:
-                try:
-                    tc_series = filtered_df[train_col_metric].astype(str).str.strip()
-                    tc_series = tc_series[tc_series != '']
-                    train_counts_series = tc_series.value_counts()
-                    if len(train_counts_series) > 0:
-                        st.markdown("**🚆 Train-wise Count**")
-                        cards_html = '<div class="train-count-container">'
-                        total_eq = len(filtered_df)
-                        cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {total_eq}</div></div>'
-                        for train_num, cnt in train_counts_series.items():
-                            cards_html += f'<div class="train-count-card"><div class="train-count-number">{train_num}</div><div class="train-count-badge">{cnt}</div></div>'
-                        cards_html += '</div>'
-                        st.markdown(cards_html, unsafe_allow_html=True)
-                        st.markdown("---")
-                except Exception:
-                    pass
+            if train_col_metric:
+                train_counts_series = filtered_df[train_col_metric].value_counts()
+                st.markdown("**🚆 Train-wise Count**")
+                cards_html = '<div class="train-count-container">'
+                total_eq = len(filtered_df)
+                cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {total_eq}</div></div>'
+                for train_num, cnt in train_counts_series.items():
+                    cards_html += f'<div class="train-count-card"><div class="train-count-number">{train_num}</div><div class="train-count-badge">{cnt}</div></div>'
+                cards_html += '</div>'
+                st.markdown(cards_html, unsafe_allow_html=True)
+                st.markdown("---")
 
         if st.button("🔄 Refresh Data", use_container_width=False, key="refresh_data_btn"):
             st.cache_data.clear()
@@ -4077,43 +2941,31 @@ def main():
                     filtered_df = filtered_df.sort_values(by=sort_col, ascending=sort_asc, key=lambda col: col.astype(str))
                 except: pass
 
-            # Pagination - bulletproof with safe defaults
-            page_size = st.session_state.get('rows_per_page', 25)
-            if page_size not in [15, 25, 50, 100, 200]:
-                page_size = 25
-            try:
-                idx = [15, 25, 50, 100, 200].index(page_size)
-            except Exception:
-                idx = 1
-            selected_page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200],
-                index=idx, key="page_size_select")
-            if not isinstance(selected_page_size, int) or selected_page_size <= 0:
-                selected_page_size = 25
-            if selected_page_size != page_size:
-                st.session_state.rows_per_page = selected_page_size
+            page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200],
+                index=[15, 25, 50, 100, 200].index(st.session_state.rows_per_page) if st.session_state.rows_per_page in [15,25,50,100,200] else 1,
+                key="page_size_select")
+            if page_size != st.session_state.rows_per_page:
+                st.session_state.rows_per_page = page_size
                 st.session_state.current_page = 1
                 st.rerun()
-            page_size = selected_page_size
 
             total_pages = max(1, math.ceil(len(filtered_df) / page_size))
-            current_page = st.session_state.get('current_page', 1)
-            if current_page > total_pages: current_page = total_pages
-            if current_page < 1: current_page = 1
-            st.session_state.current_page = current_page
+            if st.session_state.current_page > total_pages: st.session_state.current_page = total_pages
+            if st.session_state.current_page < 1: st.session_state.current_page = 1
 
             nav1, nav2, nav3 = st.columns([1, 2, 1])
             with nav1:
-                if st.button("◀ Previous", use_container_width=True, disabled=current_page <= 1, key="prev_page_btn"):
-                    st.session_state.current_page = current_page - 1
+                if st.button("◀ Previous", use_container_width=True, disabled=st.session_state.current_page <= 1, key="prev_page_btn"):
+                    st.session_state.current_page -= 1
                     st.rerun()
             with nav2:
-                st.markdown(f"<div style='text-align:center; padding-top:6px;'><b>Page {current_page} of {total_pages}</b> &nbsp;|&nbsp; <b>{len(filtered_df)} total rows</b></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='text-align:center; padding-top:6px;'><b>Page {st.session_state.current_page} of {total_pages}</b> &nbsp;|&nbsp; <b>{len(filtered_df)} total rows</b></div>", unsafe_allow_html=True)
             with nav3:
-                if st.button("Next ▶", use_container_width=True, disabled=current_page >= total_pages, key="next_page_btn"):
-                    st.session_state.current_page = current_page + 1
+                if st.button("Next ▶", use_container_width=True, disabled=st.session_state.current_page >= total_pages, key="next_page_btn"):
+                    st.session_state.current_page += 1
                     st.rerun()
 
-            page = current_page - 1
+            page = st.session_state.current_page - 1
             start_idx = page * page_size
             end_idx = min(start_idx + page_size, len(filtered_df))
             page_df = filtered_df.iloc[start_idx:end_idx].copy()
@@ -4298,7 +3150,7 @@ def main():
                             doc.close();
                             setTimeout(function(){ iframe.contentWindow.focus(); iframe.contentWindow.print(); setTimeout(function(){ window.parent.document.body.removeChild(iframe); }, 2000); }, 300);
                         })();
-                    " style="display: block; width: 100%; padding: 9px 16px; background: #2563eb; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6); text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 1rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT</button>
+                    " style="display: block; width: 100%; padding: 9px 16px; background: #2563eb; color: white; text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 1rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT</button>
                 </div>
                 """, height=45)
             st.markdown('</div>', unsafe_allow_html=True)
@@ -4385,19 +3237,14 @@ def main():
                         st.caption(f"Upcoming DOJ: {upcoming}")
                 with feat2:
                     st.markdown("**🚆 Train Analysis**")
-                    if train_col_metric and train_col_metric in filtered_df.columns and not filtered_df.empty:
-                        try:
-                            mc = filtered_df[train_col_metric].astype(str).str.strip()
-                            mc = mc[mc != ''].mode()
-                            if not mc.empty: st.caption(f"Most frequent train: {mc.iloc[0]}")
-                        except Exception: pass
-                    if pnr_col and pnr_col in filtered_df.columns:
-                        try:
+                    if train_col_metric and not filtered_df.empty:
+                        most_common = filtered_df[train_col_metric].mode()
+                        if not most_common.empty: st.caption(f"Most frequent train: {most_common.iloc[0]}")
+                        if pnr_col:
                             dupes = filtered_df[pnr_col].value_counts()
                             dupes = dupes[dupes > 1]
                             if not dupes.empty: st.warning(f"⚠️ {len(dupes)} Duplicate PNRs found!")
                             else: st.success("✅ No duplicate PNRs")
-                        except Exception: pass
                     st.markdown("**⌨️ Shortcuts**")
                     st.caption("D: Toggle Theme | Refresh button to sync data")
             st.markdown('</div>', unsafe_allow_html=True)
@@ -4492,7 +3339,7 @@ def main():
         if train_col_dash and column_has_data(dash_df, train_col_dash):
             unique_trains = dash_df[train_col_dash].dropna().astype(str).str.strip().ne('').nunique()
             with kcol2: 
-                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#11998e,#38ef7d); color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);"><h3 style="color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);">{unique_trains}</h3><p style="color: rgba(255,255,255,0.9);">Unique Trains</p></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#11998e,#38ef7d); color: white;"><h3 style="color: white;">{unique_trains}</h3><p style="color: rgba(255,255,255,0.9);">Unique Trains</p></div>', unsafe_allow_html=True)
         else:
             with kcol2: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Unique Trains</p></div>', unsafe_allow_html=True)
@@ -4501,7 +3348,7 @@ def main():
         if vip_col_dash and column_has_data(dash_df, vip_col_dash):
             vip_count = dash_df[vip_col_dash].astype(str).str.strip().ne('').sum()
             with kcol3: 
-                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#f093fb,#f5576c); color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);"><h3 style="color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);">{vip_count}</h3><p style="color: rgba(255,255,255,0.9);">VIP Records</p></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#f093fb,#f5576c); color: white;"><h3 style="color: white;">{vip_count}</h3><p style="color: rgba(255,255,255,0.9);">VIP Records</p></div>', unsafe_allow_html=True)
         else:
             with kcol3: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>VIP Records</p></div>', unsafe_allow_html=True)
@@ -4512,7 +3359,7 @@ def main():
             class_counts = class_counts[class_counts != ''].value_counts()
             top_class = class_counts.index[0] if len(class_counts) > 0 else "N/A"
             with kcol4: 
-                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#4facfe,#00f2fe); color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);"><h3 style="color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);">{top_class}</h3><p style="color: rgba(255,255,255,0.9);">Top Class</p></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#4facfe,#00f2fe); color: white;"><h3 style="color: white;">{top_class}</h3><p style="color: rgba(255,255,255,0.9);">Top Class</p></div>', unsafe_allow_html=True)
         else:
             with kcol4: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Top Class</p></div>', unsafe_allow_html=True)
@@ -4521,7 +3368,7 @@ def main():
         if doj_col_dash and column_has_data(dash_df, doj_col_dash):
             upcoming = sum(1 for _, r in dash_df.iterrows() if not is_expired(r.get(doj_col_dash, '')))
             with kcol5: 
-                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#fa709a,#fee140); color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);"><h3 style="color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);">{upcoming}</h3><p style="color: rgba(255,255,255,0.9);">Upcoming</p></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#fa709a,#fee140); color: white;"><h3 style="color: white;">{upcoming}</h3><p style="color: rgba(255,255,255,0.9);">Upcoming</p></div>', unsafe_allow_html=True)
         else:
             with kcol5: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Upcoming</p></div>', unsafe_allow_html=True)
@@ -4999,23 +3846,9 @@ def main():
             except: pass
 
         city = st.text_input("🏙️ Enter City Name", value=st.session_state.weather_city,
-                            placeholder="Any city, town or village...", key="weather_city_input")
+                            placeholder="e.g., Tinsukia, New Delhi, Mumbai", key="weather_city_input")
         if city != st.session_state.weather_city: st.session_state.weather_city = city
 
-        # Auto-fetch on Enter (value committed)
-        if city and city != st.session_state.get('_last_weather_fetch', ''):
-            st.session_state._last_weather_fetch = city
-            with st.spinner(f"Fetching weather for {city}..."):
-                data = get_weather(city)
-                forecast = get_weather_forecast(city)
-                if data and 'error' not in data:
-                    st.session_state.weather_data = data
-                    if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
-                    st.rerun()
-                else:
-                    st.error(data.get('error', 'Error fetching weather'))
-
-        st.markdown('<div class="weather-input-wrapper">', unsafe_allow_html=True)
         col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("🌤️ Get Weather", key="weather_btn", use_container_width=True):
@@ -5043,39 +3876,9 @@ def main():
                 else: st.warning("Please enter a city name.")
         with col3:
             st.empty()
-        st.markdown('</div>', unsafe_allow_html=True)
 
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
-
-            # Day/Night detection for styling
-            time_of_day = 'day'
-            try:
-                now_ts = int(time.time())
-                sunrise = data.get('sunrise')
-                sunset = data.get('sunset')
-                if sunrise and sunset and str(sunrise) not in ['', 'N/A', 'None']:
-                    sunrise = int(sunrise)
-                    sunset = int(sunset)
-                    if now_ts < sunrise - 1800: time_of_day = 'night'
-                    elif now_ts < sunrise + 1800: time_of_day = 'dawn'
-                    elif now_ts < sunset - 1800: time_of_day = 'day'
-                    elif now_ts < sunset + 1800: time_of_day = 'dusk'
-                    else: time_of_day = 'night'
-            except: pass
-
-            # Location banner
-            loc_state = data.get('state', '')
-            loc_country = data.get('country', '')
-            loc_full = data['city'] + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
-            day_night_icon = "🌙" if time_of_day in ['night', 'dusk'] else "☀️" if time_of_day == 'day' else "🌅"
-            st.markdown(f'''<div style="text-align:center; margin-bottom:15px;">
-                <div style="display:inline-block; background: linear-gradient(135deg, rgba(255,153,51,0.2), rgba(255,255,255,0.1), rgba(19,136,8,0.2)); 
-                    border: 1px solid rgba(255,255,255,0.25); border-radius: 50px; padding: 10px 30px; 
-                    backdrop-filter: blur(12px); color: #ffffff; text-shadow: 0 2px 6px rgba(0,0,0,0.8); font-weight: 700; font-size: 1.1rem;">
-                    {day_night_icon} {loc_full} • {time_of_day.title()}
-                </div>
-            </div>''', unsafe_allow_html=True)
 
             weather_html = f"""
             <style>
@@ -5092,8 +3895,8 @@ def main():
                 50% {{ transform: scale(1.15); opacity: 1; }}
             }}
             .weather-main-card {{
-                background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
-                border-radius: 24px; padding: 30px; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 24px; padding: 30px; color: white;
                 box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
                 animation: weather-float 4s ease-in-out infinite, weather-glow 3s ease-in-out infinite;
                 position: relative; overflow: hidden;
@@ -5128,7 +3931,7 @@ def main():
             <div class="weather-main-card">
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; position: relative; z-index: 1;">
                     <div>
-                        <div class="weather-city">{data['city']}{', ' + data.get('state', '') if data.get('state') else ''}, {data['country']}</div>
+                        <div class="weather-city">{data['city']}, {data['country']}</div>
                         <div class="weather-desc">{data['weather'].title()}</div>
                         <div style="font-size: 0.9rem; opacity: 0.7; margin-top: 6px;">Updated: {format_datetime()}</div>
                     </div>
@@ -5207,7 +4010,7 @@ def main():
             .w-lightning { position: absolute; top: 0; left: 0; width: 100%; height: 100%; animation: w-lightning 4s ease-in-out infinite; }
 
             @keyframes w-snow-fall { from{transform:translateY(-20px) rotate(0deg);opacity:0;} 10%{opacity:1;} 90%{opacity:1;} to{transform:translateY(240px) rotate(360deg);opacity:0;} }
-            .w-snow { position: absolute; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6); font-size: 13px; animation: w-snow-fall linear infinite; text-shadow: 0 0 4px rgba(255,255,255,0.8); }
+            .w-snow { position: absolute; color: white; font-size: 13px; animation: w-snow-fall linear infinite; text-shadow: 0 0 4px rgba(255,255,255,0.8); }
 
             @keyframes w-fog-drift { from{transform:translateX(-50%);} to{transform:translateX(0%);} }
             .w-fog { position: absolute; width: 200%; height: 50px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent); animation: w-fog-drift linear infinite; }
@@ -5289,11 +4092,7 @@ def main():
             if st.session_state.weather_forecast and 'error' not in st.session_state.weather_forecast:
                 forecast = st.session_state.weather_forecast
                 st.markdown("---")
-                loc_name = forecast.get('city', city)
-                loc_state = st.session_state.weather_data.get('state', '') if st.session_state.weather_data else ''
-                loc_country = st.session_state.weather_data.get('country', '') if st.session_state.weather_data else ''
-                full_loc = loc_name + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
-                st.subheader(f"📅 5-Day Forecast for {full_loc}")
+                st.subheader(f"📅 5-Day Forecast for {forecast.get('city', city)}")
 
                 forecast_data = forecast.get('forecast', [])
                 if forecast_data:
@@ -5311,8 +4110,8 @@ def main():
                                 50% {{ transform: translateY(-5px); }}
                             }}
                             .forecast-card-{idx} {{
-                                background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
-                                border-radius: 20px; padding: 18px; text-align: center; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);
+                                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                border-radius: 20px; padding: 18px; text-align: center; color: white;
                                 box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
                                 animation: forecast-bounce 3s ease-in-out infinite;
                                 animation-delay: {idx * 0.3}s;
