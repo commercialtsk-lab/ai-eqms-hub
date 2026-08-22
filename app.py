@@ -1633,11 +1633,15 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .streamlit-expanderHeader {{ color: #000000 !important; font-weight: 700 !important; text-shadow: none !important; -webkit-text-fill-color: #000000 !important; }}
         .stCaption {{ color: #000000 !important; text-shadow: none !important; -webkit-text-fill-color: #000000 !important; }}
         [data-testid="stMain"] .stCaption {{ color: #000000 !important; text-shadow: none !important; }}
-        .stChatMessage {{ background-color: {card_bg} !important; border: 1px solid {border} !important;
-            border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important;
-            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
-        .stChatInput {{ background-color: {input_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; }}
-        .stChatInput input {{ color: {text_color} !important; }}
+        .stChatMessage {{ background: rgba(255,255,255,0.06) !important; border: 1px solid rgba(255,255,255,0.15) !important;
+            border-radius: 16px !important; padding: 14px !important; margin-bottom: 10px !important;
+            backdrop-filter: blur(24px) saturate(180%) !important; -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important; }}
+        .stChatMessage [data-testid="stChatMessageContent"] {{ color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; text-shadow: 0 1px 4px rgba(0,0,0,0.7) !important; }}
+        .stChatMessage [data-testid="stChatMessageAvatar"] {{ background: rgba(255,255,255,0.15) !important; border: 1px solid rgba(255,255,255,0.2) !important; }}
+        .stChatInput {{ background: rgba(255,255,255,0.06) !important; border: 1px solid rgba(255,255,255,0.18) !important; border-radius: 20px !important; backdrop-filter: blur(24px) saturate(180%) !important; -webkit-backdrop-filter: blur(24px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0,0,0,0.2) !important; padding: 8px 16px !important; }}
+        .stChatInput input {{ color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; text-shadow: 0 1px 4px rgba(0,0,0,0.7) !important; background: transparent !important; font-weight: 500 !important; }}
+        .stChatInput input::placeholder {{ color: rgba(255,255,255,0.55) !important; text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important; }}
         [data-testid="stMetric"] {{ background-color: {card_bg} !important; border: 1px solid {border} !important;
             border-radius: 10px !important; padding: 14px !important;
             backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
@@ -1841,7 +1845,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
             color: #ffffff !important;
             font-weight: 800 !important;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.9) !important;
             -webkit-text-fill-color: #ffffff !important;
             font-size: 1.05rem !important;
             letter-spacing: 0.5px !important;
@@ -1851,11 +1855,13 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             background: transparent !important;
         }}
         .weather-input-wrapper {{
-            background: linear-gradient(135deg, rgba(255,153,51,0.15), rgba(255,255,255,0.1), rgba(19,136,8,0.15)) !important;
+            background: rgba(173, 216, 230, 0.22) !important;
             border-radius: 16px !important;
             padding: 12px 16px !important;
-            border: 1px solid rgba(255,255,255,0.2) !important;
-            backdrop-filter: blur(12px) !important;
+            border: 1px solid rgba(173, 216, 230, 0.4) !important;
+            backdrop-filter: blur(16px) saturate(150%) !important;
+            -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08) !important;
         }}
     </style>
     """
@@ -2409,12 +2415,19 @@ def render_audio_controls(current_scene):
         var slider = document.getElementById('eqms-vol');
         var status = document.getElementById('eqms-sound-status');
 
-        var savedVol = P.eqmsVolume || 0;
+        var savedVol = P.eqmsVolume || 25;
         slider.value = savedVol;
-        if (savedVol > 0) {{
-            status.textContent = 'Scene: {scene} | Vol: ' + savedVol + '%';
-            engine.setVolume(savedVol);
-        }}
+        engine.setVolume(savedVol);
+        status.textContent = 'Scene: {scene} | Vol: ' + savedVol + '%';
+
+        // Resume audio context on first user interaction
+        var resumeAudio = function() {{
+            if (engine.ctx && engine.ctx.state === 'suspended') {{
+                engine.ctx.resume();
+            }}
+        }};
+        doc.addEventListener('click', resumeAudio, {{once:true}});
+        doc.addEventListener('touchstart', resumeAudio, {{once:true}});
 
         slider.addEventListener('input', function() {{
             var v = parseInt(this.value);
@@ -2422,6 +2435,8 @@ def render_audio_controls(current_scene):
             engine.setVolume(v);
             status.textContent = 'Scene: {scene} | Vol: ' + v + '%';
             if (v > 0) {{
+                engine.stopAll();
+                engine.scene = null;
                 engine.setScene('{scene}');
             }} else {{
                 engine.stopAll();
@@ -2429,6 +2444,8 @@ def render_audio_controls(current_scene):
             }}
         }});
 
+        engine.stopAll();
+        engine.scene = null;
         engine.setScene('{scene}');
     }})();
     </script>
@@ -2551,195 +2568,35 @@ EARTH_BG_HTML = """
 # =====================================================================
 # Ocean Background for Chat View
 # =====================================================================
-OCEAN_BG_HTML = """
+AQUARIUM_BG_HTML = """
 <style>
-.ocean-bg-scene {
+.aquarium-bg-scene {
     position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
     z-index: -1; pointer-events: none; overflow: hidden;
-    background: linear-gradient(180deg, #006994 0%, #005073 25%, #00334e 50%, #001a2e 75%, #000d1a 100%);
 }
-.ocean-surface {
-    position: absolute; top: 0; left: 0; width: 100%; height: 15%;
-    background: linear-gradient(180deg, #4fc3f7 0%, #29b6f6 40%, #0288d1 80%, transparent 100%);
-    opacity: 0.4;
-    animation: ocean-surface-shimmer 3s ease-in-out infinite alternate;
+.aquarium-video {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    object-fit: cover; opacity: 0.92;
 }
-@keyframes ocean-surface-shimmer {
-    0% { opacity: 0.35; }
-    100% { opacity: 0.5; }
+.aquarium-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(180deg, rgba(0,30,60,0.3) 0%, rgba(0,20,50,0.4) 50%, rgba(0,10,30,0.55) 100%);
+    pointer-events: none;
 }
-.ocean-light-ray {
-    position: absolute; top: 0; width: 3px; height: 65vh;
-    background: linear-gradient(180deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05), transparent);
-    animation: ocean-ray-sway 6s ease-in-out infinite alternate;
-    border-radius: 2px;
-}
-@keyframes ocean-ray-sway {
-    0% { transform: translateX(0) rotate(-2deg); opacity: 0.15; }
-    100% { transform: translateX(15px) rotate(2deg); opacity: 0.35; }
-}
-.ocean-bubble {
-    position: absolute; bottom: -20px;
-    background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.85), rgba(255,255,255,0.3));
-    border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.25);
-    animation: ocean-bubble-rise linear infinite;
-}
-@keyframes ocean-bubble-rise {
-    0% { transform: translateY(0) scale(1); opacity: 0; }
-    8% { opacity: 0.7; }
-    92% { opacity: 0.4; }
-    100% { transform: translateY(-110vh) scale(1.3); opacity: 0; }
-}
-.ocean-fish {
-    position: absolute; font-size: 2rem;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-    animation: ocean-fish-swim linear infinite;
-    opacity: 0.85;
-}
-@keyframes ocean-fish-swim {
-    0% { transform: translateX(-120px) scaleX(1); }
-    48% { transform: translateX(calc(100vw + 120px)) scaleX(1); }
-    50% { transform: translateX(calc(100vw + 120px)) scaleX(-1); }
-    98% { transform: translateX(-120px) scaleX(-1); }
-    100% { transform: translateX(-120px) scaleX(1); }
-}
-.ocean-coral {
-    position: absolute; bottom: 0; font-size: 2.8rem;
-    filter: drop-shadow(0 -2px 6px rgba(0,0,0,0.4));
-    animation: ocean-coral-sway 4s ease-in-out infinite alternate;
-    transform-origin: bottom center;
-}
-@keyframes ocean-coral-sway {
-    0% { transform: rotate(-2deg); }
-    100% { transform: rotate(2deg); }
-}
-.ocean-seaweed {
-    position: absolute; bottom: 0; font-size: 2.2rem;
-    animation: ocean-seaweed-sway 3s ease-in-out infinite alternate;
-    transform-origin: bottom center;
-    opacity: 0.8;
-}
-@keyframes ocean-seaweed-sway {
-    0% { transform: rotate(-5deg) scaleY(1); }
-    100% { transform: rotate(5deg) scaleY(1.08); }
-}
-.ocean-jellyfish {
-    position: absolute; font-size: 2.2rem;
-    animation: ocean-jelly-float 10s ease-in-out infinite;
-    opacity: 0.55;
-    filter: drop-shadow(0 0 8px rgba(255,255,255,0.25));
-}
-@keyframes ocean-jelly-float {
-    0%, 100% { transform: translateY(0) translateX(0); }
-    20% { transform: translateY(-25px) translateX(12px); }
-    40% { transform: translateY(-8px) translateX(-8px); }
-    60% { transform: translateY(-35px) translateX(5px); }
-    80% { transform: translateY(-15px) translateX(-12px); }
-}
-.ocean-plankton {
-    position: absolute; width: 2px; height: 2px;
-    background: rgba(255,255,255,0.5);
-    border-radius: 50%;
-    animation: ocean-plankton-drift 12s linear infinite;
-}
-@keyframes ocean-plankton-drift {
-    0% { transform: translateY(0) translateX(0); opacity: 0; }
-    15% { opacity: 0.7; }
-    85% { opacity: 0.5; }
-    100% { transform: translateY(-50vh) translateX(25px); opacity: 0; }
-}
-.ocean-sand {
-    position: absolute; bottom: 0; left: 0; width: 100%; height: 50px;
-    background: linear-gradient(180deg, #c2b280 0%, #a8956b 50%, #8b7355 100%);
-    border-radius: 50% 50% 0 0 / 15px 15px 0 0;
-    opacity: 0.35;
-}
-.ocean-starfish {
-    position: absolute; bottom: 35px; font-size: 1.2rem;
-    animation: ocean-star-twinkle 3s ease-in-out infinite alternate;
-    opacity: 0.7;
-}
-@keyframes ocean-star-twinkle {
-    0% { opacity: 0.4; transform: scale(1); }
-    100% { opacity: 0.9; transform: scale(1.1); }
-}
-.ocean-shell {
-    position: absolute; bottom: 30px; font-size: 1rem;
-    opacity: 0.6;
-    animation: ocean-shell-bob 4s ease-in-out infinite;
-}
-@keyframes ocean-shell-bob {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-3px); }
+.aquarium-vignette {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    box-shadow: inset 0 0 150px rgba(0,0,0,0.6);
+    pointer-events: none;
 }
 </style>
-<div class="ocean-bg-scene">
-    <div class="ocean-surface"></div>
-    <div class="ocean-light-ray" style="left: 8%; animation-delay: 0s; height: 60vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 22%; animation-delay: 1.5s; height: 50vh; width: 3px;"></div>
-    <div class="ocean-light-ray" style="left: 38%; animation-delay: 3s; height: 65vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 55%; animation-delay: 0.8s; height: 55vh; width: 4px;"></div>
-    <div class="ocean-light-ray" style="left: 72%; animation-delay: 2.2s; height: 58vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 88%; animation-delay: 4s; height: 62vh; width: 3px;"></div>
-    <div class="ocean-bubble" style="left: 5%; width: 6px; height: 6px; animation-duration: 7s; animation-delay: 0s;"></div>
-    <div class="ocean-bubble" style="left: 12%; width: 10px; height: 10px; animation-duration: 9s; animation-delay: 1s;"></div>
-    <div class="ocean-bubble" style="left: 18%; width: 5px; height: 5px; animation-duration: 6s; animation-delay: 2.5s;"></div>
-    <div class="ocean-bubble" style="left: 28%; width: 8px; height: 8px; animation-duration: 8s; animation-delay: 0.5s;"></div>
-    <div class="ocean-bubble" style="left: 35%; width: 4px; height: 4px; animation-duration: 10s; animation-delay: 3s;"></div>
-    <div class="ocean-bubble" style="left: 42%; width: 12px; height: 12px; animation-duration: 7.5s; animation-delay: 1.5s;"></div>
-    <div class="ocean-bubble" style="left: 48%; width: 6px; height: 6px; animation-duration: 9s; animation-delay: 0.2s;"></div>
-    <div class="ocean-bubble" style="left: 58%; width: 9px; height: 9px; animation-duration: 6.5s; animation-delay: 2s;"></div>
-    <div class="ocean-bubble" style="left: 65%; width: 7px; height: 7px; animation-duration: 8.5s; animation-delay: 0.8s;"></div>
-    <div class="ocean-bubble" style="left: 72%; width: 11px; height: 11px; animation-duration: 7s; animation-delay: 3.5s;"></div>
-    <div class="ocean-bubble" style="left: 78%; width: 5px; height: 5px; animation-duration: 9s; animation-delay: 1.2s;"></div>
-    <div class="ocean-bubble" style="left: 85%; width: 8px; height: 8px; animation-duration: 8s; animation-delay: 4s;"></div>
-    <div class="ocean-bubble" style="left: 92%; width: 6px; height: 6px; animation-duration: 7s; animation-delay: 2.2s;"></div>
-    <div class="ocean-bubble" style="left: 3%; width: 10px; height: 10px; animation-duration: 10s; animation-delay: 5s;"></div>
-    <div class="ocean-bubble" style="left: 50%; width: 5px; height: 5px; animation-duration: 6s; animation-delay: 1.8s;"></div>
-    <div class="ocean-fish" style="top: 22%; animation-duration: 20s; animation-delay: 0s; font-size: 2.2rem;">🐠</div>
-    <div class="ocean-fish" style="top: 38%; animation-duration: 25s; animation-delay: 4s; font-size: 1.8rem;">🐟</div>
-    <div class="ocean-fish" style="top: 52%; animation-duration: 28s; animation-delay: 8s; font-size: 2.5rem;">🐡</div>
-    <div class="ocean-fish" style="top: 16%; animation-duration: 22s; animation-delay: 12s; font-size: 1.6rem;">🐠</div>
-    <div class="ocean-fish" style="top: 68%; animation-duration: 32s; animation-delay: 2s; font-size: 2.8rem;">🦈</div>
-    <div class="ocean-fish" style="top: 30%; animation-duration: 26s; animation-delay: 16s; font-size: 2rem;">🐬</div>
-    <div class="ocean-fish" style="top: 45%; animation-duration: 21s; animation-delay: 6s; font-size: 1.5rem;">🐟</div>
-    <div class="ocean-fish" style="top: 60%; animation-duration: 29s; animation-delay: 10s; font-size: 2.3rem;">🐠</div>
-    <div class="ocean-fish" style="top: 75%; animation-duration: 24s; animation-delay: 14s; font-size: 1.9rem;">🐟</div>
-    <div class="ocean-jellyfish" style="left: 15%; top: 25%; animation-delay: 0s; font-size: 2.5rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 60%; top: 45%; animation-delay: 5s; font-size: 2rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 40%; top: 18%; animation-delay: 10s; font-size: 1.8rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 80%; top: 55%; animation-delay: 3s; font-size: 2.2rem;">🪼</div>
-    <div class="ocean-plankton" style="left: 10%; bottom: 25%; animation-delay: 0s; animation-duration: 14s;"></div>
-    <div class="ocean-plankton" style="left: 25%; bottom: 45%; animation-delay: 2s; animation-duration: 16s;"></div>
-    <div class="ocean-plankton" style="left: 40%; bottom: 20%; animation-delay: 5s; animation-duration: 12s;"></div>
-    <div class="ocean-plankton" style="left: 55%; bottom: 55%; animation-delay: 1s; animation-duration: 15s;"></div>
-    <div class="ocean-plankton" style="left: 70%; bottom: 30%; animation-delay: 7s; animation-duration: 13s;"></div>
-    <div class="ocean-plankton" style="left: 85%; bottom: 50%; animation-delay: 3s; animation-duration: 17s;"></div>
-    <div class="ocean-plankton" style="left: 15%; bottom: 65%; animation-delay: 9s; animation-duration: 11s;"></div>
-    <div class="ocean-plankton" style="left: 50%; bottom: 40%; animation-delay: 6s; animation-duration: 14s;"></div>
-    <div class="ocean-coral" style="left: 3%; font-size: 3rem;">🪸</div>
-    <div class="ocean-coral" style="left: 15%; font-size: 2.4rem; animation-delay: 0.5s;">🪸</div>
-    <div class="ocean-coral" style="left: 30%; font-size: 3.2rem; animation-delay: 1s;">🪸</div>
-    <div class="ocean-coral" style="left: 48%; font-size: 2.2rem; animation-delay: 1.5s;">🪸</div>
-    <div class="ocean-coral" style="left: 62%; font-size: 2.8rem; animation-delay: 0.8s;">🪸</div>
-    <div class="ocean-coral" style="left: 78%; font-size: 3rem; animation-delay: 2s;">🪸</div>
-    <div class="ocean-coral" style="left: 90%; font-size: 2.5rem; animation-delay: 1.2s;">🪸</div>
-    <div class="ocean-seaweed" style="left: 8%;">🌿</div>
-    <div class="ocean-seaweed" style="left: 22%; font-size: 2.8rem; animation-delay: 0.7s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 38%; font-size: 1.9rem; animation-delay: 1.3s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 52%; font-size: 2.6rem; animation-delay: 0.4s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 68%; font-size: 2rem; animation-delay: 1.8s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 82%; font-size: 2.9rem; animation-delay: 1.1s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 95%; font-size: 2.3rem; animation-delay: 0.9s;">🌿</div>
-    <div class="ocean-starfish" style="left: 10%;">⭐</div>
-    <div class="ocean-starfish" style="left: 35%; animation-delay: 1s;">⭐</div>
-    <div class="ocean-starfish" style="left: 58%; animation-delay: 0.5s;">⭐</div>
-    <div class="ocean-starfish" style="left: 82%; animation-delay: 2s;">⭐</div>
-    <div class="ocean-shell" style="left: 20%;">🐚</div>
-    <div class="ocean-shell" style="left: 45%; animation-delay: 1.5s;">🐚</div>
-    <div class="ocean-shell" style="left: 70%; animation-delay: 0.8s;">🐚</div>
-    <div class="ocean-sand"></div>
+<div class="aquarium-bg-scene">
+    <video class="aquarium-video" autoplay muted loop playsinline preload="auto">
+        <source src="https://videos.pexels.com/video-files/32173602/32173602-uhd_3840_2160_30fps.mp4" type="video/mp4">
+        <source src="https://videos.pexels.com/video-files/32173602/32173602-hd_1920_1080_30fps.mp4" type="video/mp4">
+        <source src="https://videos.pexels.com/video-files/32173602/32173602-hd_1280_720_30fps.mp4" type="video/mp4">
+    </video>
+    <div class="aquarium-overlay"></div>
+    <div class="aquarium-vignette"></div>
 </div>
 """
 
@@ -3126,7 +2983,7 @@ def main():
     elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         pass  # Weather bg rendered later
     elif view_bg == "💬 Chat":
-        st.markdown(OCEAN_BG_HTML, unsafe_allow_html=True)
+        st.markdown(AQUARIUM_BG_HTML, unsafe_allow_html=True)
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
@@ -3854,7 +3711,85 @@ def main():
             else: st.caption("No activity yet")
         st.markdown("---")
 
-        st.markdown("### 📑 Select Sheet")
+        
+        st.markdown("---")
+        st.markdown("### 🚂 Live Engine View")
+        components.html("""
+        <style>
+        .sidebar-train-wrap {
+            position: relative;
+            width: 100%;
+            height: 280px;
+            overflow: hidden;
+            border-radius: 16px;
+            margin: 10px 0;
+            background: linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            border: 2px solid rgba(255,153,51,0.3);
+        }
+        .sidebar-train-video {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 500px;
+            height: 280px;
+            transform: translate(-50%, -50%) rotate(-90deg);
+            object-fit: cover;
+            opacity: 0.95;
+        }
+        .sidebar-train-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, rgba(255,107,53,0.1) 0%, transparent 30%, transparent 70%, rgba(19,136,8,0.1) 100%);
+            pointer-events: none;
+            z-index: 2;
+        }
+        .sidebar-train-label {
+            position: absolute;
+            bottom: 10px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.85rem;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+            z-index: 3;
+            letter-spacing: 1px;
+        }
+        .sidebar-train-glow {
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            border-radius: 18px;
+            background: linear-gradient(180deg, #FF9933, #FFFFFF, #138808);
+            background-size: 100% 200%;
+            animation: train-glow-shift 3s linear infinite;
+            z-index: 0;
+            opacity: 0.6;
+        }
+        @keyframes train-glow-shift {
+            0% { background-position: 0% 0%; }
+            100% { background-position: 0% 100%; }
+        }
+        </style>
+        <div class="sidebar-train-wrap">
+            <div class="sidebar-train-glow"></div>
+            <video class="sidebar-train-video" autoplay muted loop playsinline preload="auto">
+                <source src="https://videos.pexels.com/video-files/18855089/18855089-hd_1920_1080_25fps.mp4" type="video/mp4">
+                <source src="https://videos.pexels.com/video-files/18855089/18855089-hd_1280_720_25fps.mp4" type="video/mp4">
+            </video>
+            <div class="sidebar-train-overlay"></div>
+            <div class="sidebar-train-label">🚂 Indian Railways — Bottom to Top</div>
+        </div>
+        """, height=300)
+
+st.markdown("### 📑 Select Sheet")
         sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()),
             index=list(SHEET_CONFIG.keys()).index(st.session_state.selected_sheet)
             if st.session_state.selected_sheet in SHEET_CONFIG else 0, key="sheet_select")
@@ -4870,224 +4805,188 @@ def main():
             st.rerun()
 
     # =====================================================================
-    # VIEW: 🚂 RAILWAY
+    # VIEW: 🚂 RAILWAY → 🌊 REALISTIC UNDERWATER WORLD
     # =====================================================================
     elif view == "🚂 Railway":
-        st.subheader("🚂 Indian Railways - Real-time Info")
+        st.markdown("""
+        <style>
+        .seashore-bg-scene {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -1; pointer-events: none; overflow: hidden;
+        }
+        .seashore-video {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; opacity: 0.9;
+        }
+        .seashore-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(180deg, rgba(0,50,90,0.2) 0%, rgba(0,60,100,0.15) 40%, rgba(0,40,70,0.35) 100%);
+            pointer-events: none;
+        }
+        .seashore-vignette {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            box-shadow: inset 0 0 120px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+        .seashore-title-card {
+            position: relative; z-index: 10;
+            background: rgba(0,40,80,0.25); backdrop-filter: blur(24px) saturate(160%);
+            border: 1px solid rgba(255,255,255,0.12); border-radius: 24px;
+            padding: 28px 36px; text-align: center; margin: 25px auto; max-width: 650px;
+            box-shadow: 0 12px 48px rgba(0,0,0,0.35);
+        }
+        .seashore-title-card h2 {
+            color: #ffffff !important; text-shadow: 0 2px 12px rgba(0,0,0,0.8) !important;
+            margin: 0; font-size: 1.7rem; font-weight: 800; letter-spacing: 1px;
+        }
+        .seashore-title-card p {
+            color: rgba(255,255,255,0.85) !important;
+            text-shadow: 0 1px 6px rgba(0,0,0,0.6) !important;
+            margin: 10px 0 0 0; font-size: 0.95rem;
+        }
+        .railway-tool-card {
+            background: rgba(0,40,80,0.2); backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
+            padding: 20px; transition: all 0.35s ease;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+        }
+        .railway-tool-card:hover {
+            transform: translateY(-4px); border-color: rgba(255,255,255,0.25);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+        }
+        .railway-tool-card h4 {
+            color: #ffffff !important; text-shadow: 0 1px 5px rgba(0,0,0,0.7) !important;
+            margin: 0 0 12px 0; font-size: 1rem; font-weight: 700;
+        }
+        .railway-tool-card label {
+            color: #000000 !important; font-weight: 600 !important;
+            text-shadow: none !important;
+        }
+        .railway-tool-card input {
+            color: #000000 !important; -webkit-text-fill-color: #000000 !important;
+        }
+        </style>
+        <div class="seashore-bg-scene">
+            <video class="seashore-video" autoplay muted loop playsinline preload="auto">
+                <source src="https://videos.pexels.com/video-files/10450109/10450109-uhd_3840_2160_25fps.mp4" type="video/mp4">
+                <source src="https://videos.pexels.com/video-files/10450109/10450109-hd_1920_1080_25fps.mp4" type="video/mp4">
+                <source src="https://videos.pexels.com/video-files/10450109/10450109-hd_1280_720_25fps.mp4" type="video/mp4">
+            </video>
+            <div class="seashore-overlay"></div>
+            <div class="seashore-vignette"></div>
+        </div>
+        <div class="seashore-title-card">
+            <h2>🌊 Sea Shore Railway Hub</h2>
+            <p>Coastal railway operations with live sea shore ambience</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-        if not NTES_AVAILABLE:
-            st.error("❌ 'ntes-client' library not installed. Please run: `pip install ntes-client`")
-            st.info("💡 Using alternative web-based PNR and train status services...")
-            st.markdown("### 🔍 PNR Status (via ConfirmTkt)")
-            pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr_alt")
-            if pnr_input and len(pnr_input) == 10 and pnr_input.isdigit():
-                pnr_url = f"https://www.confirmtkt.com/pnr-status/{pnr_input}"
-                st.link_button("🔍 Check PNR Status", pnr_url, use_container_width=True)
-            st.markdown("### 🚂 Live Train Status (via RailYatri)")
-            train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train_alt")
-            if train_no and train_no.isdigit() and (3 <= len(train_no) <= 5):
-                train_url = f"https://www.railyatri.in/live-train-status/{train_no}"
-                st.link_button("🚂 Check Live Status", train_url, use_container_width=True)
-            st.markdown("### 📋 Train Schedule (via RailYatri)")
-            train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch_alt")
-            if train_no_sch and train_no_sch.isdigit() and (3 <= len(train_no_sch) <= 5):
-                sch_url = f"https://www.railyatri.in/train-schedule/{train_no_sch}"
-                st.link_button("📋 View Schedule", sch_url, use_container_width=True)
-        else:
-            tab1, tab2, tab3, tab4 = st.tabs(["🔍 PNR Status", "🚂 Live Train", "📋 Train Schedule", "📸 Passport Photo"])
+        st.markdown("<div style='height:20vh;'></div>", unsafe_allow_html=True)
 
-            with tab1:
-                st.markdown("### PNR Status Check")
-                pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr")
-                c1, c2 = st.columns(2)
-                with c1:
-                    if st.button("Check PNR", key="pnr_check", use_container_width=True):
-                        if not pnr_input or len(pnr_input) != 10 or not pnr_input.isdigit():
-                            st.error("Please enter a valid 10-digit PNR.")
-                        else:
-                            with st.spinner("Fetching PNR details..."):
-                                data = get_pnr_status(pnr_input)
-                                if data and isinstance(data, dict) and data.get('error'):
-                                    if data['error'] == "FLUSHED_PNR": st.error("❌ FLUSHED PNR / PNR NOT YET GENERATED")
-                                    else: st.error(f"❌ {data['error']}")
-                                elif data:
-                                    st.session_state.pnr_result = data
-                                    st.session_state.pnr_last_checked = time.time()
-                                    st.rerun()
-                                else: st.error("❌ PNR not found or flushed.")
-                with c2:
-                    if st.button("🔄 Refresh PNR", key="refresh_pnr", use_container_width=True):
-                        if pnr_input and len(pnr_input) == 10 and pnr_input.isdigit():
-                            with st.spinner("Refreshing PNR..."):
-                                data = get_pnr_status(pnr_input)
-                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
-                                elif data:
-                                    st.session_state.pnr_result = data
-                                    st.session_state.pnr_last_checked = time.time()
-                                    st.rerun()
-                                else: st.error("❌ PNR not found or flushed.")
-                        else: st.warning("Please enter a valid PNR first.")
+        # Railway Tools
+        st.markdown("### 🚂 Railway Operations")
+        rail_col1, rail_col2 = st.columns(2)
+        with rail_col1:
+            with st.container():
+                st.markdown("<div class='railway-tool-card'>", unsafe_allow_html=True)
+                st.markdown("**🎫 PNR Status Check**")
+                pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="railway_pnr_input")
+                if pnr_input and len(pnr_input) == 10:
+                    with st.spinner("Checking PNR..."):
+                        pnr_data = get_pnr_status(pnr_input)
+                        st.markdown(f"<div class='result-box'><pre>{format_pnr_result(pnr_data)}</pre></div>", unsafe_allow_html=True)
+                elif pnr_input:
+                    st.warning("PNR must be exactly 10 digits")
+                st.markdown("</div>", unsafe_allow_html=True)
+        with rail_col2:
+            with st.container():
+                st.markdown("<div class='railway-tool-card'>", unsafe_allow_html=True)
+                st.markdown("**🚆 Live Train Status**")
+                train_input = st.text_input("Enter Train Number", key="railway_train_input")
+                date_input = st.date_input("Journey Date", value=datetime.now(), key="railway_date_input", format="DD-MM-YYYY")
+                if st.button("🔍 Get Live Status", key="railway_status_btn", use_container_width=True):
+                    if train_input:
+                        with st.spinner("Fetching live status..."):
+                            train_data = get_live_train_status(train_input, date_input.strftime("%d-%b-%Y"))
+                            msg, _ = format_live_train_result(train_data)
+                            st.markdown(f"<div class='result-box'><pre>{msg}</pre></div>", unsafe_allow_html=True)
+                    else:
+                        st.warning("Enter train number")
+                st.markdown("</div>", unsafe_allow_html=True)
 
-                if st.session_state.pnr_result and st.session_state.pnr_last_checked:
-                    elapsed = time.time() - st.session_state.pnr_last_checked
-                    if elapsed > 300:
-                        with st.spinner("Auto-refreshing PNR..."):
-                            current_pnr = st.session_state.pnr_result.get('pnr')
-                            if current_pnr:
-                                data = get_pnr_status(current_pnr)
-                                if data and not isinstance(data, dict) or not data.get('error'):
-                                    st.session_state.pnr_result = data
-                                    st.session_state.pnr_last_checked = time.time()
-                                    st.rerun()
+        st.markdown("---")
+        st.markdown("### 🔍 Train Search & Schedule")
+        search_col1, search_col2 = st.columns(2)
+        with search_col1:
+            with st.container():
+                st.markdown("<div class='railway-tool-card'>", unsafe_allow_html=True)
+                st.markdown("**🔍 Train Search**")
+                search_query = st.text_input("Search by name/number", key="railway_search_input")
+                if st.button("🔍 Search Trains", key="railway_search_btn", use_container_width=True):
+                    if search_query:
+                        with st.spinner("Searching..."):
+                            search_data = search_trains(search_query)
+                            st.markdown(f"<div class='result-box'><pre>{format_train_search(search_data)}</pre></div>", unsafe_allow_html=True)
+                    else:
+                        st.warning("Enter search query")
+                st.markdown("</div>", unsafe_allow_html=True)
+        with search_col2:
+            with st.container():
+                st.markdown("<div class='railway-tool-card'>", unsafe_allow_html=True)
+                st.markdown("**📋 Schedule Lookup**")
+                sch_train = st.text_input("Train Number", key="railway_sch_input")
+                if st.button("📋 Get Schedule", key="railway_sch_btn", use_container_width=True):
+                    if sch_train:
+                        with st.spinner("Loading schedule..."):
+                            sch_data = get_train_schedule(sch_train)
+                            msg, _ = format_schedule_result(sch_data)
+                            st.markdown(f"<div class='result-box'><pre>{msg}</pre></div>", unsafe_allow_html=True)
+                    else:
+                        st.warning("Enter train number")
+                st.markdown("</div>", unsafe_allow_html=True)
 
-                if st.session_state.pnr_result:
-                    with st.container():
-                        st.markdown('<div class="result-box">', unsafe_allow_html=True)
-                        st.markdown(format_pnr_result(st.session_state.pnr_result))
-                        st.markdown('</div>', unsafe_allow_html=True)
-                        if st.session_state.pnr_last_checked:
-                            last_check = datetime.fromtimestamp(st.session_state.pnr_last_checked).strftime('%H:%M:%S')
-                            st.caption(f"⏱️ Last checked: {last_check} IST (auto-refreshes every 5 min)")
+        st.markdown("---")
+        st.markdown("<div style='height:15vh;'></div>", unsafe_allow_html=True)
 
-            with tab2:
-                st.markdown("### Live Train Status")
-                train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train")
-                date_options = [f"{get_date_label(i)} ({get_date_for_offset(i)})" for i in range(5)]
-                date_choice = st.selectbox("Select Date", date_options, index=0, key="rail_date")
-                offset = 0
-                for i in range(5):
-                    if get_date_label(i) in date_choice: offset = i; break
-                c1, c2 = st.columns(2)
-                with c1:
-                    if st.button("Get Live Status", key="train_live", use_container_width=True):
-                        if not train_no or not train_no.isdigit() or not (3 <= len(train_no) <= 5):
-                            st.error("Please enter a valid train number (3-5 digits).")
-                        else:
-                            with st.spinner("Fetching live status..."):
-                                date_str = get_date_for_offset(offset)
-                                data = get_live_train_status(train_no, date_str)
-                                if data and isinstance(data, dict) and data.get('error'):
-                                    st.error(f"❌ {data['error']}: {data.get('message', '')}")
-                                elif data:
-                                    st.session_state.train_result = data
-                                    st.rerun()
-                                else: st.error("❌ No data available.")
-                with c2:
-                    if st.button("🔄 Refresh Live Status", key="refresh_live", use_container_width=True):
-                        if train_no and train_no.isdigit() and (3 <= len(train_no) <= 5):
-                            with st.spinner("Refreshing live status..."):
-                                date_str = get_date_for_offset(offset)
-                                data = get_live_train_status(train_no, date_str)
-                                if data and isinstance(data, dict) and data.get('error'):
-                                    st.error(f"❌ {data['error']}: {data.get('message', '')}")
-                                elif data:
-                                    st.session_state.train_result = data
-                                    st.rerun()
-                                else: st.error("❌ No data available.")
-                        else: st.warning("Please enter a valid train number first.")
+        # Sea Shore Info Cards
+        st.markdown("### 🌊 Coastal Facts")
+        st.markdown("""
+        <style>
+        .coastal-card {
+            background: rgba(0,50,90,0.2); backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
+            padding: 20px; text-align: center; transition: all 0.35s ease;
+        }
+        .coastal-card:hover { transform: translateY(-6px); border-color: rgba(255,255,255,0.25); box-shadow: 0 10px 40px rgba(0,0,0,0.35); }
+        .coastal-card .icon-wrap { width:56px; height:56px; margin:0 auto 10px; background:linear-gradient(135deg, rgba(100,180,255,0.3), rgba(80,150,220,0.2)); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.6rem; border:1px solid rgba(255,255,255,0.15); }
+        .coastal-card h4 { color:#ffffff !important; text-shadow:0 1px 5px rgba(0,0,0,0.7) !important; margin:0; font-size:0.95rem; font-weight:700; }
+        .coastal-card p { color:rgba(255,255,255,0.75) !important; text-shadow:0 1px 4px rgba(0,0,0,0.5) !important; font-size:0.78rem; margin:6px 0 0 0; line-height:1.4; }
+        </style>
+        """, unsafe_allow_html=True)
+        c1, c2, c3, c4, c5 = st.columns(5)
+        with c1:
+            st.markdown('<div class="coastal-card"><div class="icon-wrap">🌊</div><h4>Indian Coastline</h4><p>7,500+ km of coastline</p></div>', unsafe_allow_html=True)
+        with c2:
+            st.markdown('<div class="coastal-card"><div class="icon-wrap">🚂</div><h4>Konkan Railway</h4><p>760 km scenic route</p></div>', unsafe_allow_html=True)
+        with c3:
+            st.markdown('<div class="coastal-card"><div class="icon-wrap">🌉</div><h4>Sea Bridges</h4><p>Pamban, Vidyasagar Setu</p></div>', unsafe_allow_html=True)
+        with c4:
+            st.markdown('<div class="coastal-card"><div class="icon-wrap">🏖️</div><h4>Beach Stations</h4><p>Goa, Puri, Vizag</p></div>', unsafe_allow_html=True)
+        with c5:
+            st.markdown('<div class="coastal-card"><div class="icon-wrap">⚓</div><h4>Port Connectivity</h4><p>Major ports linked</p></div>', unsafe_allow_html=True)
 
-                if st.session_state.train_result:
-                    with st.container():
-                        st.markdown('<div class="result-box">', unsafe_allow_html=True)
-                        msg, _ = format_live_train_result(st.session_state.train_result)
-                        st.markdown(msg)
-                        st.markdown('</div>', unsafe_allow_html=True)
-
-            with tab3:
-                st.markdown("### Train Schedule / Route")
-                train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch")
-                if 'sch_start' not in st.session_state: st.session_state.sch_start = 0
-                c1, c2 = st.columns(2)
-                with c1:
-                    if st.button("Get Schedule", key="train_sch", use_container_width=True):
-                        if not train_no_sch or not train_no_sch.isdigit() or not (3 <= len(train_no_sch) <= 5):
-                            st.error("Please enter a valid train number.")
-                        else:
-                            with st.spinner("Fetching schedule..."):
-                                data = get_train_schedule(train_no_sch)
-                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
-                                elif data:
-                                    st.session_state.sch_data = data
-                                    st.session_state.sch_start = 0
-                                    st.rerun()
-                                else: st.error("❌ Schedule not found.")
-                with c2:
-                    if st.button("🔄 Refresh Schedule", key="refresh_sch", use_container_width=True):
-                        if train_no_sch and train_no_sch.isdigit() and (3 <= len(train_no_sch) <= 5):
-                            with st.spinner("Refreshing schedule..."):
-                                data = get_train_schedule(train_no_sch)
-                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
-                                elif data:
-                                    st.session_state.sch_data = data
-                                    st.session_state.sch_start = 0
-                                    st.rerun()
-                                else: st.error("❌ Schedule not found.")
-                        else: st.warning("Please enter a valid train number first.")
-
-                if st.session_state.sch_data:
-                    data = st.session_state.sch_data
-                    if isinstance(data, dict):
-                        msg, pagination = format_schedule_result(data, st.session_state.sch_start)
-                        with st.container():
-                            st.markdown('<div class="result-box">', unsafe_allow_html=True)
-                            st.markdown(msg)
-                            st.markdown('</div>', unsafe_allow_html=True)
-                        if pagination:
-                            start, end, total = pagination
-                            chunk = 20
-                            if total > 0:
-                                col1, col2, col3 = st.columns([1,2,1])
-                                with col1:
-                                    if start > 0:
-                                        if st.button("◀ Previous", key="sch_prev"):
-                                            st.session_state.sch_start = max(0, start - chunk)
-                                            st.rerun()
-                                with col2: st.write(f"Showing {start+1}-{end} of {total}")
-                                with col3:
-                                    if end < total:
-                                        if st.button("Next ▶", key="sch_next"):
-                                            st.session_state.sch_start = end
-                                            st.rerun()
-                    else: st.info("No schedule data available.")
-
-            with tab4:
-                st.markdown("### 📸 Passport Photo Maker")
-                st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
-                api_key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
-                if not api_key: api_key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
-                if not api_key and "remove_bg_key" in st.session_state: api_key = str(st.session_state.remove_bg_key).strip()
-                if not api_key:
-                    st.error("❌ REMOVE_BG_API_KEY not found.")
-                    st.info("Add to secrets.toml or .env")
-                    manual_key = st.text_input("Or paste key here", type="password", key="manual_bg_key_input")
-                    if manual_key and manual_key.strip():
-                        st.session_state.remove_bg_key = manual_key.strip()
-                        st.success("Key saved. Refreshing...")
-                        st.rerun()
-                    st.stop()
-                else: st.success(f"✅ API Key ready: {api_key[:4]}...{api_key[-4:]}")
-
-                photo_file = st.file_uploader("Upload Photo", type=["png", "jpg", "jpeg"], key="passport_photo_uploader")
-                if photo_file:
-                    st.image(photo_file, caption="Original Photo", width=250)
-                    if st.button("✨ Process Passport Photo", type="primary", use_container_width=True, key="process_passport_btn"):
-                        with st.spinner("Processing... (10-30 seconds)"):
-                            try:
-                                image_data = photo_file.read()
-                                result = process_passport_image(image_data)
-                                if result:
-                                    st.success("✅ Passport Photo Ready!")
-                                    st.image(result, caption="Background removed | Black border | 35x45mm", width=300)
-                                    st.download_button("📥 Download Passport Photo", data=result,
-                                        file_name=f"passport_{now_ist().strftime('%Y%m%d_%H%M%S')}.png",
-                                        mime="image/png", use_container_width=True)
-                                else: st.error("❌ Failed to process photo.")
-                            except Exception as e: st.error(f"❌ Error: {str(e)[:200]}")
-
-    # =====================================================================
-    # VIEW: 🌤️ WEATHER
-    # =====================================================================
-    elif view == "🌤️ Weather":
+        st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
+        st.markdown("""
+        <div style="position:relative; z-index:10; text-align:center; padding:24px; background:rgba(0,50,90,0.2); backdrop-filter:blur(16px); border-radius:20px; border:1px solid rgba(255,255,255,0.1); max-width:850px; margin:0 auto;">
+            <div style="color:#ffffff; font-size:1.15rem; font-weight:700; text-shadow:0 1px 5px rgba(0,0,0,0.7); margin-bottom:10px;">🌊 Did You Know?</div>
+            <div style="color:rgba(255,255,255,0.85); font-size:0.9rem; text-shadow:0 1px 4px rgba(0,0,0,0.5); line-height:1.6;">
+                The Indian Railways operates some of the most scenic coastal routes in the world, including the 
+                Konkan Railway which runs parallel to the Arabian Sea for over 700 kilometers, offering 
+                breathtaking views of beaches, estuaries, and mangroves!
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
 
         qp_lat = st.query_params.get('__lat')
@@ -5411,22 +5310,28 @@ def main():
                                 50% {{ transform: translateY(-5px); }}
                             }}
                             .forecast-card-{idx} {{
-                                background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
-                                border-radius: 20px; padding: 18px; text-align: center; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);
+                                background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18);
+                                border-radius: 20px; padding: 18px; text-align: center;
                                 box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
                                 animation: forecast-bounce 3s ease-in-out infinite;
                                 animation-delay: {idx * 0.3}s;
+                                backdrop-filter: blur(12px);
+                            }}
+                            .forecast-card-{idx} * {{
+                                color: #ffffff !important;
+                                -webkit-text-fill-color: #ffffff !important;
+                                text-shadow: 0 1px 4px rgba(0,0,0,0.8) !important;
                             }}
                             </style>
                             <div class="forecast-card-{idx}">
-                                <div style="font-size: 0.9rem; font-weight: 600; margin-bottom: 8px;">{day_name}</div>
-                                <img src="{icon_url}" style="width: 60px; height: 60px; margin: 5px 0;">
-                                <div style="font-size: 1.8rem; font-weight: 700;">{day['temp']}°C</div>
-                                <div style="font-size: 0.75rem; margin: 4px 0;">{day['description']}</div>
-                                <div style="font-size: 0.8rem; margin-top: 8px; opacity: 0.9;">
+                                <div style="font-size: 0.9rem; font-weight: 700; margin-bottom: 8px;">{day_name}</div>
+                                <img src="{icon_url}" style="width: 60px; height: 60px; margin: 5px 0; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));">
+                                <div style="font-size: 1.8rem; font-weight: 800;">{day['temp']}°C</div>
+                                <div style="font-size: 0.8rem; margin: 4px 0; font-weight: 600;">{day['description']}</div>
+                                <div style="font-size: 0.8rem; margin-top: 8px; font-weight: 600;">
                                     🔺 {day['max_temp']}° / 🔻 {day['min_temp']}°
                                 </div>
-                                <div style="font-size: 0.75rem; margin-top: 6px; opacity: 0.85;">
+                                <div style="font-size: 0.78rem; margin-top: 6px; font-weight: 600;">
                                     💧 {day['humidity']}% | 🌬️ {day['wind']} m/s
                                 </div>
                             </div>
@@ -5528,14 +5433,6 @@ def main():
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
     }
-    /* Weather labels - WHITE for dark bg */
-    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label p,
-    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label span {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
-        font-weight: 700 !important;
-    }
     /* === DATA TABLE HEADERS === */
     div[data-testid="stMain"] .stDataFrame th,
     div[data-testid="stMain"] .stDataEditor th {
@@ -5550,6 +5447,25 @@ def main():
         color: #1e293b !important;
         -webkit-text-fill-color: #1e293b !important;
         text-shadow: none !important;
+    }
+    /* === WEATHER LABELS - WHITE (highest priority override) === */
+    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label p,
+    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label span,
+    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
+    div[data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label p,
+    div[data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label span,
+    div[data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 4px rgba(0,0,0,0.9) !important;
+        font-weight: 800 !important;
+    }
+    /* === WEATHER STAMP - LIGHT BLUE TRANSPARENT === */
+    div[data-testid="stMain"] .weather-input-wrapper {
+        background: rgba(173, 216, 230, 0.22) !important;
+        border: 1px solid rgba(173, 216, 230, 0.4) !important;
+        backdrop-filter: blur(16px) saturate(150%) !important;
+        -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
     }
     </style>
     """, unsafe_allow_html=True)
