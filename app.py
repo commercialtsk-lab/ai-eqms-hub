@@ -751,6 +751,7 @@ Previous conversation:
 def get_weather(city_name):
     if not city_name: return {'error': 'Please enter a city name'}
     try:
+        # Try direct weather API first
         url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
@@ -763,7 +764,30 @@ def get_weather(city_name):
                 'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
                 'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
                 'lat': data.get('coord', {}).get('lat'), 'lon': data.get('coord', {}).get('lon')}
-        else: return {'error': 'City not found. Please check the name.'}
+        # Fallback: try geocoding API for small towns/villages
+        geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=1&appid={WEATHER_API_KEY}"
+        geo_resp = requests.get(geo_url, timeout=10)
+        if geo_resp.status_code == 200:
+            geo_data = geo_resp.json()
+            if geo_data and len(geo_data) > 0:
+                lat = geo_data[0].get('lat')
+                lon = geo_data[0].get('lon')
+                found_name = geo_data[0].get('name', city_name)
+                country = geo_data[0].get('country', '')
+                if lat and lon:
+                    coord_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
+                    coord_resp = requests.get(coord_url, timeout=10)
+                    if coord_resp.status_code == 200:
+                        data = coord_resp.json()
+                        return {'city': found_name, 'country': country,
+                            'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
+                            'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
+                            'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
+                            'icon': data.get('weather', [{}])[0].get('icon', ''),
+                            'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
+                            'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
+                            'lat': lat, 'lon': lon}
+        return {'error': 'City not found. Try a nearby major city.'}
     except Exception as e: return {'error': f'Error fetching weather: {str(e)}'}
 
 def get_weather_forecast(city_name):
@@ -790,7 +814,39 @@ def get_weather_forecast(city_name):
                     'weather': info['weather'], 'description': info['description'].title(),
                     'icon': info['icon'], 'humidity': info['humidity'], 'wind': info['wind'], 'pressure': info['pressure']})
             return {'forecast': result, 'city': data.get('city', {}).get('name', city_name), 'country': data.get('city', {}).get('country', '')}
-        else: return {'error': 'City not found. Please check the name.'}
+        # Fallback: geocoding then forecast by coords
+        geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=1&appid={WEATHER_API_KEY}"
+        geo_resp = requests.get(geo_url, timeout=10)
+        if geo_resp.status_code == 200:
+            geo_data = geo_resp.json()
+            if geo_data and len(geo_data) > 0:
+                lat = geo_data[0].get('lat')
+                lon = geo_data[0].get('lon')
+                found_name = geo_data[0].get('name', city_name)
+                country = geo_data[0].get('country', '')
+                if lat and lon:
+                    coord_url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
+                    coord_resp = requests.get(coord_url, timeout=10)
+                    if coord_resp.status_code == 200:
+                        data = coord_resp.json()
+                        forecast_list = data.get('list', [])
+                        daily_forecast = {}
+                        for item in forecast_list:
+                            date = item.get('dt_txt', '')[:10]
+                            if date not in daily_forecast:
+                                daily_forecast[date] = {'temps': [], 'weather': item['weather'][0]['main'] if item.get('weather') else 'N/A',
+                                    'icon': item['weather'][0]['icon'] if item.get('weather') else '', 'humidity': item['main']['humidity'],
+                                    'wind': item['wind']['speed'], 'pressure': item['main']['pressure'],
+                                    'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'}
+                            daily_forecast[date]['temps'].append(item['main']['temp'])
+                        result = []
+                        for date, info in list(daily_forecast.items())[:5]:
+                            result.append({'date': date, 'temp': round(sum(info['temps'])/len(info['temps']), 1),
+                                'min_temp': round(min(info['temps']), 1), 'max_temp': round(max(info['temps']), 1),
+                                'weather': info['weather'], 'description': info['description'].title(),
+                                'icon': info['icon'], 'humidity': info['humidity'], 'wind': info['wind'], 'pressure': info['pressure']})
+                        return {'forecast': result, 'city': found_name, 'country': country}
+        return {'error': 'City not found. Try a nearby major city.'}
     except Exception as e: return {'error': f'Error fetching forecast: {str(e)}'}
 
 def get_weather_by_coords(lat, lon):
@@ -1615,6 +1671,34 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
+
+        /* Weather Input Stamp Style */
+        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
+        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input {{
+            background-color: rgba(255, 255, 255, 0.12) !important;
+            color: #000000 !important;
+            border: 1px solid rgba(255, 255, 255, 0.35) !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+            font-weight: 600 !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
+            border-radius: 10px !important;
+            padding: 6px 14px !important;
+            font-size: 0.95rem !important;
+            min-height: 36px !important;
+        }}
+        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
+        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
+            color: #ffffff !important;
+            font-weight: 700 !important;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.9) !important;
+            font-size: 0.9rem !important;
+        }}
+        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) > div > div,
+        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) > div > div {{
+            background: transparent !important;
+        }}
+
         [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important; margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important; }}
         body.sidebar-collapsed [data-testid="stSidebar"] {{ margin-left: -340px !important; opacity: 0 !important; pointer-events: none !important; }}
         body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important; }}
@@ -2736,7 +2820,7 @@ def main():
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
         with st.expander("🌤️ Quick Weather", expanded=True):
-            city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city")
+            city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city", placeholder="Any city...")
             if city != st.session_state.weather_city: st.session_state.weather_city = city
             if st.button("🌤️ Get Weather", key="sidebar_weather_btn", use_container_width=True):
                 if city:
@@ -4135,7 +4219,7 @@ def main():
             except: pass
 
         city = st.text_input("🏙️ Enter City Name", value=st.session_state.weather_city,
-                            placeholder="e.g., Tinsukia, New Delhi, Mumbai", key="weather_city_input")
+                            placeholder="Any city, town or village...", key="weather_city_input")
         if city != st.session_state.weather_city: st.session_state.weather_city = city
 
         col1, col2, col3 = st.columns(3)
