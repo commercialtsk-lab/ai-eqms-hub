@@ -1678,7 +1678,7 @@ def get_pnr_status_url(pnr):
 
 def main():
     # ═══════════════════════════════════════════════════════════════════════
-    # SOLAR SYSTEM ANIMATED BACKGROUND - Sun Center + Dual Train Orbits
+    # SOLAR SYSTEM ANIMATED BACKGROUND - Pure CSS (No JS)
     # ═══════════════════════════════════════════════════════════════════════
     bg_html = """
     <style>
@@ -1688,7 +1688,7 @@ def main():
         background: radial-gradient(ellipse at center, #0a0a1a 0%, #000000 70%);
     }
 
-    /* Twinkling Stars */
+    /* Twinkling Stars - Pure CSS */
     .star {
         position: absolute;
         background: white;
@@ -1696,14 +1696,14 @@ def main():
         animation: twinkle ease-in-out infinite;
     }
     @keyframes twinkle {
-        0%, 100% { opacity: 0.2; transform: scale(0.8); }
-        50% { opacity: 1; transform: scale(1.3); box-shadow: 0 0 6px 2px rgba(255,255,255,0.6); }
+        0%, 100% { opacity: 0.15; transform: scale(0.7); }
+        50% { opacity: 1; transform: scale(1.4); box-shadow: 0 0 8px 2px rgba(255,255,255,0.7); }
     }
 
     /* Shooting Stars */
     .shooting-star {
         position: absolute;
-        width: 100px;
+        width: 120px;
         height: 2px;
         background: linear-gradient(90deg, rgba(255,255,255,1), transparent);
         animation: shoot linear infinite;
@@ -1711,7 +1711,7 @@ def main():
     }
     @keyframes shoot {
         0% { transform: translateX(0) translateY(0) rotate(-45deg); opacity: 1; }
-        100% { transform: translateX(500px) translateY(500px) rotate(-45deg); opacity: 0; }
+        100% { transform: translateX(600px) translateY(600px) rotate(-45deg); opacity: 0; }
     }
 
     /* Central Sun */
@@ -1728,25 +1728,25 @@ def main():
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: 80px;
-        height: 80px;
+        width: 70px;
+        height: 70px;
         background: radial-gradient(circle, #FFD700 0%, #FF8C00 40%, #FF4500 70%, transparent 100%);
         border-radius: 50%;
-        box-shadow: 0 0 60px 20px rgba(255, 140, 0, 0.5), 0 0 100px 40px rgba(255, 69, 0, 0.2);
+        box-shadow: 0 0 50px 15px rgba(255, 140, 0, 0.5), 0 0 90px 35px rgba(255, 69, 0, 0.2);
         animation: sun-pulse 3s ease-in-out infinite;
     }
     @keyframes sun-pulse {
-        0%, 100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 60px 20px rgba(255, 140, 0, 0.5), 0 0 100px 40px rgba(255, 69, 0, 0.2); }
-        50% { transform: translate(-50%, -50%) scale(1.1); box-shadow: 0 0 80px 30px rgba(255, 140, 0, 0.7), 0 0 120px 50px rgba(255, 69, 0, 0.3); }
+        0%, 100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 50px 15px rgba(255, 140, 0, 0.5), 0 0 90px 35px rgba(255, 69, 0, 0.2); }
+        50% { transform: translate(-50%, -50%) scale(1.12); box-shadow: 0 0 70px 25px rgba(255, 140, 0, 0.7), 0 0 110px 45px rgba(255, 69, 0, 0.3); }
     }
     .sun-rays {
         position: absolute;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: 120px;
-        height: 120px;
-        animation: sun-rays-rotate 20s linear infinite;
+        width: 110px;
+        height: 110px;
+        animation: sun-rays-rotate 25s linear infinite;
     }
     @keyframes sun-rays-rotate {
         from { transform: translate(-50%, -50%) rotate(0deg); }
@@ -1756,9 +1756,9 @@ def main():
         position: absolute;
         top: 50%;
         left: 50%;
-        width: 60px;
-        height: 3px;
-        background: linear-gradient(90deg, rgba(255, 200, 0, 0.8), transparent);
+        width: 55px;
+        height: 2px;
+        background: linear-gradient(90deg, rgba(255, 200, 0, 0.7), transparent);
         transform-origin: 0 50%;
         border-radius: 2px;
     }
@@ -1769,38 +1769,38 @@ def main():
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        border: 1px dashed rgba(255, 255, 255, 0.15);
+        border: 1px dashed rgba(255, 255, 255, 0.12);
         border-radius: 50%;
     }
     .orbit-ring-1 {
-        width: 280px;
-        height: 280px;
+        width: 260px;
+        height: 260px;
         animation: ring-pulse-1 4s ease-in-out infinite;
     }
     .orbit-ring-2 {
-        width: 420px;
-        height: 420px;
+        width: 400px;
+        height: 400px;
         animation: ring-pulse-2 4s ease-in-out infinite;
         animation-delay: 2s;
     }
     @keyframes ring-pulse-1 {
-        0%, 100% { border-color: rgba(255, 153, 51, 0.2); }
-        50% { border-color: rgba(255, 153, 51, 0.5); }
+        0%, 100% { border-color: rgba(255, 153, 51, 0.15); }
+        50% { border-color: rgba(255, 153, 51, 0.45); }
     }
     @keyframes ring-pulse-2 {
-        0%, 100% { border-color: rgba(19, 136, 8, 0.2); }
-        50% { border-color: rgba(19, 136, 8, 0.5); }
+        0%, 100% { border-color: rgba(19, 136, 8, 0.15); }
+        50% { border-color: rgba(19, 136, 8, 0.45); }
     }
 
-    /* Train Orbit System 1 - Clockwise (Saffron Train) */
+    /* Train Orbit System 1 - Clockwise (Saffron) */
     .orbit-1 {
         position: absolute;
         top: 50%;
         left: 50%;
-        width: 280px;
-        height: 280px;
+        width: 260px;
+        height: 260px;
         transform: translate(-50%, -50%);
-        animation: orbit-spin-1 25s linear infinite;
+        animation: orbit-spin-1 22s linear infinite;
     }
     @keyframes orbit-spin-1 {
         from { transform: translate(-50%, -50%) rotate(0deg); }
@@ -1808,35 +1808,30 @@ def main():
     }
     .train-1 {
         position: absolute;
-        top: -22px;
+        top: -20px;
         left: 50%;
         transform: translateX(-50%);
-        font-size: 32px;
-        filter: drop-shadow(0 0 15px rgba(255, 153, 51, 0.9));
-        animation: train-bob-1 1s ease-in-out infinite alternate;
+        font-size: 30px;
+        filter: drop-shadow(0 0 12px rgba(255, 153, 51, 0.9));
+        animation: train-bob-1 0.9s ease-in-out infinite alternate;
     }
-    .train-1-bogie {
-        position: absolute;
-        top: -18px;
-        left: 50%;
-        font-size: 26px;
-        filter: drop-shadow(0 0 8px rgba(255, 153, 51, 0.6));
-        animation: train-bob-1 1s ease-in-out infinite alternate;
-    }
+    .train-1-b1 { transform: translateX(-50%) translateX(-38px); animation-delay: 0.04s; }
+    .train-1-b2 { transform: translateX(-50%) translateX(-72px); animation-delay: 0.08s; }
+    .train-1-b3 { transform: translateX(-50%) translateX(-102px); animation-delay: 0.12s; }
     @keyframes train-bob-1 {
         from { transform: translateX(-50%) translateY(0) scale(1); }
-        to { transform: translateX(-50%) translateY(-6px) scale(1.08); }
+        to { transform: translateX(-50%) translateY(-5px) scale(1.07); }
     }
 
-    /* Train Orbit System 2 - Counter-Clockwise (Green Train) */
+    /* Train Orbit System 2 - Counter-Clockwise (Green) */
     .orbit-2 {
         position: absolute;
         top: 50%;
         left: 50%;
-        width: 420px;
-        height: 420px;
+        width: 400px;
+        height: 400px;
         transform: translate(-50%, -50%);
-        animation: orbit-spin-2 35s linear infinite reverse;
+        animation: orbit-spin-2 32s linear infinite reverse;
     }
     @keyframes orbit-spin-2 {
         from { transform: translate(-50%, -50%) rotate(0deg); }
@@ -1844,99 +1839,135 @@ def main():
     }
     .train-2 {
         position: absolute;
-        top: -20px;
+        top: -18px;
         left: 50%;
         transform: translateX(-50%);
-        font-size: 30px;
-        filter: drop-shadow(0 0 15px rgba(19, 136, 8, 0.9));
-        animation: train-bob-2 1.2s ease-in-out infinite alternate;
+        font-size: 28px;
+        filter: drop-shadow(0 0 12px rgba(19, 136, 8, 0.9));
+        animation: train-bob-2 1s ease-in-out infinite alternate;
     }
-    .train-2-bogie {
-        position: absolute;
-        top: -16px;
-        left: 50%;
-        font-size: 24px;
-        filter: drop-shadow(0 0 8px rgba(19, 136, 8, 0.6));
-        animation: train-bob-2 1.2s ease-in-out infinite alternate;
-    }
+    .train-2-b1 { transform: translateX(-50%) translateX(-36px); animation-delay: 0.04s; }
+    .train-2-b2 { transform: translateX(-50%) translateX(-68px); animation-delay: 0.08s; }
+    .train-2-b3 { transform: translateX(-50%) translateX(-96px); animation-delay: 0.12s; }
     @keyframes train-bob-2 {
         from { transform: translateX(-50%) translateY(0) scale(1); }
-        to { transform: translateX(-50%) translateY(-5px) scale(1.06); }
+        to { transform: translateX(-50%) translateY(-4px) scale(1.05); }
     }
 
-    /* Planet decorations */
+    /* Decorative Planets */
     .planet {
         position: absolute;
         border-radius: 50%;
-        animation: planet-float 6s ease-in-out infinite;
+        animation: planet-float 7s ease-in-out infinite;
     }
     @keyframes planet-float {
         0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-10px); }
+        50% { transform: translateY(-12px); }
     }
 
-    /* Nebula clouds */
+    /* Nebula */
     .nebula {
         position: absolute;
         border-radius: 50%;
-        filter: blur(60px);
-        opacity: 0.15;
-        animation: nebula-drift 15s ease-in-out infinite;
+        filter: blur(50px);
+        opacity: 0.12;
+        animation: nebula-drift 18s ease-in-out infinite;
     }
     @keyframes nebula-drift {
         0%, 100% { transform: translate(0, 0) scale(1); }
-        33% { transform: translate(30px, -20px) scale(1.1); }
-        66% { transform: translate(-20px, 30px) scale(0.9); }
+        33% { transform: translate(25px, -15px) scale(1.08); }
+        66% { transform: translate(-15px, 25px) scale(0.95); }
     }
     </style>
     <div class="eqms-bg">
         <!-- Nebula effects -->
-        <div class="nebula" style="top: 20%; left: 15%; width: 200px; height: 200px; background: radial-gradient(circle, rgba(255,100,100,0.3), transparent);"></div>
-        <div class="nebula" style="top: 60%; right: 10%; width: 250px; height: 250px; background: radial-gradient(circle, rgba(100,100,255,0.2), transparent); animation-delay: -5s;"></div>
-        <div class="nebula" style="bottom: 20%; left: 30%; width: 180px; height: 180px; background: radial-gradient(circle, rgba(100,255,100,0.2), transparent); animation-delay: -10s;"></div>
+        <div class="nebula" style="top: 18%; left: 12%; width: 180px; height: 180px; background: radial-gradient(circle, rgba(255,100,100,0.25), transparent);"></div>
+        <div class="nebula" style="top: 55%; right: 8%; width: 220px; height: 220px; background: radial-gradient(circle, rgba(100,100,255,0.2), transparent); animation-delay: -6s;"></div>
+        <div class="nebula" style="bottom: 18%; left: 28%; width: 160px; height: 160px; background: radial-gradient(circle, rgba(100,255,100,0.18), transparent); animation-delay: -12s;"></div>
 
-        <!-- Stars - generated via JS for better distribution -->
-        <script>
-        (function() {
-            var bg = document.querySelector('.eqms-bg');
-            if (!bg) return;
-            // Create 80 twinkling stars
-            for (var i = 0; i < 80; i++) {
-                var star = document.createElement('div');
-                star.className = 'star';
-                var size = Math.random() * 3 + 1;
-                star.style.width = size + 'px';
-                star.style.height = size + 'px';
-                star.style.top = Math.random() * 100 + '%';
-                star.style.left = Math.random() * 100 + '%';
-                star.style.animationDuration = (Math.random() * 3 + 1.5) + 's';
-                star.style.animationDelay = (Math.random() * 3) + 's';
-                bg.appendChild(star);
-            }
-            // Create 5 shooting stars
-            for (var j = 0; j < 5; j++) {
-                var shooting = document.createElement('div');
-                shooting.className = 'shooting-star';
-                shooting.style.top = Math.random() * 50 + '%';
-                shooting.style.left = Math.random() * 50 + '%';
-                shooting.style.animationDuration = (Math.random() * 3 + 4) + 's';
-                shooting.style.animationDelay = (Math.random() * 10) + 's';
-                bg.appendChild(shooting);
-            }
-        })();
-        </script>
+        <!-- 60 Static Stars with inline positions (no JS needed) -->
+        <div class="star" style="top:5%;left:8%;width:2px;height:2px;animation-duration:2.1s;animation-delay:0.3s;"></div>
+        <div class="star" style="top:12%;left:15%;width:3px;height:3px;animation-duration:1.8s;animation-delay:1.2s;"></div>
+        <div class="star" style="top:8%;left:22%;width:2px;height:2px;animation-duration:2.5s;animation-delay:0.7s;"></div>
+        <div class="star" style="top:18%;left:28%;width:2px;height:2px;animation-duration:1.5s;animation-delay:2.1s;"></div>
+        <div class="star" style="top:3%;left:35%;width:3px;height:3px;animation-duration:2.8s;animation-delay:0.1s;"></div>
+        <div class="star" style="top:15%;left:42%;width:2px;height:2px;animation-duration:2.2s;animation-delay:1.5s;"></div>
+        <div class="star" style="top:6%;left:48%;width:2px;height:2px;animation-duration:1.9s;animation-delay:0.9s;"></div>
+        <div class="star" style="top:20%;left:55%;width:3px;height:3px;animation-duration:2.4s;animation-delay:0.4s;"></div>
+        <div class="star" style="top:10%;left:62%;width:2px;height:2px;animation-duration:1.7s;animation-delay:1.8s;"></div>
+        <div class="star" style="top:25%;left:68%;width:2px;height:2px;animation-duration:2.6s;animation-delay:0.6s;"></div>
+        <div class="star" style="top:7%;left:75%;width:3px;height:3px;animation-duration:2.0s;animation-delay:1.0s;"></div>
+        <div class="star" style="top:22%;left:82%;width:2px;height:2px;animation-duration:1.6s;animation-delay:2.3s;"></div>
+        <div class="star" style="top:14%;left:88%;width:2px;height:2px;animation-duration:2.3s;animation-delay:0.8s;"></div>
+        <div class="star" style="top:28%;left:92%;width:3px;height:3px;animation-duration:1.4s;animation-delay:1.3s;"></div>
+        <div class="star" style="top:2%;left:95%;width:2px;height:2px;animation-duration:2.7s;animation-delay:0.5s;"></div>
+        <div class="star" style="top:30%;left:5%;width:2px;height:2px;animation-duration:1.8s;animation-delay:1.9s;"></div>
+        <div class="star" style="top:35%;left:12%;width:3px;height:3px;animation-duration:2.1s;animation-delay:0.2s;"></div>
+        <div class="star" style="top:32%;left:20%;width:2px;height:2px;animation-duration:1.5s;animation-delay:1.1s;"></div>
+        <div class="star" style="top:38%;left:30%;width:2px;height:2px;animation-duration:2.9s;animation-delay:0.7s;"></div>
+        <div class="star" style="top:33%;left:38%;width:3px;height:3px;animation-duration:1.6s;animation-delay:2.0s;"></div>
+        <div class="star" style="top:40%;left:45%;width:2px;height:2px;animation-duration:2.3s;animation-delay:0.4s;"></div>
+        <div class="star" style="top:36%;left:52%;width:2px;height:2px;animation-duration:1.9s;animation-delay:1.4s;"></div>
+        <div class="star" style="top:42%;left:60%;width:3px;height:3px;animation-duration:2.5s;animation-delay:0.8s;"></div>
+        <div class="star" style="top:37%;left:70%;width:2px;height:2px;animation-duration:1.7s;animation-delay:1.6s;"></div>
+        <div class="star" style="top:43%;left:78%;width:2px;height:2px;animation-duration:2.0s;animation-delay:0.3s;"></div>
+        <div class="star" style="top:39%;left:85%;width:3px;height:3px;animation-duration:2.8s;animation-delay:1.2s;"></div>
+        <div class="star" style="top:45%;left:92%;width:2px;height:2px;animation-duration:1.4s;animation-delay:0.9s;"></div>
+        <div class="star" style="top:48%;left:3%;width:2px;height:2px;animation-duration:2.2s;animation-delay:1.7s;"></div>
+        <div class="star" style="top:52%;left:10%;width:3px;height:3px;animation-duration:1.8s;animation-delay:0.6s;"></div>
+        <div class="star" style="top:50%;left:18%;width:2px;height:2px;animation-duration:2.6s;animation-delay:1.0s;"></div>
+        <div class="star" style="top:55%;left:25%;width:2px;height:2px;animation-duration:1.5s;animation-delay:2.2s;"></div>
+        <div class="star" style="top:58%;left:35%;width:3px;height:3px;animation-duration:2.4s;animation-delay:0.1s;"></div>
+        <div class="star" style="top:53%;left:42%;width:2px;height:2px;animation-duration:1.9s;animation-delay:1.3s;"></div>
+        <div class="star" style="top:60%;left:50%;width:2px;height:2px;animation-duration:2.7s;animation-delay:0.5s;"></div>
+        <div class="star" style="top:56%;left:58%;width:3px;height:3px;animation-duration:1.6s;animation-delay:1.8s;"></div>
+        <div class="star" style="top:62%;left:65%;width:2px;height:2px;animation-duration:2.1s;animation-delay:0.9s;"></div>
+        <div class="star" style="top:58%;left:72%;width:2px;height:2px;animation-duration:2.3s;animation-delay:1.5s;"></div>
+        <div class="star" style="top:65%;left:80%;width:3px;height:3px;animation-duration:1.7s;animation-delay:0.4s;"></div>
+        <div class="star" style="top:60%;left:88%;width:2px;height:2px;animation-duration:2.5s;animation-delay:1.1s;"></div>
+        <div class="star" style="top:68%;left:95%;width:2px;height:2px;animation-duration:1.8s;animation-delay:2.0s;"></div>
+        <div class="star" style="top:70%;left:6%;width:3px;height:3px;animation-duration:2.2s;animation-delay:0.8s;"></div>
+        <div class="star" style="top:75%;left:15%;width:2px;height:2px;animation-duration:1.4s;animation-delay:1.6s;"></div>
+        <div class="star" style="top:72%;left:22%;width:2px;height:2px;animation-duration:2.8s;animation-delay:0.3s;"></div>
+        <div class="star" style="top:78%;left:30%;width:3px;height:3px;animation-duration:1.9s;animation-delay:1.2s;"></div>
+        <div class="star" style="top:74%;left:38%;width:2px;height:2px;animation-duration:2.0s;animation-delay:0.7s;"></div>
+        <div class="star" style="top:80%;left:45%;width:2px;height:2px;animation-duration:2.6s;animation-delay:1.9s;"></div>
+        <div class="star" style="top:76%;left:52%;width:3px;height:3px;animation-duration:1.5s;animation-delay:0.5s;"></div>
+        <div class="star" style="top:82%;left:60%;width:2px;height:2px;animation-duration:2.3s;animation-delay:1.4s;"></div>
+        <div class="star" style="top:78%;left:68%;width:2px;height:2px;animation-duration:1.7s;animation-delay:0.2s;"></div>
+        <div class="star" style="top:85%;left:75%;width:3px;height:3px;animation-duration:2.1s;animation-delay:1.0s;"></div>
+        <div class="star" style="top:80%;left:82%;width:2px;height:2px;animation-duration:2.9s;animation-delay:0.6s;"></div>
+        <div class="star" style="top:88%;left:88%;width:2px;height:2px;animation-duration:1.6s;animation-delay:1.7s;"></div>
+        <div class="star" style="top:85%;left:95%;width:3px;height:3px;animation-duration:2.4s;animation-delay:0.9s;"></div>
+        <div class="star" style="top:92%;left:5%;width:2px;height:2px;animation-duration:1.8s;animation-delay:1.3s;"></div>
+        <div class="star" style="top:90%;left:12%;width:2px;height:2px;animation-duration:2.5s;animation-delay:0.4s;"></div>
+        <div class="star" style="top:95%;left:20%;width:3px;height:3px;animation-duration:1.5s;animation-delay:2.1s;"></div>
+        <div class="star" style="top:93%;left:28%;width:2px;height:2px;animation-duration:2.7s;animation-delay:0.8s;"></div>
+        <div class="star" style="top:96%;left:40%;width:2px;height:2px;animation-duration:2.0s;animation-delay:1.5s;"></div>
+        <div class="star" style="top:94%;left:50%;width:3px;height:3px;animation-duration:1.6s;animation-delay:0.3s;"></div>
+        <div class="star" style="top:97%;left:62%;width:2px;height:2px;animation-duration:2.3s;animation-delay:1.1s;"></div>
+        <div class="star" style="top:95%;left:72%;width:2px;height:2px;animation-duration:1.9s;animation-delay:0.7s;"></div>
+        <div class="star" style="top:98%;left:82%;width:3px;height:3px;animation-duration:2.1s;animation-delay:1.8s;"></div>
+        <div class="star" style="top:96%;left:92%;width:2px;height:2px;animation-duration:2.8s;animation-delay:0.5s;"></div>
+
+        <!-- Shooting Stars -->
+        <div class="shooting-star" style="top:8%;left:5%;animation-duration:5s;animation-delay:2s;"></div>
+        <div class="shooting-star" style="top:15%;left:60%;animation-duration:6s;animation-delay:8s;"></div>
+        <div class="shooting-star" style="top:25%;left:30%;animation-duration:4.5s;animation-delay:14s;"></div>
+        <div class="shooting-star" style="top:35%;left:75%;animation-duration:5.5s;animation-delay:5s;"></div>
+        <div class="shooting-star" style="top:45%;left:15%;animation-duration:6.5s;animation-delay:11s;"></div>
 
         <!-- Central Sun -->
         <div class="sun-container">
             <div class="sun-rays">
-                <div class="sun-ray" style="transform: rotate(0deg);"></div>
-                <div class="sun-ray" style="transform: rotate(45deg);"></div>
-                <div class="sun-ray" style="transform: rotate(90deg);"></div>
-                <div class="sun-ray" style="transform: rotate(135deg);"></div>
-                <div class="sun-ray" style="transform: rotate(180deg);"></div>
-                <div class="sun-ray" style="transform: rotate(225deg);"></div>
-                <div class="sun-ray" style="transform: rotate(270deg);"></div>
-                <div class="sun-ray" style="transform: rotate(315deg);"></div>
+                <div class="sun-ray" style="transform: rotate(0deg) translateX(-50%);"></div>
+                <div class="sun-ray" style="transform: rotate(45deg) translateX(-50%);"></div>
+                <div class="sun-ray" style="transform: rotate(90deg) translateX(-50%);"></div>
+                <div class="sun-ray" style="transform: rotate(135deg) translateX(-50%);"></div>
+                <div class="sun-ray" style="transform: rotate(180deg) translateX(-50%);"></div>
+                <div class="sun-ray" style="transform: rotate(225deg) translateX(-50%);"></div>
+                <div class="sun-ray" style="transform: rotate(270deg) translateX(-50%);"></div>
+                <div class="sun-ray" style="transform: rotate(315deg) translateX(-50%);"></div>
             </div>
             <div class="sun"></div>
         </div>
@@ -1947,24 +1978,24 @@ def main():
 
         <!-- Train Orbit 1 (Inner, Clockwise, Saffron) -->
         <div class="orbit-1">
-            <div class="train-1" style="transform: translateX(-50%) rotate(0deg);">🚂</div>
-            <div class="train-1-bogie" style="transform: translateX(-50%) translateX(-42px) rotate(0deg); animation-delay: 0.05s;">🚃</div>
-            <div class="train-1-bogie" style="transform: translateX(-50%) translateX(-78px) rotate(0deg); animation-delay: 0.1s;">🚃</div>
-            <div class="train-1-bogie" style="transform: translateX(-50%) translateX(-110px) rotate(0deg); animation-delay: 0.15s;">🚃</div>
+            <div class="train-1" style="transform: translateX(-50%);">🚂</div>
+            <div class="train-1 train-1-b1">🚃</div>
+            <div class="train-1 train-1-b2">🚃</div>
+            <div class="train-1 train-1-b3">🚃</div>
         </div>
 
         <!-- Train Orbit 2 (Outer, Counter-Clockwise, Green) -->
         <div class="orbit-2">
-            <div class="train-2" style="transform: translateX(-50%) rotate(0deg);">🚂</div>
-            <div class="train-2-bogie" style="transform: translateX(-50%) translateX(-40px) rotate(0deg); animation-delay: 0.05s;">🚋</div>
-            <div class="train-2-bogie" style="transform: translateX(-50%) translateX(-74px) rotate(0deg); animation-delay: 0.1s;">🚋</div>
-            <div class="train-2-bogie" style="transform: translateX(-50%) translateX(-104px) rotate(0deg); animation-delay: 0.15s;">🚋</div>
+            <div class="train-2" style="transform: translateX(-50%);">🚂</div>
+            <div class="train-2 train-2-b1">🚋</div>
+            <div class="train-2 train-2-b2">🚋</div>
+            <div class="train-2 train-2-b3">🚋</div>
         </div>
 
         <!-- Decorative Planets -->
-        <div class="planet" style="top: 15%; right: 20%; width: 20px; height: 20px; background: radial-gradient(circle, #ff6b6b, #c92a2a); box-shadow: 0 0 20px rgba(255,107,107,0.4);"></div>
-        <div class="planet" style="bottom: 25%; left: 12%; width: 15px; height: 15px; background: radial-gradient(circle, #4ecdc4, #087f5b); box-shadow: 0 0 15px rgba(78,205,196,0.4); animation-delay: -2s;"></div>
-        <div class="planet" style="top: 70%; right: 15%; width: 25px; height: 25px; background: radial-gradient(circle, #ffe66d, #f59f00); box-shadow: 0 0 25px rgba(255,230,109,0.4); animation-delay: -4s;"></div>
+        <div class="planet" style="top: 12%; right: 18%; width: 18px; height: 18px; background: radial-gradient(circle, #ff6b6b, #c92a2a); box-shadow: 0 0 18px rgba(255,107,107,0.4); animation-delay: 0s;"></div>
+        <div class="planet" style="bottom: 22%; left: 10%; width: 14px; height: 14px; background: radial-gradient(circle, #4ecdc4, #087f5b); box-shadow: 0 0 14px rgba(78,205,196,0.4); animation-delay: -3s;"></div>
+        <div class="planet" style="top: 68%; right: 12%; width: 22px; height: 22px; background: radial-gradient(circle, #ffe66d, #f59f00); box-shadow: 0 0 22px rgba(255,230,109,0.4); animation-delay: -6s;"></div>
     </div>
     """
     st.markdown(bg_html, unsafe_allow_html=True)
@@ -2112,44 +2143,22 @@ def main():
             padding: 14px 16px;
             text-align: center;
         }
-        .welcome-title {
-            color: #000000;
-            font-size: 1.35em;
-            font-weight: 800;
-            margin: 0 0 10px 0;
-            letter-spacing: 0.5px;
-        }
-        .welcome-line {
-            display: flex;
-            align-items: center;
-            justify-content: flex-start;
-            gap: 10px;
-            padding: 7px 12px;
-            border-radius: 8px;
-            margin: 5px 0;
-            transition: transform 0.2s ease;
-        }
-        .welcome-line:hover { transform: translateX(5px); }
-        .welcome-saffron { background: linear-gradient(90deg, rgba(255,153,51,0.18), transparent); }
-        .welcome-white { background: linear-gradient(90deg, rgba(200,200,200,0.12), transparent); }
-        .welcome-green { background: linear-gradient(90deg, rgba(19,136,8,0.18), transparent); }
-        .welcome-bullet { font-size: 1.3rem; font-weight: 900; color: inherit !important; }
-        .welcome-text { color: #000000 !important; font-size: 0.95em; font-weight: 600; }
+        
         </style>
         <div class="welcome-card">
             <div class="welcome-inner">
-                <div class="welcome-title">🙏 Namaste</div>
-                <div class="welcome-line welcome-saffron">
-                    <span class="welcome-bullet" style="color:#FF9933;">●</span>
-                    <span class="welcome-text">Aapka Swagat Hai</span>
+                <div style="color: #000000 !important; font-size: 1.35em; font-weight: 800; margin: 0 0 10px 0; letter-spacing: 0.5px;">🙏 Namaste</div>
+                <div style="display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 7px 12px; border-radius: 8px; margin: 5px 0; background: linear-gradient(90deg, rgba(255,153,51,0.18), transparent);">
+                    <span style="font-size: 1.3rem; font-weight: 900; color: #FF9933;">●</span>
+                    <span style="color: #000000 !important; font-size: 0.95em; font-weight: 600;">Aapka Swagat Hai</span>
                 </div>
-                <div class="welcome-line welcome-white">
-                    <span class="welcome-bullet" style="color:#BBBBBB;">●</span>
-                    <span class="welcome-text">Ham Bharat ke Log</span>
+                <div style="display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 7px 12px; border-radius: 8px; margin: 5px 0; background: linear-gradient(90deg, rgba(200,200,200,0.12), transparent);">
+                    <span style="font-size: 1.3rem; font-weight: 900; color: #BBBBBB;">●</span>
+                    <span style="color: #000000 !important; font-size: 0.95em; font-weight: 600;">Ham Bharat ke Log</span>
                 </div>
-                <div class="welcome-line welcome-green">
-                    <span class="welcome-bullet" style="color:#138808;">●</span>
-                    <span class="welcome-text">🇮🇳 Jai Hind</span>
+                <div style="display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 7px 12px; border-radius: 8px; margin: 5px 0; background: linear-gradient(90deg, rgba(19,136,8,0.18), transparent);">
+                    <span style="font-size: 1.3rem; font-weight: 900; color: #138808;">●</span>
+                    <span style="color: #000000 !important; font-size: 0.95em; font-weight: 600;">🇮🇳 Jai Hind</span>
                 </div>
             </div>
         </div>
@@ -3512,7 +3521,7 @@ def main():
                             placeholder="e.g., Tinsukia, New Delhi, Mumbai", key="weather_city_input")
         if city != st.session_state.weather_city: st.session_state.weather_city = city
 
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("🌤️ Get Weather", key="weather_btn", use_container_width=True):
                 if city:
@@ -3537,6 +3546,8 @@ def main():
                             st.rerun()
                         else: st.error(data.get('error', 'Error fetching weather'))
                 else: st.warning("Please enter a city name.")
+        with col3:
+            st.empty()  # Removed Detect My Location button as requested
 
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
