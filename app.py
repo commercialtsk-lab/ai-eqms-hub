@@ -2568,6 +2568,42 @@ EARTH_BG_HTML = """
 # =====================================================================
 # Ocean Background for Chat View
 # =====================================================================
+
+# =====================================================================
+# Sea Shore Background for Railway Tab
+# =====================================================================
+SEASHORE_BG_HTML = """
+<style>
+.seashore-bg-scene {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    z-index: -1; pointer-events: none; overflow: hidden;
+}
+.seashore-video {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    object-fit: cover; opacity: 0.92;
+}
+.seashore-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(180deg, rgba(0,30,60,0.25) 0%, rgba(0,40,80,0.15) 40%, rgba(0,20,40,0.4) 100%);
+    pointer-events: none;
+}
+.seashore-vignette {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    box-shadow: inset 0 0 150px rgba(0,0,0,0.6);
+    pointer-events: none;
+}
+</style>
+<div class="seashore-bg-scene">
+    <video class="seashore-video" autoplay muted loop playsinline preload="auto">
+        <source src="https://videos.pexels.com/video-files/10450109/10450109-uhd_3840_2160_25fps.mp4" type="video/mp4">
+        <source src="https://videos.pexels.com/video-files/10450109/10450109-hd_1920_1080_25fps.mp4" type="video/mp4">
+        <source src="https://videos.pexels.com/video-files/10450109/10450109-hd_1280_720_25fps.mp4" type="video/mp4">
+    </video>
+    <div class="seashore-overlay"></div>
+    <div class="seashore-vignette"></div>
+</div>
+"""
+
 AQUARIUM_BG_HTML = """
 <style>
 .aquarium-bg-scene {
@@ -2984,6 +3020,8 @@ def main():
         pass  # Weather bg rendered later
     elif view_bg == "💬 Chat":
         st.markdown(AQUARIUM_BG_HTML, unsafe_allow_html=True)
+    elif view_bg == "🚂 Railway":
+        st.markdown(SEASHORE_BG_HTML, unsafe_allow_html=True)
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
@@ -4808,99 +4846,28 @@ def main():
     # VIEW: 🚂 RAILWAY → 🌊 REALISTIC UNDERWATER WORLD
     # =====================================================================
     elif view == "🚂 Railway":
-        st.markdown("""
-        <style>
-        .seashore-bg-scene {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            z-index: -1; pointer-events: none; overflow: hidden;
-        }
-        .seashore-video {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            object-fit: cover; opacity: 0.9;
-        }
-        .seashore-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(180deg, rgba(0,50,90,0.2) 0%, rgba(0,60,100,0.15) 40%, rgba(0,40,70,0.35) 100%);
-            pointer-events: none;
-        }
-        .seashore-vignette {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            box-shadow: inset 0 0 120px rgba(0,0,0,0.5);
-            pointer-events: none;
-        }
-        .seashore-title-card {
-            position: relative; z-index: 10;
-            background: rgba(0,40,80,0.25); backdrop-filter: blur(24px) saturate(160%);
-            border: 1px solid rgba(255,255,255,0.12); border-radius: 24px;
-            padding: 28px 36px; text-align: center; margin: 25px auto; max-width: 650px;
-            box-shadow: 0 12px 48px rgba(0,0,0,0.35);
-        }
-        .seashore-title-card h2 {
-            color: #ffffff !important; text-shadow: 0 2px 12px rgba(0,0,0,0.8) !important;
-            margin: 0; font-size: 1.7rem; font-weight: 800; letter-spacing: 1px;
-        }
-        .seashore-title-card p {
-            color: rgba(255,255,255,0.85) !important;
-            text-shadow: 0 1px 6px rgba(0,0,0,0.6) !important;
-            margin: 10px 0 0 0; font-size: 0.95rem;
-        }
-        .railway-tool-card {
-            background: rgba(0,40,80,0.2); backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
-            padding: 20px; transition: all 0.35s ease;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-        }
-        .railway-tool-card:hover {
-            transform: translateY(-4px); border-color: rgba(255,255,255,0.25);
-            box-shadow: 0 10px 40px rgba(0,0,0,0.35);
-        }
-        .railway-tool-card h4 {
-            color: #ffffff !important; text-shadow: 0 1px 5px rgba(0,0,0,0.7) !important;
-            margin: 0 0 12px 0; font-size: 1rem; font-weight: 700;
-        }
-        .railway-tool-card label {
-            color: #000000 !important; font-weight: 600 !important;
-            text-shadow: none !important;
-        }
-        .railway-tool-card input {
-            color: #000000 !important; -webkit-text-fill-color: #000000 !important;
-        }
-        </style>
-        <div class="seashore-bg-scene">
-            <video class="seashore-video" autoplay muted loop playsinline preload="auto">
-                <source src="https://videos.pexels.com/video-files/10450109/10450109-uhd_3840_2160_25fps.mp4" type="video/mp4">
-                <source src="https://videos.pexels.com/video-files/10450109/10450109-hd_1920_1080_25fps.mp4" type="video/mp4">
-                <source src="https://videos.pexels.com/video-files/10450109/10450109-hd_1280_720_25fps.mp4" type="video/mp4">
-            </video>
-            <div class="seashore-overlay"></div>
-            <div class="seashore-vignette"></div>
-        </div>
-        <div class="seashore-title-card">
-            <h2>🌊 Sea Shore Railway Hub</h2>
-            <p>Coastal railway operations with live sea shore ambience</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown("<div style='height:20vh;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:2vh;'></div>", unsafe_allow_html=True)
+        st.subheader("🚂 Railway Operations")
+        st.caption("PNR Status • Live Train • Schedule • Passport Photo")
+        st.markdown("---")
 
         # Railway Tools
-        st.markdown("### 🚂 Railway Operations")
         rail_col1, rail_col2 = st.columns(2)
         with rail_col1:
             with st.container():
-                st.markdown("<div class='railway-tool-card'>", unsafe_allow_html=True)
+                st.markdown("<div style='background:rgba(0,40,80,0.25); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.12); border-radius:20px; padding:20px; box-shadow:0 6px 20px rgba(0,0,0,0.25);'>", unsafe_allow_html=True)
                 st.markdown("**🎫 PNR Status Check**")
                 pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="railway_pnr_input")
                 if pnr_input and len(pnr_input) == 10:
                     with st.spinner("Checking PNR..."):
                         pnr_data = get_pnr_status(pnr_input)
-                        st.markdown(f"<div class='result-box'><pre>{format_pnr_result(pnr_data)}</pre></div>", unsafe_allow_html=True)
+                        st.markdown(f"<div style='background:rgba(0,0,0,0.3); border:2px solid #2563eb; border-radius:12px; padding:20px; margin:15px 0; backdrop-filter:blur(12px);'><pre style='white-space:pre-wrap; word-wrap:break-word; font-family:inherit; font-size:0.95rem; line-height:1.6; margin:0; color:#f1f5f9;'>{format_pnr_result(pnr_data)}</pre></div>", unsafe_allow_html=True)
                 elif pnr_input:
                     st.warning("PNR must be exactly 10 digits")
                 st.markdown("</div>", unsafe_allow_html=True)
         with rail_col2:
             with st.container():
-                st.markdown("<div class='railway-tool-card'>", unsafe_allow_html=True)
+                st.markdown("<div style='background:rgba(0,40,80,0.25); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.12); border-radius:20px; padding:20px; box-shadow:0 6px 20px rgba(0,0,0,0.25);'>", unsafe_allow_html=True)
                 st.markdown("**🚆 Live Train Status**")
                 train_input = st.text_input("Enter Train Number", key="railway_train_input")
                 date_input = st.date_input("Journey Date", value=datetime.now(), key="railway_date_input", format="DD-MM-YYYY")
@@ -4909,30 +4876,29 @@ def main():
                         with st.spinner("Fetching live status..."):
                             train_data = get_live_train_status(train_input, date_input.strftime("%d-%b-%Y"))
                             msg, _ = format_live_train_result(train_data)
-                            st.markdown(f"<div class='result-box'><pre>{msg}</pre></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='background:rgba(0,0,0,0.3); border:2px solid #2563eb; border-radius:12px; padding:20px; margin:15px 0; backdrop-filter:blur(12px);'><pre style='white-space:pre-wrap; word-wrap:break-word; font-family:inherit; font-size:0.95rem; line-height:1.6; margin:0; color:#f1f5f9;'>{msg}</pre></div>", unsafe_allow_html=True)
                     else:
                         st.warning("Enter train number")
                 st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("---")
-        st.markdown("### 🔍 Train Search & Schedule")
         search_col1, search_col2 = st.columns(2)
         with search_col1:
             with st.container():
-                st.markdown("<div class='railway-tool-card'>", unsafe_allow_html=True)
+                st.markdown("<div style='background:rgba(0,40,80,0.25); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.12); border-radius:20px; padding:20px; box-shadow:0 6px 20px rgba(0,0,0,0.25);'>", unsafe_allow_html=True)
                 st.markdown("**🔍 Train Search**")
                 search_query = st.text_input("Search by name/number", key="railway_search_input")
                 if st.button("🔍 Search Trains", key="railway_search_btn", use_container_width=True):
                     if search_query:
                         with st.spinner("Searching..."):
                             search_data = search_trains(search_query)
-                            st.markdown(f"<div class='result-box'><pre>{format_train_search(search_data)}</pre></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='background:rgba(0,0,0,0.3); border:2px solid #2563eb; border-radius:12px; padding:20px; margin:15px 0; backdrop-filter:blur(12px);'><pre style='white-space:pre-wrap; word-wrap:break-word; font-family:inherit; font-size:0.95rem; line-height:1.6; margin:0; color:#f1f5f9;'>{format_train_search(search_data)}</pre></div>", unsafe_allow_html=True)
                     else:
                         st.warning("Enter search query")
                 st.markdown("</div>", unsafe_allow_html=True)
         with search_col2:
             with st.container():
-                st.markdown("<div class='railway-tool-card'>", unsafe_allow_html=True)
+                st.markdown("<div style='background:rgba(0,40,80,0.25); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.12); border-radius:20px; padding:20px; box-shadow:0 6px 20px rgba(0,0,0,0.25);'>", unsafe_allow_html=True)
                 st.markdown("**📋 Schedule Lookup**")
                 sch_train = st.text_input("Train Number", key="railway_sch_input")
                 if st.button("📋 Get Schedule", key="railway_sch_btn", use_container_width=True):
@@ -4940,53 +4906,35 @@ def main():
                         with st.spinner("Loading schedule..."):
                             sch_data = get_train_schedule(sch_train)
                             msg, _ = format_schedule_result(sch_data)
-                            st.markdown(f"<div class='result-box'><pre>{msg}</pre></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='background:rgba(0,0,0,0.3); border:2px solid #2563eb; border-radius:12px; padding:20px; margin:15px 0; backdrop-filter:blur(12px);'><pre style='white-space:pre-wrap; word-wrap:break-word; font-family:inherit; font-size:0.95rem; line-height:1.6; margin:0; color:#f1f5f9;'>{msg}</pre></div>", unsafe_allow_html=True)
                     else:
                         st.warning("Enter train number")
                 st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("---")
-        st.markdown("<div style='height:15vh;'></div>", unsafe_allow_html=True)
+        st.markdown("### 📸 Passport Photo Tool")
+        st.markdown("<div style='background:rgba(0,40,80,0.25); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.12); border-radius:20px; padding:20px; box-shadow:0 6px 20px rgba(0,0,0,0.25);'>", unsafe_allow_html=True)
+        pp_col1, pp_col2 = st.columns(2)
+        with pp_col1:
+            pp_file = st.file_uploader("Upload Photo", type=["png","jpg","jpeg"], key="passport_photo_uploader")
+            if pp_file:
+                st.image(pp_file, caption="Original", use_container_width=True)
+        with pp_col2:
+            if pp_file:
+                if st.button("✨ Process Passport Photo", use_container_width=True, key="process_pp_btn"):
+                    with st.spinner("Processing..."):
+                        result = process_passport_image(pp_file.getvalue())
+                        if result:
+                            st.image(result, caption="Passport Size (35×45mm)", use_container_width=True)
+                            st.download_button("⬇️ Download", data=result, file_name="passport_photo.png", mime="image/png", use_container_width=True)
+                        else:
+                            st.error("Could not process. Check Remove.bg API key.")
+            else:
+                st.info("Upload a photo to convert to passport size")
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        # Sea Shore Info Cards
-        st.markdown("### 🌊 Coastal Facts")
-        st.markdown("""
-        <style>
-        .coastal-card {
-            background: rgba(0,50,90,0.2); backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
-            padding: 20px; text-align: center; transition: all 0.35s ease;
-        }
-        .coastal-card:hover { transform: translateY(-6px); border-color: rgba(255,255,255,0.25); box-shadow: 0 10px 40px rgba(0,0,0,0.35); }
-        .coastal-card .icon-wrap { width:56px; height:56px; margin:0 auto 10px; background:linear-gradient(135deg, rgba(100,180,255,0.3), rgba(80,150,220,0.2)); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.6rem; border:1px solid rgba(255,255,255,0.15); }
-        .coastal-card h4 { color:#ffffff !important; text-shadow:0 1px 5px rgba(0,0,0,0.7) !important; margin:0; font-size:0.95rem; font-weight:700; }
-        .coastal-card p { color:rgba(255,255,255,0.75) !important; text-shadow:0 1px 4px rgba(0,0,0,0.5) !important; font-size:0.78rem; margin:6px 0 0 0; line-height:1.4; }
-        </style>
-        """, unsafe_allow_html=True)
-        c1, c2, c3, c4, c5 = st.columns(5)
-        with c1:
-            st.markdown('<div class="coastal-card"><div class="icon-wrap">🌊</div><h4>Indian Coastline</h4><p>7,500+ km of coastline</p></div>', unsafe_allow_html=True)
-        with c2:
-            st.markdown('<div class="coastal-card"><div class="icon-wrap">🚂</div><h4>Konkan Railway</h4><p>760 km scenic route</p></div>', unsafe_allow_html=True)
-        with c3:
-            st.markdown('<div class="coastal-card"><div class="icon-wrap">🌉</div><h4>Sea Bridges</h4><p>Pamban, Vidyasagar Setu</p></div>', unsafe_allow_html=True)
-        with c4:
-            st.markdown('<div class="coastal-card"><div class="icon-wrap">🏖️</div><h4>Beach Stations</h4><p>Goa, Puri, Vizag</p></div>', unsafe_allow_html=True)
-        with c5:
-            st.markdown('<div class="coastal-card"><div class="icon-wrap">⚓</div><h4>Port Connectivity</h4><p>Major ports linked</p></div>', unsafe_allow_html=True)
-
-        st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
-        st.markdown("""
-        <div style="position:relative; z-index:10; text-align:center; padding:24px; background:rgba(0,50,90,0.2); backdrop-filter:blur(16px); border-radius:20px; border:1px solid rgba(255,255,255,0.1); max-width:850px; margin:0 auto;">
-            <div style="color:#ffffff; font-size:1.15rem; font-weight:700; text-shadow:0 1px 5px rgba(0,0,0,0.7); margin-bottom:10px;">🌊 Did You Know?</div>
-            <div style="color:rgba(255,255,255,0.85); font-size:0.9rem; text-shadow:0 1px 4px rgba(0,0,0,0.5); line-height:1.6;">
-                The Indian Railways operates some of the most scenic coastal routes in the world, including the 
-                Konkan Railway which runs parallel to the Arabian Sea for over 700 kilometers, offering 
-                breathtaking views of beaches, estuaries, and mangroves!
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    elif view == "🌤️ Weather":
+        st.markdown("<div style='height:10vh;'></div>", unsafe_allow_html=True)
+elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
 
         qp_lat = st.query_params.get('__lat')
