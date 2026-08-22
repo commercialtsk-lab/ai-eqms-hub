@@ -1758,7 +1758,9 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input {{
             background-color: rgba(255, 255, 255, 0.92) !important;
-            color: #1a1a2e !important;
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            caret-color: #000000 !important;
             border: 2px solid rgba(255, 255, 255, 0.8) !important;
             box-shadow: 0 0 20px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2) !important;
             font-weight: 600 !important;
@@ -2006,6 +2008,16 @@ def render_audio_controls(current_scene):
 
     if current_scene == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         weather_cond = str(st.session_state.weather_data.get('weather', '')).lower()
+        audio_time = 'day'
+        try:
+            now_ts = int(time.time())
+            sunrise = st.session_state.weather_data.get('sunrise')
+            sunset = st.session_state.weather_data.get('sunset')
+            if sunrise and sunset and str(sunrise) not in ['', 'N/A', 'None']:
+                if now_ts < int(sunrise) or now_ts > int(sunset):
+                    audio_time = 'night'
+        except:
+            pass
         if 'rain' in weather_cond or 'drizz' in weather_cond:
             scene = 'weather-rain'
         elif 'thunder' in weather_cond or 'storm' in weather_cond:
@@ -2015,21 +2027,9 @@ def render_audio_controls(current_scene):
         elif 'mist' in weather_cond or 'fog' in weather_cond or 'haz' in weather_cond:
             scene = 'weather-fog'
         elif 'cloud' in weather_cond:
-            scene = 'weather-cloudy'
+            scene = 'weather-cloudy' if audio_time == 'day' else 'weather-night'
         else:
-            try:
-                now_ts = int(time.time())
-                sunrise = st.session_state.weather_data.get('sunrise')
-                sunset = st.session_state.weather_data.get('sunset')
-                if sunrise and sunset and str(sunrise) not in ['', 'N/A', 'None']:
-                    if now_ts < int(sunrise) or now_ts > int(sunset):
-                        scene = 'weather-night'
-                    else:
-                        scene = 'weather-sunny'
-                else:
-                    scene = 'weather-sunny'
-            except:
-                scene = 'weather-sunny'
+            scene = 'weather-night' if audio_time == 'night' else 'weather-sunny'
 
     components.html(f"""
     <div style="padding: 10px 0; font-family: inherit;">
@@ -2440,6 +2440,25 @@ EARTH_BG_HTML = """
     text-shadow: 0 2px 10px rgba(0,0,0,0.8);
     pointer-events: none;
 }
+    .moon-orbit {
+        position: absolute; top: 50%; left: 50%;
+        width: 640px; height: 640px;
+        transform: translate(-50%, -50%);
+        animation: moon-spin 18s linear infinite;
+        pointer-events: none;
+    }
+    @keyframes moon-spin {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .moon {
+        position: absolute; top: -16px; left: 50%;
+        transform: translateX(-50%);
+        width: 32px; height: 32px;
+        background: radial-gradient(circle at 35% 35%, #f5f5f5, #c0c0c0, #808080);
+        border-radius: 50%;
+        box-shadow: 0 0 25px rgba(255,255,255,0.25), inset -4px -4px 8px rgba(0,0,0,0.4);
+    }
 </style>
 <div class="earth-bg-scene">
     <div class="earth-stars"></div>
@@ -2448,6 +2467,9 @@ EARTH_BG_HTML = """
         <div class="earth-atmos"></div>
     </div>
     <div class="earth-label">Real-time Earth View</div>
+    <div class="moon-orbit">
+        <div class="moon"></div>
+    </div>
 </div>
 """
 
@@ -2863,9 +2885,9 @@ def main():
         except Exception:
             pass
 
-        # ---- WEATHER TYPE ----
+        # ---- WEATHER TYPE (respects day/night) ----
         if 'rain' in weather_cond or 'drizz' in weather_cond:
-            scene = 'rain'
+            scene = 'rain' if time_of_day in ['day', 'dawn', 'dusk'] else 'night-rain'
         elif 'thunder' in weather_cond or 'storm' in weather_cond:
             scene = 'thunder'
         elif 'snow' in weather_cond or 'frost' in weather_cond or 'freez' in weather_cond:
@@ -2873,7 +2895,7 @@ def main():
         elif 'mist' in weather_cond or 'fog' in weather_cond or 'haz' in weather_cond:
             scene = 'fog'
         elif 'cloud' in weather_cond:
-            scene = 'cloudy'
+            scene = 'cloudy' if time_of_day in ['day', 'dawn', 'dusk'] else 'night'
         else:
             scene = 'night' if time_of_day in ['night', 'dusk'] else 'sunny'
 
@@ -2881,7 +2903,7 @@ def main():
         bg_style = ""
         elements = ""
 
-        if scene == 'rain':
+        if scene in ('rain', 'night-rain'):
             bg_style = "background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 35%, #2d3a4a 70%, #1a2332 100%);"
             elements += '<div style="position:absolute;top:0;left:0;width:100%;height:90px;background:linear-gradient(180deg,#1a1a2e 0%,#2d3748 50%,transparent 100%);border-radius:0 0 50% 50% / 0 0 30px 30px;opacity:0.95;z-index:2;"></div>'
             elements += '<div style="position:absolute;top:-10px;left:10%;width:200px;height:60px;background:#4a5568;border-radius:50px;opacity:0.9;z-index:3;box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>'
@@ -3045,7 +3067,12 @@ def main():
             elements += '<div style="position:absolute;bottom:110px;left:60%;font-size:45px;z-index:5;opacity:0.6;animation:treeSway 6s ease-in-out 3s infinite;">🌲</div>'
             elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#455a64;z-index:6;"></div>'
 
-        info_html = f"""<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:100;pointer-events:none;"><div style="font-size:3.5rem;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);letter-spacing:2px;">{city_name}</div><div style="font-size:7rem;font-weight:900;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);line-height:1;margin:10px 0;">{temp}°</div><div style="font-size:1.6rem;font-weight:600;color:#ffffff;text-shadow:0 2px 8px rgba(0,0,0,0.9),0 0 20px rgba(0,0,0,0.5);text-transform:capitalize;">{desc}</div></div>"""
+        loc_detail = city_name
+            if st.session_state.weather_data.get('state'):
+                loc_detail += f", {st.session_state.weather_data['state']}"
+            if st.session_state.weather_data.get('country'):
+                loc_detail += f", {st.session_state.weather_data['country']}"
+            info_html = f"""<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:100;pointer-events:none;"><div style="font-size:2.6rem;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);letter-spacing:2px;">{loc_detail}</div><div style="font-size:7rem;font-weight:900;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);line-height:1;margin:10px 0;">{temp}°</div><div style="font-size:1.6rem;font-weight:600;color:#ffffff;text-shadow:0 2px 8px rgba(0,0,0,0.9),0 0 20px rgba(0,0,0,0.5);text-transform:capitalize;">{desc}</div></div>"""
 
         weather_bg_html = f"""<style>@keyframes rainFall{{from{{transform:translateY(-20px);opacity:0;}}10%{{opacity:0.8;}}90%{{opacity:0.8;}}to{{transform:translateY(110vh);opacity:0;}}}}@keyframes snowFall{{from{{transform:translateY(-20px) rotate(0deg);opacity:0;}}10%{{opacity:1;}}90%{{opacity:1;}}to{{transform:translateY(110vh) rotate(360deg);opacity:0;}}}}@keyframes cloudDrift{{from{{transform:translateX(-300px);}}to{{transform:translateX(calc(100vw + 300px));}}}}@keyframes sunPulse{{0%,100%{{transform:scale(1);opacity:0.9;}}50%{{transform:scale(1.15);opacity:1;}}}}@keyframes raySpin{{from{{transform:translate(-50%,-50%) rotate(0deg);}}to{{transform:translate(-50%,-50%) rotate(360deg);}}}}@keyframes moonGlow{{0%,100%{{box-shadow:0 0 60px 20px rgba(245,245,220,0.3);}}50%{{box-shadow:0 0 80px 30px rgba(245,245,220,0.5);}}}}@keyframes twinkle{{0%,100%{{opacity:0.3;}}50%{{opacity:1;}}}}@keyframes treeSway{{0%,100%{{transform:rotate(-3deg);}}50%{{transform:rotate(3deg);}}}}@keyframes waterShimmer{{0%,100%{{opacity:0.3;transform:scaleX(1);}}50%{{opacity:0.7;transform:scaleX(1.2);}}}}@keyframes lightning{{0%,90%,100%{{opacity:0;}}91%{{opacity:0.3;}}92%{{opacity:0;}}93%{{opacity:0.6;}}94%{{opacity:0;}}}}@keyframes windowLight{{0%,100%{{opacity:0.6;}}50%{{opacity:1;}}}}@keyframes birdFly{{from{{transform:translateX(-50px);}}to{{transform:translateX(calc(100vw + 50px));}}}}@keyframes fogDrift{{from{{transform:translateX(-50%);}}to{{transform:translateX(0%);}}}}</style><div style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;overflow:hidden;{bg_style}">{elements}{info_html}</div>"""
 
@@ -3121,14 +3148,7 @@ def main():
                             toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
                         }
                     } catch(e) {}
-                    setInterval(function(){
-                        var sb = doc.querySelector('[data-testid="stSidebar"]');
-                        var isCollapsed = doc.body.classList.contains('sidebar-collapsed');
-                        if (sb) {
-                            if (isCollapsed) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
-                            else { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
-                        }
-                    }, 2000);
+                    // Sidebar state managed by CSS + class toggle only — no polling
                     doc.body.appendChild(toggleBtn);
                 }
 
@@ -3768,7 +3788,17 @@ def main():
 
         # Train count summary cards
         train_col_metric = find_column(filtered_df, ['T/N', 'T_N', 'TRAIN', 'TRAIN NO', 'TRAIN NUMBER'])
+        if train_col_metric is None and sheet_choice in SHEET_CONFIG:
+            cfg = SHEET_CONFIG[sheet_choice]
+            t_idx = cfg.get('train_col')
+            if t_idx is not None and t_idx < len(filtered_df.columns):
+                train_col_metric = filtered_df.columns[t_idx]
         doj_col = find_column(filtered_df, ['DOJ', 'DATE OF JOURNEY', 'JOURNEY DATE'])
+        if doj_col is None and sheet_choice in SHEET_CONFIG:
+            cfg = SHEET_CONFIG[sheet_choice]
+            d_idx = cfg.get('doj_col')
+            if d_idx is not None and d_idx < len(filtered_df.columns):
+                doj_col = filtered_df.columns[d_idx]
 
         if not filtered_df.empty and sheet_choice != "NOTE":
             if train_col_metric:
@@ -3809,9 +3839,15 @@ def main():
                     filtered_df = filtered_df.sort_values(by=sort_col, ascending=sort_asc, key=lambda col: col.astype(str))
                 except: pass
 
+            try:
+                rpp = st.session_state.rows_per_page
+                idx = [15, 25, 50, 100, 200].index(rpp) if rpp in [15,25,50,100,200] else 1
+            except Exception:
+                idx = 1
             page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200],
-                index=[15, 25, 50, 100, 200].index(st.session_state.rows_per_page) if st.session_state.rows_per_page in [15,25,50,100,200] else 1,
-                key="page_size_select")
+                index=idx, key="page_size_select")
+            if not isinstance(page_size, int) or page_size <= 0:
+                page_size = 25
             if page_size != st.session_state.rows_per_page:
                 st.session_state.rows_per_page = page_size
                 st.session_state.current_page = 1
