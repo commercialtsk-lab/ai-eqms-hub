@@ -5462,6 +5462,90 @@ def main():
         else:
             st.info("Enter a city name and click 'Get Weather' to see detailed weather information.")
 
+    # === COMPREHENSIVE TEXT VISIBILITY FIX ===
+    # This CSS block is rendered LAST and overrides all previous styles
+    st.markdown("""
+    <style>
+    /* === FORCE ALL FORM LABELS BLACK === */
+    div[data-testid="stMain"] .stTextInput label p,
+    div[data-testid="stMain"] .stTextInput label span,
+    div[data-testid="stMain"] .stSelectbox label p,
+    div[data-testid="stMain"] .stSelectbox label span,
+    div[data-testid="stMain"] .stDateInput label p,
+    div[data-testid="stMain"] .stDateInput label span,
+    div[data-testid="stMain"] .stNumberInput label p,
+    div[data-testid="stMain"] .stNumberInput label span,
+    div[data-testid="stMain"] .stTextArea label p,
+    div[data-testid="stMain"] .stTextArea label span,
+    div[data-testid="stMain"] .stRadio label p,
+    div[data-testid="stMain"] .stRadio label span,
+    div[data-testid="stMain"] .stCheckbox label p,
+    div[data-testid="stMain"] .stCheckbox label span,
+    div[data-testid="stMain"] [data-testid="stWidgetLabel"] p,
+    div[data-testid="stMain"] [data-testid="stWidgetLabel"] span,
+    div[data-testid="stMain"] [data-testid="stWidgetLabel"] {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+        font-weight: 600 !important;
+    }
+    /* === FORCE ALL FORM INPUT VALUES BLACK === */
+    div[data-testid="stMain"] .stTextInput input,
+    div[data-testid="stMain"] .stSelectbox div[data-baseweb="select"] div,
+    div[data-testid="stMain"] .stDateInput input,
+    div[data-testid="stMain"] .stNumberInput input {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+    }
+    /* === EXPANDER HEADERS BLACK === */
+    div[data-testid="stMain"] .streamlit-expanderHeader,
+    div[data-testid="stMain"] .streamlit-expanderHeader p,
+    div[data-testid="stMain"] .streamlit-expanderHeader span {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+        font-weight: 700 !important;
+    }
+    /* === CAPTIONS BLACK === */
+    div[data-testid="stMain"] .stCaption,
+    div[data-testid="stMain"] [data-testid="stCaption"] {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+    }
+    /* === SUBHEADERS & SMALL TEXT BLACK === */
+    div[data-testid="stMain"] .stMarkdown p[data-testid="stMarkdownContainer"] p,
+    div[data-testid="stMain"] .stMarkdown small,
+    div[data-testid="stMain"] .stMarkdown strong {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+    }
+    /* === WEATHER SECTION SPECIFIC === */
+    div[data-testid="stMain"] input[key="weather_city_input"] {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+    }
+    /* === DATA TABLE HEADERS === */
+    div[data-testid="stMain"] .stDataFrame th,
+    div[data-testid="stMain"] .stDataEditor th {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: none !important;
+        font-weight: 700 !important;
+    }
+    /* === DATA TABLE CELLS === */
+    div[data-testid="stMain"] .stDataFrame td,
+    div[data-testid="stMain"] .stDataEditor td {
+        color: #1e293b !important;
+        -webkit-text-fill-color: #1e293b !important;
+        text-shadow: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     # Footer
     st.markdown("""
     <div class='pro-footer no-print'>
