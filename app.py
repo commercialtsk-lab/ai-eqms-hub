@@ -1955,18 +1955,25 @@ def main():
         box-shadow:
             80px 50px #fff, 150px 80px #fff, 220px 30px #fff, 300px 120px #fff,
             400px 60px #fff, 500px 150px #fff, 600px 40px #fff, 700px 100px #fff,
+            800px 50px #fff, 850px 120px #fff, 900px 80px #fff, 950px 30px #fff,
             80px 150px #fff, 180px 200px #fff, 280px 180px #fff, 380px 220px #fff,
             480px 160px #fff, 580px 240px #fff, 680px 190px #fff, 750px 280px #fff,
+            820px 180px #fff, 880px 250px #fff, 920px 150px #fff, 980px 220px #fff,
             50px 280px #fff, 120px 320px #fff, 200px 300px #fff, 320px 350px #fff,
             420px 310px #fff, 520px 360px #fff, 620px 330px #fff, 720px 370px #fff,
+            780px 320px #fff, 840px 380px #fff, 900px 340px #fff, 960px 390px #fff,
             90px 400px #fff, 170px 450px #fff, 250px 420px #fff, 350px 480px #fff,
             450px 440px #fff, 550px 490px #fff, 650px 460px #fff, 730px 500px #fff,
+            790px 450px #fff, 860px 490px #fff, 910px 430px #fff, 970px 470px #fff,
             30px 520px #fff, 110px 560px #fff, 190px 540px #fff, 290px 580px #fff,
             390px 550px #fff, 490px 590px #fff, 590px 570px #fff, 690px 600px #fff,
+            760px 550px #fff, 830px 590px #fff, 890px 530px #fff, 950px 580px #fff,
             70px 650px #fff, 160px 680px #fff, 260px 660px #fff, 360px 700px #fff,
             460px 670px #fff, 560px 710px #fff, 660px 690px #fff, 740px 720px #fff,
+            800px 660px #fff, 870px 700px #fff, 930px 650px #fff, 990px 690px #fff,
             100px 750px #fff, 200px 780px #fff, 300px 760px #fff, 400px 790px #fff,
-            500px 770px #fff, 600px 800px #fff, 700px 740px #fff, 770px 790px #fff;
+            500px 770px #fff, 600px 800px #fff, 700px 740px #fff, 770px 790px #fff,
+            810px 750px #fff, 880px 780px #fff, 940px 760px #fff, 980px 800px #fff;
         animation: twinkle-stars 3s ease-in-out infinite alternate;
     }
     @keyframes twinkle-stars {
@@ -2308,6 +2315,18 @@ def main():
     qp_view = st.query_params.get('__view')
     if qp_view in view_options and st.session_state.view_mode != qp_view: st.session_state.view_mode = qp_view
 
+    # Time-based greeting
+    hour = now_ist().hour
+    if 5 <= hour < 12:
+        greeting = "☀️ Good Morning"
+    elif 12 <= hour < 16:
+        greeting = "🌤️ Good Afternoon"
+    elif 16 <= hour < 21:
+        greeting = "🌅 Good Evening"
+    else:
+        greeting = "🌙 Good Night"
+    st.sidebar.markdown(f"<div style='text-align:center; font-size:1.3em; font-weight:700; color:#f1f5f9; margin-bottom:10px; text-shadow:0 1px 3px rgba(0,0,0,0.5);'>{greeting}</div>", unsafe_allow_html=True)
+
     theme_choice = st.sidebar.selectbox("🎨 Theme", theme_options,
         index=theme_options.index(st.session_state.theme) if st.session_state.theme in theme_options else 0,
         key="theme_select")
@@ -2352,43 +2371,46 @@ def main():
             animation: welcome-glow 4s ease-in-out infinite;
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             border: 2px solid rgba(255,255,255,0.15);
+            display: flex;
         }
         .welcome-saffron {
             background: linear-gradient(135deg, #FF9933, #FF8C00);
-            padding: 14px 16px; text-align: center;
+            padding: 16px 8px; text-align: center;
+            flex: 1; display: flex; align-items: center; justify-content: center;
         }
         .welcome-white {
-            background: #FFFFFF; padding: 14px 16px; text-align: center; position: relative;
+            background: #FFFFFF; padding: 16px 8px; text-align: center; position: relative;
+            flex: 1; display: flex; align-items: center; justify-content: center;
         }
         .welcome-green {
             background: linear-gradient(135deg, #138808, #0d6e05);
-            padding: 14px 16px; text-align: center;
+            padding: 16px 8px; text-align: center;
+            flex: 1; display: flex; align-items: center; justify-content: center;
         }
         .welcome-text-saffron {
-            font-size: 1.2em; font-weight: 700; color: #000000 !important; letter-spacing: 0.5px;
-            font-family: 'Segoe UI', 'Noto Sans Devanagari', Arial, sans-serif;
-            line-height: 1.5;
+            font-size: 1.3em; font-weight: 700; color: #000000 !important;
+            font-family: 'Segoe UI', Arial, sans-serif;
         }
         .welcome-text-white {
-            font-size: 1.2em; font-weight: 700; color: #000000 !important; letter-spacing: 0.5px;
+            font-size: 1.3em; font-weight: 700; color: #000000 !important;
             position: relative; z-index: 2;
-            font-family: 'Segoe UI', 'Noto Sans Devanagari', Arial, sans-serif;
+            font-family: 'Segoe UI', Arial, sans-serif;
         }
         .welcome-text-green {
-            font-size: 1.2em; font-weight: 700; color: #000000 !important; letter-spacing: 0.5px;
-            font-family: 'Segoe UI', 'Noto Sans Devanagari', Arial, sans-serif;
+            font-size: 1.3em; font-weight: 700; color: #000000 !important;
+            font-family: 'Segoe UI', Arial, sans-serif;
         }
         .chakra-emblem {
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            width: 48px; height: 48px; z-index: 1;
-            opacity: 0.35;
+            width: 44px; height: 44px; z-index: 1;
+            opacity: 0.3;
         }
         .chakra-emblem svg { width: 100%; height: 100%; }
         </style>
         <div class="welcome-flag-card">
             <div class="welcome-saffron">
-                <div class="welcome-text-saffron">🙏 नमस्ते<br>आपका स्वागत है</div>
+                <div class="welcome-text-saffron">🙏</div>
             </div>
             <div class="welcome-white">
                 <div class="chakra-emblem">
@@ -2429,10 +2451,10 @@ def main():
                         </g>
                     </svg>
                 </div>
-                <div class="welcome-text-white">हम भारत के लोग</div>
+                <div class="welcome-text-white">🇮🇳</div>
             </div>
             <div class="welcome-green">
-                <div class="welcome-text-green">🇮🇳 जय हिंद</div>
+                <div class="welcome-text-green">🫡</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -2440,7 +2462,7 @@ def main():
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
-        with st.expander("🌤️ Quick Weather", expanded=False):
+        with st.expander("🌤️ Quick Weather", expanded=True):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city")
             if city != st.session_state.weather_city: st.session_state.weather_city = city
             if st.button("🌤️ Get Weather", key="sidebar_weather_btn", use_container_width=True):
@@ -2461,7 +2483,7 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
 
-        with st.expander("🔄 Sync & Status", expanded=False):
+        with st.expander("🔄 Sync & Status", expanded=True):
             if st.button("🔄 Sync Now", use_container_width=True, key="sync_now_btn"):
                 st.cache_data.clear()
                 st.session_state.last_refresh = time.time()
@@ -2774,10 +2796,13 @@ def main():
         padding-left: 100%;
         animation: marquee-scroll 25s linear infinite;
         color: #000000 !important;
-        font-weight: 700;
+        -webkit-text-fill-color: #000000 !important;
+        text-fill-color: #000000 !important;
+        font-weight: 800;
         letter-spacing: 0.5px;
         font-size: 15px;
         font-family: 'Segoe UI', Arial, sans-serif;
+        text-shadow: none !important;
     }
     @keyframes marquee-scroll {
         0% { transform: translateX(0); }
