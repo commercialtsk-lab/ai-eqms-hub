@@ -751,10 +751,22 @@ Previous conversation:
 def get_weather(city_name):
     if not city_name: return {'error': 'Please enter a city name'}
     try:
-        # Step 1: Geocode to get lat, lon, name, state, country
+        # Try direct weather API first
+        url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            return {'city': data.get('name', city_name), 'state': '', 'country': data.get('sys', {}).get('country', ''),
+                'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
+                'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
+                'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
+                'icon': data.get('weather', [{}])[0].get('icon', ''),
+                'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
+                'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
+                'lat': data.get('coord', {}).get('lat'), 'lon': data.get('coord', {}).get('lon')}
+        # Fallback: try geocoding API for small towns/villages
         geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=1&appid={WEATHER_API_KEY}"
         geo_resp = requests.get(geo_url, timeout=10)
-        lat, lon, found_name, country, state = None, None, city_name, '', ''
         if geo_resp.status_code == 200:
             geo_data = geo_resp.json()
             if geo_data and len(geo_data) > 0:
@@ -763,36 +775,19 @@ def get_weather(city_name):
                 found_name = geo_data[0].get('name', city_name)
                 country = geo_data[0].get('country', '')
                 state = geo_data[0].get('state', '')
-
-        # Step 2: Get weather by coordinates (most accurate)
-        if lat and lon:
-            coord_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
-            coord_resp = requests.get(coord_url, timeout=10)
-            if coord_resp.status_code == 200:
-                data = coord_resp.json()
-                return {'city': found_name, 'country': country, 'state': state,
-                    'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
-                    'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
-                    'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
-                    'icon': data.get('weather', [{}])[0].get('icon', ''),
-                    'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
-                    'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
-                    'lat': lat, 'lon': lon}
-
-        # Fallback: direct city name API (no state available)
-        url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            return {'city': data.get('name', city_name), 'country': data.get('sys', {}).get('country', ''), 'state': state,
-                'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
-                'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
-                'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
-                'icon': data.get('weather', [{}])[0].get('icon', ''),
-                'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
-                'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
-                'lat': data.get('coord', {}).get('lat'), 'lon': data.get('coord', {}).get('lon')}
-
+                if lat and lon:
+                    coord_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
+                    coord_resp = requests.get(coord_url, timeout=10)
+                    if coord_resp.status_code == 200:
+                        data = coord_resp.json()
+                        return {'city': found_name, 'state': state, 'country': country,
+                            'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
+                            'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
+                            'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
+                            'icon': data.get('weather', [{}])[0].get('icon', ''),
+                            'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
+                            'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
+                            'lat': lat, 'lon': lon}
         return {'error': 'City not found. Try a nearby major city.'}
     except Exception as e: return {'error': f'Error fetching weather: {str(e)}'}
 
@@ -861,7 +856,7 @@ def get_weather_by_coords(lat, lon):
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            return {'city': data.get('name', 'Unknown'), 'country': data.get('sys', {}).get('country', ''), 'state': '',
+            return {'city': data.get('name', 'Unknown'), 'state': '', 'country': data.get('sys', {}).get('country', ''),
                 'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
                 'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
                 'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
@@ -1678,31 +1673,52 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
 
-        /* Weather Input Stamp Style */
+        /* Weather Input - Adaptive Day/Night */
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input {{
-            background-color: rgba(255, 255, 255, 0.12) !important;
+            background-color: rgba(255, 255, 255, 0.18) !important;
             color: #000000 !important;
-            border: 1px solid rgba(255, 255, 255, 0.35) !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
-            font-weight: 600 !important;
-            backdrop-filter: blur(10px) !important;
-            -webkit-backdrop-filter: blur(10px) !important;
-            border-radius: 10px !important;
-            padding: 6px 14px !important;
-            font-size: 0.95rem !important;
-            min-height: 36px !important;
+            border: 1px solid rgba(255, 255, 255, 0.5) !important;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.2) !important;
+            font-weight: 700 !important;
+            backdrop-filter: blur(12px) saturate(150%) !important;
+            -webkit-backdrop-filter: blur(12px) saturate(150%) !important;
+            border-radius: 12px !important;
+            padding: 8px 16px !important;
+            font-size: 1rem !important;
+            min-height: 40px !important;
+            text-shadow: 0 1px 2px rgba(255,255,255,0.3) !important;
+        }}
+        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input::placeholder,
+        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input::placeholder {{
+            color: rgba(0, 0, 0, 0.5) !important;
+            font-weight: 500 !important;
         }}
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
             color: #ffffff !important;
-            font-weight: 700 !important;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.9) !important;
-            font-size: 0.9rem !important;
+            font-weight: 800 !important;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.5) !important;
+            font-size: 1rem !important;
+            letter-spacing: 0.5px !important;
         }}
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) > div > div,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) > div > div {{
             background: transparent !important;
+        }}
+        /* Weather location badge */
+        .weather-location-badge {{
+            display: inline-block;
+            background: rgba(0,0,0,0.4);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 20px;
+            padding: 6px 16px;
+            color: #ffffff;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+            margin-bottom: 10px;
         }}
 
         [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important; margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important; }}
@@ -1754,36 +1770,21 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stDataFrame [data-testid="stDataFrameResizable"] {{
             border: 1px solid {border} !important; border-radius: 8px !important;
         }}
-        /* Weather Section Input Visibility - Day/Night Adaptive */
+        /* Weather Section Input Visibility */
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input {{
-            background-color: rgba(255, 255, 255, 0.92) !important;
-            color: #1a1a2e !important;
-            border: 2px solid rgba(255, 255, 255, 0.8) !important;
-            box-shadow: 0 0 20px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2) !important;
-            font-weight: 600 !important;
-            font-size: 1.05rem !important;
-            border-radius: 12px !important;
-            padding: 10px 16px !important;
+            background-color: rgba(255, 255, 255, 0.85) !important;
+            color: #000000 !important;
+            border: 2px solid rgba(255, 255, 255, 0.6) !important;
+            box-shadow: 0 0 15px rgba(0,0,0,0.3) !important;
+            font-weight: 500 !important;
         }}
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
             color: #ffffff !important;
-            font-weight: 800 !important;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 15px rgba(0,0,0,0.5) !important;
-            font-size: 1.05rem !important;
-            letter-spacing: 0.5px !important;
-        }}
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) > div > div,
-        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) > div > div {{
-            background: transparent !important;
-        }}
-        .weather-input-wrapper {{
-            background: linear-gradient(135deg, rgba(255,153,51,0.15), rgba(255,255,255,0.1), rgba(19,136,8,0.15)) !important;
-            border-radius: 16px !important;
-            padding: 12px 16px !important;
-            border: 1px solid rgba(255,255,255,0.2) !important;
-            backdrop-filter: blur(12px) !important;
+            font-weight: 700 !important;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.8) !important;
+            font-size: 1rem !important;
         }}
     </style>
     """
@@ -1988,469 +1989,6 @@ def get_pnr_status_url(pnr):
 # =====================================================================
 # MAIN FUNCTION
 # =====================================================================
-
-# =====================================================================
-# Audio Engine & Earth Background
-# =====================================================================
-
-def render_audio_controls(current_scene):
-    """Render sidebar audio volume + Web Audio engine."""
-    scene_map = {
-        "📋 Data Table": "solar",
-        "📊 Dashboard": "dashboard",
-        "💬 Chat": "solar",
-        "🚂 Railway": "solar",
-        "🌤️ Weather": "weather-sunny"
-    }
-    scene = scene_map.get(current_scene, "solar")
-
-    if current_scene == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
-        weather_cond = str(st.session_state.weather_data.get('weather', '')).lower()
-        if 'rain' in weather_cond or 'drizz' in weather_cond:
-            scene = 'weather-rain'
-        elif 'thunder' in weather_cond or 'storm' in weather_cond:
-            scene = 'weather-thunder'
-        elif 'snow' in weather_cond or 'frost' in weather_cond or 'freez' in weather_cond:
-            scene = 'weather-snow'
-        elif 'mist' in weather_cond or 'fog' in weather_cond or 'haz' in weather_cond:
-            scene = 'weather-fog'
-        elif 'cloud' in weather_cond:
-            scene = 'weather-cloudy'
-        else:
-            try:
-                now_ts = int(time.time())
-                sunrise = st.session_state.weather_data.get('sunrise')
-                sunset = st.session_state.weather_data.get('sunset')
-                if sunrise and sunset and str(sunrise) not in ['', 'N/A', 'None']:
-                    if now_ts < int(sunrise) or now_ts > int(sunset):
-                        scene = 'weather-night'
-                    else:
-                        scene = 'weather-sunny'
-                else:
-                    scene = 'weather-sunny'
-            except:
-                scene = 'weather-sunny'
-
-    components.html(f"""
-    <div style="padding: 10px 0; font-family: inherit;">
-        <div style="color: #f1f5f9; font-weight: 600; margin-bottom: 6px; font-size: 0.95rem;">🔊 Ambient Sound</div>
-        <input type="range" id="eqms-vol" min="0" max="100" value="0" 
-               style="width: 100%; accent-color: #FF9933; cursor: pointer; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1);">
-        <div style="display: flex; justify-content: space-between; color: #94a3b8; font-size: 0.75rem; margin-top: 4px;">
-            <span>Off</span><span>Max</span>
-        </div>
-        <div id="eqms-sound-status" style="color: #64748b; font-size: 0.75rem; margin-top: 6px; font-style: italic;">
-            Move slider to enable sound
-        </div>
-    </div>
-    <script>
-    (function() {{
-        var P = window.parent;
-
-        class SoundEngine {{
-            constructor() {{
-                this.ctx = null;
-                this.master = null;
-                this.nodes = {{}};
-                this.volume = 0;
-                this.scene = null;
-                this.started = false;
-                this._thunderInterval = null;
-                this._chirpTimeout = null;
-                this._lastBrown = 0;
-            }}
-
-            init() {{
-                if (this.ctx) return;
-                var AudioContext = window.AudioContext || window.webkitAudioContext;
-                this.ctx = new AudioContext();
-                this.master = this.ctx.createGain();
-                this.master.gain.value = 0;
-                this.master.connect(this.ctx.destination);
-                this.started = true;
-            }}
-
-            setVolume(v) {{
-                this.volume = v / 100;
-                if (!this.ctx) this.init();
-                if (this.master) {{
-                    this.master.gain.setTargetAtTime(this.volume * 0.35, this.ctx.currentTime, 0.1);
-                }}
-                if (this.volume > 0 && this.ctx && this.ctx.state === 'suspended') {{
-                    this.ctx.resume();
-                }}
-            }}
-
-            stopAll() {{
-                for (var k in this.nodes) {{
-                    try {{ this.nodes[k].stop(); }} catch(e){{}}
-                    try {{ this.nodes[k].disconnect(); }} catch(e){{}}
-                }}
-                this.nodes = {{}};
-                if (this._thunderInterval) {{ clearInterval(this._thunderInterval); this._thunderInterval = null; }}
-                if (this._chirpTimeout) {{ clearTimeout(this._chirpTimeout); this._chirpTimeout = null; }}
-            }}
-
-            setScene(scene) {{
-                if (this.scene === scene) return;
-                this.scene = scene;
-                if (this.volume <= 0) return;
-                this.stopAll();
-                if (!this.ctx) this.init();
-                switch(scene) {{
-                    case 'solar': this.playSolar(); break;
-                    case 'dashboard': this.playDashboard(); break;
-                    case 'weather-rain': this.playRain(); break;
-                    case 'weather-thunder': this.playThunder(); break;
-                    case 'weather-sunny': this.playSunny(); break;
-                    case 'weather-snow': this.playSnow(); break;
-                    case 'weather-cloudy': this.playCloudy(); break;
-                    case 'weather-night': this.playNight(); break;
-                    case 'weather-fog': this.playFog(); break;
-                    default: this.stopAll();
-                }}
-            }}
-
-            noiseBuffer() {{
-                var len = this.ctx.sampleRate * 2;
-                var buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-                var d = buf.getChannelData(0);
-                this._lastBrown = 0;
-                for (var i = 0; i < len; i++) {{
-                    var white = Math.random() * 2 - 1;
-                    this._lastBrown = (this._lastBrown || 0) + (white * 0.02);
-                    d[i] = this._lastBrown * 3.5;
-                }}
-                return buf;
-            }}
-
-            whiteNoiseBuffer() {{
-                var len = this.ctx.sampleRate * 2;
-                var buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-                var d = buf.getChannelData(0);
-                for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-                return buf;
-            }}
-
-            playSolar() {{
-                var noise = this.ctx.createBufferSource();
-                noise.buffer = this.noiseBuffer();
-                noise.loop = true;
-                var noiseFilter = this.ctx.createBiquadFilter();
-                noiseFilter.type = 'lowpass';
-                noiseFilter.frequency.value = 180;
-                var noiseGain = this.ctx.createGain();
-                noiseGain.gain.value = 0.5;
-                noise.connect(noiseFilter);
-                noiseFilter.connect(noiseGain);
-                noiseGain.connect(this.master);
-                noise.start();
-                this.nodes.noise = noise;
-
-                var osc = this.ctx.createOscillator();
-                osc.type = 'sawtooth';
-                osc.frequency.value = 42;
-                var oscGain = this.ctx.createGain();
-                oscGain.gain.value = 0.3;
-                osc.connect(oscGain);
-                oscGain.connect(this.master);
-                osc.start();
-                this.nodes.osc = osc;
-
-                var lfo = this.ctx.createOscillator();
-                lfo.type = 'square';
-                lfo.frequency.value = 3.2;
-                var lfoGain = this.ctx.createGain();
-                lfoGain.gain.value = 0.18;
-                lfo.connect(lfoGain);
-                lfoGain.connect(oscGain.gain);
-                lfo.start();
-                this.nodes.lfo = lfo;
-            }}
-
-            playDashboard() {{
-                var osc = this.ctx.createOscillator();
-                osc.type = 'sine';
-                osc.frequency.value = 55;
-                var g = this.ctx.createGain();
-                g.gain.value = 0.35;
-                osc.connect(g);
-                g.connect(this.master);
-                osc.start();
-                this.nodes.osc = osc;
-
-                var osc2 = this.ctx.createOscillator();
-                osc2.type = 'sine';
-                osc2.frequency.value = 110;
-                var g2 = this.ctx.createGain();
-                g2.gain.value = 0.12;
-                osc2.connect(g2);
-                g2.connect(this.master);
-                osc2.start();
-                this.nodes.osc2 = osc2;
-
-                var osc3 = this.ctx.createOscillator();
-                osc3.type = 'triangle';
-                osc3.frequency.value = 220;
-                var g3 = this.ctx.createGain();
-                g3.gain.value = 0.05;
-                osc3.connect(g3);
-                g3.connect(this.master);
-                osc3.start();
-                this.nodes.osc3 = osc3;
-            }}
-
-            playRain() {{
-                var src = this.ctx.createBufferSource();
-                src.buffer = this.whiteNoiseBuffer();
-                src.loop = true;
-                var filter = this.ctx.createBiquadFilter();
-                filter.type = 'lowpass';
-                filter.frequency.value = 550;
-                var g = this.ctx.createGain();
-                g.gain.value = 0.3;
-                src.connect(filter);
-                filter.connect(g);
-                g.connect(this.master);
-                src.start();
-                this.nodes.rain = src;
-            }}
-
-            playThunder() {{
-                this.playRain();
-                var self = this;
-                var thunderInterval = setInterval(function() {{
-                    if (self.scene !== 'weather-thunder') {{ clearInterval(thunderInterval); return; }}
-                    var burst = self.ctx.createBufferSource();
-                    burst.buffer = self.whiteNoiseBuffer();
-                    var burstFilter = self.ctx.createBiquadFilter();
-                    burstFilter.type = 'lowpass';
-                    burstFilter.frequency.value = 120;
-                    var burstGain = self.ctx.createGain();
-                    burstGain.gain.setValueAtTime(0.55, self.ctx.currentTime);
-                    burstGain.gain.exponentialRampToValueAtTime(0.01, self.ctx.currentTime + 1.8);
-                    burst.connect(burstFilter);
-                    burstFilter.connect(burstGain);
-                    burstGain.connect(self.master);
-                    burst.start();
-                    burst.stop(self.ctx.currentTime + 1.8);
-                }}, 7000 + Math.random() * 8000);
-                this._thunderInterval = thunderInterval;
-            }}
-
-            playSunny() {{
-                var self = this;
-                var chirp = function() {{
-                    if (self.scene !== 'weather-sunny') return;
-                    var t = self.ctx.currentTime;
-                    var osc = self.ctx.createOscillator();
-                    osc.type = 'sine';
-                    var f = 2800 + Math.random() * 2500;
-                    osc.frequency.setValueAtTime(f, t);
-                    osc.frequency.exponentialRampToValueAtTime(f + 1200, t + 0.08);
-                    var g = self.ctx.createGain();
-                    g.gain.setValueAtTime(0.1, t);
-                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
-                    osc.connect(g);
-                    g.connect(self.master);
-                    osc.start(t);
-                    osc.stop(t + 0.15);
-                    self._chirpTimeout = setTimeout(chirp, 400 + Math.random() * 1800);
-                }};
-                chirp();
-            }}
-
-            playNight() {{
-                var self = this;
-                var chirp = function() {{
-                    if (self.scene !== 'weather-night') return;
-                    var t = self.ctx.currentTime;
-                    for (var i = 0; i < 3; i++) {{
-                        var osc = self.ctx.createOscillator();
-                        osc.type = 'sine';
-                        osc.frequency.value = 3200 + Math.random() * 600;
-                        var g = self.ctx.createGain();
-                        g.gain.setValueAtTime(0.07, t + i * 0.05);
-                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.05 + 0.04);
-                        osc.connect(g);
-                        g.connect(self.master);
-                        osc.start(t + i * 0.05);
-                        osc.stop(t + i * 0.05 + 0.04);
-                    }}
-                    self._chirpTimeout = setTimeout(chirp, 250 + Math.random() * 900);
-                }};
-                chirp();
-            }}
-
-            playSnow() {{
-                var src = this.ctx.createBufferSource();
-                src.buffer = this.whiteNoiseBuffer();
-                src.loop = true;
-                var filter = this.ctx.createBiquadFilter();
-                filter.type = 'bandpass';
-                filter.frequency.value = 350;
-                filter.Q.value = 0.5;
-                var g = this.ctx.createGain();
-                g.gain.value = 0.18;
-                src.connect(filter);
-                filter.connect(g);
-                g.connect(this.master);
-                src.start();
-                this.nodes.snow = src;
-            }}
-
-            playCloudy() {{
-                var src = this.ctx.createBufferSource();
-                src.buffer = this.whiteNoiseBuffer();
-                src.loop = true;
-                var filter = this.ctx.createBiquadFilter();
-                filter.type = 'bandpass';
-                filter.frequency.value = 280;
-                var g = this.ctx.createGain();
-                g.gain.value = 0.14;
-                src.connect(filter);
-                filter.connect(g);
-                g.connect(this.master);
-                src.start();
-                this.nodes.cloudy = src;
-            }}
-
-            playFog() {{
-                var src = this.ctx.createBufferSource();
-                src.buffer = this.whiteNoiseBuffer();
-                src.loop = true;
-                var filter = this.ctx.createBiquadFilter();
-                filter.type = 'lowpass';
-                filter.frequency.value = 220;
-                var g = this.ctx.createGain();
-                g.gain.value = 0.22;
-                src.connect(filter);
-                filter.connect(g);
-                g.connect(this.master);
-                src.start();
-                this.nodes.fog = src;
-            }}
-        }}
-
-        if (!P.eqmsSoundEngine) {{
-            P.eqmsSoundEngine = new SoundEngine();
-        }}
-        var engine = P.eqmsSoundEngine;
-        var slider = document.getElementById('eqms-vol');
-        var status = document.getElementById('eqms-sound-status');
-
-        var savedVol = P.eqmsVolume || 0;
-        slider.value = savedVol;
-        if (savedVol > 0) {{
-            status.textContent = 'Scene: {scene} | Vol: ' + savedVol + '%';
-            engine.setVolume(savedVol);
-        }}
-
-        slider.addEventListener('input', function() {{
-            var v = parseInt(this.value);
-            P.eqmsVolume = v;
-            engine.setVolume(v);
-            status.textContent = 'Scene: {scene} | Vol: ' + v + '%';
-            if (v > 0) {{
-                engine.setScene('{scene}');
-            }} else {{
-                engine.stopAll();
-                status.textContent = 'Move slider to enable sound';
-            }}
-        }});
-
-        engine.setScene('{scene}');
-    }})();
-    </script>
-    """, height=120)
-
-
-EARTH_BG_HTML = """
-<style>
-.earth-bg-scene {
-    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-    z-index: -1; pointer-events: none; overflow: hidden;
-    background: radial-gradient(ellipse at center, #0a0e27 0%, #000000 70%);
-    display: flex; align-items: center; justify-content: center;
-}
-.earth-wrap {
-    position: relative; width: 520px; height: 520px;
-    animation: earth-float 6s ease-in-out infinite;
-}
-@keyframes earth-float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-15px); }
-}
-.earth-globe {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    border-radius: 50%;
-    background: url('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg');
-    background-size: 1050px 100%;
-    box-shadow: 
-        inset -50px -50px 120px rgba(0,0,0,0.95), 
-        inset 15px 15px 40px rgba(255,255,255,0.15), 
-        0 0 80px rgba(80,120,220,0.25),
-        0 0 160px rgba(80,120,220,0.1);
-    animation: earth-spin 40s linear infinite;
-}
-.earth-globe::after {
-    content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 35%, transparent 30%, rgba(0,0,0,0.7) 75%, rgba(0,0,0,0.95) 100%);
-    pointer-events: none;
-}
-.earth-atmos {
-    position: absolute; top: -25px; left: -25px; right: -25px; bottom: -25px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 35%, rgba(100,160,255,0.12) 0%, transparent 55%);
-    box-shadow: 0 0 100px 30px rgba(100,160,255,0.08);
-    pointer-events: none;
-    animation: atmos-pulse 4s ease-in-out infinite;
-}
-@keyframes earth-spin {
-    from { background-position: 0 center; }
-    to { background-position: 1050px center; }
-}
-@keyframes atmos-pulse {
-    0%, 100% { opacity: 0.7; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.02); }
-}
-.earth-stars {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background-image: 
-        radial-gradient(2px 2px at 20px 30px, #eee, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 40px 70px, #fff, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 50px 160px, #ddd, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 90px 40px, #fff, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 130px 80px, #fff, rgba(0,0,0,0)),
-        radial-gradient(2px 2px at 160px 120px, #ddd, rgba(0,0,0,0));
-    background-repeat: repeat;
-    background-size: 200px 200px;
-    animation: twinkle 5s ease-in-out infinite alternate;
-    opacity: 0.6;
-}
-@keyframes twinkle {
-    from { opacity: 0.3; }
-    to { opacity: 0.8; }
-}
-.earth-label {
-    position: absolute; bottom: 8%; left: 50%; transform: translateX(-50%);
-    color: rgba(255,255,255,0.6); font-size: 0.9rem; letter-spacing: 4px;
-    text-transform: uppercase; font-weight: 600;
-    text-shadow: 0 2px 10px rgba(0,0,0,0.8);
-    pointer-events: none;
-}
-</style>
-<div class="earth-bg-scene">
-    <div class="earth-stars"></div>
-    <div class="earth-wrap">
-        <div class="earth-globe"></div>
-        <div class="earth-atmos"></div>
-    </div>
-    <div class="earth-label">Real-time Earth View</div>
-</div>
-"""
-
 def main():
     # Always update last_refresh to current time on page load so sync time matches live time
     st.session_state.last_refresh = time.time()
@@ -2822,13 +2360,7 @@ def main():
         <div class="shooting"></div>
     </div>
     """
-    view_bg = st.session_state.view_mode
-    if view_bg == "📊 Dashboard":
-        st.markdown(EARTH_BG_HTML, unsafe_allow_html=True)
-    elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
-        pass  # Weather bg rendered later
-    else:
-        st.markdown(bg_html, unsafe_allow_html=True)
+    st.markdown(bg_html, unsafe_allow_html=True)
 
     # =====================================================================
     # WEATHER ANIMATED BACKGROUND (Replaces Solar when Weather is active)
@@ -3309,9 +2841,6 @@ def main():
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
-        # Audio Volume Control
-        render_audio_controls(st.session_state.view_mode)
-
         with st.expander("🌤️ Quick Weather", expanded=True):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city", placeholder="Any city...")
             if city != st.session_state.weather_city: st.session_state.weather_city = city
@@ -3325,10 +2854,8 @@ def main():
                         else: st.error(data.get('error', 'Error'))
             if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
                 data = st.session_state.weather_data
-                loc_display = data['city'] + (f", {data.get('state', '')}" if data.get('state') else "") + (f", {data.get('country', '')}" if data.get('country') else "")
                 st.markdown(f"""
                 <div style="text-align:center; padding: 5px 0;">
-                    <div style="font-size:0.85rem; font-weight:600; color:#f1f5f9; margin-bottom:4px;">{loc_display}</div>
                     <div style="font-size:1.5rem; font-weight:700;">{data['temp']}°C</div>
                     <div>{data['weather'].title()}</div>
                     <div style="font-size:0.8rem; color:#64748b;">💧 {data['humidity']}%  🌬️ {data['wind_speed']} m/s</div>
@@ -4713,43 +4240,42 @@ def main():
                 st.session_state.weather_lon = float(qp_lon)
             except: pass
 
+        # Auto-search function
+        def auto_fetch_weather():
+            c = st.session_state.get('weather_city_input', '')
+            if c and c.strip():
+                st.session_state.weather_city = c.strip()
+                with st.spinner(f"Fetching weather for {c.strip()}..."):
+                    data = get_weather(c.strip())
+                    forecast = get_weather_forecast(c.strip())
+                    if data and 'error' not in data:
+                        st.session_state.weather_data = data
+                        if forecast and 'error' not in forecast:
+                            st.session_state.weather_forecast = forecast
+                    else:
+                        st.session_state._weather_error = data.get('error', 'Error fetching weather')
+
         city = st.text_input("🏙️ Enter City Name", value=st.session_state.weather_city,
-                            placeholder="Any city, town or village...", key="weather_city_input")
-        if city != st.session_state.weather_city: st.session_state.weather_city = city
+                            placeholder="Any city, town or village...", key="weather_city_input",
+                            on_change=auto_fetch_weather)
+        if city != st.session_state.weather_city:
+            st.session_state.weather_city = city
 
-        # Auto-fetch on Enter (value committed)
-        if city and city != st.session_state.get('_last_weather_fetch', ''):
-            st.session_state._last_weather_fetch = city
-            with st.spinner(f"Fetching weather for {city}..."):
-                data = get_weather(city)
-                forecast = get_weather_forecast(city)
-                if data and 'error' not in data:
-                    st.session_state.weather_data = data
-                    if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
-                    st.rerun()
-                else:
-                    st.error(data.get('error', 'Error fetching weather'))
-
-        st.markdown('<div class="weather-input-wrapper">', unsafe_allow_html=True)
         col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("🌤️ Get Weather", key="weather_btn", use_container_width=True):
-                if city:
-                    with st.spinner(f"Fetching weather for {city}..."):
-                        data = get_weather(city)
-                        forecast = get_weather_forecast(city)
-                        if data and 'error' not in data:
-                            st.session_state.weather_data = data
-                            if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
-                            st.rerun()
-                        else: st.error(data.get('error', 'Error fetching weather'))
-                else: st.warning("Please enter a city name.")
+                auto_fetch_weather()
+                if st.session_state.get('_weather_error'):
+                    st.error(st.session_state._weather_error)
+                    st.session_state._weather_error = None
+                else:
+                    st.rerun()
         with col2:
             if st.button("🔄 Refresh", key="refresh_weather", use_container_width=True):
-                if city:
-                    with st.spinner(f"Refreshing weather for {city}..."):
-                        data = get_weather(city)
-                        forecast = get_weather_forecast(city)
+                if st.session_state.weather_city:
+                    with st.spinner(f"Refreshing weather for {st.session_state.weather_city}..."):
+                        data = get_weather(st.session_state.weather_city)
+                        forecast = get_weather_forecast(st.session_state.weather_city)
                         if data and 'error' not in data:
                             st.session_state.weather_data = data
                             if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
@@ -4758,39 +4284,9 @@ def main():
                 else: st.warning("Please enter a city name.")
         with col3:
             st.empty()
-        st.markdown('</div>', unsafe_allow_html=True)
 
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
-
-            # Day/Night detection for styling
-            time_of_day = 'day'
-            try:
-                now_ts = int(time.time())
-                sunrise = data.get('sunrise')
-                sunset = data.get('sunset')
-                if sunrise and sunset and str(sunrise) not in ['', 'N/A', 'None']:
-                    sunrise = int(sunrise)
-                    sunset = int(sunset)
-                    if now_ts < sunrise - 1800: time_of_day = 'night'
-                    elif now_ts < sunrise + 1800: time_of_day = 'dawn'
-                    elif now_ts < sunset - 1800: time_of_day = 'day'
-                    elif now_ts < sunset + 1800: time_of_day = 'dusk'
-                    else: time_of_day = 'night'
-            except: pass
-
-            # Location banner
-            loc_state = data.get('state', '')
-            loc_country = data.get('country', '')
-            loc_full = data['city'] + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
-            day_night_icon = "🌙" if time_of_day in ['night', 'dusk'] else "☀️" if time_of_day == 'day' else "🌅"
-            st.markdown(f'''<div style="text-align:center; margin-bottom:15px;">
-                <div style="display:inline-block; background: linear-gradient(135deg, rgba(255,153,51,0.2), rgba(255,255,255,0.1), rgba(19,136,8,0.2)); 
-                    border: 1px solid rgba(255,255,255,0.25); border-radius: 50px; padding: 10px 30px; 
-                    backdrop-filter: blur(12px); color: #ffffff; text-shadow: 0 2px 6px rgba(0,0,0,0.8); font-weight: 700; font-size: 1.1rem;">
-                    {day_night_icon} {loc_full} • {time_of_day.title()}
-                </div>
-            </div>''', unsafe_allow_html=True)
 
             weather_html = f"""
             <style>
@@ -4843,7 +4339,7 @@ def main():
             <div class="weather-main-card">
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; position: relative; z-index: 1;">
                     <div>
-                        <div class="weather-city">{data['city']}{', ' + data.get('state', '') if data.get('state') else ''}, {data['country']}</div>
+                        <div class="weather-city">{data['city']}, {data['country']}</div>
                         <div class="weather-desc">{data['weather'].title()}</div>
                         <div style="font-size: 0.9rem; opacity: 0.7; margin-top: 6px;">Updated: {format_datetime()}</div>
                     </div>
@@ -5004,11 +4500,7 @@ def main():
             if st.session_state.weather_forecast and 'error' not in st.session_state.weather_forecast:
                 forecast = st.session_state.weather_forecast
                 st.markdown("---")
-                loc_name = forecast.get('city', city)
-                loc_state = st.session_state.weather_data.get('state', '') if st.session_state.weather_data else ''
-                loc_country = st.session_state.weather_data.get('country', '') if st.session_state.weather_data else ''
-                full_loc = loc_name + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
-                st.subheader(f"📅 5-Day Forecast for {full_loc}")
+                st.subheader(f"📅 5-Day Forecast for {forecast.get('city', city)}")
 
                 forecast_data = forecast.get('forecast', [])
                 if forecast_data:
