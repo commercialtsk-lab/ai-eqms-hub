@@ -4986,7 +4986,7 @@ def main():
             </div>
         </div>
         """, unsafe_allow_html=True)
-elif view == "🌤️ Weather":
+    elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
 
         qp_lat = st.query_params.get('__lat')
