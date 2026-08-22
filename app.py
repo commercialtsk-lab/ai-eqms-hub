@@ -1633,15 +1633,11 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .streamlit-expanderHeader {{ color: #000000 !important; font-weight: 700 !important; text-shadow: none !important; -webkit-text-fill-color: #000000 !important; }}
         .stCaption {{ color: #000000 !important; text-shadow: none !important; -webkit-text-fill-color: #000000 !important; }}
         [data-testid="stMain"] .stCaption {{ color: #000000 !important; text-shadow: none !important; }}
-        .stChatMessage {{ background: rgba(255,255,255,0.06) !important; border: 1px solid rgba(255,255,255,0.15) !important;
-            border-radius: 16px !important; padding: 14px !important; margin-bottom: 10px !important;
-            backdrop-filter: blur(24px) saturate(180%) !important; -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important; }}
-        .stChatMessage [data-testid="stChatMessageContent"] {{ color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; text-shadow: 0 1px 4px rgba(0,0,0,0.7) !important; }}
-        .stChatMessage [data-testid="stChatMessageAvatar"] {{ background: rgba(255,255,255,0.15) !important; border: 1px solid rgba(255,255,255,0.2) !important; }}
-        .stChatInput {{ background: rgba(255,255,255,0.06) !important; border: 1px solid rgba(255,255,255,0.18) !important; border-radius: 20px !important; backdrop-filter: blur(24px) saturate(180%) !important; -webkit-backdrop-filter: blur(24px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0,0,0,0.2) !important; padding: 8px 16px !important; }}
-        .stChatInput input {{ color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; text-shadow: 0 1px 4px rgba(0,0,0,0.7) !important; background: transparent !important; font-weight: 500 !important; }}
-        .stChatInput input::placeholder {{ color: rgba(255,255,255,0.55) !important; text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important; }}
+        .stChatMessage {{ background-color: {card_bg} !important; border: 1px solid {border} !important;
+            border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
+        .stChatInput {{ background-color: {input_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; }}
+        .stChatInput input {{ color: {text_color} !important; }}
         [data-testid="stMetric"] {{ background-color: {card_bg} !important; border: 1px solid {border} !important;
             border-radius: 10px !important; padding: 14px !important;
             backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
@@ -1747,17 +1743,17 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
 
-        /* Weather Input Stamp Style - BLACK TEXT */
+        /* Weather Input Stamp Style - WHITE TEXT on LIGHT BLUE TRANSPARENT */
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input {{
-            background-color: rgba(255, 255, 255, 0.95) !important;
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
-            border: 2px solid rgba(0, 0, 0, 0.2) !important;
+            background: rgba(173, 216, 230, 0.25) !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            border: 2px solid rgba(255, 255, 255, 0.3) !important;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
             font-weight: 600 !important;
-            backdrop-filter: blur(10px) !important;
-            -webkit-backdrop-filter: blur(10px) !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
             border-radius: 10px !important;
             padding: 6px 14px !important;
             font-size: 0.95rem !important;
@@ -1765,10 +1761,10 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
-            color: #000000 !important;
+            color: #ffffff !important;
             font-weight: 700 !important;
-            text-shadow: none !important;
-            -webkit-text-fill-color: #000000 !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+            -webkit-text-fill-color: #ffffff !important;
             font-size: 0.95rem !important;
         }}
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) > div > div,
@@ -1830,11 +1826,11 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input,
         [data-testid="stMain"] input[key="weather_city_input"],
         [data-testid="stMain"] input[key="sidebar_weather_city"] {{
-            background-color: rgba(255, 255, 255, 0.95) !important;
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
-            caret-color: #000000 !important;
-            border: 2px solid rgba(0, 0, 0, 0.2) !important;
+            background: rgba(173, 216, 230, 0.25) !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            caret-color: #ffffff !important;
+            border: 2px solid rgba(255, 255, 255, 0.3) !important;
             box-shadow: 0 0 20px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2) !important;
             font-weight: 700 !important;
             font-size: 1.05rem !important;
@@ -1845,7 +1841,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
             color: #ffffff !important;
             font-weight: 800 !important;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.9) !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
             -webkit-text-fill-color: #ffffff !important;
             font-size: 1.05rem !important;
             letter-spacing: 0.5px !important;
@@ -1855,13 +1851,11 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             background: transparent !important;
         }}
         .weather-input-wrapper {{
-            background: rgba(173, 216, 230, 0.22) !important;
+            background: rgba(173, 216, 230, 0.15) !important;
             border-radius: 16px !important;
             padding: 12px 16px !important;
-            border: 1px solid rgba(173, 216, 230, 0.4) !important;
-            backdrop-filter: blur(16px) saturate(150%) !important;
-            -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08) !important;
+            border: 1px solid rgba(255,255,255,0.2) !important;
+            backdrop-filter: blur(12px) !important;
         }}
     </style>
     """
@@ -2076,8 +2070,8 @@ def render_audio_controls(current_scene):
     scene_map = {
         "📋 Data Table": "solar",
         "📊 Dashboard": "dashboard",
-        "💬 Chat": "solar",
-        "🚂 Railway": "solar",
+        "💬 Chat": "ocean",
+        "🚂 Railway": "railway",
         "🌤️ Weather": "weather-sunny"
     }
     scene = scene_map.get(current_scene, "solar")
@@ -2176,6 +2170,8 @@ def render_audio_controls(current_scene):
                 switch(scene) {{
                     case 'solar': this.playSolar(); break;
                     case 'dashboard': this.playDashboard(); break;
+                    case 'ocean': this.playOcean(); break;
+                    case 'railway': this.playRailway(); break;
                     case 'weather-rain': this.playRain(); break;
                     case 'weather-thunder': this.playThunder(); break;
                     case 'weather-sunny': this.playSunny(); break;
@@ -2406,6 +2402,106 @@ def render_audio_controls(current_scene):
                 src.start();
                 this.nodes.fog = src;
             }}
+
+            playOcean() {{
+                var self = this;
+                var noise = this.ctx.createBufferSource();
+                noise.buffer = this.noiseBuffer();
+                noise.loop = true;
+                var noiseFilter = this.ctx.createBiquadFilter();
+                noiseFilter.type = 'lowpass';
+                noiseFilter.frequency.value = 120;
+                var noiseGain = this.ctx.createGain();
+                noiseGain.gain.value = 0.25;
+                noise.connect(noiseFilter);
+                noiseFilter.connect(noiseGain);
+                noiseGain.connect(this.master);
+                noise.start();
+                this.nodes.oceanNoise = noise;
+                var swish = this.ctx.createOscillator();
+                swish.type = 'sine';
+                swish.frequency.value = 0.18;
+                var swishGain = this.ctx.createGain();
+                swishGain.gain.value = 0.12;
+                swish.connect(swishGain);
+                swishGain.connect(this.master);
+                swish.start();
+                this.nodes.swish = swish;
+                var bubblePop = function() {{
+                    if (self.scene !== 'ocean') return;
+                    var t = self.ctx.currentTime;
+                    var osc = self.ctx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(600 + Math.random() * 400, t);
+                    osc.frequency.exponentialRampToValueAtTime(200, t + 0.08);
+                    var g = self.ctx.createGain();
+                    g.gain.setValueAtTime(0.06, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+                    osc.connect(g);
+                    g.connect(self.master);
+                    osc.start(t);
+                    osc.stop(t + 0.12);
+                    self._chirpTimeout = setTimeout(bubblePop, 800 + Math.random() * 2500);
+                }};
+                bubblePop();
+            }}
+
+            playRailway() {{
+                var self = this;
+                var chuff = function() {{
+                    if (self.scene !== 'railway') return;
+                    var t = self.ctx.currentTime;
+                    var osc1 = self.ctx.createOscillator();
+                    osc1.type = 'sawtooth';
+                    osc1.frequency.value = 55 + Math.random() * 10;
+                    var g1 = self.ctx.createGain();
+                    g1.gain.setValueAtTime(0.2, t);
+                    g1.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+                    osc1.connect(g1);
+                    g1.connect(self.master);
+                    osc1.start(t);
+                    osc1.stop(t + 0.15);
+                    var osc2 = self.ctx.createOscillator();
+                    osc2.type = 'sawtooth';
+                    osc2.frequency.value = 50 + Math.random() * 8;
+                    var g2 = self.ctx.createGain();
+                    g2.gain.setValueAtTime(0.18, t + 0.25);
+                    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+                    osc2.connect(g2);
+                    g2.connect(self.master);
+                    osc2.start(t + 0.25);
+                    osc2.stop(t + 0.4);
+                    if (Math.random() < 0.08) {{
+                        var wh = self.ctx.createOscillator();
+                        wh.type = 'triangle';
+                        wh.frequency.setValueAtTime(440, t + 0.5);
+                        wh.frequency.linearRampToValueAtTime(520, t + 0.7);
+                        wh.frequency.linearRampToValueAtTime(440, t + 0.9);
+                        var wg = self.ctx.createGain();
+                        wg.gain.setValueAtTime(0.15, t + 0.5);
+                        wg.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+                        wh.connect(wg);
+                        wg.connect(self.master);
+                        wh.start(t + 0.5);
+                        wh.stop(t + 1.2);
+                    }}
+                    self._chirpTimeout = setTimeout(chuff, 900 + Math.random() * 400);
+                }};
+                chuff();
+                var trackNoise = this.ctx.createBufferSource();
+                trackNoise.buffer = this.noiseBuffer();
+                trackNoise.loop = true;
+                var trackFilter = this.ctx.createBiquadFilter();
+                trackFilter.type = 'lowpass';
+                trackFilter.frequency.value = 200;
+                var trackGain = this.ctx.createGain();
+                trackGain.gain.value = 0.08;
+                trackNoise.connect(trackFilter);
+                trackFilter.connect(trackGain);
+                trackGain.connect(this.master);
+                trackNoise.start();
+                this.nodes.trackNoise = trackNoise;
+            }}
         }}
 
         if (!P.eqmsSoundEngine) {{
@@ -2415,19 +2511,12 @@ def render_audio_controls(current_scene):
         var slider = document.getElementById('eqms-vol');
         var status = document.getElementById('eqms-sound-status');
 
-        var savedVol = P.eqmsVolume || 25;
+        var savedVol = P.eqmsVolume !== undefined ? P.eqmsVolume : 15;
         slider.value = savedVol;
-        engine.setVolume(savedVol);
-        status.textContent = 'Scene: {scene} | Vol: ' + savedVol + '%';
-
-        // Resume audio context on first user interaction
-        var resumeAudio = function() {{
-            if (engine.ctx && engine.ctx.state === 'suspended') {{
-                engine.ctx.resume();
-            }}
-        }};
-        doc.addEventListener('click', resumeAudio, {{once:true}});
-        doc.addEventListener('touchstart', resumeAudio, {{once:true}});
+        if (savedVol > 0) {{
+            status.textContent = 'Scene: {scene} | Vol: ' + savedVol + '%';
+            engine.setVolume(savedVol);
+        }}
 
         slider.addEventListener('input', function() {{
             var v = parseInt(this.value);
@@ -2435,8 +2524,6 @@ def render_audio_controls(current_scene):
             engine.setVolume(v);
             status.textContent = 'Scene: {scene} | Vol: ' + v + '%';
             if (v > 0) {{
-                engine.stopAll();
-                engine.scene = null;
                 engine.setScene('{scene}');
             }} else {{
                 engine.stopAll();
@@ -2444,8 +2531,6 @@ def render_audio_controls(current_scene):
             }}
         }});
 
-        engine.stopAll();
-        engine.scene = null;
         engine.setScene('{scene}');
     }})();
     </script>
@@ -2568,35 +2653,31 @@ EARTH_BG_HTML = """
 # =====================================================================
 # Ocean Background for Chat View
 # =====================================================================
-OCEAN_BG_HTML = """
+CHAT_VIDEO_BG_HTML = """
 <style>
-.ocean-bg-scene {
+.chat-video-bg {
     position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
     z-index: -1; pointer-events: none; overflow: hidden;
 }
-.ocean-video {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    object-fit: cover; opacity: 0.92;
+.chat-video-bg video {
+    position: absolute; top: 50%; left: 50%;
+    min-width: 100%; min-height: 100%;
+    width: auto; height: auto;
+    transform: translate(-50%, -50%);
+    object-fit: cover;
 }
-.ocean-overlay {
+.chat-video-overlay {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background: linear-gradient(180deg, rgba(0,40,80,0.35) 0%, rgba(0,20,50,0.45) 50%, rgba(0,10,30,0.6) 100%);
-    pointer-events: none;
-}
-.ocean-vignette {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    box-shadow: inset 0 0 150px rgba(0,0,0,0.6);
+    background: linear-gradient(180deg, rgba(0,30,60,0.45) 0%, rgba(0,15,40,0.35) 50%, rgba(0,30,60,0.45) 100%);
     pointer-events: none;
 }
 </style>
-<div class="ocean-bg-scene">
-    <video class="ocean-video" autoplay muted loop playsinline preload="auto">
-        <source src="https://videos.pexels.com/video-files/3571264/3571264-uhd_2560_1440_30fps.mp4" type="video/mp4">
-        <source src="https://videos.pexels.com/video-files/3571264/3571264-hd_1920_1080_30fps.mp4" type="video/mp4">
-        <source src="https://videos.pexels.com/video-files/3571264/3571264-hd_1280_720_30fps.mp4" type="video/mp4">
+<div class="chat-video-bg">
+    <video autoplay muted loop playsinline poster="https://images.unsplash.com/photo-1582967788606-a171f1080ca8?w=1920">
+        <source src="https://assets.mixkit.co/videos/preview/mixkit-fish-underwater-7055-large.mp4" type="video/mp4">
+        <source src="https://assets.mixkit.co/videos/preview/mixkit-school-of-fish-1170-large.mp4" type="video/mp4">
     </video>
-    <div class="ocean-overlay"></div>
-    <div class="ocean-vignette"></div>
+    <div class="chat-video-overlay"></div>
 </div>
 """
 
@@ -2983,7 +3064,7 @@ def main():
     elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         pass  # Weather bg rendered later
     elif view_bg == "💬 Chat":
-        st.markdown(OCEAN_BG_HTML, unsafe_allow_html=True)
+        st.markdown(CHAT_VIDEO_BG_HTML, unsafe_allow_html=True)
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
@@ -4727,192 +4808,263 @@ def main():
             st.rerun()
 
     # =====================================================================
-    # VIEW: 🚂 RAILWAY → 🌊 REALISTIC UNDERWATER WORLD
+    # VIEW: 🚂 RAILWAY
     # =====================================================================
     elif view == "🚂 Railway":
+        st.subheader("🚂 Indian Railways - Real-time Info")
+
+        # India Map Slideshow - Full Cover
         st.markdown("""
         <style>
-        @keyframes real-bubble-rise { 0%{transform:translateY(0) scale(0.6); opacity:0;} 8%{opacity:0.85;} 92%{opacity:0.5;} 100%{transform:translateY(-110vh) scale(1.3); opacity:0;} }
-        @keyframes real-bubble-wobble { 0%,100%{margin-left:0;} 25%{margin-left:6px;} 75%{margin-left:-6px;} }
-        @keyframes real-ray-shine { 0%{opacity:0.08; transform:translateX(-15px) rotate(-2deg);} 50%{opacity:0.3;} 100%{opacity:0.08; transform:translateX(15px) rotate(2deg);} }
-        @keyframes real-particle-drift { 0%{transform:translate(0,0); opacity:0;} 15%{opacity:0.7;} 85%{opacity:0.4;} 100%{transform:translate(25px,-50vh); opacity:0;} }
-        @keyframes real-dust-mote { 0%,100%{opacity:0.3; transform:translateY(0);} 50%{opacity:0.8; transform:translateY(-10px);} }
-        @keyframes real-sand-shimmer { 0%,100%{opacity:0.25;} 50%{opacity:0.5;} }
-        @keyframes real-coral-sway { 0%,100%{transform:rotate(-2deg);} 50%{transform:rotate(2deg);} }
-        @keyframes real-seaweed-sway { 0%,100%{transform:rotate(-4deg) scaleY(1);} 50%{transform:rotate(4deg) scaleY(1.05);} }
-        @keyframes real-light-flicker { 0%,100%{opacity:0.6;} 50%{opacity:1;} }
-        .real-aqua-wrap { position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:-1; pointer-events:none; overflow:hidden; }
-        .real-aqua-video { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; opacity:0.88; }
-        .real-aqua-overlay { position:absolute; top:0; left:0; width:100%; height:100%; background:linear-gradient(180deg, rgba(0,50,100,0.2) 0%, rgba(0,25,60,0.35) 40%, rgba(0,10,35,0.5) 100%); pointer-events:none; }
-        .real-aqua-vignette { position:absolute; top:0; left:0; width:100%; height:100%; box-shadow:inset 0 0 180px rgba(0,0,0,0.55); pointer-events:none; }
-        /* Realistic bubbles */
-        .real-bubble { position:absolute; border-radius:50%; background:radial-gradient(circle at 30% 30%, rgba(255,255,255,0.95), rgba(200,230,255,0.5), rgba(150,200,255,0.2)); border:1px solid rgba(255,255,255,0.35); box-shadow:0 0 8px rgba(255,255,255,0.2), inset 0 0 6px rgba(255,255,255,0.4); z-index:3; animation:real-bubble-rise linear infinite; }
-        .real-bubble::before { content:''; position:absolute; top:18%; left:22%; width:22%; height:22%; background:rgba(255,255,255,0.9); border-radius:50%; }
-        .real-bubble::after { content:''; position:absolute; bottom:20%; right:25%; width:12%; height:12%; background:rgba(255,255,255,0.5); border-radius:50%; }
-        /* Light rays from surface */
-        .real-ray { position:absolute; top:0; width:3px; height:75vh; background:linear-gradient(180deg, rgba(255,255,255,0.18), rgba(200,230,255,0.06), transparent); border-radius:2px; animation:real-ray-shine 7s ease-in-out infinite; z-index:1; }
-        /* Tiny particles / plankton */
-        .real-particle { position:absolute; width:2px; height:2px; background:rgba(180,220,255,0.7); border-radius:50%; box-shadow:0 0 3px rgba(180,220,255,0.5); animation:real-particle-drift linear infinite; z-index:1; }
-        /* Dust motes in light */
-        .real-dust { position:absolute; width:1px; height:1px; background:rgba(255,255,255,0.6); border-radius:50%; animation:real-dust-mote 6s ease-in-out infinite; z-index:2; }
-        /* Sandy ocean floor */
-        .real-sand { position:absolute; bottom:0; left:0; width:100%; height:60px; background:linear-gradient(180deg, rgba(194,165,116,0.5) 0%, rgba(160,128,80,0.55) 50%, rgba(107,80,48,0.6) 100%); border-radius:50% 50% 0 0 / 20px 20px 0 0; z-index:2; }
-        .real-sand-shine { position:absolute; bottom:8px; left:0; width:100%; height:2px; background:rgba(255,255,255,0.12); animation:real-sand-shimmer 4s ease-in-out infinite; z-index:3; }
-        /* CSS-based coral shapes (subtle, not emoji) */
-        .real-coral-shape { position:absolute; bottom:45px; width:8px; background:linear-gradient(180deg, rgba(255,150,120,0.6), rgba(200,100,80,0.5)); border-radius:4px; transform-origin:bottom center; animation:real-coral-sway 5s ease-in-out infinite; z-index:2; }
-        .real-coral-shape::before { content:''; position:absolute; top:-8px; left:-4px; width:6px; height:14px; background:linear-gradient(180deg, rgba(255,140,110,0.55), rgba(180,90,70,0.45)); border-radius:3px; transform:rotate(-25deg); }
-        .real-coral-shape::after { content:''; position:absolute; top:-5px; right:-4px; width:5px; height:12px; background:linear-gradient(180deg, rgba(255,130,100,0.5), rgba(170,80,60,0.4)); border-radius:3px; transform:rotate(20deg); }
-        /* CSS-based seaweed */
-        .real-seaweed-shape { position:absolute; bottom:50px; width:4px; height:35px; background:linear-gradient(180deg, rgba(100,200,120,0.5), rgba(60,150,80,0.4)); border-radius:2px; transform-origin:bottom center; animation:real-seaweed-sway 4s ease-in-out infinite; z-index:2; }
-        .real-seaweed-shape::before { content:''; position:absolute; top:-6px; left:-3px; width:3px; height:15px; background:linear-gradient(180deg, rgba(90,190,110,0.45), rgba(50,140,70,0.35)); border-radius:2px; transform:rotate(-30deg); transform-origin:bottom; }
-        /* Title card glassmorphism */
-        .real-title-card { position:relative; z-index:10; background:rgba(0,30,60,0.25); backdrop-filter:blur(24px) saturate(160%); border:1px solid rgba(255,255,255,0.12); border-radius:24px; padding:28px 36px; text-align:center; margin:25px auto; max-width:650px; box-shadow:0 12px 48px rgba(0,0,0,0.35); }
-        .real-title-card h2 { color:#ffffff !important; text-shadow:0 2px 12px rgba(0,0,0,0.8) !important; margin:0; font-size:1.7rem; font-weight:800; letter-spacing:1px; }
-        .real-title-card p { color:rgba(255,255,255,0.85) !important; text-shadow:0 1px 6px rgba(0,0,0,0.6) !important; margin:10px 0 0 0; font-size:0.95rem; }
-        /* Marine info cards */
-        .real-marine-card { background:rgba(0,40,80,0.2); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.1); border-radius:20px; padding:20px; text-align:center; transition:all 0.35s ease; }
-        .real-marine-card:hover { transform:translateY(-6px); border-color:rgba(255,255,255,0.25); box-shadow:0 10px 40px rgba(0,0,0,0.35); }
-        .real-marine-card .icon-wrap { width:56px; height:56px; margin:0 auto 10px; background:linear-gradient(135deg, rgba(100,180,255,0.3), rgba(80,150,220,0.2)); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.6rem; border:1px solid rgba(255,255,255,0.15); }
-        .real-marine-card h4 { color:#ffffff !important; text-shadow:0 1px 5px rgba(0,0,0,0.7) !important; margin:0; font-size:0.95rem; font-weight:700; }
-        .real-marine-card p { color:rgba(255,255,255,0.75) !important; text-shadow:0 1px 4px rgba(0,0,0,0.5) !important; font-size:0.78rem; margin:6px 0 0 0; line-height:1.4; }
-        /* Fact box */
-        .real-fact-box { position:relative; z-index:10; text-align:center; padding:24px; background:rgba(0,30,60,0.2); backdrop-filter:blur(16px); border-radius:20px; border:1px solid rgba(255,255,255,0.1); max-width:850px; margin:0 auto; }
-        .real-fact-box .fact-title { color:#ffffff; font-size:1.15rem; font-weight:700; text-shadow:0 1px 5px rgba(0,0,0,0.7); margin-bottom:10px; }
-        .real-fact-box .fact-text { color:rgba(255,255,255,0.85); font-size:0.9rem; text-shadow:0 1px 4px rgba(0,0,0,0.5); line-height:1.6; }
+        @keyframes india-fade-1 { 0%,100% { opacity: 1; } 20% { opacity: 1; } 25% { opacity: 0; } 95% { opacity: 0; } }
+        @keyframes india-fade-2 { 0%,24% { opacity: 0; } 25% { opacity: 1; } 45% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
+        @keyframes india-fade-3 { 0%,49% { opacity: 0; } 50% { opacity: 1; } 70% { opacity: 1; } 75% { opacity: 0; } 100% { opacity: 0; } }
+        @keyframes india-fade-4 { 0%,74% { opacity: 0; } 75% { opacity: 1; } 95% { opacity: 1; } 100% { opacity: 0; } }
+        @keyframes india-glow { 0%,100% { box-shadow: 0 0 20px rgba(255,153,51,0.3); } 50% { box-shadow: 0 0 40px rgba(19,136,8,0.4); } }
+        .india-map-box { position: relative; width: 100%; max-width: 1200px; margin: 0 auto 20px auto; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 2px solid rgba(255,153,51,0.3); animation: india-glow 4s ease-in-out infinite; background: #0a0e27; }
+        .india-map-box::before { content: ''; position: absolute; inset: 0; border-radius: 16px; padding: 3px; background: linear-gradient(45deg, #FF9933, #FFFFFF, #138808, #FF9933); background-size: 400% 400%; animation: glow-rotate 6s linear infinite; -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; z-index: 10; }
+        .india-map-img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; padding: 8px; box-sizing: border-box; }
+        .india-map-lbl { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 8px 24px; border-radius: 30px; font-size: 1rem; font-weight: 700; letter-spacing: 1px; z-index: 5; border: 1px solid rgba(255,153,51,0.4); white-space: nowrap; }
+        .india-tag { position: absolute; background: rgba(255,153,51,0.9); color: #000; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 12px; border: 1px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.4); z-index: 6; animation: monument-pop 2s ease-in-out infinite alternate; }
+        @keyframes monument-pop { 0% { transform: scale(1); } 100% { transform: scale(1.08); } }
+        .im1 { animation: india-fade-1 24s ease-in-out infinite; z-index: 4; }
+        .im2 { animation: india-fade-2 24s ease-in-out infinite; z-index: 3; }
+        .im3 { animation: india-fade-3 24s ease-in-out infinite; z-index: 2; }
+        .im4 { animation: india-fade-4 24s ease-in-out infinite; z-index: 1; }
         </style>
-        <div class="real-aqua-wrap">
-            <video class="real-aqua-video" autoplay muted loop playsinline preload="auto">
-                <source src="https://videos.pexels.com/video-files/3571264/3571264-uhd_2560_1440_30fps.mp4" type="video/mp4">
-                <source src="https://videos.pexels.com/video-files/3571264/3571264-hd_1920_1080_30fps.mp4" type="video/mp4">
-            </video>
-            <div class="real-aqua-overlay"></div>
-            <div class="real-aqua-vignette"></div>
-            <!-- Light rays from surface -->
-            <div class="real-ray" style="left:8%; animation-delay:0s; height:65vh; width:2px;"></div>
-            <div class="real-ray" style="left:18%; animation-delay:1.5s; height:55vh; width:3px;"></div>
-            <div class="real-ray" style="left:28%; animation-delay:3s; height:70vh; width:2px;"></div>
-            <div class="real-ray" style="left:42%; animation-delay:0.8s; height:60vh; width:4px;"></div>
-            <div class="real-ray" style="left:55%; animation-delay:2.2s; height:68vh; width:2px;"></div>
-            <div class="real-ray" style="left:68%; animation-delay:4s; height:58vh; width:3px;"></div>
-            <div class="real-ray" style="left:78%; animation-delay:1s; height:62vh; width:2px;"></div>
-            <div class="real-ray" style="left:90%; animation-delay:3.5s; height:55vh; width:3px;"></div>
-            <!-- Realistic bubbles -->
-            <div class="real-bubble" style="left:5%; bottom:-10px; width:10px; height:10px; animation-duration:7s; animation-delay:0s;"></div>
-            <div class="real-bubble" style="left:12%; bottom:-10px; width:16px; height:16px; animation-duration:9.5s; animation-delay:1.2s;"></div>
-            <div class="real-bubble" style="left:18%; bottom:-10px; width:8px; height:8px; animation-duration:6.5s; animation-delay:2.8s;"></div>
-            <div class="real-bubble" style="left:25%; bottom:-10px; width:14px; height:14px; animation-duration:8.5s; animation-delay:0.6s;"></div>
-            <div class="real-bubble" style="left:32%; bottom:-10px; width:20px; height:20px; animation-duration:11s; animation-delay:3.8s;"></div>
-            <div class="real-bubble" style="left:38%; bottom:-10px; width:9px; height:9px; animation-duration:7.8s; animation-delay:1.5s;"></div>
-            <div class="real-bubble" style="left:45%; bottom:-10px; width:12px; height:12px; animation-duration:9s; animation-delay:0.2s;"></div>
-            <div class="real-bubble" style="left:52%; bottom:-10px; width:18px; height:18px; animation-duration:10s; animation-delay:2.5s;"></div>
-            <div class="real-bubble" style="left:58%; bottom:-10px; width:7px; height:7px; animation-duration:6s; animation-delay:4.2s;"></div>
-            <div class="real-bubble" style="left:65%; bottom:-10px; width:15px; height:15px; animation-duration:8.2s; animation-delay:0.9s;"></div>
-            <div class="real-bubble" style="left:72%; bottom:-10px; width:11px; height:11px; animation-duration:7.2s; animation-delay:2.1s;"></div>
-            <div class="real-bubble" style="left:78%; bottom:-10px; width:22px; height:22px; animation-duration:12s; animation-delay:3.2s;"></div>
-            <div class="real-bubble" style="left:85%; bottom:-10px; width:9px; height:9px; animation-duration:6.8s; animation-delay:1.8s;"></div>
-            <div class="real-bubble" style="left:92%; bottom:-10px; width:13px; height:13px; animation-duration:9.2s; animation-delay:0.4s;"></div>
-            <div class="real-bubble" style="left:3%; bottom:-10px; width:24px; height:24px; animation-duration:13s; animation-delay:5s;"></div>
-            <div class="real-bubble" style="left:48%; bottom:-10px; width:6px; height:6px; animation-duration:5.5s; animation-delay:1s;"></div>
-            <div class="real-bubble" style="left:68%; bottom:-10px; width:17px; height:17px; animation-duration:9.8s; animation-delay:4.5s;"></div>
-            <!-- Particles / plankton -->
-            <div class="real-particle" style="left:10%; bottom:25%; animation-delay:0s; animation-duration:16s;"></div>
-            <div class="real-particle" style="left:22%; bottom:45%; animation-delay:3s; animation-duration:18s;"></div>
-            <div class="real-particle" style="left:35%; bottom:20%; animation-delay:6s; animation-duration:14s;"></div>
-            <div class="real-particle" style="left:48%; bottom:55%; animation-delay:2s; animation-duration:17s;"></div>
-            <div class="real-particle" style="left:60%; bottom:30%; animation-delay:8s; animation-duration:15s;"></div>
-            <div class="real-particle" style="left:72%; bottom:50%; animation-delay:4s; animation-duration:19s;"></div>
-            <div class="real-particle" style="left:85%; bottom:35%; animation-delay:10s; animation-duration:13s;"></div>
-            <div class="real-particle" style="left:5%; bottom:65%; animation-delay:7s; animation-duration:16s;"></div>
-            <div class="real-particle" style="left:50%; bottom:40%; animation-delay:5s; animation-duration:14s;"></div>
-            <div class="real-particle" style="left:75%; bottom:60%; animation-delay:12s; animation-duration:20s;"></div>
-            <!-- Dust motes in light -->
-            <div class="real-dust" style="left:15%; top:20%; animation-delay:0s;"></div>
-            <div class="real-dust" style="left:25%; top:35%; animation-delay:1.5s;"></div>
-            <div class="real-dust" style="left:40%; top:15%; animation-delay:3s;"></div>
-            <div class="real-dust" style="left:55%; top:40%; animation-delay:0.8s;"></div>
-            <div class="real-dust" style="left:70%; top:25%; animation-delay:2.2s;"></div>
-            <div class="real-dust" style="left:82%; top:45%; animation-delay:4s;"></div>
-            <div class="real-dust" style="left:8%; top:50%; animation-delay:1s;"></div>
-            <div class="real-dust" style="left:35%; top:55%; animation-delay:2.8s;"></div>
-            <div class="real-dust" style="left:62%; top:18%; animation-delay:3.5s;"></div>
-            <div class="real-dust" style="left:90%; top:30%; animation-delay:0.5s;"></div>
-            <!-- CSS Coral shapes -->
-            <div class="real-coral-shape" style="left:4%; height:28px; animation-delay:0s;"></div>
-            <div class="real-coral-shape" style="left:12%; height:22px; animation-delay:0.8s;"></div>
-            <div class="real-coral-shape" style="left:22%; height:32px; animation-delay:1.5s;"></div>
-            <div class="real-coral-shape" style="left:32%; height:18px; animation-delay:0.3s;"></div>
-            <div class="real-coral-shape" style="left:42%; height:26px; animation-delay:2s;"></div>
-            <div class="real-coral-shape" style="left:55%; height:20px; animation-delay:1s;"></div>
-            <div class="real-coral-shape" style="left:65%; height:30px; animation-delay:2.5s;"></div>
-            <div class="real-coral-shape" style="left:75%; height:24px; animation-delay:0.6s;"></div>
-            <div class="real-coral-shape" style="left:85%; height:28px; animation-delay:1.8s;"></div>
-            <div class="real-coral-shape" style="left:94%; height:20px; animation-delay:3s;"></div>
-            <!-- CSS Seaweed shapes -->
-            <div class="real-seaweed-shape" style="left:7%; height:30px; animation-delay:0s;"></div>
-            <div class="real-seaweed-shape" style="left:17%; height:25px; animation-delay:0.7s;"></div>
-            <div class="real-seaweed-shape" style="left:28%; height:35px; animation-delay:1.3s;"></div>
-            <div class="real-seaweed-shape" style="left:38%; height:22px; animation-delay:0.4s;"></div>
-            <div class="real-seaweed-shape" style="left:48%; height:32px; animation-delay:1.8s;"></div>
-            <div class="real-seaweed-shape" style="left:58%; height:28px; animation-delay:0.9s;"></div>
-            <div class="real-seaweed-shape" style="left:70%; height:26px; animation-delay:2.1s;"></div>
-            <div class="real-seaweed-shape" style="left:80%; height:34px; animation-delay:1.1s;"></div>
-            <div class="real-seaweed-shape" style="left:90%; height:24px; animation-delay:0.5s;"></div>
-            <div class="real-seaweed-shape" style="left:97%; height:30px; animation-delay:2.8s;"></div>
-            <!-- Sandy floor -->
-            <div class="real-sand"></div>
-            <div class="real-sand-shine"></div>
+        <div class="india-map-box" style="aspect-ratio: 4/3;">
+            <img class="india-map-img im1" src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2e/Political_map_of_India_HI.svg/1024px-Political_map_of_India_HI.svg.png" alt="Political">
+            <div class="india-map-lbl im1">🇮🇳 India Political Map — States & UTs</div>
+            <img class="india-map-img im2" src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Physical_Map_of_India.jpg/1024px-Physical_Map_of_India.jpg" alt="Physical">
+            <div class="india-map-lbl im2">⛰️ Mountains, Rivers & Peaks</div>
+            <img class="india-map-img im3" src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/India_Geographic_Map.jpg/1024px-India_Geographic_Map.jpg" alt="Monuments">
+            <div class="india-map-lbl im3">🏛️ Famous Monuments & Heritage</div>
+            <div class="india-tag im3" style="top: 32%; left: 42%;">🕌 Taj Mahal</div>
+            <div class="india-tag im3" style="top: 22%; left: 28%;">🕍 Golden Temple</div>
+            <div class="india-tag im3" style="top: 55%; left: 48%;">⛩️ Konark Sun Temple</div>
+            <div class="india-tag im3" style="top: 65%; left: 35%;">🗼 Gateway of India</div>
+            <div class="india-tag im3" style="top: 45%; left: 58%;">🏯 Victoria Memorial</div>
+            <div class="india-tag im3" style="top: 72%; left: 45%;">🏛️ Meenakshi Temple</div>
+            <div class="india-tag im3" style="top: 60%; left: 22%;">🕌 Hawa Mahal</div>
+            <div class="india-tag im3" style="top: 38%; left: 55%;">🛕 Mahabodhi Temple</div>
+            <img class="india-map-img im4" src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Map_of_India.png/1024px-Map_of_India.png" alt="Simple">
+            <div class="india-map-lbl im4">🗺️ Simple States Outline</div>
         </div>
-        <div class="real-title-card">
-            <h2>🌊 Deep Ocean Explorer</h2>
-            <p>Immersive underwater experience • Real ocean footage with ambient marine atmosphere</p>
-        </div>
+        <div style="text-align:center; margin:8px 0 20px 0; color:#94a3b8; font-size:0.85rem;">🎬 Maps cycle every 6 seconds • Source: Wikimedia Commons</div>
         """, unsafe_allow_html=True)
 
-        st.markdown("<div style='height:55vh;'></div>", unsafe_allow_html=True)
+        if not NTES_AVAILABLE:
+            st.error("❌ 'ntes-client' library not installed. Please run: `pip install ntes-client`")
+            st.info("💡 Using alternative web-based PNR and train status services...")
+            st.markdown("### 🔍 PNR Status (via ConfirmTkt)")
+            pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr_alt")
+            if pnr_input and len(pnr_input) == 10 and pnr_input.isdigit():
+                pnr_url = f"https://www.confirmtkt.com/pnr-status/{pnr_input}"
+                st.link_button("🔍 Check PNR Status", pnr_url, use_container_width=True)
+            st.markdown("### 🚂 Live Train Status (via RailYatri)")
+            train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train_alt")
+            if train_no and train_no.isdigit() and (3 <= len(train_no) <= 5):
+                train_url = f"https://www.railyatri.in/live-train-status/{train_no}"
+                st.link_button("🚂 Check Live Status", train_url, use_container_width=True)
+            st.markdown("### 📋 Train Schedule (via RailYatri)")
+            train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch_alt")
+            if train_no_sch and train_no_sch.isdigit() and (3 <= len(train_no_sch) <= 5):
+                sch_url = f"https://www.railyatri.in/train-schedule/{train_no_sch}"
+                st.link_button("📋 View Schedule", sch_url, use_container_width=True)
+        else:
+            tab1, tab2, tab3, tab4 = st.tabs(["🔍 PNR Status", "🚂 Live Train", "📋 Train Schedule", "📸 Passport Photo"])
 
-        # Marine info cards
-        st.markdown("""
-        <style>
-        .real-marine-card { background:rgba(0,40,80,0.2); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.1); border-radius:20px; padding:20px; text-align:center; transition:all 0.35s ease; }
-        .real-marine-card:hover { transform:translateY(-6px); border-color:rgba(255,255,255,0.25); box-shadow:0 10px 40px rgba(0,0,0,0.35); }
-        .real-marine-card .icon-wrap { width:56px; height:56px; margin:0 auto 10px; background:linear-gradient(135deg, rgba(100,180,255,0.3), rgba(80,150,220,0.2)); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.6rem; border:1px solid rgba(255,255,255,0.15); }
-        .real-marine-card h4 { color:#ffffff !important; text-shadow:0 1px 5px rgba(0,0,0,0.7) !important; margin:0; font-size:0.95rem; font-weight:700; }
-        .real-marine-card p { color:rgba(255,255,255,0.75) !important; text-shadow:0 1px 4px rgba(0,0,0,0.5) !important; font-size:0.78rem; margin:6px 0 0 0; line-height:1.4; }
-        </style>
-        """, unsafe_allow_html=True)
+            with tab1:
+                st.markdown("### PNR Status Check")
+                pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr")
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Check PNR", key="pnr_check", use_container_width=True):
+                        if not pnr_input or len(pnr_input) != 10 or not pnr_input.isdigit():
+                            st.error("Please enter a valid 10-digit PNR.")
+                        else:
+                            with st.spinner("Fetching PNR details..."):
+                                data = get_pnr_status(pnr_input)
+                                if data and isinstance(data, dict) and data.get('error'):
+                                    if data['error'] == "FLUSHED_PNR": st.error("❌ FLUSHED PNR / PNR NOT YET GENERATED")
+                                    else: st.error(f"❌ {data['error']}")
+                                elif data:
+                                    st.session_state.pnr_result = data
+                                    st.session_state.pnr_last_checked = time.time()
+                                    st.rerun()
+                                else: st.error("❌ PNR not found or flushed.")
+                with c2:
+                    if st.button("🔄 Refresh PNR", key="refresh_pnr", use_container_width=True):
+                        if pnr_input and len(pnr_input) == 10 and pnr_input.isdigit():
+                            with st.spinner("Refreshing PNR..."):
+                                data = get_pnr_status(pnr_input)
+                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
+                                elif data:
+                                    st.session_state.pnr_result = data
+                                    st.session_state.pnr_last_checked = time.time()
+                                    st.rerun()
+                                else: st.error("❌ PNR not found or flushed.")
+                        else: st.warning("Please enter a valid PNR first.")
 
-        c1, c2, c3, c4, c5 = st.columns(5)
-        with c1:
-            st.markdown('<div class="real-marine-card"><div class="icon-wrap">🌊</div><h4>Ocean Depth</h4><p>Average depth is 3,688 meters</p></div>', unsafe_allow_html=True)
-        with c2:
-            st.markdown('<div class="real-marine-card"><div class="icon-wrap">🫧</div><h4>Oxygen</h4><p>Produces 50%+ of world&apos;s O<sub>2</sub></p></div>', unsafe_allow_html=True)
-        with c3:
-            st.markdown('<div class="real-marine-card"><div class="icon-wrap">🪸</div><h4>Coral Reefs</h4><p>Home to 25% of marine life</p></div>', unsafe_allow_html=True)
-        with c4:
-            st.markdown('<div class="real-marine-card"><div class="icon-wrap">🐋</div><h4>Marine Species</h4><p>Over 2 million species exist</p></div>', unsafe_allow_html=True)
-        with c5:
-            st.markdown('<div class="real-marine-card"><div class="icon-wrap">🔬</div><h4>Unexplored</h4><p>80% of ocean is unmapped</p></div>', unsafe_allow_html=True)
+                if st.session_state.pnr_result and st.session_state.pnr_last_checked:
+                    elapsed = time.time() - st.session_state.pnr_last_checked
+                    if elapsed > 300:
+                        with st.spinner("Auto-refreshing PNR..."):
+                            current_pnr = st.session_state.pnr_result.get('pnr')
+                            if current_pnr:
+                                data = get_pnr_status(current_pnr)
+                                if data and not isinstance(data, dict) or not data.get('error'):
+                                    st.session_state.pnr_result = data
+                                    st.session_state.pnr_last_checked = time.time()
+                                    st.rerun()
 
-        st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
+                if st.session_state.pnr_result:
+                    with st.container():
+                        st.markdown('<div class="result-box">', unsafe_allow_html=True)
+                        st.markdown(format_pnr_result(st.session_state.pnr_result))
+                        st.markdown('</div>', unsafe_allow_html=True)
+                        if st.session_state.pnr_last_checked:
+                            last_check = datetime.fromtimestamp(st.session_state.pnr_last_checked).strftime('%H:%M:%S')
+                            st.caption(f"⏱️ Last checked: {last_check} IST (auto-refreshes every 5 min)")
 
-        # Ocean fact box
-        st.markdown("""
-        <div class="real-fact-box">
-            <div class="fact-title">🌊 Did You Know?</div>
-            <div class="fact-text">
-                The ocean covers more than 70% of Earth's surface and contains 99% of the planet's living space. 
-                A single drop of seawater can contain millions of bacteria and viruses, yet the ocean remains 
-                one of the least explored frontiers — we've mapped more of Mars than our own ocean floor!
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+            with tab2:
+                st.markdown("### Live Train Status")
+                train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train")
+                date_options = [f"{get_date_label(i)} ({get_date_for_offset(i)})" for i in range(5)]
+                date_choice = st.selectbox("Select Date", date_options, index=0, key="rail_date")
+                offset = 0
+                for i in range(5):
+                    if get_date_label(i) in date_choice: offset = i; break
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Get Live Status", key="train_live", use_container_width=True):
+                        if not train_no or not train_no.isdigit() or not (3 <= len(train_no) <= 5):
+                            st.error("Please enter a valid train number (3-5 digits).")
+                        else:
+                            with st.spinner("Fetching live status..."):
+                                date_str = get_date_for_offset(offset)
+                                data = get_live_train_status(train_no, date_str)
+                                if data and isinstance(data, dict) and data.get('error'):
+                                    st.error(f"❌ {data['error']}: {data.get('message', '')}")
+                                elif data:
+                                    st.session_state.train_result = data
+                                    st.rerun()
+                                else: st.error("❌ No data available.")
+                with c2:
+                    if st.button("🔄 Refresh Live Status", key="refresh_live", use_container_width=True):
+                        if train_no and train_no.isdigit() and (3 <= len(train_no) <= 5):
+                            with st.spinner("Refreshing live status..."):
+                                date_str = get_date_for_offset(offset)
+                                data = get_live_train_status(train_no, date_str)
+                                if data and isinstance(data, dict) and data.get('error'):
+                                    st.error(f"❌ {data['error']}: {data.get('message', '')}")
+                                elif data:
+                                    st.session_state.train_result = data
+                                    st.rerun()
+                                else: st.error("❌ No data available.")
+                        else: st.warning("Please enter a valid train number first.")
+
+                if st.session_state.train_result:
+                    with st.container():
+                        st.markdown('<div class="result-box">', unsafe_allow_html=True)
+                        msg, _ = format_live_train_result(st.session_state.train_result)
+                        st.markdown(msg)
+                        st.markdown('</div>', unsafe_allow_html=True)
+
+            with tab3:
+                st.markdown("### Train Schedule / Route")
+                train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch")
+                if 'sch_start' not in st.session_state: st.session_state.sch_start = 0
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Get Schedule", key="train_sch", use_container_width=True):
+                        if not train_no_sch or not train_no_sch.isdigit() or not (3 <= len(train_no_sch) <= 5):
+                            st.error("Please enter a valid train number.")
+                        else:
+                            with st.spinner("Fetching schedule..."):
+                                data = get_train_schedule(train_no_sch)
+                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
+                                elif data:
+                                    st.session_state.sch_data = data
+                                    st.session_state.sch_start = 0
+                                    st.rerun()
+                                else: st.error("❌ Schedule not found.")
+                with c2:
+                    if st.button("🔄 Refresh Schedule", key="refresh_sch", use_container_width=True):
+                        if train_no_sch and train_no_sch.isdigit() and (3 <= len(train_no_sch) <= 5):
+                            with st.spinner("Refreshing schedule..."):
+                                data = get_train_schedule(train_no_sch)
+                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
+                                elif data:
+                                    st.session_state.sch_data = data
+                                    st.session_state.sch_start = 0
+                                    st.rerun()
+                                else: st.error("❌ Schedule not found.")
+                        else: st.warning("Please enter a valid train number first.")
+
+                if st.session_state.sch_data:
+                    data = st.session_state.sch_data
+                    if isinstance(data, dict):
+                        msg, pagination = format_schedule_result(data, st.session_state.sch_start)
+                        with st.container():
+                            st.markdown('<div class="result-box">', unsafe_allow_html=True)
+                            st.markdown(msg)
+                            st.markdown('</div>', unsafe_allow_html=True)
+                        if pagination:
+                            start, end, total = pagination
+                            chunk = 20
+                            if total > 0:
+                                col1, col2, col3 = st.columns([1,2,1])
+                                with col1:
+                                    if start > 0:
+                                        if st.button("◀ Previous", key="sch_prev"):
+                                            st.session_state.sch_start = max(0, start - chunk)
+                                            st.rerun()
+                                with col2: st.write(f"Showing {start+1}-{end} of {total}")
+                                with col3:
+                                    if end < total:
+                                        if st.button("Next ▶", key="sch_next"):
+                                            st.session_state.sch_start = end
+                                            st.rerun()
+                    else: st.info("No schedule data available.")
+
+            with tab4:
+                st.markdown("### 📸 Passport Photo Maker")
+                st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
+                api_key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
+                if not api_key: api_key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
+                if not api_key and "remove_bg_key" in st.session_state: api_key = str(st.session_state.remove_bg_key).strip()
+                if not api_key:
+                    st.error("❌ REMOVE_BG_API_KEY not found.")
+                    st.info("Add to secrets.toml or .env")
+                    manual_key = st.text_input("Or paste key here", type="password", key="manual_bg_key_input")
+                    if manual_key and manual_key.strip():
+                        st.session_state.remove_bg_key = manual_key.strip()
+                        st.success("Key saved. Refreshing...")
+                        st.rerun()
+                    st.stop()
+                else: st.success(f"✅ API Key ready: {api_key[:4]}...{api_key[-4:]}")
+
+                photo_file = st.file_uploader("Upload Photo", type=["png", "jpg", "jpeg"], key="passport_photo_uploader")
+                if photo_file:
+                    st.image(photo_file, caption="Original Photo", width=250)
+                    if st.button("✨ Process Passport Photo", type="primary", use_container_width=True, key="process_passport_btn"):
+                        with st.spinner("Processing... (10-30 seconds)"):
+                            try:
+                                image_data = photo_file.read()
+                                result = process_passport_image(image_data)
+                                if result:
+                                    st.success("✅ Passport Photo Ready!")
+                                    st.image(result, caption="Background removed | Black border | 35x45mm", width=300)
+                                    st.download_button("📥 Download Passport Photo", data=result,
+                                        file_name=f"passport_{now_ist().strftime('%Y%m%d_%H%M%S')}.png",
+                                        mime="image/png", use_container_width=True)
+                                else: st.error("❌ Failed to process photo.")
+                            except Exception as e: st.error(f"❌ Error: {str(e)[:200]}")
 
     # =====================================================================
-    # VIEW: 🌤️ WEATHER    # =====================================================================
-    # VIEW: 🌤️ WEATHER    # =====================================================================
     # VIEW: 🌤️ WEATHER
-    # =====================================================================
-    elif view == "🌤️ Weather":
+    # =====================================================================elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
 
         qp_lat = st.query_params.get('__lat')
@@ -4995,9 +5147,9 @@ def main():
             loc_full = data['city'] + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
             day_night_icon = "🌙" if time_of_day in ['night', 'dusk'] else "☀️" if time_of_day == 'day' else "🌅"
             st.markdown(f'''<div style="text-align:center; margin-bottom:15px;">
-                <div style="display:inline-block; background: linear-gradient(135deg, rgba(255,153,51,0.2), rgba(255,255,255,0.1), rgba(19,136,8,0.2)); 
-                    border: 1px solid rgba(0,0,0,0.15); border-radius: 50px; padding: 10px 30px; 
-                    backdrop-filter: blur(12px); color: #000000 !important; text-shadow: none !important; font-weight: 700; font-size: 1.1rem;">
+                <div style="display:inline-block; background: rgba(173, 216, 230, 0.25); 
+                    border: 1px solid rgba(255,255,255,0.25); border-radius: 50px; padding: 10px 30px; 
+                    backdrop-filter: blur(12px); color: #ffffff !important; text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important; font-weight: 700; font-size: 1.1rem;">
                     {day_night_icon} {loc_full} • {time_of_day.title()}
                 </div>
             </div>''', unsafe_allow_html=True)
@@ -5236,28 +5388,22 @@ def main():
                                 50% {{ transform: translateY(-5px); }}
                             }}
                             .forecast-card-{idx} {{
-                                background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18);
-                                border-radius: 20px; padding: 18px; text-align: center;
+                                background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+                                border-radius: 20px; padding: 18px; text-align: center; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);
                                 box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
                                 animation: forecast-bounce 3s ease-in-out infinite;
                                 animation-delay: {idx * 0.3}s;
-                                backdrop-filter: blur(12px);
-                            }}
-                            .forecast-card-{idx} * {{
-                                color: #ffffff !important;
-                                -webkit-text-fill-color: #ffffff !important;
-                                text-shadow: 0 1px 4px rgba(0,0,0,0.8) !important;
                             }}
                             </style>
                             <div class="forecast-card-{idx}">
-                                <div style="font-size: 0.9rem; font-weight: 700; margin-bottom: 8px;">{day_name}</div>
-                                <img src="{icon_url}" style="width: 60px; height: 60px; margin: 5px 0; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));">
-                                <div style="font-size: 1.8rem; font-weight: 800;">{day['temp']}°C</div>
-                                <div style="font-size: 0.8rem; margin: 4px 0; font-weight: 600;">{day['description']}</div>
-                                <div style="font-size: 0.8rem; margin-top: 8px; font-weight: 600;">
+                                <div style="font-size: 0.9rem; font-weight: 600; margin-bottom: 8px;">{day_name}</div>
+                                <img src="{icon_url}" style="width: 60px; height: 60px; margin: 5px 0;">
+                                <div style="font-size: 1.8rem; font-weight: 700;">{day['temp']}°C</div>
+                                <div style="font-size: 0.75rem; margin: 4px 0;">{day['description']}</div>
+                                <div style="font-size: 0.8rem; margin-top: 8px; opacity: 0.9;">
                                     🔺 {day['max_temp']}° / 🔻 {day['min_temp']}°
                                 </div>
-                                <div style="font-size: 0.78rem; margin-top: 6px; font-weight: 600;">
+                                <div style="font-size: 0.75rem; margin-top: 6px; opacity: 0.85;">
                                     💧 {day['humidity']}% | 🌬️ {day['wind']} m/s
                                 </div>
                             </div>
@@ -5359,6 +5505,14 @@ def main():
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
     }
+    /* Weather labels - WHITE for dark bg */
+    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label p,
+    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label span {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        font-weight: 700 !important;
+    }
     /* === DATA TABLE HEADERS === */
     div[data-testid="stMain"] .stDataFrame th,
     div[data-testid="stMain"] .stDataEditor th {
@@ -5373,25 +5527,6 @@ def main():
         color: #1e293b !important;
         -webkit-text-fill-color: #1e293b !important;
         text-shadow: none !important;
-    }
-    /* === WEATHER LABELS - WHITE (highest priority override) === */
-    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label p,
-    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label span,
-    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
-    div[data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label p,
-    div[data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label span,
-    div[data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 4px rgba(0,0,0,0.9) !important;
-        font-weight: 800 !important;
-    }
-    /* === WEATHER STAMP - LIGHT BLUE TRANSPARENT === */
-    div[data-testid="stMain"] .weather-input-wrapper {
-        background: rgba(173, 216, 230, 0.22) !important;
-        border: 1px solid rgba(173, 216, 230, 0.4) !important;
-        backdrop-filter: blur(16px) saturate(150%) !important;
-        -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
     }
     </style>
     """, unsafe_allow_html=True)
