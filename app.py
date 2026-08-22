@@ -2261,683 +2261,223 @@ def main():
     # =====================================================================
     weather_bg_html = ""
     if st.session_state.weather_data and 'error' not in st.session_state.weather_data and st.session_state.view_mode == "🌤️ Weather":
+        import math
         weather_cond = str(st.session_state.weather_data.get('weather', '')).lower()
-        if 'rain' in weather_cond or 'drizz' in weather_cond:
-            wtype = 'rain'
-        elif 'thunder' in weather_cond or 'storm' in weather_cond:
-            wtype = 'thunder'
-        elif 'snow' in weather_cond or 'frost' in weather_cond or 'freez' in weather_cond:
-            wtype = 'snow'
-        elif 'mist' in weather_cond or 'fog' in weather_cond or 'haz' in weather_cond:
-            wtype = 'fog'
-        elif 'cloud' in weather_cond:
-            wtype = 'cloudy'
-        else:
-            wtype = 'sunny'
         city_name = st.session_state.weather_data.get('city', 'Weather')
         temp = st.session_state.weather_data.get('temp', '--')
         desc = st.session_state.weather_data.get('weather', '').title()
 
-        if wtype == 'rain':
-            rain_drops = ""
-            rain_drops += '            <div class="w-rain-drop" style="left:0.0%;height:15px;animation-duration:0.6s;animation-delay:0.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:1.3%;height:16px;animation-duration:0.8s;animation-delay:0.15s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:2.6%;height:17px;animation-duration:1.0s;animation-delay:0.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:3.9%;height:18px;animation-duration:1.2s;animation-delay:0.45s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:5.2%;height:19px;animation-duration:1.4s;animation-delay:0.6s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:6.5%;height:20px;animation-duration:0.6s;animation-delay:0.75s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:7.8%;height:21px;animation-duration:0.8s;animation-delay:0.9s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:9.1%;height:22px;animation-duration:1.0s;animation-delay:1.05s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:10.4%;height:23px;animation-duration:1.2s;animation-delay:1.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:11.7%;height:24px;animation-duration:1.4s;animation-delay:1.35s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:13.0%;height:25px;animation-duration:0.6s;animation-delay:1.5s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:14.3%;height:26px;animation-duration:0.8s;animation-delay:1.65s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:15.6%;height:27px;animation-duration:1.0s;animation-delay:1.8s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:16.9%;height:28px;animation-duration:1.2s;animation-delay:1.95s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:18.2%;height:29px;animation-duration:1.4s;animation-delay:2.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:19.5%;height:30px;animation-duration:0.6s;animation-delay:2.25s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:20.8%;height:31px;animation-duration:0.8s;animation-delay:2.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:22.1%;height:32px;animation-duration:1.0s;animation-delay:2.55s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:23.4%;height:33px;animation-duration:1.2s;animation-delay:2.7s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:24.7%;height:34px;animation-duration:1.4s;animation-delay:2.85s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:26.0%;height:15px;animation-duration:0.6s;animation-delay:0.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:27.3%;height:16px;animation-duration:0.8s;animation-delay:0.15s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:28.6%;height:17px;animation-duration:1.0s;animation-delay:0.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:29.9%;height:18px;animation-duration:1.2s;animation-delay:0.45s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:31.2%;height:19px;animation-duration:1.4s;animation-delay:0.6s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:32.5%;height:20px;animation-duration:0.6s;animation-delay:0.75s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:33.8%;height:21px;animation-duration:0.8s;animation-delay:0.9s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:35.1%;height:22px;animation-duration:1.0s;animation-delay:1.05s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:36.4%;height:23px;animation-duration:1.2s;animation-delay:1.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:37.7%;height:24px;animation-duration:1.4s;animation-delay:1.35s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:39.0%;height:25px;animation-duration:0.6s;animation-delay:1.5s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:40.3%;height:26px;animation-duration:0.8s;animation-delay:1.65s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:41.6%;height:27px;animation-duration:1.0s;animation-delay:1.8s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:42.9%;height:28px;animation-duration:1.2s;animation-delay:1.95s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:44.2%;height:29px;animation-duration:1.4s;animation-delay:2.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:45.5%;height:30px;animation-duration:0.6s;animation-delay:2.25s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:46.8%;height:31px;animation-duration:0.8s;animation-delay:2.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:48.1%;height:32px;animation-duration:1.0s;animation-delay:2.55s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:49.4%;height:33px;animation-duration:1.2s;animation-delay:2.7s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:50.7%;height:34px;animation-duration:1.4s;animation-delay:2.85s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:52.0%;height:15px;animation-duration:0.6s;animation-delay:0.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:53.3%;height:16px;animation-duration:0.8s;animation-delay:0.15s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:54.6%;height:17px;animation-duration:1.0s;animation-delay:0.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:55.9%;height:18px;animation-duration:1.2s;animation-delay:0.45s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:57.2%;height:19px;animation-duration:1.4s;animation-delay:0.6s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:58.5%;height:20px;animation-duration:0.6s;animation-delay:0.75s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:59.8%;height:21px;animation-duration:0.8s;animation-delay:0.9s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:61.1%;height:22px;animation-duration:1.0s;animation-delay:1.05s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:62.4%;height:23px;animation-duration:1.2s;animation-delay:1.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:63.7%;height:24px;animation-duration:1.4s;animation-delay:1.35s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:65.0%;height:25px;animation-duration:0.6s;animation-delay:1.5s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:66.3%;height:26px;animation-duration:0.8s;animation-delay:1.65s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:67.6%;height:27px;animation-duration:1.0s;animation-delay:1.8s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:68.9%;height:28px;animation-duration:1.2s;animation-delay:1.95s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:70.2%;height:29px;animation-duration:1.4s;animation-delay:2.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:71.5%;height:30px;animation-duration:0.6s;animation-delay:2.25s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:72.8%;height:31px;animation-duration:0.8s;animation-delay:2.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:74.1%;height:32px;animation-duration:1.0s;animation-delay:2.55s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:75.4%;height:33px;animation-duration:1.2s;animation-delay:2.7s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:76.7%;height:34px;animation-duration:1.4s;animation-delay:2.85s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:78.0%;height:15px;animation-duration:0.6s;animation-delay:0.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:79.3%;height:16px;animation-duration:0.8s;animation-delay:0.15s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:80.6%;height:17px;animation-duration:1.0s;animation-delay:0.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:81.9%;height:18px;animation-duration:1.2s;animation-delay:0.45s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:83.2%;height:19px;animation-duration:1.4s;animation-delay:0.6s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:84.5%;height:20px;animation-duration:0.6s;animation-delay:0.75s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:85.8%;height:21px;animation-duration:0.8s;animation-delay:0.9s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:87.1%;height:22px;animation-duration:1.0s;animation-delay:1.05s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:88.4%;height:23px;animation-duration:1.2s;animation-delay:1.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:89.7%;height:24px;animation-duration:1.4s;animation-delay:1.35s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:91.0%;height:25px;animation-duration:0.6s;animation-delay:1.5s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:92.3%;height:26px;animation-duration:0.8s;animation-delay:1.65s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:93.6%;height:27px;animation-duration:1.0s;animation-delay:1.8s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:94.9%;height:28px;animation-duration:1.2s;animation-delay:1.95s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:96.2%;height:29px;animation-duration:1.4s;animation-delay:2.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:97.5%;height:30px;animation-duration:0.6s;animation-delay:2.25s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:98.8%;height:31px;animation-duration:0.8s;animation-delay:2.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:0.1%;height:32px;animation-duration:1.0s;animation-delay:2.55s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:1.4%;height:33px;animation-duration:1.2s;animation-delay:2.7s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:2.7%;height:34px;animation-duration:1.4s;animation-delay:2.85s;"></div>\n'
-            weather_bg_html = """
-            <style>
-            .weather-bg-full {
-                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                z-index: -1; pointer-events: none; overflow: hidden;
-                background: linear-gradient(180deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%);
-            }
-            @keyframes w-rain-fall {
-                from { transform: translateY(-20px); opacity: 0; }
-                10% { opacity: 0.7; }
-                90% { opacity: 0.7; }
-                to { transform: translateY(110vh); opacity: 0; }
-            }
-            @keyframes w-cloud-drift {
-                from { transform: translateX(-200px); }
-                to { transform: translateX(calc(100vw + 200px)); }
-            }
-            @keyframes w-lightning {
-                0%,90%,100% { opacity: 0; }
-                91% { opacity: 0.3; }
-                92% { opacity: 0; }
-                93% { opacity: 0.6; }
-                94% { opacity: 0; }
-            }
-            .w-rain-drop {
-                position: absolute; width: 1.5px;
-                background: linear-gradient(180deg, rgba(100,181,246,0), rgba(100,181,246,0.9), rgba(144,202,249,0.7));
-                border-radius: 0 0 1px 1px; opacity: 0.8;
-                animation: w-rain-fall linear infinite;
-                box-shadow: 0 0 2px rgba(100,181,246,0.5);
-            }
-            .w-dark-cloud {
-                position: absolute; background: linear-gradient(180deg, #455a64, #37474f);
-                border-radius: 50px; opacity: 0.9;
-                animation: w-cloud-drift linear infinite;
-            }
-            .w-lightning-flash {
-                position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-                background: rgba(255,255,255,0.08);
-                animation: w-lightning 5s ease-in-out infinite;
-                pointer-events: none;
-            }
-            .w-weather-info {
-                position: absolute; top: 50%; left: 50%;
-                transform: translate(-50%, -50%);
-                text-align: center; color: #000000;
-                font-family: 'Segoe UI', Arial, sans-serif;
-                text-shadow: 0 2px 8px rgba(255,255,255,0.9), 0 0 20px rgba(255,255,255,0.5);
-                pointer-events: none;
-            }
-            .w-weather-info .w-city { font-size: 3.5rem; font-weight: 800; letter-spacing: 2px; }
-            .w-weather-info .w-temp { font-size: 8rem; font-weight: 900; line-height: 1; margin: 10px 0; }
-            .w-weather-info .w-desc { font-size: 1.8rem; font-weight: 600; text-transform: capitalize; }
-            .w-ripple {
-                position: absolute; bottom: 0; left: 0; width: 100%; height: 120px;
-                background: linear-gradient(180deg, transparent, rgba(100,181,246,0.15));
-            }
-            </style>
-            <div class="weather-bg-full">
-                <div class="w-lightning-flash"></div>
-                <div class="w-dark-cloud" style="top:5%;width:280px;height:90px;animation-duration:45s;"></div>
-                <div class="w-dark-cloud" style="top:12%;width:200px;height:70px;animation-duration:55s;animation-delay:-15s;"></div>
-                <div class="w-dark-cloud" style="top:8%;width:320px;height:100px;animation-duration:38s;animation-delay:-25s;"></div>
-                <div class="w-dark-cloud" style="top:18%;width:180px;height:60px;animation-duration:50s;animation-delay:-8s;"></div>
-                <div class="w-dark-cloud" style="top:3%;width:250px;height:80px;animation-duration:42s;animation-delay:-30s;"></div>
-""" + rain_drops + """
-                <div class="w-ripple"></div>
-                <div class="w-weather-info">
-                    <div class="w-city">""" + city_name + """</div>
-                    <div class="w-temp">""" + str(temp) + """°</div>
-                    <div class="w-desc">🌧️ """ + desc + """</div>
-                </div>
-            </div>
-            """
+        # ---- DAY / NIGHT DETECTION ----
+        time_of_day = 'day'
+        try:
+            now_ts = int(time.time())
+            sunrise = st.session_state.weather_data.get('sunrise')
+            sunset = st.session_state.weather_data.get('sunset')
+            if sunrise and sunset and str(sunrise) not in ['', 'N/A', 'None']:
+                sunrise = int(sunrise)
+                sunset = int(sunset)
+                if now_ts < sunrise - 1800:
+                    time_of_day = 'night'
+                elif now_ts < sunrise + 1800:
+                    time_of_day = 'dawn'
+                elif now_ts < sunset - 1800:
+                    time_of_day = 'day'
+                elif now_ts < sunset + 1800:
+                    time_of_day = 'dusk'
+                else:
+                    time_of_day = 'night'
+        except Exception:
+            pass
 
-        elif wtype == 'thunder':
-            rain_drops = ""
-            rain_drops += '            <div class="w-rain-drop" style="left:0.0%;height:20px;animation-duration:0.4s;animation-delay:0.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:1.1%;height:21px;animation-duration:0.55s;animation-delay:0.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:2.2%;height:22px;animation-duration:0.7s;animation-delay:0.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:3.3%;height:23px;animation-duration:0.85s;animation-delay:0.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:4.4%;height:24px;animation-duration:0.4s;animation-delay:0.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:5.5%;height:25px;animation-duration:0.55s;animation-delay:0.5s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:6.6%;height:26px;animation-duration:0.7s;animation-delay:0.6s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:7.7%;height:27px;animation-duration:0.85s;animation-delay:0.7s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:8.8%;height:28px;animation-duration:0.4s;animation-delay:0.8s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:9.9%;height:29px;animation-duration:0.55s;animation-delay:0.9s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:11.0%;height:30px;animation-duration:0.7s;animation-delay:1.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:12.1%;height:31px;animation-duration:0.85s;animation-delay:1.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:13.2%;height:32px;animation-duration:0.4s;animation-delay:1.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:14.3%;height:33px;animation-duration:0.55s;animation-delay:1.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:15.4%;height:34px;animation-duration:0.7s;animation-delay:1.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:16.5%;height:35px;animation-duration:0.85s;animation-delay:1.5s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:17.6%;height:36px;animation-duration:0.4s;animation-delay:1.6s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:18.7%;height:37px;animation-duration:0.55s;animation-delay:1.7s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:19.8%;height:38px;animation-duration:0.7s;animation-delay:1.8s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:20.9%;height:39px;animation-duration:0.85s;animation-delay:1.9s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:22.0%;height:40px;animation-duration:0.4s;animation-delay:2.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:23.1%;height:41px;animation-duration:0.55s;animation-delay:2.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:24.2%;height:42px;animation-duration:0.7s;animation-delay:2.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:25.3%;height:43px;animation-duration:0.85s;animation-delay:2.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:26.4%;height:44px;animation-duration:0.4s;animation-delay:2.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:27.5%;height:20px;animation-duration:0.55s;animation-delay:0.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:28.6%;height:21px;animation-duration:0.7s;animation-delay:0.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:29.7%;height:22px;animation-duration:0.85s;animation-delay:0.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:30.8%;height:23px;animation-duration:0.4s;animation-delay:0.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:31.9%;height:24px;animation-duration:0.55s;animation-delay:0.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:33.0%;height:25px;animation-duration:0.7s;animation-delay:0.5s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:34.1%;height:26px;animation-duration:0.85s;animation-delay:0.6s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:35.2%;height:27px;animation-duration:0.4s;animation-delay:0.7s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:36.3%;height:28px;animation-duration:0.55s;animation-delay:0.8s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:37.4%;height:29px;animation-duration:0.7s;animation-delay:0.9s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:38.5%;height:30px;animation-duration:0.85s;animation-delay:1.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:39.6%;height:31px;animation-duration:0.4s;animation-delay:1.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:40.7%;height:32px;animation-duration:0.55s;animation-delay:1.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:41.8%;height:33px;animation-duration:0.7s;animation-delay:1.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:42.9%;height:34px;animation-duration:0.85s;animation-delay:1.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:44.0%;height:35px;animation-duration:0.4s;animation-delay:1.5s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:45.1%;height:36px;animation-duration:0.55s;animation-delay:1.6s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:46.2%;height:37px;animation-duration:0.7s;animation-delay:1.7s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:47.3%;height:38px;animation-duration:0.85s;animation-delay:1.8s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:48.4%;height:39px;animation-duration:0.4s;animation-delay:1.9s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:49.5%;height:40px;animation-duration:0.55s;animation-delay:2.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:50.6%;height:41px;animation-duration:0.7s;animation-delay:2.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:51.7%;height:42px;animation-duration:0.85s;animation-delay:2.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:52.8%;height:43px;animation-duration:0.4s;animation-delay:2.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:53.9%;height:44px;animation-duration:0.55s;animation-delay:2.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:55.0%;height:20px;animation-duration:0.7s;animation-delay:0.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:56.1%;height:21px;animation-duration:0.85s;animation-delay:0.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:57.2%;height:22px;animation-duration:0.4s;animation-delay:0.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:58.3%;height:23px;animation-duration:0.55s;animation-delay:0.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:59.4%;height:24px;animation-duration:0.7s;animation-delay:0.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:60.5%;height:25px;animation-duration:0.85s;animation-delay:0.5s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:61.6%;height:26px;animation-duration:0.4s;animation-delay:0.6s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:62.7%;height:27px;animation-duration:0.55s;animation-delay:0.7s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:63.8%;height:28px;animation-duration:0.7s;animation-delay:0.8s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:64.9%;height:29px;animation-duration:0.85s;animation-delay:0.9s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:66.0%;height:30px;animation-duration:0.4s;animation-delay:1.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:67.1%;height:31px;animation-duration:0.55s;animation-delay:1.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:68.2%;height:32px;animation-duration:0.7s;animation-delay:1.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:69.3%;height:33px;animation-duration:0.85s;animation-delay:1.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:70.4%;height:34px;animation-duration:0.4s;animation-delay:1.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:71.5%;height:35px;animation-duration:0.55s;animation-delay:1.5s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:72.6%;height:36px;animation-duration:0.7s;animation-delay:1.6s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:73.7%;height:37px;animation-duration:0.85s;animation-delay:1.7s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:74.8%;height:38px;animation-duration:0.4s;animation-delay:1.8s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:75.9%;height:39px;animation-duration:0.55s;animation-delay:1.9s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:77.0%;height:40px;animation-duration:0.7s;animation-delay:2.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:78.1%;height:41px;animation-duration:0.85s;animation-delay:2.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:79.2%;height:42px;animation-duration:0.4s;animation-delay:2.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:80.3%;height:43px;animation-duration:0.55s;animation-delay:2.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:81.4%;height:44px;animation-duration:0.7s;animation-delay:2.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:82.5%;height:20px;animation-duration:0.85s;animation-delay:0.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:83.6%;height:21px;animation-duration:0.4s;animation-delay:0.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:84.7%;height:22px;animation-duration:0.55s;animation-delay:0.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:85.8%;height:23px;animation-duration:0.7s;animation-delay:0.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:86.9%;height:24px;animation-duration:0.85s;animation-delay:0.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:88.0%;height:25px;animation-duration:0.4s;animation-delay:0.5s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:89.1%;height:26px;animation-duration:0.55s;animation-delay:0.6s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:90.2%;height:27px;animation-duration:0.7s;animation-delay:0.7s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:91.3%;height:28px;animation-duration:0.85s;animation-delay:0.8s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:92.4%;height:29px;animation-duration:0.4s;animation-delay:0.9s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:93.5%;height:30px;animation-duration:0.55s;animation-delay:1.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:94.6%;height:31px;animation-duration:0.7s;animation-delay:1.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:95.7%;height:32px;animation-duration:0.85s;animation-delay:1.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:96.8%;height:33px;animation-duration:0.4s;animation-delay:1.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:97.9%;height:34px;animation-duration:0.55s;animation-delay:1.4s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:99.0%;height:35px;animation-duration:0.7s;animation-delay:1.5s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:0.1%;height:36px;animation-duration:0.85s;animation-delay:1.6s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:1.2%;height:37px;animation-duration:0.4s;animation-delay:1.7s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:2.3%;height:38px;animation-duration:0.55s;animation-delay:1.8s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:3.4%;height:39px;animation-duration:0.7s;animation-delay:1.9s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:4.5%;height:40px;animation-duration:0.85s;animation-delay:2.0s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:5.6%;height:41px;animation-duration:0.4s;animation-delay:2.1s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:6.7%;height:42px;animation-duration:0.55s;animation-delay:2.2s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:7.8%;height:43px;animation-duration:0.7s;animation-delay:2.3s;"></div>\n'
-            rain_drops += '            <div class="w-rain-drop" style="left:8.9%;height:44px;animation-duration:0.85s;animation-delay:2.4s;"></div>\n'
-            weather_bg_html = """
-            <style>
-            .weather-bg-full {
-                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                z-index: -1; pointer-events: none; overflow: hidden;
-                background: linear-gradient(180deg, #0d0d1a 0%, #1a0a2e 50%, #2d1b4e 100%);
-            }
-            @keyframes w-thunder-bolt {
-                0%,85%,100% { opacity: 0; }
-                86% { opacity: 1; }
-                87% { opacity: 0; }
-                88% { opacity: 0.8; }
-                89% { opacity: 0; }
-                90% { opacity: 0.5; }
-                91% { opacity: 0; }
-            }
-            @keyframes w-rain-fall {
-                from { transform: translateY(-30px); opacity: 0; }
-                10% { opacity: 0.8; }
-                90% { opacity: 0.8; }
-                to { transform: translateY(110vh); opacity: 0; }
-            }
-            @keyframes w-cloud-drift {
-                from { transform: translateX(-250px); }
-                to { transform: translateX(calc(100vw + 250px)); }
-            }
-            .w-thunder-bolt {
-                position: absolute; top: 0; left: 40%; width: 3px; height: 60vh;
-                background: linear-gradient(180deg, transparent, #fff, #ffeb3b, #fff, transparent);
-                filter: drop-shadow(0 0 10px #ffeb3b) drop-shadow(0 0 25px #ff9800);
-                animation: w-thunder-bolt 3s ease-in-out infinite;
-                transform: rotate(15deg);
-                opacity: 0;
-            }
-            .w-thunder-bolt-2 {
-                position: absolute; top: 0; left: 65%; width: 2px; height: 50vh;
-                background: linear-gradient(180deg, transparent, #fff, #90caf9, #fff, transparent);
-                filter: drop-shadow(0 0 8px #90caf9) drop-shadow(0 0 20px #42a5f5);
-                animation: w-thunder-bolt 4s ease-in-out infinite;
-                animation-delay: 1.5s;
-                transform: rotate(-10deg);
-                opacity: 0;
-            }
-            .w-storm-cloud {
-                position: absolute; background: linear-gradient(180deg, #37474f, #263238);
-                border-radius: 60px; opacity: 0.95;
-                animation: w-cloud-drift linear infinite;
-            }
-            .w-rain-drop {
-                position: absolute; width: 2px;
-                background: linear-gradient(180deg, transparent, #64b5f6, #bbdefb);
-                border-radius: 0 0 2px 2px; opacity: 0.7;
-                animation: w-rain-fall linear infinite;
-            }
-            .w-weather-info {
-                position: absolute; top: 50%; left: 50%;
-                transform: translate(-50%, -50%);
-                text-align: center; color: #000000;
-                font-family: 'Segoe UI', Arial, sans-serif;
-                text-shadow: 0 2px 8px rgba(255,255,255,0.9), 0 0 20px rgba(255,255,255,0.5);
-                pointer-events: none;
-            }
-            .w-weather-info .w-city { font-size: 3.5rem; font-weight: 800; letter-spacing: 2px; }
-            .w-weather-info .w-temp { font-size: 8rem; font-weight: 900; line-height: 1; margin: 10px 0; }
-            .w-weather-info .w-desc { font-size: 1.8rem; font-weight: 600; text-transform: capitalize; }
-            </style>
-            <div class="weather-bg-full">
-                <div class="w-thunder-bolt"></div>
-                <div class="w-thunder-bolt-2"></div>
-                <div class="w-storm-cloud" style="top:3%;width:350px;height:110px;animation-duration:40s;"></div>
-                <div class="w-storm-cloud" style="top:10%;width:280px;height:90px;animation-duration:50s;animation-delay:-20s;"></div>
-                <div class="w-storm-cloud" style="top:6%;width:400px;height:120px;animation-duration:35s;animation-delay:-10s;"></div>
-                <div class="w-storm-cloud" style="top:15%;width:220px;height:80px;animation-duration:45s;animation-delay:-30s;"></div>
-""" + rain_drops + """
-                <div class="w-weather-info">
-                    <div class="w-city">""" + city_name + """</div>
-                    <div class="w-temp">""" + str(temp) + """°</div>
-                    <div class="w-desc">⛈️ """ + desc + """</div>
-                </div>
-            </div>
-            """
+        # ---- WEATHER TYPE ----
+        if 'rain' in weather_cond or 'drizz' in weather_cond:
+            scene = 'rain'
+        elif 'thunder' in weather_cond or 'storm' in weather_cond:
+            scene = 'thunder'
+        elif 'snow' in weather_cond or 'frost' in weather_cond or 'freez' in weather_cond:
+            scene = 'snow'
+        elif 'mist' in weather_cond or 'fog' in weather_cond or 'haz' in weather_cond:
+            scene = 'fog'
+        elif 'cloud' in weather_cond:
+            scene = 'cloudy'
+        else:
+            scene = 'night' if time_of_day in ['night', 'dusk'] else 'sunny'
 
-        elif wtype == 'snow':
-            snow_flakes = ""
-            snow_flakes += '            <div class="w-snowflake" style="left:0.0%;font-size:12px;animation-duration:3.0s;animation-delay:0.0s;">❄</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:1.7%;font-size:13px;animation-duration:4.5s;animation-delay:0.2s;">❅</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:3.4%;font-size:14px;animation-duration:6.0s;animation-delay:0.4s;">❆</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:5.1%;font-size:15px;animation-duration:7.5s;animation-delay:0.6s;">✻</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:6.8%;font-size:16px;animation-duration:9.0s;animation-delay:0.8s;">✼</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:8.5%;font-size:17px;animation-duration:10.5s;animation-delay:1.0s;">❋</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:10.2%;font-size:18px;animation-duration:3.0s;animation-delay:1.2s;">❄</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:11.9%;font-size:19px;animation-duration:4.5s;animation-delay:1.4s;">❅</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:13.6%;font-size:20px;animation-duration:6.0s;animation-delay:1.6s;">❆</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:15.3%;font-size:21px;animation-duration:7.5s;animation-delay:1.8s;">✻</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:17.0%;font-size:22px;animation-duration:9.0s;animation-delay:2.0s;">✼</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:18.7%;font-size:23px;animation-duration:10.5s;animation-delay:2.2s;">❋</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:20.4%;font-size:24px;animation-duration:3.0s;animation-delay:2.4s;">❄</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:22.1%;font-size:25px;animation-duration:4.5s;animation-delay:2.6s;">❅</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:23.8%;font-size:26px;animation-duration:6.0s;animation-delay:2.8s;">❆</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:25.5%;font-size:27px;animation-duration:7.5s;animation-delay:3.0s;">✻</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:27.2%;font-size:12px;animation-duration:9.0s;animation-delay:3.2s;">✼</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:28.9%;font-size:13px;animation-duration:10.5s;animation-delay:3.4s;">❋</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:30.6%;font-size:14px;animation-duration:3.0s;animation-delay:3.6s;">❄</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:32.3%;font-size:15px;animation-duration:4.5s;animation-delay:3.8s;">❅</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:34.0%;font-size:16px;animation-duration:6.0s;animation-delay:4.0s;">❆</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:35.7%;font-size:17px;animation-duration:7.5s;animation-delay:4.2s;">✻</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:37.4%;font-size:18px;animation-duration:9.0s;animation-delay:4.4s;">✼</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:39.1%;font-size:19px;animation-duration:10.5s;animation-delay:4.6s;">❋</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:40.8%;font-size:20px;animation-duration:3.0s;animation-delay:4.8s;">❄</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:42.5%;font-size:21px;animation-duration:4.5s;animation-delay:0.0s;">❅</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:44.2%;font-size:22px;animation-duration:6.0s;animation-delay:0.2s;">❆</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:45.9%;font-size:23px;animation-duration:7.5s;animation-delay:0.4s;">✻</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:47.6%;font-size:24px;animation-duration:9.0s;animation-delay:0.6s;">✼</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:49.3%;font-size:25px;animation-duration:10.5s;animation-delay:0.8s;">❋</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:51.0%;font-size:26px;animation-duration:3.0s;animation-delay:1.0s;">❄</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:52.7%;font-size:27px;animation-duration:4.5s;animation-delay:1.2s;">❅</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:54.4%;font-size:12px;animation-duration:6.0s;animation-delay:1.4s;">❆</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:56.1%;font-size:13px;animation-duration:7.5s;animation-delay:1.6s;">✻</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:57.8%;font-size:14px;animation-duration:9.0s;animation-delay:1.8s;">✼</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:59.5%;font-size:15px;animation-duration:10.5s;animation-delay:2.0s;">❋</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:61.2%;font-size:16px;animation-duration:3.0s;animation-delay:2.2s;">❄</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:62.9%;font-size:17px;animation-duration:4.5s;animation-delay:2.4s;">❅</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:64.6%;font-size:18px;animation-duration:6.0s;animation-delay:2.6s;">❆</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:66.3%;font-size:19px;animation-duration:7.5s;animation-delay:2.8s;">✻</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:68.0%;font-size:20px;animation-duration:9.0s;animation-delay:3.0s;">✼</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:69.7%;font-size:21px;animation-duration:10.5s;animation-delay:3.2s;">❋</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:71.4%;font-size:22px;animation-duration:3.0s;animation-delay:3.4s;">❄</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:73.1%;font-size:23px;animation-duration:4.5s;animation-delay:3.6s;">❅</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:74.8%;font-size:24px;animation-duration:6.0s;animation-delay:3.8s;">❆</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:76.5%;font-size:25px;animation-duration:7.5s;animation-delay:4.0s;">✻</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:78.2%;font-size:26px;animation-duration:9.0s;animation-delay:4.2s;">✼</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:79.9%;font-size:27px;animation-duration:10.5s;animation-delay:4.4s;">❋</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:81.6%;font-size:12px;animation-duration:3.0s;animation-delay:4.6s;">❄</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:83.3%;font-size:13px;animation-duration:4.5s;animation-delay:4.8s;">❅</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:85.0%;font-size:14px;animation-duration:6.0s;animation-delay:0.0s;">❆</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:86.7%;font-size:15px;animation-duration:7.5s;animation-delay:0.2s;">✻</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:88.4%;font-size:16px;animation-duration:9.0s;animation-delay:0.4s;">✼</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:90.1%;font-size:17px;animation-duration:10.5s;animation-delay:0.6s;">❋</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:91.8%;font-size:18px;animation-duration:3.0s;animation-delay:0.8s;">❄</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:93.5%;font-size:19px;animation-duration:4.5s;animation-delay:1.0s;">❅</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:95.2%;font-size:20px;animation-duration:6.0s;animation-delay:1.2s;">❆</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:96.9%;font-size:21px;animation-duration:7.5s;animation-delay:1.4s;">✻</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:98.6%;font-size:22px;animation-duration:9.0s;animation-delay:1.6s;">✼</div>\n'
-            snow_flakes += '            <div class="w-snowflake" style="left:0.3%;font-size:23px;animation-duration:10.5s;animation-delay:1.8s;">❋</div>\n'
-            weather_bg_html = """
-            <style>
-            .weather-bg-full {
-                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                z-index: -1; pointer-events: none; overflow: hidden;
-                background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 40%, #90caf9 100%);
-            }
-            @keyframes w-snow-fall {
-                from { transform: translateY(-30px) rotate(0deg); opacity: 0; }
-                15% { opacity: 1; }
-                85% { opacity: 1; }
-                to { transform: translateY(110vh) rotate(360deg); opacity: 0; }
-            }
-            @keyframes w-snow-drift {
-                from { transform: translateX(-100px); }
-                to { transform: translateX(calc(100vw + 100px)); }
-            }
-            .w-snowflake {
-                position: absolute; color: #ffffff;
-                animation: w-snow-fall linear infinite;
-                text-shadow: 0 0 4px rgba(255,255,255,0.8);
-                pointer-events: none;
-            }
-            .w-snow-cloud {
-                position: absolute; background: rgba(255,255,255,0.5);
-                border-radius: 50px; opacity: 0.5;
-                animation: w-snow-drift linear infinite;
-            }
-            .w-snow-ground {
-                position: absolute; bottom: 0; left: 0; width: 100%; height: 80px;
-                background: linear-gradient(180deg, transparent, rgba(255,255,255,0.4));
-                border-radius: 50% 50% 0 0 / 20px 20px 0 0;
-            }
-            .w-weather-info {
-                position: absolute; top: 50%; left: 50%;
-                transform: translate(-50%, -50%);
-                text-align: center; color: #000000;
-                font-family: 'Segoe UI', Arial, sans-serif;
-                text-shadow: 0 2px 8px rgba(255,255,255,0.9), 0 0 20px rgba(255,255,255,0.5);
-                pointer-events: none;
-            }
-            .w-weather-info .w-city { font-size: 3.5rem; font-weight: 800; letter-spacing: 2px; }
-            .w-weather-info .w-temp { font-size: 8rem; font-weight: 900; line-height: 1; margin: 10px 0; }
-            .w-weather-info .w-desc { font-size: 1.8rem; font-weight: 600; text-transform: capitalize; }
-            </style>
-            <div class="weather-bg-full">
-                <div class="w-snow-cloud" style="top:5%;width:300px;height:100px;animation-duration:50s;"></div>
-                <div class="w-snow-cloud" style="top:12%;width:220px;height:80px;animation-duration:60s;animation-delay:-20s;"></div>
-                <div class="w-snow-cloud" style="top:8%;width:350px;height:110px;animation-duration:45s;animation-delay:-10s;"></div>
-""" + snow_flakes + """
-                <div class="w-snow-ground"></div>
-                <div class="w-weather-info">
-                    <div class="w-city">""" + city_name + """</div>
-                    <div class="w-temp">""" + str(temp) + """°</div>
-                    <div class="w-desc">❄️ """ + desc + """</div>
-                </div>
-            </div>
-            """
+        # ---- CSS & HTML ----
+        bg_style = ""
+        elements = ""
 
-        elif wtype == 'fog':
-            weather_bg_html = """
-            <style>
-            .weather-bg-full {
-                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                z-index: -1; pointer-events: none; overflow: hidden;
-                background: linear-gradient(180deg, #cfd8dc 0%, #b0bec5 50%, #90a4ae 100%);
-            }
-            @keyframes w-fog-drift {
-                from { transform: translateX(-50%); }
-                to { transform: translateX(0%); }
-            }
-            @keyframes w-fog-drift-rev {
-                from { transform: translateX(0%); }
-                to { transform: translateX(-50%); }
-            }
-            .w-fog-layer {
-                position: absolute; width: 200%; height: 150px;
-                background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent);
-                animation: w-fog-drift linear infinite;
-                filter: blur(4px);
-            }
-            .w-fog-layer-rev {
-                position: absolute; width: 200%; height: 120px;
-                background: linear-gradient(90deg, transparent, rgba(236,239,241,0.4), transparent);
-                animation: w-fog-drift-rev linear infinite;
-                filter: blur(4px);
-            }
-            .w-weather-info {
-                position: absolute; top: 50%; left: 50%;
-                transform: translate(-50%, -50%);
-                text-align: center; color: #000000;
-                font-family: 'Segoe UI', Arial, sans-serif;
-                text-shadow: 0 2px 8px rgba(255,255,255,0.9), 0 0 20px rgba(255,255,255,0.5);
-                pointer-events: none;
-            }
-            .w-weather-info .w-city { font-size: 3.5rem; font-weight: 800; letter-spacing: 2px; }
-            .w-weather-info .w-temp { font-size: 8rem; font-weight: 900; line-height: 1; margin: 10px 0; }
-            .w-weather-info .w-desc { font-size: 1.8rem; font-weight: 600; text-transform: capitalize; }
-            </style>
-            <div class="weather-bg-full">
-                <div class="w-fog-layer" style="top:10%;animation-duration:25s;"></div>
-                <div class="w-fog-layer-rev" style="top:25%;animation-duration:30s;animation-delay:-10s;"></div>
-                <div class="w-fog-layer" style="top:40%;animation-duration:35s;animation-delay:-5s;"></div>
-                <div class="w-fog-layer-rev" style="top:55%;animation-duration:28s;animation-delay:-15s;"></div>
-                <div class="w-fog-layer" style="top:70%;animation-duration:32s;animation-delay:-8s;"></div>
-                <div class="w-fog-layer-rev" style="top:82%;animation-duration:26s;animation-delay:-20s;"></div>
-                <div class="w-weather-info">
-                    <div class="w-city">""" + city_name + """</div>
-                    <div class="w-temp">""" + str(temp) + """°</div>
-                    <div class="w-desc">🌫️ """ + desc + """</div>
-                </div>
-            </div>
-            """
+        if scene == 'rain':
+            bg_style = "background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 35%, #2d3a4a 70%, #1a2332 100%);"
+            elements += '<div style="position:absolute;top:0;left:0;width:100%;height:90px;background:linear-gradient(180deg,#1a1a2e 0%,#2d3748 50%,transparent 100%);border-radius:0 0 50% 50% / 0 0 30px 30px;opacity:0.95;z-index:2;"></div>'
+            elements += '<div style="position:absolute;top:-10px;left:10%;width:200px;height:60px;background:#4a5568;border-radius:50px;opacity:0.9;z-index:3;box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>'
+            elements += '<div style="position:absolute;top:5px;left:25%;width:160px;height:50px;background:#4a5568;border-radius:50px;opacity:0.85;z-index:3;"></div>'
+            elements += '<div style="position:absolute;top:-5px;left:55%;width:220px;height:65px;background:#4a5568;border-radius:50px;opacity:0.9;z-index:3;"></div>'
+            elements += '<div style="position:absolute;top:8px;left:75%;width:180px;height:55px;background:#4a5568;border-radius:50px;opacity:0.85;z-index:3;"></div>'
+            for i in range(60):
+                left = (i * 1.7) % 100
+                delay = (i * 0.08) % 1.5
+                dur = 0.5 + (i % 4) * 0.15
+                height = 15 + (i % 5) * 8
+                elements += f'<div style="position:absolute;left:{left}%;top:60px;width:2px;height:{height}px;background:linear-gradient(180deg,transparent,#64b5f6,#90caf9);border-radius:0 0 2px 2px;opacity:0.7;animation:rainFall {dur}s linear {delay}s infinite;z-index:4;"></div>'
+            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:120px;background:linear-gradient(180deg,#1a3a4a 0%,#0d1b2a 100%);z-index:5;"></div>'
+            elements += '<div style="position:absolute;bottom:90px;left:0;width:100%;height:30px;background:linear-gradient(180deg,rgba(100,181,246,0.3) 0%,transparent 100%);z-index:6;"></div>'
+            for i in range(8):
+                left = 5 + (i * 12)
+                width = 40 + (i % 3) * 20
+                delay = (i * 0.3) % 2
+                elements += f'<div style="position:absolute;bottom:{15 + (i%2)*10}px;left:{left}%;width:{width}px;height:8px;background:rgba(100,181,246,0.4);border-radius:50%;animation:waterShimmer 2s ease-in-out {delay}s infinite;z-index:7;"></div>'
+            elements += '<div style="position:absolute;bottom:100px;left:5%;font-size:60px;z-index:8;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">🏠</div>'
+            elements += '<div style="position:absolute;bottom:100px;left:15%;font-size:55px;z-index:8;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">🏡</div>'
+            elements += '<div style="position:absolute;bottom:100px;left:70%;font-size:65px;z-index:8;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">🏠</div>'
+            elements += '<div style="position:absolute;bottom:100px;left:82%;font-size:50px;z-index:8;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">🏡</div>'
+            elements += '<div style="position:absolute;bottom:105px;left:25%;font-size:50px;z-index:9;animation:treeSway 3s ease-in-out infinite;">🌲</div>'
+            elements += '<div style="position:absolute;bottom:105px;left:35%;font-size:55px;z-index:9;animation:treeSway 3s ease-in-out 0.5s infinite;">🌳</div>'
+            elements += '<div style="position:absolute;bottom:105px;left:55%;font-size:48px;z-index:9;animation:treeSway 3s ease-in-out 1s infinite;">🌲</div>'
+            elements += '<div style="position:absolute;bottom:105px;left:90%;font-size:52px;z-index:9;animation:treeSway 3s ease-in-out 1.5s infinite;">🌳</div>'
+            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#2d3748;z-index:10;"></div>'
+            elements += '<div style="position:absolute;bottom:5px;left:0;width:100%;height:2px;background:rgba(100,181,246,0.3);z-index:11;"></div>'
 
-        elif wtype == 'cloudy':
-            weather_bg_html = """
-            <style>
-            .weather-bg-full {
-                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                z-index: -1; pointer-events: none; overflow: hidden;
-                background: linear-gradient(180deg, #546e7a 0%, #78909c 40%, #90a4ae 100%);
-            }
-            @keyframes w-cloud-drift {
-                from { transform: translateX(-300px); }
-                to { transform: translateX(calc(100vw + 300px)); }
-            }
-            @keyframes w-sun-glow-cloudy {
-                0%,100% { opacity: 0.3; transform: scale(1); }
-                50% { opacity: 0.5; transform: scale(1.1); }
-            }
-            .w-cloudy-cloud {
-                position: absolute; background: rgba(255,255,255,0.4);
-                border-radius: 60px; opacity: 0.6;
-                animation: w-cloud-drift linear infinite;
-            }
-            .w-cloudy-sun {
-                position: absolute; top: 8%; right: 15%;
-                width: 100px; height: 100px;
-                background: radial-gradient(circle, rgba(255,235,59,0.4) 0%, rgba(255,193,7,0.2) 50%, transparent 70%);
-                border-radius: 50%;
-                animation: w-sun-glow-cloudy 4s ease-in-out infinite;
-            }
-            .w-weather-info {
-                position: absolute; top: 50%; left: 50%;
-                transform: translate(-50%, -50%);
-                text-align: center; color: #000000;
-                font-family: 'Segoe UI', Arial, sans-serif;
-                text-shadow: 0 2px 8px rgba(255,255,255,0.9), 0 0 20px rgba(255,255,255,0.5);
-                pointer-events: none;
-            }
-            .w-weather-info .w-city { font-size: 3.5rem; font-weight: 800; letter-spacing: 2px; }
-            .w-weather-info .w-temp { font-size: 8rem; font-weight: 900; line-height: 1; margin: 10px 0; }
-            .w-weather-info .w-desc { font-size: 1.8rem; font-weight: 600; text-transform: capitalize; }
-            </style>
-            <div class="weather-bg-full">
-                <div class="w-cloudy-sun"></div>
-                <div class="w-cloudy-cloud" style="top:5%;width:400px;height:130px;animation-duration:50s;"></div>
-                <div class="w-cloudy-cloud" style="top:15%;width:320px;height:100px;animation-duration:60s;animation-delay:-20s;"></div>
-                <div class="w-cloudy-cloud" style="top:8%;width:450px;height:140px;animation-duration:45s;animation-delay:-10s;"></div>
-                <div class="w-cloudy-cloud" style="top:20%;width:280px;height:90px;animation-duration:55s;animation-delay:-30s;"></div>
-                <div class="w-cloudy-cloud" style="top:3%;width:350px;height:110px;animation-duration:40s;animation-delay:-15s;"></div>
-                <div class="w-weather-info">
-                    <div class="w-city">""" + city_name + """</div>
-                    <div class="w-temp">""" + str(temp) + """°</div>
-                    <div class="w-desc">☁️ """ + desc + """</div>
-                </div>
-            </div>
-            """
+        elif scene == 'thunder':
+            bg_style = "background: linear-gradient(180deg, #050510 0%, #0d0d1a 35%, #1a0a2e 70%, #0d0d1a 100%);"
+            elements += '<div style="position:absolute;top:0;left:0;width:100%;height:100px;background:linear-gradient(180deg,#1a1a2e 0%,#374151 50%,transparent 100%);border-radius:0 0 50% 50% / 0 0 40px 40px;opacity:0.95;z-index:2;"></div>'
+            elements += '<div style="position:absolute;top:-15px;left:5%;width:250px;height:70px;background:#1f2937;border-radius:50px;opacity:0.95;z-index:3;"></div>'
+            elements += '<div style="position:absolute;top:0;left:30%;width:200px;height:60px;background:#1f2937;border-radius:50px;opacity:0.9;z-index:3;"></div>'
+            elements += '<div style="position:absolute;top:-10px;left:60%;width:280px;height:75px;background:#1f2937;border-radius:50px;opacity:0.95;z-index:3;"></div>'
+            elements += '<div style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.08);animation:lightning 3s ease-in-out infinite;z-index:4;pointer-events:none;"></div>'
+            elements += '<div style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.05);animation:lightning 3s ease-in-out 1.5s infinite;z-index:4;pointer-events:none;"></div>'
+            for i in range(80):
+                left = (i * 1.3) % 100
+                delay = (i * 0.06) % 1.2
+                dur = 0.3 + (i % 3) * 0.1
+                height = 20 + (i % 6) * 10
+                elements += f'<div style="position:absolute;left:{left}%;top:70px;width:2px;height:{height}px;background:linear-gradient(180deg,transparent,#90caf9,#e3f2fd);border-radius:0 0 2px 2px;opacity:0.8;animation:rainFall {dur}s linear {delay}s infinite;z-index:5;"></div>'
+            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:120px;background:linear-gradient(180deg,#1a1a2e 0%,#0d0d1a 100%);z-index:6;"></div>'
+            elements += '<div style="position:absolute;bottom:90px;left:0;width:100%;height:30px;background:linear-gradient(180deg,rgba(144,202,249,0.2) 0%,transparent 100%);z-index:7;"></div>'
+            elements += '<div style="position:absolute;bottom:100px;left:8%;font-size:55px;z-index:8;">🏠</div>'
+            elements += '<div style="position:absolute;bottom:100px;left:72%;font-size:60px;z-index:8;">🏡</div>'
+            elements += '<div style="position:absolute;bottom:100px;left:85%;font-size:50px;z-index:8;">🏠</div>'
+            elements += '<div style="position:absolute;bottom:105px;left:22%;font-size:50px;z-index:9;animation:treeSway 2.5s ease-in-out infinite;">🌲</div>'
+            elements += '<div style="position:absolute;bottom:105px;left:38%;font-size:52px;z-index:9;animation:treeSway 2.5s ease-in-out 0.7s infinite;">🌳</div>'
+            elements += '<div style="position:absolute;bottom:105px;left:58%;font-size:48px;z-index:9;animation:treeSway 2.5s ease-in-out 1.4s infinite;">🌲</div>'
+            for i in range(6):
+                left = 8 + (i * 15)
+                delay = (i * 0.4) % 2
+                elements += f'<div style="position:absolute;bottom:{12 + (i%2)*8}px;left:{left}%;width:50px;height:6px;background:rgba(144,202,249,0.35);border-radius:50%;animation:waterShimmer 1.5s ease-in-out {delay}s infinite;z-index:10;"></div>'
 
-        else:  # sunny
-            sun_rays = ""
-            sun_rays += '            <div class="w-sunny-ray" style="transform: rotate(0deg);"></div>\n'
-            sun_rays += '            <div class="w-sunny-ray" style="transform: rotate(30deg);"></div>\n'
-            sun_rays += '            <div class="w-sunny-ray" style="transform: rotate(60deg);"></div>\n'
-            sun_rays += '            <div class="w-sunny-ray" style="transform: rotate(90deg);"></div>\n'
-            sun_rays += '            <div class="w-sunny-ray" style="transform: rotate(120deg);"></div>\n'
-            sun_rays += '            <div class="w-sunny-ray" style="transform: rotate(150deg);"></div>\n'
-            sun_rays += '            <div class="w-sunny-ray" style="transform: rotate(180deg);"></div>\n'
-            sun_rays += '            <div class="w-sunny-ray" style="transform: rotate(210deg);"></div>\n'
-            sun_rays += '            <div class="w-sunny-ray" style="transform: rotate(240deg);"></div>\n'
-            sun_rays += '            <div class="w-sunny-ray" style="transform: rotate(270deg);"></div>\n'
-            sun_rays += '            <div class="w-sunny-ray" style="transform: rotate(300deg);"></div>\n'
-            sun_rays += '            <div class="w-sunny-ray" style="transform: rotate(330deg);"></div>\n'
-            weather_bg_html = """
-            <style>
-            .weather-bg-full {
-                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                z-index: -1; pointer-events: none; overflow: hidden;
-                background: linear-gradient(180deg, #42a5f5 0%, #64b5f6 30%, #90caf9 60%, #bbdefb 100%);
-            }
-            @keyframes w-sun-pulse {
-                0%,100% { transform: scale(1); opacity: 0.9; }
-                50% { transform: scale(1.15); opacity: 1; }
-            }
-            @keyframes w-sun-ray-spin {
-                from { transform: translate(-50%,-50%) rotate(0deg); }
-                to { transform: translate(-50%,-50%) rotate(360deg); }
-            }
-            @keyframes w-cloud-drift {
-                from { transform: translateX(-200px); }
-                to { transform: translateX(calc(100vw + 200px)); }
-            }
-            .w-sunny-sun {
-                position: absolute; top: 8%; right: 12%;
-                width: 140px; height: 140px;
-                background: radial-gradient(circle, #fff9c4 0%, #ffeb3b 30%, #ffc107 60%, transparent 70%);
-                border-radius: 50%;
-                animation: w-sun-pulse 3s ease-in-out infinite;
-                box-shadow: 0 0 80px 30px rgba(255,235,59,0.4), 0 0 120px 50px rgba(255,193,7,0.2);
-            }
-            .w-sunny-ray {
-                position: absolute; top: 8%; right: 12%;
-                width: 300px; height: 3px;
-                background: linear-gradient(90deg, transparent, rgba(255,235,59,0.7), rgba(255,235,59,0.3), transparent);
-                transform-origin: center;
-                animation: w-sun-ray-spin 20s linear infinite;
-                margin-top: 68px; margin-right: -150px;
-            }
-            .w-sunny-cloud {
-                position: absolute; background: rgba(255,255,255,0.5);
-                border-radius: 50px; opacity: 0.7;
-                animation: w-cloud-drift linear infinite;
-            }
-            .w-bird {
-                position: absolute; font-size: 18px; opacity: 0.6;
-                animation: w-cloud-drift linear infinite;
-            }
-            .w-weather-info {
-                position: absolute; top: 50%; left: 50%;
-                transform: translate(-50%, -50%);
-                text-align: center; color: #000000;
-                font-family: 'Segoe UI', Arial, sans-serif;
-                text-shadow: 0 2px 8px rgba(255,255,255,0.9), 0 0 20px rgba(255,255,255,0.5);
-                pointer-events: none;
-            }
-            .w-weather-info .w-city { font-size: 3.5rem; font-weight: 800; letter-spacing: 2px; }
-            .w-weather-info .w-temp { font-size: 8rem; font-weight: 900; line-height: 1; margin: 10px 0; }
-            .w-weather-info .w-desc { font-size: 1.8rem; font-weight: 600; text-transform: capitalize; }
-            </style>
-            <div class="weather-bg-full">
-                <div class="w-sunny-sun"></div>
-""" + sun_rays + """
-                <div class="w-sunny-cloud" style="top:12%;width:180px;height:60px;animation-duration:40s;"><div style="position:absolute;top:-20px;left:25px;width:50px;height:50px;"></div></div>
-                <div class="w-sunny-cloud" style="top:18%;width:140px;height:50px;animation-duration:50s;animation-delay:-15s;"><div style="position:absolute;top:-15px;left:20px;width:40px;height:40px;"></div></div>
-                <div class="w-sunny-cloud" style="top:8%;width:220px;height:70px;animation-duration:35s;animation-delay:-25s;"><div style="position:absolute;top:-22px;left:30px;width:55px;height:55px;"></div></div>
-                <div class="w-bird" style="top:25%;animation-duration:25s;">🕊️</div>
-                <div class="w-bird" style="top:30%;animation-duration:30s;animation-delay:-10s;">🐦</div>
-                <div class="w-weather-info">
-                    <div class="w-city">""" + city_name + """</div>
-                    <div class="w-temp">""" + str(temp) + """°</div>
-                    <div class="w-desc">☀️ """ + desc + """</div>
-                </div>
-            </div>
-            """
+        elif scene == 'sunny':
+            bg_style = "background: linear-gradient(180deg, #0288d1 0%, #29b6f6 20%, #4fc3f7 40%, #81d4fa 60%, #b3e5fc 80%, #e1f5fe 100%);"
+            elements += '<div style="position:absolute;top:30px;right:80px;width:120px;height:120px;background:radial-gradient(circle,#fff9c4 0%,#ffeb3b 30%,#ffc107 60%,transparent 70%);border-radius:50%;animation:sunPulse 3s ease-in-out infinite;z-index:2;box-shadow:0 0 80px 30px rgba(255,235,59,0.5),0 0 120px 50px rgba(255,193,7,0.3);"></div>'
+            for angle in range(0, 360, 30):
+                elements += f'<div style="position:absolute;top:90px;right:20px;width:180px;height:3px;background:linear-gradient(90deg,transparent,rgba(255,235,59,0.6),transparent);transform-origin:center;transform:translate(-50%,-50%) rotate({angle}deg);animation:raySpin 20s linear infinite;z-index:1;"></div>'
+            elements += '<div style="position:absolute;top:40px;left:10%;width:180px;height:55px;background:rgba(255,255,255,0.85);border-radius:50px;animation:cloudDrift 35s linear infinite;z-index:3;"></div>'
+            elements += '<div style="position:absolute;top:50px;left:40%;width:140px;height:45px;background:rgba(255,255,255,0.75);border-radius:50px;animation:cloudDrift 40s linear infinite;animation-delay:-15s;z-index:3;"></div>'
+            elements += '<div style="position:absolute;top:35px;left:65%;width:200px;height:60px;background:rgba(255,255,255,0.8);border-radius:50px;animation:cloudDrift 30s linear infinite;animation-delay:-8s;z-index:3;"></div>'
+            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:130px;background:linear-gradient(180deg,#43a047 0%,#2e7d32 40%,#1b5e20 100%);z-index:4;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
+            elements += '<div style="position:absolute;bottom:110px;left:0;width:100%;height:25px;background:linear-gradient(180deg,rgba(129,199,132,0.5) 0%,transparent 100%);z-index:5;"></div>'
+            elements += '<div style="position:absolute;bottom:110px;left:6%;font-size:60px;z-index:6;">🏠</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:18%;font-size:55px;z-index:6;">🏡</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:68%;font-size:65px;z-index:6;">🏠</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:82%;font-size:50px;z-index:6;">🏡</div>'
+            elements += '<div style="position:absolute;bottom:115px;left:30%;font-size:55px;z-index:7;animation:treeSway 4s ease-in-out infinite;">🌲</div>'
+            elements += '<div style="position:absolute;bottom:115px;left:42%;font-size:60px;z-index:7;animation:treeSway 4s ease-in-out 0.8s infinite;">🌳</div>'
+            elements += '<div style="position:absolute;bottom:115px;left:55%;font-size:52px;z-index:7;animation:treeSway 4s ease-in-out 1.6s infinite;">🌲</div>'
+            elements += '<div style="position:absolute;bottom:115px;left:92%;font-size:58px;z-index:7;animation:treeSway 4s ease-in-out 2.4s infinite;">🌳</div>'
+            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:18px;background:#795548;z-index:8;"></div>'
+            elements += '<div style="position:absolute;bottom:8px;left:0;width:100%;height:3px;background:rgba(255,255,255,0.2);z-index:9;"></div>'
+            elements += '<div style="position:absolute;top:25%;left:20%;font-size:20px;animation:birdFly 15s linear infinite;z-index:10;">🕊️</div>'
+            elements += '<div style="position:absolute;top:20%;left:50%;font-size:18px;animation:birdFly 18s linear infinite;animation-delay:-5s;z-index:10;">🐦</div>'
+
+        elif scene == 'night':
+            bg_style = "background: linear-gradient(180deg, #000000 0%, #0a0a1a 20%, #1a1a3e 50%, #2d1b4e 80%, #1a1a2e 100%);"
+            for i in range(80):
+                left = (i * 3.7) % 100
+                top = (i * 2.3) % 50
+                delay = (i * 0.2) % 3
+                size = 1 + (i % 3)
+                opacity = 0.3 + (i % 5) * 0.15
+                elements += f'<div style="position:absolute;left:{left}%;top:{top}%;width:{size}px;height:{size}px;background:#fff;border-radius:50%;opacity:{opacity};animation:twinkle 2s ease-in-out {delay}s infinite;z-index:1;"></div>'
+            elements += '<div style="position:absolute;top:40px;right:100px;width:100px;height:100px;background:radial-gradient(circle at 35% 35%,#fff9c4,#f5f5dc,#e0e0e0);border-radius:50%;animation:moonGlow 4s ease-in-out infinite;z-index:2;box-shadow:0 0 60px 20px rgba(245,245,220,0.3),0 0 100px 40px rgba(245,245,220,0.15);"></div>'
+            elements += '<div style="position:absolute;top:55px;right:155px;width:15px;height:15px;background:rgba(200,200,200,0.4);border-radius:50%;z-index:3;"></div>'
+            elements += '<div style="position:absolute;top:80px;right:130px;width:10px;height:10px;background:rgba(200,200,200,0.35);border-radius:50%;z-index:3;"></div>'
+            elements += '<div style="position:absolute;top:65px;right:115px;width:12px;height:12px;background:rgba(200,200,200,0.3);border-radius:50%;z-index:3;"></div>'
+            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:130px;background:linear-gradient(180deg,#1a1a2e 0%,#0d0d1a 50%,#000000 100%);z-index:4;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
+            elements += '<div style="position:absolute;bottom:110px;left:8%;font-size:55px;z-index:5;filter:drop-shadow(0 0 10px rgba(255,235,59,0.3));">🏠</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:20%;font-size:50px;z-index:5;filter:drop-shadow(0 0 8px rgba(255,235,59,0.2));">🏡</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:70%;font-size:60px;z-index:5;filter:drop-shadow(0 0 12px rgba(255,235,59,0.3));">🏠</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:85%;font-size:48px;z-index:5;filter:drop-shadow(0 0 8px rgba(255,235,59,0.2));">🏡</div>'
+            elements += '<div style="position:absolute;bottom:140px;left:10%;width:6px;height:6px;background:#ffeb3b;border-radius:1px;animation:windowLight 3s ease-in-out infinite;z-index:6;"></div>'
+            elements += '<div style="position:absolute;bottom:140px;left:13%;width:6px;height:6px;background:#ffeb3b;border-radius:1px;animation:windowLight 3s ease-in-out 1s infinite;z-index:6;"></div>'
+            elements += '<div style="position:absolute;bottom:145px;left:73%;width:6px;height:6px;background:#ffeb3b;border-radius:1px;animation:windowLight 3s ease-in-out 0.5s infinite;z-index:6;"></div>'
+            elements += '<div style="position:absolute;bottom:115px;left:32%;font-size:50px;z-index:7;animation:treeSway 5s ease-in-out infinite;">🌲</div>'
+            elements += '<div style="position:absolute;bottom:115px;left:45%;font-size:55px;z-index:7;animation:treeSway 5s ease-in-out 1s infinite;">🌳</div>'
+            elements += '<div style="position:absolute;bottom:115px;left:58%;font-size:48px;z-index:7;animation:treeSway 5s ease-in-out 2s infinite;">🌲</div>'
+            elements += '<div style="position:absolute;bottom:115px;left:92%;font-size:52px;z-index:7;animation:treeSway 5s ease-in-out 3s infinite;">🌳</div>'
+            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#1a1a1a;z-index:8;"></div>'
+
+        elif scene == 'cloudy':
+            bg_style = "background: linear-gradient(180deg, #546e7a 0%, #78909c 30%, #90a4ae 60%, #b0bec5 100%);"
+            elements += '<div style="position:absolute;top:20px;left:5%;width:220px;height:70px;background:rgba(255,255,255,0.6);border-radius:50px;animation:cloudDrift 40s linear infinite;z-index:2;"></div>'
+            elements += '<div style="position:absolute;top:40px;left:35%;width:180px;height:60px;background:rgba(255,255,255,0.5);border-radius:50px;animation:cloudDrift 45s linear infinite;animation-delay:-10s;z-index:2;"></div>'
+            elements += '<div style="position:absolute;top:15px;left:65%;width:250px;height:75px;background:rgba(255,255,255,0.55);border-radius:50px;animation:cloudDrift 35s linear infinite;animation-delay:-20s;z-index:2;"></div>'
+            elements += '<div style="position:absolute;top:50px;left:85%;width:160px;height:55px;background:rgba(255,255,255,0.45);border-radius:50px;animation:cloudDrift 50s linear infinite;animation-delay:-5s;z-index:2;"></div>'
+            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:120px;background:linear-gradient(180deg,#558b2f 0%,#33691e 50%,#1b5e20 100%);z-index:3;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
+            elements += '<div style="position:absolute;bottom:105px;left:7%;font-size:55px;z-index:4;">🏠</div>'
+            elements += '<div style="position:absolute;bottom:105px;left:72%;font-size:60px;z-index:4;">🏡</div>'
+            elements += '<div style="position:absolute;bottom:105px;left:85%;font-size:50px;z-index:4;">🏠</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:22%;font-size:52px;z-index:5;animation:treeSway 4s ease-in-out infinite;">🌲</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:38%;font-size:58px;z-index:5;animation:treeSway 4s ease-in-out 0.8s infinite;">🌳</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:55%;font-size:50px;z-index:5;animation:treeSway 4s ease-in-out 1.6s infinite;">🌲</div>'
+            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#5d4037;z-index:6;"></div>'
+
+        elif scene == 'snow':
+            bg_style = "background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 40%, #90caf9 70%, #e1f5fe 100%);"
+            elements += '<div style="position:absolute;top:10px;left:0;width:100%;height:80px;background:linear-gradient(180deg,rgba(255,255,255,0.9) 0%,rgba(255,255,255,0.6) 50%,transparent 100%);border-radius:0 0 50% 50% / 0 0 30px 30px;z-index:2;"></div>'
+            elements += '<div style="position:absolute;top:0;left:15%;width:200px;height:65px;background:rgba(255,255,255,0.85);border-radius:50px;z-index:3;"></div>'
+            elements += '<div style="position:absolute;top:5px;left:50%;width:250px;height:70px;background:rgba(255,255,255,0.8);border-radius:50px;z-index:3;"></div>'
+            elements += '<div style="position:absolute;top:0;left:75%;width:180px;height:60px;background:rgba(255,255,255,0.85);border-radius:50px;z-index:3;"></div>'
+            snow_chars = ['❄', '❅', '❆', '✻', '✼']
+            for i in range(50):
+                left = (i * 2.1) % 100
+                delay = (i * 0.12) % 3
+                dur = 2 + (i % 4) * 1.5
+                size = 12 + (i % 4) * 4
+                char = snow_chars[i % 5]
+                elements += f'<div style="position:absolute;left:{left}%;top:-20px;font-size:{size}px;color:#fff;opacity:0.8;text-shadow:0 0 4px rgba(255,255,255,0.8);animation:snowFall {dur}s linear {delay}s infinite;z-index:4;">{char}</div>'
+            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:130px;background:linear-gradient(180deg,#fff 0%,#e3f2fd 40%,#bbdefb 100%);z-index:5;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
+            elements += '<div style="position:absolute;bottom:110px;left:6%;font-size:55px;z-index:6;">🏠</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:18%;font-size:50px;z-index:6;">🏡</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:70%;font-size:60px;z-index:6;">🏠</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:84%;font-size:48px;z-index:6;">🏡</div>'
+            elements += '<div style="position:absolute;bottom:115px;left:30%;font-size:55px;z-index:7;animation:treeSway 5s ease-in-out infinite;">🌲</div>'
+            elements += '<div style="position:absolute;bottom:115px;left:42%;font-size:60px;z-index:7;animation:treeSway 5s ease-in-out 1s infinite;">🌳</div>'
+            elements += '<div style="position:absolute;bottom:115px;left:56%;font-size:52px;z-index:7;animation:treeSway 5s ease-in-out 2s infinite;">🌲</div>'
+            elements += '<div style="position:absolute;bottom:115px;left:92%;font-size:58px;z-index:7;animation:treeSway 5s ease-in-out 3s infinite;">🌳</div>'
+            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#e0e0e0;z-index:8;"></div>'
+
+        else:  # fog
+            bg_style = "background: linear-gradient(180deg, #cfd8dc 0%, #b0bec5 50%, #90a4ae 100%);"
+            for i in range(6):
+                top = 10 + i * 14
+                delay = (i * 0.5) % 3
+                dur = 20 + i * 5
+                opacity = 0.15 + (i % 3) * 0.1
+                elements += f'<div style="position:absolute;top:{top}%;left:-50%;width:200%;height:60px;background:linear-gradient(90deg,transparent,rgba(255,255,255,{opacity}),transparent);animation:fogDrift {dur}s linear {delay}s infinite;z-index:2;filter:blur(3px);"></div>'
+            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:120px;background:linear-gradient(180deg,#78909c 0%,#546e7a 50%,#37474f 100%);z-index:3;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
+            elements += '<div style="position:absolute;bottom:105px;left:10%;font-size:50px;z-index:4;opacity:0.7;">🏠</div>'
+            elements += '<div style="position:absolute;bottom:105px;left:75%;font-size:55px;z-index:4;opacity:0.7;">🏡</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:28%;font-size:48px;z-index:5;opacity:0.6;animation:treeSway 6s ease-in-out infinite;">🌲</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:45%;font-size:52px;z-index:5;opacity:0.6;animation:treeSway 6s ease-in-out 1.5s infinite;">🌳</div>'
+            elements += '<div style="position:absolute;bottom:110px;left:60%;font-size:45px;z-index:5;opacity:0.6;animation:treeSway 6s ease-in-out 3s infinite;">🌲</div>'
+            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#455a64;z-index:6;"></div>'
+
+        info_html = f"""<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:100;pointer-events:none;"><div style="font-size:3.5rem;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);letter-spacing:2px;">{city_name}</div><div style="font-size:7rem;font-weight:900;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);line-height:1;margin:10px 0;">{temp}°</div><div style="font-size:1.6rem;font-weight:600;color:#ffffff;text-shadow:0 2px 8px rgba(0,0,0,0.9),0 0 20px rgba(0,0,0,0.5);text-transform:capitalize;">{desc}</div></div>"""
+
+        weather_bg_html = f"""<style>@keyframes rainFall{{from{{transform:translateY(-20px);opacity:0;}}10%{{opacity:0.8;}}90%{{opacity:0.8;}}to{{transform:translateY(110vh);opacity:0;}}}}@keyframes snowFall{{from{{transform:translateY(-20px) rotate(0deg);opacity:0;}}10%{{opacity:1;}}90%{{opacity:1;}}to{{transform:translateY(110vh) rotate(360deg);opacity:0;}}}}@keyframes cloudDrift{{from{{transform:translateX(-300px);}}to{{transform:translateX(calc(100vw + 300px));}}}}@keyframes sunPulse{{0%,100%{{transform:scale(1);opacity:0.9;}}50%{{transform:scale(1.15);opacity:1;}}}}@keyframes raySpin{{from{{transform:translate(-50%,-50%) rotate(0deg);}}to{{transform:translate(-50%,-50%) rotate(360deg);}}}}@keyframes moonGlow{{0%,100%{{box-shadow:0 0 60px 20px rgba(245,245,220,0.3);}}50%{{box-shadow:0 0 80px 30px rgba(245,245,220,0.5);}}}}@keyframes twinkle{{0%,100%{{opacity:0.3;}}50%{{opacity:1;}}}}@keyframes treeSway{{0%,100%{{transform:rotate(-3deg);}}50%{{transform:rotate(3deg);}}}}@keyframes waterShimmer{{0%,100%{{opacity:0.3;transform:scaleX(1);}}50%{{opacity:0.7;transform:scaleX(1.2);}}}}@keyframes lightning{{0%,90%,100%{{opacity:0;}}91%{{opacity:0.3;}}92%{{opacity:0;}}93%{{opacity:0.6;}}94%{{opacity:0;}}}}@keyframes windowLight{{0%,100%{{opacity:0.6;}}50%{{opacity:1;}}}}@keyframes birdFly{{from{{transform:translateX(-50px);}}to{{transform:translateX(calc(100vw + 50px));}}}}@keyframes fogDrift{{from{{transform:translateX(-50%);}}to{{transform:translateX(0%);}}}}</style><div style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;overflow:hidden;{bg_style}">{elements}{info_html}</div>"""
 
     if weather_bg_html:
         st.markdown(weather_bg_html, unsafe_allow_html=True)
+
 
 
     # Sidebar Toggle + Back-to-Top Button
