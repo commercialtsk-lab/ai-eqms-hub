@@ -4998,10 +4998,10 @@ def main():
                 forecast = st.session_state.weather_forecast
                 st.markdown("---")
                 loc_name = forecast.get('city', city)
-loc_state = st.session_state.weather_data.get('state', '') if st.session_state.weather_data else ''
-loc_country = st.session_state.weather_data.get('country', '') if st.session_state.weather_data else ''
-full_loc = loc_name + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
-st.subheader(f"📅 5-Day Forecast for {full_loc}")
+                loc_state = st.session_state.weather_data.get('state', '') if st.session_state.weather_data else ''
+                loc_country = st.session_state.weather_data.get('country', '') if st.session_state.weather_data else ''
+                full_loc = loc_name + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
+                st.subheader(f"📅 5-Day Forecast for {full_loc}")
 
                 forecast_data = forecast.get('forecast', [])
                 if forecast_data:
