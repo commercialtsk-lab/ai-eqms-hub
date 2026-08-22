@@ -1337,19 +1337,19 @@ def process_passport_image(data):
 # =====================================================================
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
-        bg = "transparent"; card_bg = "rgba(248, 250, 252, 0.82)"; text_color = "#1e293b"; text_secondary = "#475569"
-        border = "rgba(148, 163, 184, 0.4)"; input_bg = "rgba(255, 255, 255, 0.9)"; accent = "#2563eb"; accent_hover = "#1d4ed8"
-        success = "#16a34a"; danger = "#dc2626"; button_bg = "rgba(241, 245, 249, 0.85)"; button_text = "#1e293b"
-        button_border = "rgba(203, 213, 225, 0.6)"; button_hover_bg = accent; button_hover_text = "white"; button_hover_border = accent
-        number_color = "#2563eb"; table_header_bg = "#1e293b"; table_header_text = "#ffffff"
-        table_alt_row = "rgba(248, 250, 252, 0.6)"; chart_bg = "rgba(0,0,0,0)"
+        bg = "transparent"; card_bg = "rgba(248, 250, 252, 0.15)"; text_color = "#1e293b"; text_secondary = "#475569"
+        border = "rgba(148, 163, 184, 0.25)"; input_bg = "rgba(255, 255, 255, 0.12)"; accent = "#2563eb"; accent_hover = "#1d4ed8"
+        success = "#16a34a"; danger = "#dc2626"; button_bg = "rgba(241, 245, 249, 0.15)"; button_text = "#1e293b"
+        button_border = "rgba(203, 213, 225, 0.3)"; button_hover_bg = accent; button_hover_text = "white"; button_hover_border = accent
+        number_color = "#2563eb"; table_header_bg = "rgba(30, 41, 59, 0.7)"; table_header_text = "#ffffff"
+        table_alt_row = "rgba(248, 250, 252, 0.08)"; chart_bg = "rgba(0,0,0,0)"
     elif theme == 'Dark':
-        bg = "transparent"; card_bg = "rgba(30, 41, 59, 0.78)"; text_color = "#f1f5f9"; text_secondary = "#94a3b8"
-        border = "rgba(148, 163, 184, 0.25)"; input_bg = "rgba(15, 23, 42, 0.85)"; accent = "#60a5fa"; accent_hover = "#93c5fd"
-        success = "#4ade80"; danger = "#f87171"; button_bg = "rgba(51, 65, 85, 0.75)"; button_text = "#f1f5f9"
-        button_border = "rgba(148, 163, 184, 0.35)"; button_hover_bg = accent; button_hover_text = "white"; button_hover_border = accent
-        number_color = "#60a5fa"; table_header_bg = "#2563eb"; table_header_text = "#ffffff"
-        table_alt_row = "rgba(30, 41, 59, 0.55)"; chart_bg = "rgba(0,0,0,0)"
+        bg = "transparent"; card_bg = "rgba(30, 41, 59, 0.15)"; text_color = "#f1f5f9"; text_secondary = "#94a3b8"
+        border = "rgba(148, 163, 184, 0.2)"; input_bg = "rgba(15, 23, 42, 0.12)"; accent = "#60a5fa"; accent_hover = "#93c5fd"
+        success = "#4ade80"; danger = "#f87171"; button_bg = "rgba(51, 65, 85, 0.15)"; button_text = "#f1f5f9"
+        button_border = "rgba(148, 163, 184, 0.25)"; button_hover_bg = accent; button_hover_text = "white"; button_hover_border = accent
+        number_color = "#60a5fa"; table_header_bg = "rgba(37, 99, 235, 0.6)"; table_header_text = "#ffffff"
+        table_alt_row = "rgba(30, 41, 59, 0.08)"; chart_bg = "rgba(0,0,0,0)"
     else:
         bg = "transparent"
         def is_dark_color(hex_color):
@@ -1360,17 +1360,17 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
                 return brightness < 128
             except: return False
         is_dark = is_dark_color(custom_bg) if custom_bg else False
-        card_bg = custom_bg if custom_bg else ("rgba(30, 41, 59, 0.78)" if is_dark else "rgba(248, 250, 252, 0.82)")
+        card_bg = custom_bg if custom_bg else ("rgba(30, 41, 59, 0.15)" if is_dark else "rgba(248, 250, 252, 0.15)")
         text_color = custom_text if custom_text else ("#f1f5f9" if is_dark else "#1e293b")
-        text_secondary = text_color; border = "rgba(148, 163, 184, 0.35)" if is_dark else "rgba(148, 163, 184, 0.4)"
-        input_bg = "rgba(15, 23, 42, 0.85)" if is_dark else "rgba(255, 255, 255, 0.9)"
+        text_secondary = text_color; border = "rgba(148, 163, 184, 0.2)" if is_dark else "rgba(148, 163, 184, 0.25)"
+        input_bg = "rgba(15, 23, 42, 0.12)" if is_dark else "rgba(255, 255, 255, 0.12)"
         accent = "#60a5fa" if is_dark else "#2563eb"; accent_hover = "#93c5fd" if is_dark else "#1d4ed8"
         success = "#4ade80" if is_dark else "#16a34a"; danger = "#f87171" if is_dark else "#dc2626"
-        button_bg = "rgba(51, 65, 85, 0.75)" if is_dark else "rgba(241, 245, 249, 0.85)"
+        button_bg = "rgba(51, 65, 85, 0.15)" if is_dark else "rgba(241, 245, 249, 0.15)"
         button_text = text_color; button_border = border; button_hover_bg = accent
         button_hover_text = "white"; button_hover_border = accent; number_color = accent
-        table_header_bg = "#2563eb" if is_dark else "#1e293b"; table_header_text = "#ffffff"
-        table_alt_row = "rgba(30, 41, 59, 0.55)" if is_dark else "rgba(248, 250, 252, 0.6)"; chart_bg = "rgba(0,0,0,0)"
+        table_header_bg = "rgba(37, 99, 235, 0.6)" if is_dark else "rgba(30, 41, 59, 0.6)"; table_header_text = "#ffffff"
+        table_alt_row = "rgba(30, 41, 59, 0.08)" if is_dark else "rgba(248, 250, 252, 0.08)"; chart_bg = "rgba(0,0,0,0)"
 
     css = f"""
     <style>
@@ -1953,27 +1953,60 @@ def main():
         position: absolute; top: 0; left: 0; width: 2px; height: 2px;
         background: transparent;
         box-shadow:
-            80px 50px #fff, 150px 80px #fff, 220px 30px #fff, 300px 120px #fff,
-            400px 60px #fff, 500px 150px #fff, 600px 40px #fff, 700px 100px #fff,
-            800px 50px #fff, 850px 120px #fff, 900px 80px #fff, 950px 30px #fff,
-            80px 150px #fff, 180px 200px #fff, 280px 180px #fff, 380px 220px #fff,
-            480px 160px #fff, 580px 240px #fff, 680px 190px #fff, 750px 280px #fff,
-            820px 180px #fff, 880px 250px #fff, 920px 150px #fff, 980px 220px #fff,
-            50px 280px #fff, 120px 320px #fff, 200px 300px #fff, 320px 350px #fff,
-            420px 310px #fff, 520px 360px #fff, 620px 330px #fff, 720px 370px #fff,
-            780px 320px #fff, 840px 380px #fff, 900px 340px #fff, 960px 390px #fff,
-            90px 400px #fff, 170px 450px #fff, 250px 420px #fff, 350px 480px #fff,
-            450px 440px #fff, 550px 490px #fff, 650px 460px #fff, 730px 500px #fff,
-            790px 450px #fff, 860px 490px #fff, 910px 430px #fff, 970px 470px #fff,
-            30px 520px #fff, 110px 560px #fff, 190px 540px #fff, 290px 580px #fff,
-            390px 550px #fff, 490px 590px #fff, 590px 570px #fff, 690px 600px #fff,
-            760px 550px #fff, 830px 590px #fff, 890px 530px #fff, 950px 580px #fff,
-            70px 650px #fff, 160px 680px #fff, 260px 660px #fff, 360px 700px #fff,
-            460px 670px #fff, 560px 710px #fff, 660px 690px #fff, 740px 720px #fff,
-            800px 660px #fff, 870px 700px #fff, 930px 650px #fff, 990px 690px #fff,
-            100px 750px #fff, 200px 780px #fff, 300px 760px #fff, 400px 790px #fff,
-            500px 770px #fff, 600px 800px #fff, 700px 740px #fff, 770px 790px #fff,
-            810px 750px #fff, 880px 780px #fff, 940px 760px #fff, 980px 800px #fff;
+            /* Row 1 - evenly spread */
+            3vw 5vh #fff, 8vw 8vh #fff, 13vw 3vh #fff, 18vw 12vh #fff,
+            23vw 6vh #fff, 28vw 15vh #fff, 33vw 4vh #fff, 38vw 10vh #fff,
+            43vw 7vh #fff, 48vw 14vh #fff, 53vw 5vh #fff, 58vw 9vh #fff,
+            63vw 11vh #fff, 68vw 6vh #fff, 73vw 13vh #fff, 78vw 4vh #fff,
+            83vw 8vh #fff, 88vw 15vh #fff, 93vw 7vh #fff, 97vw 11vh #fff,
+            /* Row 2 */
+            5vw 18vh #fff, 10vw 22vh #fff, 15vw 16vh #fff, 20vw 25vh #fff,
+            25vw 19vh #fff, 30vw 24vh #fff, 35vw 17vh #fff, 40vw 21vh #fff,
+            45vw 26vh #fff, 50vw 18vh #fff, 55vw 23vh #fff, 60vw 16vh #fff,
+            65vw 20vh #fff, 70vw 25vh #fff, 75vw 17vh #fff, 80vw 22vh #fff,
+            85vw 19vh #fff, 90vw 24vh #fff, 95vw 16vh #fff, 98vw 21vh #fff,
+            /* Row 3 */
+            2vw 30vh #fff, 7vw 35vh #fff, 12vw 28vh #fff, 17vw 33vh #fff,
+            22vw 29vh #fff, 27vw 34vh #fff, 32vw 31vh #fff, 37vw 36vh #fff,
+            42vw 28vh #fff, 47vw 32vh #fff, 52vw 35vh #fff, 57vw 30vh #fff,
+            62vw 34vh #fff, 67vw 29vh #fff, 72vw 33vh #fff, 77vw 31vh #fff,
+            82vw 35vh #fff, 87vw 28vh #fff, 92vw 32vh #fff, 96vw 30vh #fff,
+            /* Row 4 */
+            4vw 40vh #fff, 9vw 45vh #fff, 14vw 38vh #fff, 19vw 42vh #fff,
+            24vw 46vh #fff, 29vw 39vh #fff, 34vw 44vh #fff, 39vw 37vh #fff,
+            44vw 41vh #fff, 49vw 45vh #fff, 54vw 38vh #fff, 59vw 43vh #fff,
+            64vw 40vh #fff, 69vw 44vh #fff, 74vw 39vh #fff, 79vw 42vh #fff,
+            84vw 46vh #fff, 89vw 38vh #fff, 94vw 41vh #fff, 99vw 45vh #fff,
+            /* Row 5 */
+            6vw 50vh #fff, 11vw 55vh #fff, 16vw 48vh #fff, 21vw 52vh #fff,
+            26vw 56vh #fff, 31vw 49vh #fff, 36vw 54vh #fff, 41vw 47vh #fff,
+            46vw 51vh #fff, 51vw 55vh #fff, 56vw 48vh #fff, 61vw 53vh #fff,
+            66vw 50vh #fff, 71vw 54vh #fff, 76vw 49vh #fff, 81vw 52vh #fff,
+            86vw 56vh #fff, 91vw 48vh #fff, 95vw 51vh #fff, 98vw 55vh #fff,
+            /* Row 6 */
+            1vw 60vh #fff, 6vw 65vh #fff, 11vw 58vh #fff, 16vw 63vh #fff,
+            21vw 59vh #fff, 26vw 64vh #fff, 31vw 61vh #fff, 36vw 66vh #fff,
+            41vw 58vh #fff, 46vw 62vh #fff, 51vw 65vh #fff, 56vw 60vh #fff,
+            61vw 64vh #fff, 66vw 59vh #fff, 71vw 63vh #fff, 76vw 61vh #fff,
+            81vw 65vh #fff, 86vw 58vh #fff, 91vw 62vh #fff, 96vw 60vh #fff,
+            /* Row 7 */
+            3vw 70vh #fff, 8vw 75vh #fff, 13vw 68vh #fff, 18vw 73vh #fff,
+            23vw 77vh #fff, 28vw 69vh #fff, 33vw 74vh #fff, 38vw 71vh #fff,
+            43vw 76vh #fff, 48vw 68vh #fff, 53vw 72vh #fff, 58vw 75vh #fff,
+            63vw 70vh #fff, 68vw 74vh #fff, 73vw 69vh #fff, 78vw 73vh #fff,
+            83vw 77vh #fff, 88vw 70vh #fff, 93vw 74vh #fff, 97vw 71vh #fff,
+            /* Row 8 */
+            5vw 80vh #fff, 10vw 85vh #fff, 15vw 78vh #fff, 20vw 83vh #fff,
+            25vw 87vh #fff, 30vw 79vh #fff, 35vw 84vh #fff, 40vw 81vh #fff,
+            45vw 86vh #fff, 50vw 78vh #fff, 55vw 82vh #fff, 60vw 85vh #fff,
+            65vw 80vh #fff, 70vw 84vh #fff, 75vw 79vh #fff, 80vw 83vh #fff,
+            85vw 87vh #fff, 90vw 80vh #fff, 95vw 84vh #fff, 98vw 81vh #fff,
+            /* Row 9 */
+            2vw 90vh #fff, 7vw 95vh #fff, 12vw 88vh #fff, 17vw 93vh #fff,
+            22vw 89vh #fff, 27vw 94vh #fff, 32vw 91vh #fff, 37vw 96vh #fff,
+            42vw 88vh #fff, 47vw 92vh #fff, 52vw 95vh #fff, 57vw 90vh #fff,
+            62vw 94vh #fff, 67vw 89vh #fff, 72vw 93vh #fff, 77vw 91vh #fff,
+            82vw 95vh #fff, 87vw 88vh #fff, 92vw 92vh #fff, 96vw 90vh #fff;
         animation: twinkle-stars 3s ease-in-out infinite alternate;
     }
     @keyframes twinkle-stars {
@@ -2783,13 +2816,12 @@ def main():
     st.markdown("""
     <style>
     .eqms-marquee-box { 
-        background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); 
+        background: transparent !important; 
         padding: 10px 0; 
         border-radius: 8px; 
         margin-bottom: 12px;
         overflow: hidden;
         white-space: nowrap;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     }
     .eqms-marquee-box .scroll-text {
         display: inline-block;
