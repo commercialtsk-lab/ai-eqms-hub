@@ -2403,7 +2403,7 @@ def render_audio_controls(current_scene):
                 this.nodes.fog = src;
             }}
 
-            playOcean() {
+            playOcean() {{
                 var self = this;
                 var noise = this.ctx.createBufferSource();
                 noise.buffer = this.noiseBuffer();
@@ -2427,7 +2427,7 @@ def render_audio_controls(current_scene):
                 swishGain.connect(this.master);
                 swish.start();
                 this.nodes.swish = swish;
-                var bubblePop = function() {
+                var bubblePop = function() {{
                     if (self.scene !== 'ocean') return;
                     var t = self.ctx.currentTime;
                     var osc = self.ctx.createOscillator();
@@ -2442,13 +2442,13 @@ def render_audio_controls(current_scene):
                     osc.start(t);
                     osc.stop(t + 0.12);
                     self._chirpTimeout = setTimeout(bubblePop, 800 + Math.random() * 2500);
-                };
+                }};
                 bubblePop();
-            }
+            }}
 
-            playRailway() {
+            playRailway() {{
                 var self = this;
-                var chuff = function() {
+                var chuff = function() {{
                     if (self.scene !== 'railway') return;
                     var t = self.ctx.currentTime;
                     var osc1 = self.ctx.createOscillator();
@@ -2471,7 +2471,7 @@ def render_audio_controls(current_scene):
                     g2.connect(self.master);
                     osc2.start(t + 0.25);
                     osc2.stop(t + 0.4);
-                    if (Math.random() < 0.08) {
+                    if (Math.random() < 0.08) {{
                         var wh = self.ctx.createOscillator();
                         wh.type = 'triangle';
                         wh.frequency.setValueAtTime(440, t + 0.5);
@@ -2484,9 +2484,9 @@ def render_audio_controls(current_scene):
                         wg.connect(self.master);
                         wh.start(t + 0.5);
                         wh.stop(t + 1.2);
-                    }
+                    }}
                     self._chirpTimeout = setTimeout(chuff, 900 + Math.random() * 400);
-                };
+                }};
                 chuff();
                 var trackNoise = this.ctx.createBufferSource();
                 trackNoise.buffer = this.noiseBuffer();
@@ -2501,8 +2501,8 @@ def render_audio_controls(current_scene):
                 trackGain.connect(this.master);
                 trackNoise.start();
                 this.nodes.trackNoise = trackNoise;
-            }
-        }
+            }}
+        }}
 
         if (!P.eqmsSoundEngine) {{
             P.eqmsSoundEngine = new SoundEngine();
