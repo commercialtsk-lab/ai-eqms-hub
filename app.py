@@ -4008,38 +4008,36 @@ def main():
                 if st.button("🚀 Apply Filters", use_container_width=True, key="adv_apply"):
                     st.rerun()
 
-        # Train count summary cards — ROBUST for ALL sheets
+        # ================================================================
+        # Train count summary cards — ALL sheets except NOTE
+        # ================================================================
         train_col_metric = None
         doj_col = None
         try:
-            # Try to find train column from filtered data first
-            if not filtered_df.empty:
-                train_col_metric = find_column(filtered_df, ['T/N', 'T_N', 'TRAIN', 'TRAIN NO', 'TRAIN NUMBER'])
-                doj_col = find_column(filtered_df, ['DOJ', 'DATE OF JOURNEY', 'JOURNEY DATE'])
-            # Fallback: use df_raw columns
-            if train_col_metric is None and not df_raw.empty:
-                train_col_metric = find_column(df_raw, ['T/N', 'T_N', 'TRAIN', 'TRAIN NO', 'TRAIN NUMBER'])
-            if doj_col is None and not df_raw.empty:
-                doj_col = find_column(df_raw, ['DOJ', 'DATE OF JOURNEY', 'JOURNEY DATE'])
-            # Final fallback: SHEET_CONFIG index
-            if train_col_metric is None and sheet_choice in SHEET_CONFIG:
+            # PRIMARY: Use SHEET_CONFIG index (most reliable)
+            if sheet_choice in SHEET_CONFIG and sheet_choice != "NOTE":
                 cfg = SHEET_CONFIG[sheet_choice]
-                t_idx = cfg.get('train_col')
                 src = filtered_df if not filtered_df.empty else df_raw
-                if t_idx is not None and src is not None and t_idx < len(src.columns):
-                    train_col_metric = src.columns[t_idx]
-            if doj_col is None and sheet_choice in SHEET_CONFIG:
-                cfg = SHEET_CONFIG[sheet_choice]
-                d_idx = cfg.get('doj_col')
-                src = filtered_df if not filtered_df.empty else df_raw
-                if d_idx is not None and src is not None and d_idx < len(src.columns):
-                    doj_col = src.columns[d_idx]
+                if src is not None and len(src.columns) > 0:
+                    t_idx = cfg.get('train_col')
+                    if t_idx is not None and t_idx < len(src.columns):
+                        train_col_metric = src.columns[t_idx]
+                    d_idx = cfg.get('doj_col')
+                    if d_idx is not None and d_idx < len(src.columns):
+                        doj_col = src.columns[d_idx]
+            # FALLBACK: fuzzy header search if config index didn't work
+            if train_col_metric is None:
+                search_src = filtered_df if not filtered_df.empty else df_raw
+                if search_src is not None and not search_src.empty:
+                    train_col_metric = find_column(search_src, ['T/N', 'T_N', 'TRAIN', 'TRAIN NO', 'TRAIN NUMBER'])
+                    doj_col = find_column(search_src, ['DOJ', 'DATE OF JOURNEY', 'JOURNEY DATE'])
         except Exception:
             train_col_metric = None
             doj_col = None
 
-        if not filtered_df.empty and sheet_choice != "NOTE":
-            if train_col_metric and train_col_metric in filtered_df.columns:
+        # Show train count cards for ALL sheets except NOTE
+        if sheet_choice != "NOTE":
+            if not filtered_df.empty and train_col_metric and train_col_metric in filtered_df.columns:
                 try:
                     tc_series = filtered_df[train_col_metric].astype(str).str.strip()
                     tc_series = tc_series[tc_series != '']
@@ -4056,6 +4054,14 @@ def main():
                         st.markdown("---")
                 except Exception:
                     pass
+            elif not filtered_df.empty:
+                # Column found but no valid train data — still show Total EQ
+                st.markdown("**🚆 Train-wise Count**")
+                cards_html = '<div class="train-count-container">'
+                cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {len(filtered_df)}</div></div>'
+                cards_html += '</div>'
+                st.markdown(cards_html, unsafe_allow_html=True)
+                st.markdown("---")
 
         if st.button("🔄 Refresh Data", use_container_width=False, key="refresh_data_btn"):
             st.cache_data.clear()
