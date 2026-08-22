@@ -3778,6 +3778,69 @@ def main():
         
         st.markdown("---")
 
+        st.markdown("---")
+        st.markdown("### 📑 Select Sheet")
+        sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()),
+            index=list(SHEET_CONFIG.keys()).index(st.session_state.selected_sheet)
+            if st.session_state.selected_sheet in SHEET_CONFIG else 0, key="sheet_select")
+        if sheet_choice != st.session_state.selected_sheet:
+            st.session_state.selected_sheet = sheet_choice
+            st.session_state.current_page = 1
+            st.cache_data.clear()
+            st.rerun()
+
+        if sheet_choice != "NOTE":
+            st.markdown("### 🔍 Filters")
+            config = SHEET_CONFIG[sheet_choice]
+            pnr_col_idx = config.get("pnr_col")
+            train_col_idx = config.get("train_col")
+            class_col_idx = config.get("class_col")
+            doj_col_idx = config.get("doj_col")
+
+            pnr_input = st.text_input("PNR (Partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
+            if pnr_input != st.session_state.pnr_val:
+                st.session_state.pnr_val = pnr_input
+                st.session_state.current_page = 1
+                st.rerun()
+
+            train_input = st.text_input("Train (Partial)", value=st.session_state.train_val, key="train_filter_input")
+            if train_input != st.session_state.train_val:
+                st.session_state.train_val = train_input
+                st.session_state.current_page = 1
+                st.rerun()
+
+            if class_col_idx is not None:
+                class_input = st.text_input("Class (Partial)", value=st.session_state.get('class_val', ''), key="class_filter_input")
+                if class_input != st.session_state.get('class_val', ''):
+                    st.session_state.class_val = class_input
+                    st.session_state.current_page = 1
+                    st.rerun()
+
+            c1, c2 = st.columns(2)
+            with c1:
+                from_input = st.date_input("From DOJ", value=st.session_state.from_val,
+                    key="from_date_input", format="DD-MM-YYYY")
+            with c2:
+                to_input = st.date_input("To DOJ", value=st.session_state.to_val,
+                    key="to_date_input", format="DD-MM-YYYY")
+            if from_input != st.session_state.from_val:
+                st.session_state.from_val = from_input
+                st.session_state.current_page = 1
+                st.rerun()
+            if to_input != st.session_state.to_val:
+                st.session_state.to_val = to_input
+                st.session_state.current_page = 1
+                st.rerun()
+
+            if st.button("🧹 Clear All Filters", use_container_width=True, key="clear_filters_btn"):
+                st.session_state.pnr_val = ''
+                st.session_state.train_val = ''
+                st.session_state.class_val = ''
+                st.session_state.from_val = None
+                st.session_state.to_val = None
+                st.session_state.current_page = 1
+                st.rerun()
+
     # =====================================================================
     # VIEW: 📋 DATA TABLE
     # =====================================================================
