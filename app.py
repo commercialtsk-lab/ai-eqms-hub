@@ -1667,16 +1667,18 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         /* Weather Section Input Visibility */
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input {{
-            background-color: rgba(255, 255, 255, 0.25) !important;
-            color: #f1f5f9 !important;
-            border: 2px solid rgba(255, 255, 255, 0.4) !important;
+            background-color: rgba(255, 255, 255, 0.85) !important;
+            color: #000000 !important;
+            border: 2px solid rgba(255, 255, 255, 0.6) !important;
             box-shadow: 0 0 15px rgba(0,0,0,0.3) !important;
+            font-weight: 500 !important;
         }}
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
-            color: #f1f5f9 !important;
-            font-weight: 600 !important;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.7) !important;
+            color: #ffffff !important;
+            font-weight: 700 !important;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.8) !important;
+            font-size: 1rem !important;
         }}
     </style>
     """
@@ -2258,7 +2260,7 @@ def main():
     # WEATHER ANIMATED BACKGROUND (Replaces Solar when Weather is active)
     # =====================================================================
     weather_bg_html = ""
-    if st.session_state.weather_data and 'error' not in st.session_state.weather_data and view == "🌤️ Weather":
+    if st.session_state.weather_data and 'error' not in st.session_state.weather_data and st.session_state.view_mode == "🌤️ Weather":
         weather_cond = str(st.session_state.weather_data.get('weather', '')).lower()
         if 'rain' in weather_cond or 'drizz' in weather_cond:
             wtype = 'rain'
@@ -3518,12 +3520,13 @@ def main():
     st.markdown("""
     <style>
     .eqms-marquee-box { 
-        background: transparent !important; 
+        background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); 
         padding: 10px 0; 
         border-radius: 8px; 
         margin-bottom: 12px;
         overflow: hidden;
         white-space: nowrap;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     }
     .eqms-marquee-box .scroll-text {
         display: inline-block;
