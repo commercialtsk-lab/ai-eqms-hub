@@ -3841,6 +3841,41 @@ def main():
                 st.session_state.current_page = 1
                 st.rerun()
 
+    # Load data for selected sheet
+    df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
+    filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
+
+    # Apply filters (skip for NOTE sheet)
+    if not filtered_df.empty and sheet_choice != "NOTE":
+        config = SHEET_CONFIG[sheet_choice]
+        pnr_col_idx = config.get("pnr_col")
+        train_col_idx = config.get("train_col")
+        class_col_idx = config.get("class_col")
+        doj_col_idx = config.get("doj_col")
+
+        if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
+            col_name = filtered_df.columns[pnr_col_idx]
+            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.pnr_val, case=False, na=False)]
+        if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
+            col_name = filtered_df.columns[train_col_idx]
+            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
+        if st.session_state.get('class_val', '') and class_col_idx is not None and class_col_idx < len(filtered_df.columns):
+            col_name = filtered_df.columns[class_col_idx]
+            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.get('class_val', ''), case=False, na=False)]
+        if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
+            col_name = filtered_df.columns[doj_col_idx]
+            try:
+                filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
+                if filtered_df['_temp'].isna().all():
+                    filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
+            except Exception:
+                filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
+            if st.session_state.from_val:
+                filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
+            if st.session_state.to_val:
+                filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
+            filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
+
     # =====================================================================
     # VIEW: 📋 DATA TABLE
     # =====================================================================
