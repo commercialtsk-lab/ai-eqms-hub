@@ -3789,7 +3789,7 @@ def main():
         </div>
         """, height=300)
 
-st.markdown("### 📑 Select Sheet")
+        st.markdown("### 📑 Select Sheet")
         sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()),
             index=list(SHEET_CONFIG.keys()).index(st.session_state.selected_sheet)
             if st.session_state.selected_sheet in SHEET_CONFIG else 0, key="sheet_select")
