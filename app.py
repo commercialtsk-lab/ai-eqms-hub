@@ -3025,6 +3025,8 @@ def main():
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
+    view = st.session_state.view_mode
+
     # =====================================================================
     # WEATHER ANIMATED BACKGROUND (Replaces Solar when Weather is active)
     # =====================================================================
