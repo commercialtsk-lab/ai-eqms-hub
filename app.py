@@ -1398,14 +1398,7 @@ def process_passport_image(data):
 # Apply Theme
 # =====================================================================
 def apply_theme(theme, custom_bg=None, custom_text=None):
-    if theme == '🟡 Yellow Mood':
-        bg = "transparent"; card_bg = "rgba(255, 215, 0, 0.1)"; text_color = "#fbbf24"; text_secondary = "#f59e0b"
-        border = "rgba(251, 191, 36, 0.35)"; input_bg = "rgba(255, 215, 0, 0.08)"; accent = "#fbbf24"; accent_hover = "#f59e0b"
-        success = "#84cc16"; danger = "#ef4444"; button_bg = "rgba(251, 191, 36, 0.12)"; button_text = "#fbbf24"
-        button_border = "rgba(251, 191, 36, 0.3)"; button_hover_bg = "#fbbf24"; button_hover_text = "#000000"; button_hover_border = "#fbbf24"
-        number_color = "#fbbf24"; table_header_bg = "rgba(251, 191, 36, 0.45)"; table_header_text = "#000000"
-        table_alt_row = "rgba(255, 215, 0, 0.05)"; chart_bg = "rgba(0,0,0,0)"
-    elif theme == 'Day':
+    if theme == 'Day':
         bg = "transparent"; card_bg = "rgba(248, 250, 252, 0.15)"; text_color = "#1e293b"; text_secondary = "#475569"
         border = "rgba(148, 163, 184, 0.25)"; input_bg = "rgba(255, 255, 255, 0.12)"; accent = "#2563eb"; accent_hover = "#1d4ed8"
         success = "#16a34a"; danger = "#dc2626"; button_bg = "rgba(241, 245, 249, 0.15)"; button_text = "#1e293b"
@@ -1684,8 +1677,6 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
-        .mood-yellow-glow {{ display: inline-block; font-size: 1.1rem; filter: drop-shadow(0 0 6px #fbbf24) drop-shadow(0 0 12px #f59e0b); animation: mood-yellow-pulse 2s ease-in-out infinite; }}
-        @keyframes mood-yellow-pulse {{ 0%, 100% {{ filter: drop-shadow(0 0 6px #fbbf24) drop-shadow(0 0 12px #f59e0b); transform: scale(1); }} 50% {{ filter: drop-shadow(0 0 12px #fbbf24) drop-shadow(0 0 24px #f59e0b); transform: scale(1.15); }} }}
 
         /* Weather Input Stamp Style */
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
@@ -3074,6 +3065,29 @@ def main():
     # =====================================================================
     # WEATHER ANIMATED BACKGROUND (Replaces Solar when Weather is active)
     # =====================================================================
+    # Force black text for all weather elements to override global white text
+    st.markdown("""
+    <style>
+    /* Weather section text override - force black */
+    .weather-main-card, .weather-main-card *,
+    .weather-detail-item, .weather-detail-item *,
+    .sunrise-sunset, .sunrise-sunset *,
+    .forecast-card-0, .forecast-card-0 *,
+    .forecast-card-1, .forecast-card-1 *,
+    .forecast-card-2, .forecast-card-2 *,
+    .forecast-card-3, .forecast-card-3 *,
+    .forecast-card-4, .forecast-card-4 *,
+    div[data-testid="stMain"] .weather-main-card,
+    div[data-testid="stMain"] .weather-main-card *,
+    div[data-testid="stMain"] .forecast-card-0,
+    div[data-testid="stMain"] .forecast-card-0 * {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     weather_bg_html = ""
     if st.session_state.weather_data and 'error' not in st.session_state.weather_data and st.session_state.view_mode == "🌤️ Weather":
         weather_cond = str(st.session_state.weather_data.get('weather', '')).lower()
@@ -3389,7 +3403,7 @@ def main():
     """, height=0)
 
     # Theme setup
-    theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)', '🟡 Yellow Mood']
+    theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
     qp_theme = st.query_params.get('__theme')
     if qp_theme in theme_options and st.session_state.theme != qp_theme:
         st.session_state.theme = qp_theme
@@ -3426,9 +3440,7 @@ def main():
         h = now_ist().hour
         effective_theme = 'Day' if 6 <= h < 19 else 'Dark'
 
-    if effective_theme == '🟡 Yellow Mood':
-        apply_theme(effective_theme)
-    elif effective_theme == 'Custom':
+    if effective_theme == 'Custom':
         custom_bg = st.sidebar.color_picker("Background Color", value=st.session_state.custom_bg, key="custom_bg_picker")
         custom_text = st.sidebar.color_picker("Text Color", value=st.session_state.custom_text, key="custom_text_picker")
         if custom_bg != st.session_state.custom_bg or custom_text != st.session_state.custom_text:
@@ -3929,7 +3941,7 @@ def main():
                     st.query_params['__view'] = name
                     st.rerun()
     with top_c2:
-        st.markdown(f"<div style='padding-top:6px; text-align:right;'><span class='status-pill status-live'>● Live</span> &nbsp; <span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span> &nbsp; <span class='mood-yellow-glow' title='Mood: Active'>🟡</span></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='padding-top:6px; text-align:right;'><span class='status-pill status-live'>● Live</span> &nbsp; <span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span></div>", unsafe_allow_html=True)
 
     st.caption(f"Enterprise Railway EQ Management  •  {format_date()}  •  {format_time()} IST")
     st.markdown("---")
@@ -5091,8 +5103,8 @@ def main():
             day_night_icon = "🌙" if time_of_day in ['night', 'dusk'] else "☀️" if time_of_day == 'day' else "🌅"
             st.markdown(f'''<div style="text-align:center; margin-bottom:15px;">
                 <div style="display:inline-block; background: linear-gradient(135deg, rgba(255,153,51,0.2), rgba(255,255,255,0.1), rgba(19,136,8,0.2)); 
-                    border: 1px solid rgba(255,255,255,0.25); border-radius: 50px; padding: 10px 30px; 
-                    backdrop-filter: blur(12px); color: #ffffff; text-shadow: 0 2px 6px rgba(0,0,0,0.8); font-weight: 700; font-size: 1.1rem;">
+                    border: 1px solid rgba(0,0,0,0.15); border-radius: 50px; padding: 10px 30px; 
+                    backdrop-filter: blur(12px); color: #000000 !important; text-shadow: none !important; font-weight: 700; font-size: 1.1rem;">
                     {day_night_icon} {loc_full} • {time_of_day.title()}
                 </div>
             </div>''', unsafe_allow_html=True)
@@ -5112,7 +5124,7 @@ def main():
                 50% {{ transform: scale(1.15); opacity: 1; }}
             }}
             .weather-main-card {{
-                background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+                background: rgba(255,255,255,0.9); border: 1px solid rgba(0,0,0,0.1);
                 border-radius: 24px; padding: 30px; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);
                 box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
                 animation: weather-float 4s ease-in-out infinite, weather-glow 3s ease-in-out infinite;
@@ -5130,7 +5142,7 @@ def main():
             .weather-desc {{ font-size: 1.3rem; opacity: 0.95; }}
             .weather-detail-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 20px; }}
             .weather-detail-item {{
-                background: rgba(255,255,255,0.15); border-radius: 12px; padding: 12px;
+                background: rgba(255,255,255,0.5); border-radius: 12px; padding: 12px; border: 1px solid rgba(0,0,0,0.08);
                 text-align: center; backdrop-filter: blur(10px);
             }}
             .weather-detail-icon {{ font-size: 1.5rem; margin-bottom: 4px; }}
@@ -5138,7 +5150,7 @@ def main():
             .weather-detail-value {{ font-size: 1.1rem; font-weight: 700; }}
             .sunrise-sunset {{
                 display: flex; justify-content: center; gap: 40px; margin-top: 16px;
-                padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.2);
+                padding-top: 16px; border-top: 1px solid rgba(0,0,0,0.15);
             }}
             .sun-item {{ text-align: center; }}
             .sun-icon {{ font-size: 2rem; animation: sun-pulse 2s ease-in-out infinite; }}
