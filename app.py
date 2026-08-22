@@ -844,7 +844,9 @@ def get_weather_forecast(city_name):
                                     'icon': item['weather'][0]['icon'] if item.get('weather') else '', 'humidity': item['main']['humidity'],
                                     'wind': item['wind']['speed'], 'pressure': item['main']['pressure'],
                                     'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'}
-                            daily_forecast[date]['temps'].append(item['main']['temp'])
+                                daily_forecast[date]['temps'].append(item['main']['temp'])
+                            else:
+                                daily_forecast[date]['temps'].append(item['main']['temp'])
                         result = []
                         for date, info in list(daily_forecast.items())[:5]:
                             result.append({'date': date, 'temp': round(sum(info['temps'])/len(info['temps']), 1),
@@ -887,7 +889,9 @@ def get_forecast_by_coords(lat, lon):
                         'icon': item['weather'][0]['icon'] if item.get('weather') else '', 'humidity': item['main']['humidity'],
                         'wind': item['wind']['speed'], 'pressure': item['main']['pressure'],
                         'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'}
-                daily_forecast[date]['temps'].append(item['main']['temp'])
+                    daily_forecast[date]['temps'].append(item['main']['temp'])
+                else:
+                    daily_forecast[date]['temps'].append(item['main']['temp'])
             result = []
             for date, info in list(daily_forecast.items())[:5]:
                 result.append({'date': date, 'temp': round(sum(info['temps'])/len(info['temps']), 1),
@@ -3115,7 +3119,8 @@ def main():
         # ---- CSS & HTML ----
         bg_style = ""
         elements = ""
-        info_html = ""  # Initialize to prevent UnboundLocalError
+        # Define info_html at the top so it's always defined
+        info_html = ""
 
         if scene in ('rain', 'night-rain'):
             bg_style = "background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 35%, #2d3a4a 70%, #1a2332 100%);"
@@ -3253,7 +3258,7 @@ def main():
                 dur = 2 + (i % 4) * 1.5
                 size = 12 + (i % 4) * 4
                 char = snow_chars[i % 5]
-                elements += f'<div style="position:absolute;left:{left}%;top:-20px;font-size:{size}px;color:#fff;opacity:0.8;text-shadow:0 0 4px rgba(255,255,255,0.8);animation:snowFall {dur}s linear {delay}s infinite;z-index:4;">{char}</div>'
+                elements += f'<div style="position:absolute;left:{left}%;top:-20px;font-size:{size}px;color:#000000;opacity:0.8;text-shadow:0 0 4px rgba(255,255,255,0.8);animation:snowFall {dur}s linear {delay}s infinite;z-index:4;">{char}</div>'
             elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:130px;background:linear-gradient(180deg,#fff 0%,#e3f2fd 40%,#bbdefb 100%);z-index:5;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
             elements += '<div style="position:absolute;bottom:110px;left:6%;font-size:55px;z-index:6;">🏠</div>'
             elements += '<div style="position:absolute;bottom:110px;left:18%;font-size:50px;z-index:6;">🏡</div>'
@@ -3281,19 +3286,22 @@ def main():
             elements += '<div style="position:absolute;bottom:110px;left:60%;font-size:45px;z-index:5;opacity:0.6;animation:treeSway 6s ease-in-out 3s infinite;">🌲</div>'
             elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#455a64;z-index:6;"></div>'
 
-            loc_detail = city_name
-            if st.session_state.weather_data.get('state'):
-                loc_detail += f", {st.session_state.weather_data['state']}"
-            if st.session_state.weather_data.get('country'):
-                loc_detail += f", {st.session_state.weather_data['country']}"
-            info_html = f"""<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:100;pointer-events:none;"><div style="font-size:2.6rem;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);letter-spacing:2px;">{loc_detail}</div><div style="font-size:7rem;font-weight:900;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);line-height:1;margin:10px 0;">{temp}°</div><div style="font-size:1.6rem;font-weight:600;color:#ffffff;text-shadow:0 2px 8px rgba(0,0,0,0.9),0 0 20px rgba(0,0,0,0.5);text-transform:capitalize;">{desc}</div></div>"""
+        # ---- Info overlay (city, temp, description) - common for all scenes ----
+        loc_detail = city_name
+        if st.session_state.weather_data.get('state'):
+            loc_detail += f", {st.session_state.weather_data['state']}"
+        if st.session_state.weather_data.get('country'):
+            loc_detail += f", {st.session_state.weather_data['country']}"
+        info_html = f"""<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:100;pointer-events:none;">
+            <div style="font-size:2.6rem;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);letter-spacing:2px;">{loc_detail}</div>
+            <div style="font-size:7rem;font-weight:900;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);line-height:1;margin:10px 0;">{temp}°</div>
+            <div style="font-size:1.6rem;font-weight:600;color:#ffffff;text-shadow:0 2px 8px rgba(0,0,0,0.9),0 0 20px rgba(0,0,0,0.5);text-transform:capitalize;">{desc}</div>
+        </div>"""
 
         weather_bg_html = f"""<style>@keyframes rainFall{{from{{transform:translateY(-20px);opacity:0;}}10%{{opacity:0.8;}}90%{{opacity:0.8;}}to{{transform:translateY(110vh);opacity:0;}}}}@keyframes snowFall{{from{{transform:translateY(-20px) rotate(0deg);opacity:0;}}10%{{opacity:1;}}90%{{opacity:1;}}to{{transform:translateY(110vh) rotate(360deg);opacity:0;}}}}@keyframes cloudDrift{{from{{transform:translateX(-300px);}}to{{transform:translateX(calc(100vw + 300px));}}}}@keyframes sunPulse{{0%,100%{{transform:scale(1);opacity:0.9;}}50%{{transform:scale(1.15);opacity:1;}}}}@keyframes raySpin{{from{{transform:translate(-50%,-50%) rotate(0deg);}}to{{transform:translate(-50%,-50%) rotate(360deg);}}}}@keyframes moonGlow{{0%,100%{{box-shadow:0 0 60px 20px rgba(245,245,220,0.3);}}50%{{box-shadow:0 0 80px 30px rgba(245,245,220,0.5);}}}}@keyframes twinkle{{0%,100%{{opacity:0.3;}}50%{{opacity:1;}}}}@keyframes treeSway{{0%,100%{{transform:rotate(-3deg);}}50%{{transform:rotate(3deg);}}}}@keyframes waterShimmer{{0%,100%{{opacity:0.3;transform:scaleX(1);}}50%{{opacity:0.7;transform:scaleX(1.2);}}}}@keyframes lightning{{0%,90%,100%{{opacity:0;}}91%{{opacity:0.3;}}92%{{opacity:0;}}93%{{opacity:0.6;}}94%{{opacity:0;}}}}@keyframes windowLight{{0%,100%{{opacity:0.6;}}50%{{opacity:1;}}}}@keyframes birdFly{{from{{transform:translateX(-50px);}}to{{transform:translateX(calc(100vw + 50px));}}}}@keyframes fogDrift{{from{{transform:translateX(-50%);}}to{{transform:translateX(0%);}}}}</style><div style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;overflow:hidden;{bg_style}">{elements}{info_html}</div>"""
 
     if weather_bg_html:
         st.markdown(weather_bg_html, unsafe_allow_html=True)
-
-
 
     # Sidebar Toggle + Back-to-Top Button
     components.html("""
@@ -3840,7 +3848,6 @@ def main():
         config = SHEET_CONFIG[sheet_choice]
         pnr_col_idx = config.get("pnr_col")
         train_col_idx = config.get("train_col")
-        class_col_idx = config.get("class_col")
         doj_col_idx = config.get("doj_col")
 
         if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
@@ -4058,11 +4065,6 @@ def main():
             log_activity("🔄 Manual refresh from main")
             st.rerun()
 
-        # Initialize pagination defaults to prevent UnboundLocalError
-        page_size = st.session_state.get('rows_per_page', 25)
-        if page_size not in [15, 25, 50, 100, 200] or not isinstance(page_size, int):
-            page_size = 25
-
         if filtered_df.empty:
             st.info("📭 No data. Clear filters or select another sheet.")
             has_structure = len(df_raw.columns) > 0
@@ -4084,13 +4086,12 @@ def main():
                 except: pass
 
             # Pagination - bulletproof with safe defaults
+            page_size = st.session_state.get('rows_per_page', 25)
+            if page_size not in [15, 25, 50, 100, 200]:
+                page_size = 25
             try:
-                page_size = st.session_state.get('rows_per_page', 25)
-                if page_size not in [15, 25, 50, 100, 200] or not isinstance(page_size, int):
-                    page_size = 25
                 idx = [15, 25, 50, 100, 200].index(page_size)
             except Exception:
-                page_size = 25
                 idx = 1
             selected_page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200],
                 index=idx, key="page_size_select")
@@ -4102,7 +4103,7 @@ def main():
                 st.rerun()
             page_size = selected_page_size
 
-            total_pages = max(1, math.ceil(len(filtered_df) / page_size)) if len(filtered_df) > 0 else 1
+            total_pages = max(1, math.ceil(len(filtered_df) / page_size))
             current_page = st.session_state.get('current_page', 1)
             if current_page > total_pages: current_page = total_pages
             if current_page < 1: current_page = 1
