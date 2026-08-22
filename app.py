@@ -1399,7 +1399,29 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
 
         [data-testid="stSidebar"] > div:first-child {{ padding-top: 0 !important; }}
-        [data-testid="stSidebar"] {{ background-color: {card_bg} !important; border-right: 1px solid {border} !important; backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%); }}
+        [data-testid="stSidebar"] {{ background-color: rgba(15, 23, 42, 0.92) !important; border-right: 1px solid rgba(148, 163, 184, 0.3) !important; backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); }}
+        [data-testid="stSidebar"] * {{ color: #f1f5f9 !important; }}
+        [data-testid="stSidebar"] .stTextInput input, [data-testid="stSidebar"] .stNumberInput input,
+        [data-testid="stSidebar"] .stDateInput input, [data-testid="stSidebar"] .stTextArea textarea,
+        [data-testid="stSidebar"] .stSelectbox > div > div > div {{
+            background-color: rgba(30, 41, 59, 0.9) !important; color: #f1f5f9 !important;
+            border: 1px solid rgba(148, 163, 184, 0.4) !important;
+        }}
+        [data-testid="stSidebar"] .stButton > button {{
+            background-color: rgba(51, 65, 85, 0.8) !important; color: #f1f5f9 !important;
+            border: 1px solid rgba(148, 163, 184, 0.4) !important;
+        }}
+        [data-testid="stSidebar"] .stButton > button:hover {{
+            background-color: #2563eb !important; color: white !important;
+        }}
+        [data-testid="stSidebar"] .stExpander {{
+            background-color: rgba(30, 41, 59, 0.7) !important;
+            border: 1px solid rgba(148, 163, 184, 0.25) !important;
+        }}
+        [data-testid="stSidebar"] .stFileUploader {{
+            background-color: rgba(30, 41, 59, 0.7) !important;
+            border: 2px dashed rgba(148, 163, 184, 0.3) !important;
+        }}
         [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown div,
         [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
         [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] .stDateInput label,
@@ -1934,55 +1956,113 @@ def main():
         0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 50px 20px rgba(255,140,0,0.5), 0 0 100px 40px rgba(255,69,0,0.25); }
         100% { transform: translate(-50%, -50%) scale(1.12); box-shadow: 0 0 70px 30px rgba(255,140,0,0.6), 0 0 140px 50px rgba(255,69,0,0.35); }
     }
-    .orbit-ring {
+    .ring-1 {
         position: absolute; top: 50%; left: 50%;
         transform: translate(-50%, -50%);
+        width: 260px; height: 260px;
+        border: 1px dashed rgba(255,153,51,0.25);
         border-radius: 50%;
-        border: 1px dashed rgba(255,255,255,0.12);
+        animation: ring-pulse-1 4s ease-in-out infinite;
     }
-    .ring-1 { width: 260px; height: 260px; animation: ring-pulse-1 5s ease-in-out infinite; }
-    .ring-2 { width: 400px; height: 400px; animation: ring-pulse-2 5s ease-in-out infinite; animation-delay: 1.5s; }
-    .ring-3 { width: 540px; height: 540px; animation: ring-pulse-1 5s ease-in-out infinite; animation-delay: 3s; border-color: rgba(200,180,140,0.12); }
-    .ring-4 { width: 680px; height: 680px; animation: ring-pulse-2 5s ease-in-out infinite; animation-delay: 4.5s; border-color: rgba(180,140,100,0.12); }
+    .ring-2 {
+        position: absolute; top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 400px; height: 400px;
+        border: 1px dashed rgba(19,136,8,0.25);
+        border-radius: 50%;
+        animation: ring-pulse-2 4s ease-in-out infinite;
+        animation-delay: 2s;
+    }
+    .ring-3 {
+        position: absolute; top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 540px; height: 540px;
+        border: 1px dashed rgba(200,180,140,0.2);
+        border-radius: 50%;
+        animation: ring-pulse-1 5s ease-in-out infinite;
+        animation-delay: 1s;
+    }
+    .ring-4 {
+        position: absolute; top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 680px; height: 680px;
+        border: 1px dashed rgba(180,140,100,0.2);
+        border-radius: 50%;
+        animation: ring-pulse-2 5s ease-in-out infinite;
+        animation-delay: 3s;
+    }
     @keyframes ring-pulse-1 {
-        0%, 100% { border-color: rgba(255,153,51,0.1); }
-        50% { border-color: rgba(255,153,51,0.35); }
+        0%, 100% { border-color: rgba(255,153,51,0.15); }
+        50% { border-color: rgba(255,153,51,0.45); }
     }
     @keyframes ring-pulse-2 {
-        0%, 100% { border-color: rgba(19,136,8,0.1); }
-        50% { border-color: rgba(19,136,8,0.35); }
+        0%, 100% { border-color: rgba(19,136,8,0.15); }
+        50% { border-color: rgba(19,136,8,0.45); }
     }
-    .orbit {
+    .orbit-1 {
         position: absolute; top: 50%; left: 50%;
+        width: 260px; height: 260px;
         transform: translate(-50%, -50%);
+        animation: spin-1 22s linear infinite;
     }
-    .orbit-1 { width: 260px; height: 260px; animation: spin-1 24s linear infinite; }
-    .orbit-2 { width: 400px; height: 400px; animation: spin-2 38s linear infinite reverse; }
-    .orbit-3 { width: 540px; height: 540px; animation: spin-3 52s linear infinite; }
-    .orbit-4 { width: 680px; height: 680px; animation: spin-4 70s linear infinite reverse; }
-    @keyframes spin-1 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-    @keyframes spin-2 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-    @keyframes spin-3 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-    @keyframes spin-4 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-
-    .train-engine-1 { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 30px; filter: drop-shadow(0 0 12px rgba(255,153,51,0.9)); }
-    .train-coach-1 { position: absolute; top: -18px; left: 50%; font-size: 26px; filter: drop-shadow(0 0 8px rgba(255,153,51,0.7)); }
-    .tc1-1 { transform: translateX(calc(-50% - 40px)); }
-    .tc1-2 { transform: translateX(calc(-50% - 76px)); }
-    .tc1-3 { transform: translateX(calc(-50% - 110px)); }
-
-    .train-engine-2 { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 28px; filter: drop-shadow(0 0 12px rgba(19,136,8,0.9)); }
-    .train-coach-2 { position: absolute; top: -16px; left: 50%; font-size: 24px; filter: drop-shadow(0 0 8px rgba(19,136,8,0.7)); }
-    .tc2-1 { transform: translateX(calc(-50% - 38px)); }
-    .tc2-2 { transform: translateX(calc(-50% - 72px)); }
-    .tc2-3 { transform: translateX(calc(-50% - 104px)); }
-    .tc2-4 { transform: translateX(calc(-50% - 134px)); }
-    .tc2-5 { transform: translateX(calc(-50% - 162px)); }
-
+    @keyframes spin-1 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .t1 { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 28px; filter: drop-shadow(0 0 10px rgba(255,153,51,0.9)); animation: bob-1 0.9s ease-in-out infinite alternate; }
+    .t1-b1 { transform: translateX(-50%) translateX(-36px); animation-delay: 0.04s; }
+    .t1-b2 { transform: translateX(-50%) translateX(-68px); animation-delay: 0.08s; }
+    .t1-b3 { transform: translateX(-50%) translateX(-96px); animation-delay: 0.12s; }
+    @keyframes bob-1 {
+        from { transform: translateX(-50%) translateY(0) scale(1); }
+        to { transform: translateX(-50%) translateY(-5px) scale(1.07); }
+    }
+    .orbit-2 {
+        position: absolute; top: 50%; left: 50%;
+        width: 400px; height: 400px;
+        transform: translate(-50%, -50%);
+        animation: spin-2 32s linear infinite reverse;
+    }
+    @keyframes spin-2 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .t2 { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 26px; filter: drop-shadow(0 0 10px rgba(19,136,8,0.9)); animation: bob-2 1s ease-in-out infinite alternate; }
+    .t2-b1 { transform: translateX(-50%) translateX(-34px); animation-delay: 0.04s; }
+    .t2-b2 { transform: translateX(-50%) translateX(-64px); animation-delay: 0.08s; }
+    .t2-b3 { transform: translateX(-50%) translateX(-90px); animation-delay: 0.12s; }
+    @keyframes bob-2 {
+        from { transform: translateX(-50%) translateY(0) scale(1); }
+        to { transform: translateX(-50%) translateY(-4px) scale(1.05); }
+    }
+    .orbit-3 {
+        position: absolute; top: 50%; left: 50%;
+        width: 540px; height: 540px;
+        transform: translate(-50%, -50%);
+        animation: spin-3 48s linear infinite;
+    }
+    @keyframes spin-3 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
     .planet-saturn {
         position: absolute; top: -24px; left: 50%; transform: translateX(-50%);
-        font-size: 36px; filter: drop-shadow(0 0 18px rgba(210,180,140,0.6));
+        font-size: 34px; filter: drop-shadow(0 0 18px rgba(210,180,140,0.6));
         animation: planet-bob 3.5s ease-in-out infinite;
+    }
+    @keyframes planet-bob {
+        0%, 100% { transform: translateX(-50%) translateY(0); }
+        50% { transform: translateX(-50%) translateY(-6px); }
+    }
+    .orbit-4 {
+        position: absolute; top: 50%; left: 50%;
+        width: 680px; height: 680px;
+        transform: translate(-50%, -50%);
+        animation: spin-4 65s linear infinite reverse;
+    }
+    @keyframes spin-4 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
     }
     .planet-jupiter {
         position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
@@ -2000,21 +2080,17 @@ def main():
         content: ''; position: absolute; top: 60%; left: 15%; width: 70%; height: 2px;
         background: rgba(160,82,45,0.35); border-radius: 2px;
     }
-    @keyframes planet-bob {
-        0%, 100% { transform: translateX(-50%) translateY(0); }
-        50% { transform: translateX(-50%) translateY(-6px); }
-    }
     .shooting {
         position: absolute; top: 10%; left: 10%;
-        width: 120px; height: 2px;
+        width: 100px; height: 2px;
         background: linear-gradient(90deg, rgba(255,255,255,1), transparent);
         transform: rotate(-45deg);
         opacity: 0;
-        animation: shoot 6s linear infinite;
+        animation: shoot 5s linear infinite;
     }
     @keyframes shoot {
         0% { transform: translateX(0) translateY(0) rotate(-45deg); opacity: 1; }
-        100% { transform: translateX(600px) translateY(600px) rotate(-45deg); opacity: 0; }
+        100% { transform: translateX(500px) translateY(500px) rotate(-45deg); opacity: 0; }
     }
     </style>
     <div class="eqms-bg">
@@ -2022,28 +2098,26 @@ def main():
         <div class="sun-wrap">
             <div class="sun-core"></div>
         </div>
-        <div class="orbit-ring ring-1"></div>
-        <div class="orbit-ring ring-2"></div>
-        <div class="orbit-ring ring-3"></div>
-        <div class="orbit-ring ring-4"></div>
-        <div class="orbit orbit-1">
-            <div class="train-engine-1">🚂</div>
-            <div class="train-coach-1 tc1-1">🚃</div>
-            <div class="train-coach-1 tc1-2">🚃</div>
-            <div class="train-coach-1 tc1-3">🚃</div>
+        <div class="ring-1"></div>
+        <div class="ring-2"></div>
+        <div class="ring-3"></div>
+        <div class="ring-4"></div>
+        <div class="orbit-1">
+            <div class="t1">🚂</div>
+            <div class="t1 t1-b1">🚃</div>
+            <div class="t1 t1-b2">🚃</div>
+            <div class="t1 t1-b3">🚃</div>
         </div>
-        <div class="orbit orbit-2">
-            <div class="train-engine-2">🚂</div>
-            <div class="train-coach-2 tc2-1">🚋</div>
-            <div class="train-coach-2 tc2-2">🚋</div>
-            <div class="train-coach-2 tc2-3">🚋</div>
-            <div class="train-coach-2 tc2-4">🚋</div>
-            <div class="train-coach-2 tc2-5">🚋</div>
+        <div class="orbit-2">
+            <div class="t2">🚂</div>
+            <div class="t2 t2-b1">🚋</div>
+            <div class="t2 t2-b2">🚋</div>
+            <div class="t2 t2-b3">🚋</div>
         </div>
-        <div class="orbit orbit-3">
+        <div class="orbit-3">
             <div class="planet-saturn">🪐</div>
         </div>
-        <div class="orbit orbit-4">
+        <div class="orbit-4">
             <div class="planet-jupiter"></div>
         </div>
         <div class="shooting"></div>
@@ -2216,47 +2290,82 @@ def main():
         st.markdown("""
         <style>
         @keyframes welcome-glow {
-            0%, 100% { box-shadow: 0 4px 25px rgba(255,153,51,0.35); }
-            33% { box-shadow: 0 4px 25px rgba(255,255,255,0.35); }
-            66% { box-shadow: 0 4px 25px rgba(19,136,8,0.35); }
+            0%, 100% { box-shadow: 0 4px 25px rgba(255,153,51,0.4); }
+            33% { box-shadow: 0 4px 25px rgba(255,255,255,0.4); }
+            66% { box-shadow: 0 4px 25px rgba(19,136,8,0.4); }
         }
         .welcome-flag-card {
             border-radius: 14px; overflow: hidden; margin-bottom: 14px;
             animation: welcome-glow 4s ease-in-out infinite;
             box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            border: 2px solid rgba(255,255,255,0.15);
         }
         .welcome-saffron {
             background: linear-gradient(135deg, #FF9933, #FF8C00);
-            padding: 12px 16px; text-align: center;
+            padding: 14px 16px; text-align: center;
         }
         .welcome-white {
-            background: #FFFFFF; padding: 12px 16px; text-align: center; position: relative;
+            background: #FFFFFF; padding: 14px 16px; text-align: center; position: relative;
         }
         .welcome-green {
             background: linear-gradient(135deg, #138808, #0d6e05);
-            padding: 12px 16px; text-align: center;
+            padding: 14px 16px; text-align: center;
         }
-        .welcome-text {
-            font-size: 1.15em; font-weight: 700; color: #000; letter-spacing: 0.5px;
-            text-shadow: 0 1px 2px rgba(255,255,255,0.3);
+        .welcome-text-saffron {
+            font-size: 1.2em; font-weight: 700; color: #000000; letter-spacing: 0.5px;
+            font-family: 'Segoe UI', 'Noto Sans Devanagari', Arial, sans-serif;
+            line-height: 1.5;
         }
-        .welcome-white .welcome-text { color: #000; position: relative; z-index: 2; }
-        .chakra-overlay {
+        .welcome-text-white {
+            font-size: 1.2em; font-weight: 700; color: #000000; letter-spacing: 0.5px;
+            position: relative; z-index: 2;
+            font-family: 'Segoe UI', 'Noto Sans Devanagari', Arial, sans-serif;
+        }
+        .welcome-text-green {
+            font-size: 1.2em; font-weight: 700; color: #000000; letter-spacing: 0.5px;
+            font-family: 'Segoe UI', 'Noto Sans Devanagari', Arial, sans-serif;
+        }
+        .chakra-emblem {
             position: absolute; top: 50%; left: 50%;
-            transform: translate(-50%, -50%); opacity: 0.12;
-            font-size: 2.8rem; z-index: 1;
+            transform: translate(-50%, -50%);
+            width: 44px; height: 44px; z-index: 1;
+            opacity: 0.25;
         }
+        .chakra-emblem svg { width: 100%; height: 100%; }
         </style>
         <div class="welcome-flag-card">
             <div class="welcome-saffron">
-                <div class="welcome-text">🙏 Namaste<br>Aapka Swagat Hai</div>
+                <div class="welcome-text-saffron">🙏 नमस्ते<br>आपका स्वागत है</div>
             </div>
             <div class="welcome-white">
-                <div class="chakra-overlay">☸</div>
-                <div class="welcome-text">Ham Bharat Ke Log</div>
+                <div class="chakra-emblem">
+                    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="#000080" stroke-width="2"/>
+                        <circle cx="50" cy="50" r="8" fill="none" stroke="#000080" stroke-width="2"/>
+                        <g stroke="#000080" stroke-width="1.5">
+                            <line x1="50" y1="5" x2="50" y2="20"/>
+                            <line x1="50" y1="80" x2="50" y2="95"/>
+                            <line x1="5" y1="50" x2="20" y2="50"/>
+                            <line x1="80" y1="50" x2="95" y2="50"/>
+                            <line x1="18.2" y1="18.2" x2="28.8" y2="28.8"/>
+                            <line x1="71.2" y1="71.2" x2="81.8" y2="81.8"/>
+                            <line x1="81.8" y1="18.2" x2="71.2" y2="28.8"/>
+                            <line x1="28.8" y1="71.2" x2="18.2" y2="81.8"/>
+                            <line x1="50" y1="5" x2="50" y2="20" transform="rotate(22.5 50 50)"/>
+                            <line x1="50" y1="80" x2="50" y2="95" transform="rotate(22.5 50 50)"/>
+                            <line x1="5" y1="50" x2="20" y2="50" transform="rotate(22.5 50 50)"/>
+                            <line x1="80" y1="50" x2="95" y2="50" transform="rotate(22.5 50 50)"/>
+                            <line x1="18.2" y1="18.2" x2="28.8" y2="28.8" transform="rotate(22.5 50 50)"/>
+                            <line x1="71.2" y1="71.2" x2="81.8" y2="81.8" transform="rotate(22.5 50 50)"/>
+                            <line x1="81.8" y1="18.2" x2="71.2" y2="28.8" transform="rotate(22.5 50 50)"/>
+                            <line x1="28.8" y1="71.2" x2="18.2" y2="81.8" transform="rotate(22.5 50 50)"/>
+                        </g>
+                    </svg>
+                </div>
+                <div class="welcome-text-white">हम भारत के लोग</div>
             </div>
             <div class="welcome-green">
-                <div class="welcome-text">🇮🇳 Jai Hind</div>
+                <div class="welcome-text-green">🇮🇳 जय हिंद</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -2562,9 +2671,9 @@ def main():
         if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
             col_name = filtered_df.columns[train_col_idx]
             filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
-        if st.session_state.class_val and class_col_idx is not None and class_col_idx < len(filtered_df.columns):
+        if st.session_state.get('class_val', '') and class_col_idx is not None and class_col_idx < len(filtered_df.columns):
             col_name = filtered_df.columns[class_col_idx]
-            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.class_val, case=False, na=False)]
+            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.get('class_val', ''), case=False, na=False)]
         if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
             col_name = filtered_df.columns[doj_col_idx]
             try:
