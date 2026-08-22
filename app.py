@@ -1633,15 +1633,45 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .streamlit-expanderHeader {{ color: #000000 !important; font-weight: 700 !important; text-shadow: none !important; -webkit-text-fill-color: #000000 !important; }}
         .stCaption {{ color: #000000 !important; text-shadow: none !important; -webkit-text-fill-color: #000000 !important; }}
         [data-testid="stMain"] .stCaption {{ color: #000000 !important; text-shadow: none !important; }}
-        .stChatMessage {{ background: rgba(255,255,255,0.06) !important; border: 1px solid rgba(255,255,255,0.15) !important;
-            border-radius: 16px !important; padding: 14px !important; margin-bottom: 10px !important;
-            backdrop-filter: blur(24px) saturate(180%) !important; -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important; }}
-        .stChatMessage [data-testid="stChatMessageContent"] {{ color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; text-shadow: 0 1px 4px rgba(0,0,0,0.7) !important; }}
-        .stChatMessage [data-testid="stChatMessageAvatar"] {{ background: rgba(255,255,255,0.15) !important; border: 1px solid rgba(255,255,255,0.2) !important; }}
-        .stChatInput {{ background: rgba(255,255,255,0.06) !important; border: 1px solid rgba(255,255,255,0.18) !important; border-radius: 20px !important; backdrop-filter: blur(24px) saturate(180%) !important; -webkit-backdrop-filter: blur(24px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0,0,0,0.2) !important; padding: 8px 16px !important; }}
-        .stChatInput input {{ color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; text-shadow: 0 1px 4px rgba(0,0,0,0.7) !important; background: transparent !important; font-weight: 500 !important; }}
-        .stChatInput input::placeholder {{ color: rgba(255,255,255,0.55) !important; text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important; }}
+        .stChatMessage {{ 
+            background: rgba(173, 216, 230, 0.08) !important; 
+            border: 1px solid rgba(173, 216, 230, 0.25) !important;
+            border-radius: 16px !important; 
+            padding: 14px !important; 
+            margin-bottom: 10px !important;
+            backdrop-filter: blur(16px) saturate(140%) !important; 
+            -webkit-backdrop-filter: blur(16px) saturate(140%) !important;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06) !important; 
+        }}
+        .stChatMessage [data-testid="stChatMessageContent"] {{ 
+            color: #000000 !important; 
+            -webkit-text-fill-color: #000000 !important; 
+            text-shadow: 0 1px 3px rgba(255,255,255,0.6) !important; 
+        }}
+        .stChatMessage [data-testid="stChatMessageAvatar"] {{ 
+            background: rgba(173, 216, 230, 0.2) !important; 
+            border: 1px solid rgba(173, 216, 230, 0.35) !important; 
+        }}
+        .stChatInput {{ 
+            background: rgba(173, 216, 230, 0.1) !important; 
+            border: 1px solid rgba(173, 216, 230, 0.3) !important; 
+            border-radius: 20px !important; 
+            backdrop-filter: blur(16px) saturate(140%) !important; 
+            -webkit-backdrop-filter: blur(16px) saturate(140%) !important; 
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06) !important; 
+            padding: 8px 16px !important; 
+        }}
+        .stChatInput input {{ 
+            color: #000000 !important; 
+            -webkit-text-fill-color: #000000 !important; 
+            text-shadow: 0 1px 3px rgba(255,255,255,0.6) !important; 
+            background: transparent !important; 
+            font-weight: 500 !important; 
+        }}
+        .stChatInput input::placeholder {{ 
+            color: rgba(0,0,0,0.4) !important; 
+            text-shadow: 0 1px 3px rgba(255,255,255,0.5) !important; 
+        }}
         [data-testid="stMetric"] {{ background-color: {card_bg} !important; border: 1px solid {border} !important;
             border-radius: 10px !important; padding: 14px !important;
             backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
@@ -4729,176 +4759,353 @@ def main():
     # =====================================================================
     # VIEW: 🚂 RAILWAY → 🌊 REALISTIC UNDERWATER WORLD
     # =====================================================================
+        # =====================================================================
+    # VIEW: 🚂 RAILWAY → 🐠 REAL AQUARIUM UNDERWATER WORLD
+    # =====================================================================
     elif view == "🚂 Railway":
         st.markdown("""
         <style>
-        @keyframes real-bubble-rise { 0%{transform:translateY(0) scale(0.6); opacity:0;} 8%{opacity:0.85;} 92%{opacity:0.5;} 100%{transform:translateY(-110vh) scale(1.3); opacity:0;} }
-        @keyframes real-bubble-wobble { 0%,100%{margin-left:0;} 25%{margin-left:6px;} 75%{margin-left:-6px;} }
-        @keyframes real-ray-shine { 0%{opacity:0.08; transform:translateX(-15px) rotate(-2deg);} 50%{opacity:0.3;} 100%{opacity:0.08; transform:translateX(15px) rotate(2deg);} }
-        @keyframes real-particle-drift { 0%{transform:translate(0,0); opacity:0;} 15%{opacity:0.7;} 85%{opacity:0.4;} 100%{transform:translate(25px,-50vh); opacity:0;} }
-        @keyframes real-dust-mote { 0%,100%{opacity:0.3; transform:translateY(0);} 50%{opacity:0.8; transform:translateY(-10px);} }
-        @keyframes real-sand-shimmer { 0%,100%{opacity:0.25;} 50%{opacity:0.5;} }
-        @keyframes real-coral-sway { 0%,100%{transform:rotate(-2deg);} 50%{transform:rotate(2deg);} }
-        @keyframes real-seaweed-sway { 0%,100%{transform:rotate(-4deg) scaleY(1);} 50%{transform:rotate(4deg) scaleY(1.05);} }
-        @keyframes real-light-flicker { 0%,100%{opacity:0.6;} 50%{opacity:1;} }
-        .real-aqua-wrap { position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:-1; pointer-events:none; overflow:hidden; }
-        .real-aqua-video { position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; opacity:0.88; }
-        .real-aqua-overlay { position:absolute; top:0; left:0; width:100%; height:100%; background:linear-gradient(180deg, rgba(0,50,100,0.2) 0%, rgba(0,25,60,0.35) 40%, rgba(0,10,35,0.5) 100%); pointer-events:none; }
-        .real-aqua-vignette { position:absolute; top:0; left:0; width:100%; height:100%; box-shadow:inset 0 0 180px rgba(0,0,0,0.55); pointer-events:none; }
-        /* Realistic bubbles */
-        .real-bubble { position:absolute; border-radius:50%; background:radial-gradient(circle at 30% 30%, rgba(255,255,255,0.95), rgba(200,230,255,0.5), rgba(150,200,255,0.2)); border:1px solid rgba(255,255,255,0.35); box-shadow:0 0 8px rgba(255,255,255,0.2), inset 0 0 6px rgba(255,255,255,0.4); z-index:3; animation:real-bubble-rise linear infinite; }
-        .real-bubble::before { content:''; position:absolute; top:18%; left:22%; width:22%; height:22%; background:rgba(255,255,255,0.9); border-radius:50%; }
-        .real-bubble::after { content:''; position:absolute; bottom:20%; right:25%; width:12%; height:12%; background:rgba(255,255,255,0.5); border-radius:50%; }
-        /* Light rays from surface */
-        .real-ray { position:absolute; top:0; width:3px; height:75vh; background:linear-gradient(180deg, rgba(255,255,255,0.18), rgba(200,230,255,0.06), transparent); border-radius:2px; animation:real-ray-shine 7s ease-in-out infinite; z-index:1; }
-        /* Tiny particles / plankton */
-        .real-particle { position:absolute; width:2px; height:2px; background:rgba(180,220,255,0.7); border-radius:50%; box-shadow:0 0 3px rgba(180,220,255,0.5); animation:real-particle-drift linear infinite; z-index:1; }
+        @keyframes aqua-bubble-rise { 
+            0%{transform:translateY(0) scale(0.4); opacity:0;} 
+            10%{opacity:0.9;} 
+            90%{opacity:0.6;} 
+            100%{transform:translateY(-100vh) scale(1.2); opacity:0;} 
+        }
+        @keyframes aqua-bubble-wobble { 
+            0%,100%{margin-left:0;} 
+            25%{margin-left:8px;} 
+            75%{margin-left:-8px;} 
+        }
+        @keyframes aqua-fish-swim-lr { 
+            0%{transform:translateX(-120px) scaleX(1);} 
+            45%{transform:translateX(calc(50vw)) scaleX(1);} 
+            50%{transform:translateX(calc(50vw)) scaleX(-1);} 
+            95%{transform:translateX(-120px) scaleX(-1);} 
+            100%{transform:translateX(-120px) scaleX(1);} 
+        }
+        @keyframes aqua-fish-swim-rl { 
+            0%{transform:translateX(calc(100vw + 120px)) scaleX(-1);} 
+            45%{transform:translateX(calc(50vw)) scaleX(-1);} 
+            50%{transform:translateX(calc(50vw)) scaleX(1);} 
+            95%{transform:translateX(calc(100vw + 120px)) scaleX(1);} 
+            100%{transform:translateX(calc(100vw + 120px)) scaleX(-1);} 
+        }
+        @keyframes aqua-jelly-float { 
+            0%,100%{transform:translateY(0) scale(1); opacity:0.7;} 
+            50%{transform:translateY(-30px) scale(1.05); opacity:0.9;} 
+        }
+        @keyframes aqua-jelly-pulse { 
+            0%,100%{transform:scale(1);} 
+            50%{transform:scale(1.15);} 
+        }
+        @keyframes aqua-star-twinkle { 
+            0%,100%{opacity:0.4; transform:scale(1) rotate(0deg);} 
+            50%{opacity:1; transform:scale(1.1) rotate(180deg);} 
+        }
+        @keyframes aqua-coral-sway { 
+            0%,100%{transform:rotate(-3deg);} 
+            50%{transform:rotate(3deg);} 
+        }
+        @keyframes aqua-seaweed-wave { 
+            0%,100%{transform:rotate(-5deg) scaleY(1);} 
+            50%{transform:rotate(5deg) scaleY(1.08);} 
+        }
+        @keyframes aqua-light-shaft { 
+            0%{opacity:0.1; transform:translateX(-20px) skewX(-2deg);} 
+            50%{opacity:0.25;} 
+            100%{opacity:0.1; transform:translateX(20px) skewX(2deg);} 
+        }
+        @keyframes aqua-dust-mote { 
+            0%,100%{opacity:0.3; transform:translate(0,0);} 
+            50%{opacity:0.8; transform:translate(10px,-15px);} 
+        }
+
+        .aqua-scene-wrap { 
+            position:fixed; top:0; left:0; width:100vw; height:100vh; 
+            z-index:-1; pointer-events:none; overflow:hidden; 
+        }
+        .aqua-video-bg { 
+            position:absolute; top:0; left:0; width:100%; height:100%; 
+            object-fit:cover; opacity:0.92; 
+        }
+        .aqua-overlay { 
+            position:absolute; top:0; left:0; width:100%; height:100%; 
+            background:linear-gradient(180deg, rgba(0,60,120,0.15) 0%, rgba(0,30,70,0.25) 40%, rgba(0,15,40,0.4) 100%); 
+            pointer-events:none; 
+        }
+        .aqua-vignette { 
+            position:absolute; top:0; left:0; width:100%; height:100%; 
+            box-shadow:inset 0 0 150px rgba(0,0,0,0.5); pointer-events:none; 
+        }
+
+        /* Realistic bubbles from fish breathing */
+        .aqua-bubble { 
+            position:absolute; border-radius:50%; 
+            background:radial-gradient(circle at 30% 30%, rgba(255,255,255,0.95), rgba(200,240,255,0.6), rgba(150,220,255,0.25)); 
+            border:1px solid rgba(255,255,255,0.4); 
+            box-shadow:0 0 6px rgba(255,255,255,0.25), inset 0 0 4px rgba(255,255,255,0.5); 
+            z-index:3; animation:aqua-bubble-rise linear infinite, aqua-bubble-wobble ease-in-out infinite; 
+        }
+        .aqua-bubble::before { content:''; position:absolute; top:20%; left:20%; width:25%; height:25%; background:rgba(255,255,255,0.9); border-radius:50%; }
+        .aqua-bubble::after { content:''; position:absolute; bottom:18%; right:22%; width:14%; height:14%; background:rgba(255,255,255,0.5); border-radius:50%; }
+
+        /* Light shafts from surface */
+        .aqua-light-shaft { 
+            position:absolute; top:0; width:4px; height:70vh; 
+            background:linear-gradient(180deg, rgba(255,255,255,0.2), rgba(200,230,255,0.08), transparent); 
+            border-radius:2px; animation:aqua-light-shaft 6s ease-in-out infinite; z-index:1; 
+        }
+
+        /* Swimming fish emojis */
+        .aqua-fish { 
+            position:absolute; font-size:2.2rem; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.4)); 
+            z-index:4; animation:aqua-fish-swim-lr linear infinite; 
+        }
+        .aqua-fish-reverse { 
+            animation:aqua-fish-swim-rl linear infinite; 
+        }
+
+        /* Jellyfish */
+        .aqua-jelly { 
+            position:absolute; font-size:2.8rem; filter:drop-shadow(0 2px 8px rgba(180,120,255,0.4)); 
+            z-index:3; animation:aqua-jelly-float 4s ease-in-out infinite; 
+        }
+
+        /* Starfish */
+        .aqua-star { 
+            position:absolute; font-size:1.8rem; filter:drop-shadow(0 2px 4px rgba(255,180,100,0.5)); 
+            z-index:5; animation:aqua-star-twinkle 5s ease-in-out infinite; 
+        }
+
+        /* CSS Corals at bottom */
+        .aqua-coral { 
+            position:absolute; bottom:40px; width:10px; 
+            background:linear-gradient(180deg, rgba(255,130,100,0.7), rgba(200,80,60,0.6), rgba(160,50,40,0.5)); 
+            border-radius:5px; transform-origin:bottom center; animation:aqua-coral-sway 4s ease-in-out infinite; 
+            z-index:4; 
+        }
+        .aqua-coral::before { 
+            content:''; position:absolute; top:-10px; left:-5px; width:8px; height:16px; 
+            background:linear-gradient(180deg, rgba(255,120,90,0.65), rgba(180,70,50,0.5)); 
+            border-radius:4px; transform:rotate(-30deg); 
+        }
+        .aqua-coral::after { 
+            content:''; position:absolute; top:-6px; right:-5px; width:6px; height:12px; 
+            background:linear-gradient(180deg, rgba(255,110,80,0.6), rgba(170,60,40,0.45)); 
+            border-radius:3px; transform:rotate(25deg); 
+        }
+
+        /* Seaweed */
+        .aqua-seaweed { 
+            position:absolute; bottom:45px; width:5px; height:40px; 
+            background:linear-gradient(180deg, rgba(80,200,100,0.6), rgba(50,150,70,0.5), rgba(30,100,50,0.4)); 
+            border-radius:3px; transform-origin:bottom center; animation:aqua-seaweed-wave 3.5s ease-in-out infinite; 
+            z-index:4; 
+        }
+        .aqua-seaweed::before { 
+            content:''; position:absolute; top:-8px; left:-3px; width:4px; height:18px; 
+            background:linear-gradient(180deg, rgba(70,190,90,0.55), rgba(40,140,60,0.4)); 
+            border-radius:2px; transform:rotate(-35deg); transform-origin:bottom; 
+        }
+
+        /* Sandy bottom */
+        .aqua-sand { 
+            position:absolute; bottom:0; left:0; width:100%; height:55px; 
+            background:linear-gradient(180deg, rgba(210,180,140,0.6) 0%, rgba(180,150,110,0.65) 50%, rgba(140,110,70,0.7) 100%); 
+            border-radius:50% 50% 0 0 / 15px 15px 0 0; z-index:3; 
+        }
+        .aqua-sand-shine { 
+            position:absolute; bottom:10px; left:0; width:100%; height:2px; 
+            background:rgba(255,255,255,0.15); animation:aqua-star-twinkle 4s ease-in-out infinite; z-index:4; 
+        }
+
         /* Dust motes in light */
-        .real-dust { position:absolute; width:1px; height:1px; background:rgba(255,255,255,0.6); border-radius:50%; animation:real-dust-mote 6s ease-in-out infinite; z-index:2; }
-        /* Sandy ocean floor */
-        .real-sand { position:absolute; bottom:0; left:0; width:100%; height:60px; background:linear-gradient(180deg, rgba(194,165,116,0.5) 0%, rgba(160,128,80,0.55) 50%, rgba(107,80,48,0.6) 100%); border-radius:50% 50% 0 0 / 20px 20px 0 0; z-index:2; }
-        .real-sand-shine { position:absolute; bottom:8px; left:0; width:100%; height:2px; background:rgba(255,255,255,0.12); animation:real-sand-shimmer 4s ease-in-out infinite; z-index:3; }
-        /* CSS-based coral shapes (subtle, not emoji) */
-        .real-coral-shape { position:absolute; bottom:45px; width:8px; background:linear-gradient(180deg, rgba(255,150,120,0.6), rgba(200,100,80,0.5)); border-radius:4px; transform-origin:bottom center; animation:real-coral-sway 5s ease-in-out infinite; z-index:2; }
-        .real-coral-shape::before { content:''; position:absolute; top:-8px; left:-4px; width:6px; height:14px; background:linear-gradient(180deg, rgba(255,140,110,0.55), rgba(180,90,70,0.45)); border-radius:3px; transform:rotate(-25deg); }
-        .real-coral-shape::after { content:''; position:absolute; top:-5px; right:-4px; width:5px; height:12px; background:linear-gradient(180deg, rgba(255,130,100,0.5), rgba(170,80,60,0.4)); border-radius:3px; transform:rotate(20deg); }
-        /* CSS-based seaweed */
-        .real-seaweed-shape { position:absolute; bottom:50px; width:4px; height:35px; background:linear-gradient(180deg, rgba(100,200,120,0.5), rgba(60,150,80,0.4)); border-radius:2px; transform-origin:bottom center; animation:real-seaweed-sway 4s ease-in-out infinite; z-index:2; }
-        .real-seaweed-shape::before { content:''; position:absolute; top:-6px; left:-3px; width:3px; height:15px; background:linear-gradient(180deg, rgba(90,190,110,0.45), rgba(50,140,70,0.35)); border-radius:2px; transform:rotate(-30deg); transform-origin:bottom; }
-        /* Title card glassmorphism */
-        .real-title-card { position:relative; z-index:10; background:rgba(0,30,60,0.25); backdrop-filter:blur(24px) saturate(160%); border:1px solid rgba(255,255,255,0.12); border-radius:24px; padding:28px 36px; text-align:center; margin:25px auto; max-width:650px; box-shadow:0 12px 48px rgba(0,0,0,0.35); }
-        .real-title-card h2 { color:#ffffff !important; text-shadow:0 2px 12px rgba(0,0,0,0.8) !important; margin:0; font-size:1.7rem; font-weight:800; letter-spacing:1px; }
-        .real-title-card p { color:rgba(255,255,255,0.85) !important; text-shadow:0 1px 6px rgba(0,0,0,0.6) !important; margin:10px 0 0 0; font-size:0.95rem; }
+        .aqua-dust { 
+            position:absolute; width:2px; height:2px; background:rgba(255,255,255,0.5); border-radius:50%; 
+            animation:aqua-dust-mote 7s ease-in-out infinite; z-index:2; 
+        }
+
+        /* Title card */
+        .aqua-title-card { 
+            position:relative; z-index:10; 
+            background:rgba(0,40,80,0.2); backdrop-filter:blur(24px) saturate(160%); 
+            border:1px solid rgba(255,255,255,0.12); border-radius:24px; 
+            padding:28px 36px; text-align:center; margin:25px auto; max-width:650px; 
+            box-shadow:0 12px 48px rgba(0,0,0,0.35); 
+        }
+        .aqua-title-card h2 { color:#ffffff !important; text-shadow:0 2px 12px rgba(0,0,0,0.8) !important; margin:0; font-size:1.7rem; font-weight:800; letter-spacing:1px; }
+        .aqua-title-card p { color:rgba(255,255,255,0.85) !important; text-shadow:0 1px 6px rgba(0,0,0,0.6) !important; margin:10px 0 0 0; font-size:0.95rem; }
+
         /* Marine info cards */
-        .real-marine-card { background:rgba(0,40,80,0.2); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.1); border-radius:20px; padding:20px; text-align:center; transition:all 0.35s ease; }
-        .real-marine-card:hover { transform:translateY(-6px); border-color:rgba(255,255,255,0.25); box-shadow:0 10px 40px rgba(0,0,0,0.35); }
-        .real-marine-card .icon-wrap { width:56px; height:56px; margin:0 auto 10px; background:linear-gradient(135deg, rgba(100,180,255,0.3), rgba(80,150,220,0.2)); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.6rem; border:1px solid rgba(255,255,255,0.15); }
-        .real-marine-card h4 { color:#ffffff !important; text-shadow:0 1px 5px rgba(0,0,0,0.7) !important; margin:0; font-size:0.95rem; font-weight:700; }
-        .real-marine-card p { color:rgba(255,255,255,0.75) !important; text-shadow:0 1px 4px rgba(0,0,0,0.5) !important; font-size:0.78rem; margin:6px 0 0 0; line-height:1.4; }
+        .aqua-marine-card { 
+            background:rgba(0,50,100,0.2); backdrop-filter:blur(20px); 
+            border:1px solid rgba(255,255,255,0.1); border-radius:20px; 
+            padding:20px; text-align:center; transition:all 0.35s ease; 
+        }
+        .aqua-marine-card:hover { transform:translateY(-6px); border-color:rgba(255,255,255,0.25); box-shadow:0 10px 40px rgba(0,0,0,0.35); }
+        .aqua-marine-card .icon-wrap { 
+            width:56px; height:56px; margin:0 auto 10px; 
+            background:linear-gradient(135deg, rgba(100,200,255,0.3), rgba(80,170,220,0.2)); 
+            border-radius:50%; display:flex; align-items:center; justify-content:center; 
+            font-size:1.6rem; border:1px solid rgba(255,255,255,0.15); 
+        }
+        .aqua-marine-card h4 { color:#ffffff !important; text-shadow:0 1px 5px rgba(0,0,0,0.7) !important; margin:0; font-size:0.95rem; font-weight:700; }
+        .aqua-marine-card p { color:rgba(255,255,255,0.75) !important; text-shadow:0 1px 4px rgba(0,0,0,0.5) !important; font-size:0.78rem; margin:6px 0 0 0; line-height:1.4; }
+
         /* Fact box */
-        .real-fact-box { position:relative; z-index:10; text-align:center; padding:24px; background:rgba(0,30,60,0.2); backdrop-filter:blur(16px); border-radius:20px; border:1px solid rgba(255,255,255,0.1); max-width:850px; margin:0 auto; }
-        .real-fact-box .fact-title { color:#ffffff; font-size:1.15rem; font-weight:700; text-shadow:0 1px 5px rgba(0,0,0,0.7); margin-bottom:10px; }
-        .real-fact-box .fact-text { color:rgba(255,255,255,0.85); font-size:0.9rem; text-shadow:0 1px 4px rgba(0,0,0,0.5); line-height:1.6; }
+        .aqua-fact-box { 
+            position:relative; z-index:10; text-align:center; padding:24px; 
+            background:rgba(0,40,80,0.2); backdrop-filter:blur(16px); 
+            border-radius:20px; border:1px solid rgba(255,255,255,0.1); 
+            max-width:850px; margin:0 auto; 
+        }
+        .aqua-fact-box .fact-title { color:#ffffff; font-size:1.15rem; font-weight:700; text-shadow:0 1px 5px rgba(0,0,0,0.7); margin-bottom:10px; }
+        .aqua-fact-box .fact-text { color:rgba(255,255,255,0.85); font-size:0.9rem; text-shadow:0 1px 4px rgba(0,0,0,0.5); line-height:1.6; }
         </style>
-        <div class="real-aqua-wrap">
-            <video class="real-aqua-video" autoplay muted loop playsinline preload="auto">
-                <source src="https://videos.pexels.com/video-files/3571264/3571264-uhd_2560_1440_30fps.mp4" type="video/mp4">
-                <source src="https://videos.pexels.com/video-files/3571264/3571264-hd_1920_1080_30fps.mp4" type="video/mp4">
+
+        <div class="aqua-scene-wrap">
+            <!-- Real Aquarium Video Background -->
+            <video class="aqua-video-bg" autoplay muted loop playsinline preload="auto">
+                <source src="https://videos.pexels.com/video-files/16014629/16014629-uhd_2560_1440_30fps.mp4" type="video/mp4">
+                <source src="https://videos.pexels.com/video-files/16014629/16014629-hd_1920_1080_30fps.mp4" type="video/mp4">
+                <source src="https://videos.pexels.com/video-files/16014629/16014629-hd_1280_720_30fps.mp4" type="video/mp4">
             </video>
-            <div class="real-aqua-overlay"></div>
-            <div class="real-aqua-vignette"></div>
-            <!-- Light rays from surface -->
-            <div class="real-ray" style="left:8%; animation-delay:0s; height:65vh; width:2px;"></div>
-            <div class="real-ray" style="left:18%; animation-delay:1.5s; height:55vh; width:3px;"></div>
-            <div class="real-ray" style="left:28%; animation-delay:3s; height:70vh; width:2px;"></div>
-            <div class="real-ray" style="left:42%; animation-delay:0.8s; height:60vh; width:4px;"></div>
-            <div class="real-ray" style="left:55%; animation-delay:2.2s; height:68vh; width:2px;"></div>
-            <div class="real-ray" style="left:68%; animation-delay:4s; height:58vh; width:3px;"></div>
-            <div class="real-ray" style="left:78%; animation-delay:1s; height:62vh; width:2px;"></div>
-            <div class="real-ray" style="left:90%; animation-delay:3.5s; height:55vh; width:3px;"></div>
-            <!-- Realistic bubbles -->
-            <div class="real-bubble" style="left:5%; bottom:-10px; width:10px; height:10px; animation-duration:7s; animation-delay:0s;"></div>
-            <div class="real-bubble" style="left:12%; bottom:-10px; width:16px; height:16px; animation-duration:9.5s; animation-delay:1.2s;"></div>
-            <div class="real-bubble" style="left:18%; bottom:-10px; width:8px; height:8px; animation-duration:6.5s; animation-delay:2.8s;"></div>
-            <div class="real-bubble" style="left:25%; bottom:-10px; width:14px; height:14px; animation-duration:8.5s; animation-delay:0.6s;"></div>
-            <div class="real-bubble" style="left:32%; bottom:-10px; width:20px; height:20px; animation-duration:11s; animation-delay:3.8s;"></div>
-            <div class="real-bubble" style="left:38%; bottom:-10px; width:9px; height:9px; animation-duration:7.8s; animation-delay:1.5s;"></div>
-            <div class="real-bubble" style="left:45%; bottom:-10px; width:12px; height:12px; animation-duration:9s; animation-delay:0.2s;"></div>
-            <div class="real-bubble" style="left:52%; bottom:-10px; width:18px; height:18px; animation-duration:10s; animation-delay:2.5s;"></div>
-            <div class="real-bubble" style="left:58%; bottom:-10px; width:7px; height:7px; animation-duration:6s; animation-delay:4.2s;"></div>
-            <div class="real-bubble" style="left:65%; bottom:-10px; width:15px; height:15px; animation-duration:8.2s; animation-delay:0.9s;"></div>
-            <div class="real-bubble" style="left:72%; bottom:-10px; width:11px; height:11px; animation-duration:7.2s; animation-delay:2.1s;"></div>
-            <div class="real-bubble" style="left:78%; bottom:-10px; width:22px; height:22px; animation-duration:12s; animation-delay:3.2s;"></div>
-            <div class="real-bubble" style="left:85%; bottom:-10px; width:9px; height:9px; animation-duration:6.8s; animation-delay:1.8s;"></div>
-            <div class="real-bubble" style="left:92%; bottom:-10px; width:13px; height:13px; animation-duration:9.2s; animation-delay:0.4s;"></div>
-            <div class="real-bubble" style="left:3%; bottom:-10px; width:24px; height:24px; animation-duration:13s; animation-delay:5s;"></div>
-            <div class="real-bubble" style="left:48%; bottom:-10px; width:6px; height:6px; animation-duration:5.5s; animation-delay:1s;"></div>
-            <div class="real-bubble" style="left:68%; bottom:-10px; width:17px; height:17px; animation-duration:9.8s; animation-delay:4.5s;"></div>
-            <!-- Particles / plankton -->
-            <div class="real-particle" style="left:10%; bottom:25%; animation-delay:0s; animation-duration:16s;"></div>
-            <div class="real-particle" style="left:22%; bottom:45%; animation-delay:3s; animation-duration:18s;"></div>
-            <div class="real-particle" style="left:35%; bottom:20%; animation-delay:6s; animation-duration:14s;"></div>
-            <div class="real-particle" style="left:48%; bottom:55%; animation-delay:2s; animation-duration:17s;"></div>
-            <div class="real-particle" style="left:60%; bottom:30%; animation-delay:8s; animation-duration:15s;"></div>
-            <div class="real-particle" style="left:72%; bottom:50%; animation-delay:4s; animation-duration:19s;"></div>
-            <div class="real-particle" style="left:85%; bottom:35%; animation-delay:10s; animation-duration:13s;"></div>
-            <div class="real-particle" style="left:5%; bottom:65%; animation-delay:7s; animation-duration:16s;"></div>
-            <div class="real-particle" style="left:50%; bottom:40%; animation-delay:5s; animation-duration:14s;"></div>
-            <div class="real-particle" style="left:75%; bottom:60%; animation-delay:12s; animation-duration:20s;"></div>
+            <div class="aqua-overlay"></div>
+            <div class="aqua-vignette"></div>
+
+            <!-- Light shafts from surface -->
+            <div class="aqua-light-shaft" style="left:6%; animation-delay:0s; height:60vh; width:3px;"></div>
+            <div class="aqua-light-shaft" style="left:18%; animation-delay:1.2s; height:55vh; width:2px;"></div>
+            <div class="aqua-light-shaft" style="left:32%; animation-delay:2.5s; height:65vh; width:4px;"></div>
+            <div class="aqua-light-shaft" style="left:48%; animation-delay:0.8s; height:50vh; width:2px;"></div>
+            <div class="aqua-light-shaft" style="left:62%; animation-delay:3s; height:58vh; width:3px;"></div>
+            <div class="aqua-light-shaft" style="left:76%; animation-delay:1.8s; height:62vh; width:2px;"></div>
+            <div class="aqua-light-shaft" style="left:88%; animation-delay:4s; height:55vh; width:3px;"></div>
+
+            <!-- Bubbles from fish breathing -->
+            <div class="aqua-bubble" style="left:8%; bottom:15%; width:8px; height:8px; animation-duration:6s; animation-delay:0s;"></div>
+            <div class="aqua-bubble" style="left:12%; bottom:25%; width:12px; height:12px; animation-duration:8s; animation-delay:1.5s;"></div>
+            <div class="aqua-bubble" style="left:18%; bottom:10%; width:6px; height:6px; animation-duration:5s; animation-delay:0.8s;"></div>
+            <div class="aqua-bubble" style="left:22%; bottom:35%; width:10px; height:10px; animation-duration:7s; animation-delay:2.2s;"></div>
+            <div class="aqua-bubble" style="left:28%; bottom:20%; width:14px; height:14px; animation-duration:9s; animation-delay:0.3s;"></div>
+            <div class="aqua-bubble" style="left:35%; bottom:40%; width:7px; height:7px; animation-duration:6.5s; animation-delay:3s;"></div>
+            <div class="aqua-bubble" style="left:42%; bottom:18%; width:11px; height:11px; animation-duration:7.5s; animation-delay:1s;"></div>
+            <div class="aqua-bubble" style="left:48%; bottom:30%; width:9px; height:9px; animation-duration:6s; animation-delay:2.5s;"></div>
+            <div class="aqua-bubble" style="left:55%; bottom:22%; width:13px; height:13px; animation-duration:8.5s; animation-delay:0.6s;"></div>
+            <div class="aqua-bubble" style="left:62%; bottom:38%; width:7px; height:7px; animation-duration:5.5s; animation-delay:1.8s;"></div>
+            <div class="aqua-bubble" style="left:68%; bottom:15%; width:10px; height:10px; animation-duration:7s; animation-delay:3.5s;"></div>
+            <div class="aqua-bubble" style="left:75%; bottom:28%; width:8px; height:8px; animation-duration:6s; animation-delay:0.2s;"></div>
+            <div class="aqua-bubble" style="left:82%; bottom:20%; width:12px; height:12px; animation-duration:8s; animation-delay:2s;"></div>
+            <div class="aqua-bubble" style="left:88%; bottom:35%; width:6px; height:6px; animation-duration:5s; animation-delay:1.2s;"></div>
+            <div class="aqua-bubble" style="left:92%; bottom:12%; width:9px; height:9px; animation-duration:6.5s; animation-delay:0.5s;"></div>
+            <div class="aqua-bubble" style="left:15%; bottom:45%; width:11px; height:11px; animation-duration:7.2s; animation-delay:2.8s;"></div>
+            <div class="aqua-bubble" style="left:38%; bottom:50%; width:8px; height:8px; animation-duration:6s; animation-delay:0.9s;"></div>
+            <div class="aqua-bubble" style="left:58%; bottom:48%; width:10px; height:10px; animation-duration:7.8s; animation-delay:1.5s;"></div>
+            <div class="aqua-bubble" style="left:72%; bottom:42%; width:7px; height:7px; animation-duration:5.5s; animation-delay:3.2s;"></div>
+            <div class="aqua-bubble" style="left:5%; bottom:32%; width:13px; height:13px; animation-duration:8.2s; animation-delay:0.1s;"></div>
+
+            <!-- Swimming Fish -->
+            <div class="aqua-fish" style="top:18%; animation-duration:18s; animation-delay:0s;">🐠</div>
+            <div class="aqua-fish aqua-fish-reverse" style="top:25%; animation-duration:22s; animation-delay:3s;">🐟</div>
+            <div class="aqua-fish" style="top:32%; animation-duration:20s; animation-delay:6s; font-size:1.8rem;">🐡</div>
+            <div class="aqua-fish aqua-fish-reverse" style="top:15%; animation-duration:25s; animation-delay:1s; font-size:2.5rem;">🦈</div>
+            <div class="aqua-fish" style="top:40%; animation-duration:16s; animation-delay:8s;">🐠</div>
+            <div class="aqua-fish aqua-fish-reverse" style="top:22%; animation-duration:19s; animation-delay:4s; font-size:1.6rem;">🐟</div>
+            <div class="aqua-fish" style="top:35%; animation-duration:24s; animation-delay:10s; font-size:2rem;">🐠</div>
+            <div class="aqua-fish aqua-fish-reverse" style="top:12%; animation-duration:21s; animation-delay:2s;">🐟</div>
+            <div class="aqua-fish" style="top:45%; animation-duration:17s; animation-delay:7s; font-size:1.5rem;">🐡</div>
+            <div class="aqua-fish aqua-fish-reverse" style="top:28%; animation-duration:23s; animation-delay:5s; font-size:2.2rem;">🐠</div>
+
+            <!-- Jellyfish -->
+            <div class="aqua-jelly" style="left:10%; top:20%; animation-delay:0s;">🪼</div>
+            <div class="aqua-jelly" style="left:75%; top:35%; animation-delay:2s; font-size:2.2rem;">🪼</div>
+            <div class="aqua-jelly" style="left:45%; top:15%; animation-delay:4s; font-size:3rem;">🪼</div>
+
+            <!-- Starfish -->
+            <div class="aqua-star" style="left:8%; bottom:60px; animation-delay:0s;">⭐</div>
+            <div class="aqua-star" style="left:25%; bottom:55px; animation-delay:1.5s; font-size:1.4rem;">⭐</div>
+            <div class="aqua-star" style="left:65%; bottom:58px; animation-delay:3s;">⭐</div>
+            <div class="aqua-star" style="left:85%; bottom:52px; animation-delay:0.8s; font-size:2rem;">⭐</div>
+            <div class="aqua-star" style="left:42%; bottom:62px; animation-delay:2.2s; font-size:1.3rem;">⭐</div>
+
+            <!-- Corals -->
+            <div class="aqua-coral" style="left:3%; height:30px; animation-delay:0s;"></div>
+            <div class="aqua-coral" style="left:8%; height:22px; animation-delay:0.7s;"></div>
+            <div class="aqua-coral" style="left:14%; height:35px; animation-delay:1.2s;"></div>
+            <div class="aqua-coral" style="left:20%; height:18px; animation-delay:0.3s;"></div>
+            <div class="aqua-coral" style="left:26%; height:28px; animation-delay:1.8s;"></div>
+            <div class="aqua-coral" style="left:32%; height:20px; animation-delay:0.5s;"></div>
+            <div class="aqua-coral" style="left:38%; height:32px; animation-delay:2.2s;"></div>
+            <div class="aqua-coral" style="left:44%; height:25px; animation-delay:0.9s;"></div>
+            <div class="aqua-coral" style="left:50%; height:30px; animation-delay:1.5s;"></div>
+            <div class="aqua-coral" style="left:56%; height:22px; animation-delay:0.2s;"></div>
+            <div class="aqua-coral" style="left:62%; height:35px; animation-delay:2.5s;"></div>
+            <div class="aqua-coral" style="left:68%; height:20px; animation-delay:0.8s;"></div>
+            <div class="aqua-coral" style="left:74%; height:28px; animation-delay:1.3s;"></div>
+            <div class="aqua-coral" style="left:80%; height:24px; animation-delay:0.4s;"></div>
+            <div class="aqua-coral" style="left:86%; height:32px; animation-delay:1.9s;"></div>
+            <div class="aqua-coral" style="left:92%; height:26px; animation-delay:0.6s;"></div>
+            <div class="aqua-coral" style="left:96%; height:20px; animation-delay:2.8s;"></div>
+
+            <!-- Seaweed -->
+            <div class="aqua-seaweed" style="left:5%; height:35px; animation-delay:0s;"></div>
+            <div class="aqua-seaweed" style="left:12%; height:28px; animation-delay:0.8s;"></div>
+            <div class="aqua-seaweed" style="left:18%; height:42px; animation-delay:1.5s;"></div>
+            <div class="aqua-seaweed" style="left:25%; height:30px; animation-delay:0.3s;"></div>
+            <div class="aqua-seaweed" style="left:32%; height:38px; animation-delay:2s;"></div>
+            <div class="aqua-seaweed" style="left:40%; height:25px; animation-delay:0.6s;"></div>
+            <div class="aqua-seaweed" style="left:48%; height:35px; animation-delay:1.2s;"></div>
+            <div class="aqua-seaweed" style="left:55%; height:30px; animation-delay:0.1s;"></div>
+            <div class="aqua-seaweed" style="left:62%; height:40px; animation-delay:1.8s;"></div>
+            <div class="aqua-seaweed" style="left:70%; height:28px; animation-delay:0.5s;"></div>
+            <div class="aqua-seaweed" style="left:78%; height:36px; animation-delay:2.2s;"></div>
+            <div class="aqua-seaweed" style="left:85%; height:32px; animation-delay:0.9s;"></div>
+            <div class="aqua-seaweed" style="left:92%; height:26px; animation-delay:1.5s;"></div>
+
+            <!-- Sandy bottom -->
+            <div class="aqua-sand"></div>
+            <div class="aqua-sand-shine"></div>
+
             <!-- Dust motes in light -->
-            <div class="real-dust" style="left:15%; top:20%; animation-delay:0s;"></div>
-            <div class="real-dust" style="left:25%; top:35%; animation-delay:1.5s;"></div>
-            <div class="real-dust" style="left:40%; top:15%; animation-delay:3s;"></div>
-            <div class="real-dust" style="left:55%; top:40%; animation-delay:0.8s;"></div>
-            <div class="real-dust" style="left:70%; top:25%; animation-delay:2.2s;"></div>
-            <div class="real-dust" style="left:82%; top:45%; animation-delay:4s;"></div>
-            <div class="real-dust" style="left:8%; top:50%; animation-delay:1s;"></div>
-            <div class="real-dust" style="left:35%; top:55%; animation-delay:2.8s;"></div>
-            <div class="real-dust" style="left:62%; top:18%; animation-delay:3.5s;"></div>
-            <div class="real-dust" style="left:90%; top:30%; animation-delay:0.5s;"></div>
-            <!-- CSS Coral shapes -->
-            <div class="real-coral-shape" style="left:4%; height:28px; animation-delay:0s;"></div>
-            <div class="real-coral-shape" style="left:12%; height:22px; animation-delay:0.8s;"></div>
-            <div class="real-coral-shape" style="left:22%; height:32px; animation-delay:1.5s;"></div>
-            <div class="real-coral-shape" style="left:32%; height:18px; animation-delay:0.3s;"></div>
-            <div class="real-coral-shape" style="left:42%; height:26px; animation-delay:2s;"></div>
-            <div class="real-coral-shape" style="left:55%; height:20px; animation-delay:1s;"></div>
-            <div class="real-coral-shape" style="left:65%; height:30px; animation-delay:2.5s;"></div>
-            <div class="real-coral-shape" style="left:75%; height:24px; animation-delay:0.6s;"></div>
-            <div class="real-coral-shape" style="left:85%; height:28px; animation-delay:1.8s;"></div>
-            <div class="real-coral-shape" style="left:94%; height:20px; animation-delay:3s;"></div>
-            <!-- CSS Seaweed shapes -->
-            <div class="real-seaweed-shape" style="left:7%; height:30px; animation-delay:0s;"></div>
-            <div class="real-seaweed-shape" style="left:17%; height:25px; animation-delay:0.7s;"></div>
-            <div class="real-seaweed-shape" style="left:28%; height:35px; animation-delay:1.3s;"></div>
-            <div class="real-seaweed-shape" style="left:38%; height:22px; animation-delay:0.4s;"></div>
-            <div class="real-seaweed-shape" style="left:48%; height:32px; animation-delay:1.8s;"></div>
-            <div class="real-seaweed-shape" style="left:58%; height:28px; animation-delay:0.9s;"></div>
-            <div class="real-seaweed-shape" style="left:70%; height:26px; animation-delay:2.1s;"></div>
-            <div class="real-seaweed-shape" style="left:80%; height:34px; animation-delay:1.1s;"></div>
-            <div class="real-seaweed-shape" style="left:90%; height:24px; animation-delay:0.5s;"></div>
-            <div class="real-seaweed-shape" style="left:97%; height:30px; animation-delay:2.8s;"></div>
-            <!-- Sandy floor -->
-            <div class="real-sand"></div>
-            <div class="real-sand-shine"></div>
+            <div class="aqua-dust" style="left:15%; top:20%; animation-delay:0s;"></div>
+            <div class="aqua-dust" style="left:25%; top:35%; animation-delay:2s;"></div>
+            <div class="aqua-dust" style="left:40%; top:18%; animation-delay:4s;"></div>
+            <div class="aqua-dust" style="left:55%; top:40%; animation-delay:1s;"></div>
+            <div class="aqua-dust" style="left:70%; top:25%; animation-delay:3s;"></div>
+            <div class="aqua-dust" style="left:82%; top:45%; animation-delay:5s;"></div>
+            <div class="aqua-dust" style="left:8%; top:50%; animation-delay:1.5s;"></div>
+            <div class="aqua-dust" style="left:35%; top:55%; animation-delay:3.5s;"></div>
+            <div class="aqua-dust" style="left:60%; top:15%; animation-delay:0.5s;"></div>
+            <div class="aqua-dust" style="left:88%; top:30%; animation-delay:2.5s;"></div>
         </div>
-        <div class="real-title-card">
-            <h2>🌊 Deep Ocean Explorer</h2>
-            <p>Immersive underwater experience • Real ocean footage with ambient marine atmosphere</p>
+
+        <div class="aqua-title-card">
+            <h2>🐠 Aquarium Explorer</h2>
+            <p>Real underwater world with tropical fish, corals, jellyfish & starfish</p>
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("<div style='height:55vh;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:50vh;'></div>", unsafe_allow_html=True)
 
         # Marine info cards
-        st.markdown("""
-        <style>
-        .real-marine-card { background:rgba(0,40,80,0.2); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.1); border-radius:20px; padding:20px; text-align:center; transition:all 0.35s ease; }
-        .real-marine-card:hover { transform:translateY(-6px); border-color:rgba(255,255,255,0.25); box-shadow:0 10px 40px rgba(0,0,0,0.35); }
-        .real-marine-card .icon-wrap { width:56px; height:56px; margin:0 auto 10px; background:linear-gradient(135deg, rgba(100,180,255,0.3), rgba(80,150,220,0.2)); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.6rem; border:1px solid rgba(255,255,255,0.15); }
-        .real-marine-card h4 { color:#ffffff !important; text-shadow:0 1px 5px rgba(0,0,0,0.7) !important; margin:0; font-size:0.95rem; font-weight:700; }
-        .real-marine-card p { color:rgba(255,255,255,0.75) !important; text-shadow:0 1px 4px rgba(0,0,0,0.5) !important; font-size:0.78rem; margin:6px 0 0 0; line-height:1.4; }
-        </style>
-        """, unsafe_allow_html=True)
-
         c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
-            st.markdown('<div class="real-marine-card"><div class="icon-wrap">🌊</div><h4>Ocean Depth</h4><p>Average depth is 3,688 meters</p></div>', unsafe_allow_html=True)
+            st.markdown('<div class="aqua-marine-card"><div class="icon-wrap">🌊</div><h4>Ocean Depth</h4><p>Average depth is 3,688 meters</p></div>', unsafe_allow_html=True)
         with c2:
-            st.markdown('<div class="real-marine-card"><div class="icon-wrap">🫧</div><h4>Oxygen</h4><p>Produces 50%+ of world&apos;s O<sub>2</sub></p></div>', unsafe_allow_html=True)
+            st.markdown('<div class="aqua-marine-card"><div class="icon-wrap">🫧</div><h4>Oxygen</h4><p>Produces 50%+ of world&apos;s O<sub>2</sub></p></div>', unsafe_allow_html=True)
         with c3:
-            st.markdown('<div class="real-marine-card"><div class="icon-wrap">🪸</div><h4>Coral Reefs</h4><p>Home to 25% of marine life</p></div>', unsafe_allow_html=True)
+            st.markdown('<div class="aqua-marine-card"><div class="icon-wrap">🪸</div><h4>Coral Reefs</h4><p>Home to 25% of marine life</p></div>', unsafe_allow_html=True)
         with c4:
-            st.markdown('<div class="real-marine-card"><div class="icon-wrap">🐋</div><h4>Marine Species</h4><p>Over 2 million species exist</p></div>', unsafe_allow_html=True)
+            st.markdown('<div class="aqua-marine-card"><div class="icon-wrap">🐋</div><h4>Marine Species</h4><p>Over 2 million species exist</p></div>', unsafe_allow_html=True)
         with c5:
-            st.markdown('<div class="real-marine-card"><div class="icon-wrap">🔬</div><h4>Unexplored</h4><p>80% of ocean is unmapped</p></div>', unsafe_allow_html=True)
+            st.markdown('<div class="aqua-marine-card"><div class="icon-wrap">🔬</div><h4>Unexplored</h4><p>80% of ocean is unmapped</p></div>', unsafe_allow_html=True)
 
         st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
 
         # Ocean fact box
         st.markdown("""
-        <div class="real-fact-box">
-            <div class="fact-title">🌊 Did You Know?</div>
+        <div class="aqua-fact-box">
+            <div class="fact-title">🐠 Did You Know?</div>
             <div class="fact-text">
                 The ocean covers more than 70% of Earth's surface and contains 99% of the planet's living space. 
                 A single drop of seawater can contain millions of bacteria and viruses, yet the ocean remains 
@@ -4907,6 +5114,9 @@ def main():
         </div>
         """, unsafe_allow_html=True)
 
+    # =====================================================================
+    # VIEW: 🌤️ WEATHER
+    # =====================================================================
     # =====================================================================
     # VIEW: 🌤️ WEATHER    # =====================================================================
     # VIEW: 🌤️ WEATHER    # =====================================================================
@@ -5236,19 +5446,19 @@ def main():
                                 50% {{ transform: translateY(-5px); }}
                             }}
                             .forecast-card-{idx} {{
-                                background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18);
+                                background: rgba(173, 216, 230, 0.12); border: 1px solid rgba(173, 216, 230, 0.3);
                                 border-radius: 20px; padding: 18px; text-align: center;
-                                box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+                                box-shadow: 0 4px 16px rgba(0,0,0,0.08);
                                 animation: forecast-bounce 3s ease-in-out infinite;
                                 animation-delay: {idx * 0.3}s;
-                                backdrop-filter: blur(12px);
+                                backdrop-filter: blur(16px) saturate(140%);
+                                -webkit-backdrop-filter: blur(16px) saturate(140%);
                             }}
                             .forecast-card-{idx} * {{
-                                color: #ffffff !important;
-                                -webkit-text-fill-color: #ffffff !important;
-                                text-shadow: 0 1px 4px rgba(0,0,0,0.8) !important;
-                            }}
-                            </style>
+                                color: #000000 !important;
+                                -webkit-text-fill-color: #000000 !important;
+                                text-shadow: 0 1px 3px rgba(255,255,255,0.6) !important;
+                            }}</style>
                             <div class="forecast-card-{idx}">
                                 <div style="font-size: 0.9rem; font-weight: 700; margin-bottom: 8px;">{day_name}</div>
                                 <img src="{icon_url}" style="width: 60px; height: 60px; margin: 5px 0; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));">
