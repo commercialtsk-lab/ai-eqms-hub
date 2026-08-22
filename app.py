@@ -1399,28 +1399,38 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
 
         [data-testid="stSidebar"] > div:first-child {{ padding-top: 0 !important; }}
-        [data-testid="stSidebar"] {{ background-color: rgba(15, 23, 42, 0.92) !important; border-right: 1px solid rgba(148, 163, 184, 0.3) !important; backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); }}
-        [data-testid="stSidebar"] * {{ color: #f1f5f9 !important; }}
+        [data-testid="stSidebar"] {{ background-color: rgba(15, 23, 42, 0.95) !important; border-right: 1px solid rgba(148, 163, 184, 0.3) !important; }}
+        [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown div,
+        [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
+        [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] .stDateInput label,
+        [data-testid="stSidebar"] .stNumberInput label, [data-testid="stSidebar"] .stTextArea label,
+        [data-testid="stSidebar"] .stRadio label, [data-testid="stSidebar"] .stCheckbox label {{
+            color: #f1f5f9 !important;
+        }}
         [data-testid="stSidebar"] .stTextInput input, [data-testid="stSidebar"] .stNumberInput input,
         [data-testid="stSidebar"] .stDateInput input, [data-testid="stSidebar"] .stTextArea textarea,
         [data-testid="stSidebar"] .stSelectbox > div > div > div {{
-            background-color: rgba(30, 41, 59, 0.9) !important; color: #f1f5f9 !important;
-            border: 1px solid rgba(148, 163, 184, 0.4) !important;
+            background-color: #1e293b !important; color: #f1f5f9 !important;
+            border: 1px solid #475569 !important; border-radius: 8px !important;
         }}
         [data-testid="stSidebar"] .stButton > button {{
-            background-color: rgba(51, 65, 85, 0.8) !important; color: #f1f5f9 !important;
-            border: 1px solid rgba(148, 163, 184, 0.4) !important;
+            background-color: #334155 !important; color: #f1f5f9 !important;
+            border: 1px solid #475569 !important; border-radius: 8px !important;
         }}
         [data-testid="stSidebar"] .stButton > button:hover {{
             background-color: #2563eb !important; color: white !important;
+            border-color: #2563eb !important;
         }}
         [data-testid="stSidebar"] .stExpander {{
-            background-color: rgba(30, 41, 59, 0.7) !important;
-            border: 1px solid rgba(148, 163, 184, 0.25) !important;
+            background-color: rgba(30, 41, 59, 0.85) !important;
+            border: 1px solid rgba(148, 163, 184, 0.3) !important; border-radius: 8px !important;
         }}
         [data-testid="stSidebar"] .stFileUploader {{
-            background-color: rgba(30, 41, 59, 0.7) !important;
-            border: 2px dashed rgba(148, 163, 184, 0.3) !important;
+            background-color: rgba(30, 41, 59, 0.85) !important;
+            border: 2px dashed rgba(148, 163, 184, 0.4) !important;
+        }}
+        [data-testid="stSidebar"] .stCaption {{
+            color: #94a3b8 !important;
         }}
         [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown div,
         [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
@@ -1434,6 +1444,12 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"], .stCaption {{
             color: {text_color} !important;
+        }}
+        [data-testid="stMain"] .stMarkdown p, [data-testid="stMain"] .stMarkdown div,
+        [data-testid="stMain"] .stMarkdown span, [data-testid="stMain"] h1,
+        [data-testid="stMain"] h2, [data-testid="stMain"] h3, [data-testid="stMain"] h4 {{
+            color: #f1f5f9 !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important;
         }}
         .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea,
         .stSelectbox > div > div > div {{
@@ -1933,28 +1949,47 @@ def main():
         z-index: -1; pointer-events: none; overflow: hidden;
         background: radial-gradient(ellipse at center, #0a0a1a 0%, #000000 70%);
     }
-    .stars-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-    @keyframes twinkle-star {
-        0%, 100% { opacity: 0.3; transform: scale(0.8); }
-        50% { opacity: 1; transform: scale(1.2); }
+    .stars {
+        position: absolute; top: 0; left: 0; width: 2px; height: 2px;
+        background: transparent;
+        box-shadow:
+            80px 50px #fff, 150px 80px #fff, 220px 30px #fff, 300px 120px #fff,
+            400px 60px #fff, 500px 150px #fff, 600px 40px #fff, 700px 100px #fff,
+            80px 150px #fff, 180px 200px #fff, 280px 180px #fff, 380px 220px #fff,
+            480px 160px #fff, 580px 240px #fff, 680px 190px #fff, 750px 280px #fff,
+            50px 280px #fff, 120px 320px #fff, 200px 300px #fff, 320px 350px #fff,
+            420px 310px #fff, 520px 360px #fff, 620px 330px #fff, 720px 370px #fff,
+            90px 400px #fff, 170px 450px #fff, 250px 420px #fff, 350px 480px #fff,
+            450px 440px #fff, 550px 490px #fff, 650px 460px #fff, 730px 500px #fff,
+            30px 520px #fff, 110px 560px #fff, 190px 540px #fff, 290px 580px #fff,
+            390px 550px #fff, 490px 590px #fff, 590px 570px #fff, 690px 600px #fff,
+            70px 650px #fff, 160px 680px #fff, 260px 660px #fff, 360px 700px #fff,
+            460px 670px #fff, 560px 710px #fff, 660px 690px #fff, 740px 720px #fff,
+            100px 750px #fff, 200px 780px #fff, 300px 760px #fff, 400px 790px #fff,
+            500px 770px #fff, 600px 800px #fff, 700px 740px #fff, 770px 790px #fff;
+        animation: twinkle-stars 3s ease-in-out infinite alternate;
+    }
+    @keyframes twinkle-stars {
+        0% { opacity: 0.3; }
+        100% { opacity: 1; }
     }
     .sun-wrap {
         position: absolute; top: 50%; left: 50%;
         transform: translate(-50%, -50%);
-        width: 80px; height: 80px;
+        width: 100px; height: 100px;
     }
     .sun-core {
         position: absolute; top: 50%; left: 50%;
         transform: translate(-50%, -50%);
-        width: 64px; height: 64px;
-        background: radial-gradient(circle at 35% 35%, #FFD700 0%, #FF8C00 40%, #FF4500 80%, #8B0000 100%);
+        width: 60px; height: 60px;
+        background: radial-gradient(circle, #FFD700 0%, #FF8C00 50%, #FF4500 100%);
         border-radius: 50%;
-        box-shadow: 0 0 50px 20px rgba(255,140,0,0.5), 0 0 100px 40px rgba(255,69,0,0.25), inset -6px -6px 12px rgba(0,0,0,0.3);
-        animation: sun-glow 4s ease-in-out infinite alternate;
+        box-shadow: 0 0 40px 15px rgba(255,140,0,0.6), 0 0 80px 30px rgba(255,69,0,0.3);
+        animation: sun-glow 3s ease-in-out infinite alternate;
     }
     @keyframes sun-glow {
-        0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 50px 20px rgba(255,140,0,0.5), 0 0 100px 40px rgba(255,69,0,0.25); }
-        100% { transform: translate(-50%, -50%) scale(1.12); box-shadow: 0 0 70px 30px rgba(255,140,0,0.6), 0 0 140px 50px rgba(255,69,0,0.35); }
+        0% { transform: translate(-50%, -50%) scale(1); }
+        100% { transform: translate(-50%, -50%) scale(1.15); }
     }
     .ring-1 {
         position: absolute; top: 50%; left: 50%;
@@ -1979,7 +2014,7 @@ def main():
         width: 540px; height: 540px;
         border: 1px dashed rgba(200,180,140,0.2);
         border-radius: 50%;
-        animation: ring-pulse-1 5s ease-in-out infinite;
+        animation: ring-pulse-3 5s ease-in-out infinite;
         animation-delay: 1s;
     }
     .ring-4 {
@@ -1988,7 +2023,7 @@ def main():
         width: 680px; height: 680px;
         border: 1px dashed rgba(180,140,100,0.2);
         border-radius: 50%;
-        animation: ring-pulse-2 5s ease-in-out infinite;
+        animation: ring-pulse-4 5s ease-in-out infinite;
         animation-delay: 3s;
     }
     @keyframes ring-pulse-1 {
@@ -1998,6 +2033,14 @@ def main():
     @keyframes ring-pulse-2 {
         0%, 100% { border-color: rgba(19,136,8,0.15); }
         50% { border-color: rgba(19,136,8,0.45); }
+    }
+    @keyframes ring-pulse-3 {
+        0%, 100% { border-color: rgba(200,180,140,0.1); }
+        50% { border-color: rgba(200,180,140,0.35); }
+    }
+    @keyframes ring-pulse-4 {
+        0%, 100% { border-color: rgba(180,140,100,0.1); }
+        50% { border-color: rgba(180,140,100,0.35); }
     }
     .orbit-1 {
         position: absolute; top: 50%; left: 50%;
@@ -2080,6 +2123,35 @@ def main():
         content: ''; position: absolute; top: 60%; left: 15%; width: 70%; height: 2px;
         background: rgba(160,82,45,0.35); border-radius: 2px;
     }
+    .planet-1 {
+        position: absolute; top: 12%; right: 18%;
+        width: 16px; height: 16px;
+        background: radial-gradient(circle, #ff6b6b, #c92a2a);
+        border-radius: 50%;
+        box-shadow: 0 0 15px rgba(255,107,107,0.4);
+        animation: float-1 7s ease-in-out infinite;
+    }
+    .planet-2 {
+        position: absolute; bottom: 22%; left: 10%;
+        width: 12px; height: 12px;
+        background: radial-gradient(circle, #4ecdc4, #087f5b);
+        border-radius: 50%;
+        box-shadow: 0 0 12px rgba(78,205,196,0.4);
+        animation: float-2 7s ease-in-out infinite;
+        animation-delay: -3s;
+    }
+    .planet-3 {
+        position: absolute; top: 68%; right: 12%;
+        width: 20px; height: 20px;
+        background: radial-gradient(circle, #ffe66d, #f59f00);
+        border-radius: 50%;
+        box-shadow: 0 0 20px rgba(255,230,109,0.4);
+        animation: float-3 7s ease-in-out infinite;
+        animation-delay: -6s;
+    }
+    @keyframes float-1 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+    @keyframes float-2 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    @keyframes float-3 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
     .shooting {
         position: absolute; top: 10%; left: 10%;
         width: 100px; height: 2px;
@@ -2094,7 +2166,7 @@ def main():
     }
     </style>
     <div class="eqms-bg">
-        <div class="stars-container" id="stars-container"></div>
+        <div class="stars"></div>
         <div class="sun-wrap">
             <div class="sun-core"></div>
         </div>
@@ -2120,30 +2192,11 @@ def main():
         <div class="orbit-4">
             <div class="planet-jupiter"></div>
         </div>
+        <div class="planet-1"></div>
+        <div class="planet-2"></div>
+        <div class="planet-3"></div>
         <div class="shooting"></div>
     </div>
-    <script>
-    (function(){
-        var container = document.getElementById('stars-container');
-        if(container && container.children.length === 0){
-            for(var i=0; i<180; i++){
-                var s = document.createElement('div');
-                s.style.position = 'absolute';
-                var sz = Math.random() > 0.85 ? '3px' : '2px';
-                s.style.width = sz; s.style.height = sz;
-                s.style.background = Math.random() > 0.92 ? '#FFD700' : '#fff';
-                s.style.borderRadius = '50%';
-                s.style.left = (Math.random() * 100) + '%';
-                s.style.top = (Math.random() * 100) + '%';
-                s.style.opacity = (Math.random() * 0.6 + 0.2).toFixed(2);
-                s.style.boxShadow = '0 0 ' + (Math.random()*4+1).toFixed(1) + 'px ' + s.style.background;
-                s.style.animation = 'twinkle-star ' + (Math.random()*4+2).toFixed(1) + 's ease-in-out infinite alternate';
-                s.style.animationDelay = (Math.random()*5).toFixed(1) + 's';
-                container.appendChild(s);
-            }
-        }
-    })();
-    </script>
     """
     st.markdown(bg_html, unsafe_allow_html=True)
 
@@ -2312,24 +2365,24 @@ def main():
             padding: 14px 16px; text-align: center;
         }
         .welcome-text-saffron {
-            font-size: 1.2em; font-weight: 700; color: #000000; letter-spacing: 0.5px;
+            font-size: 1.2em; font-weight: 700; color: #000000 !important; letter-spacing: 0.5px;
             font-family: 'Segoe UI', 'Noto Sans Devanagari', Arial, sans-serif;
             line-height: 1.5;
         }
         .welcome-text-white {
-            font-size: 1.2em; font-weight: 700; color: #000000; letter-spacing: 0.5px;
+            font-size: 1.2em; font-weight: 700; color: #000000 !important; letter-spacing: 0.5px;
             position: relative; z-index: 2;
             font-family: 'Segoe UI', 'Noto Sans Devanagari', Arial, sans-serif;
         }
         .welcome-text-green {
-            font-size: 1.2em; font-weight: 700; color: #000000; letter-spacing: 0.5px;
+            font-size: 1.2em; font-weight: 700; color: #000000 !important; letter-spacing: 0.5px;
             font-family: 'Segoe UI', 'Noto Sans Devanagari', Arial, sans-serif;
         }
         .chakra-emblem {
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            width: 44px; height: 44px; z-index: 1;
-            opacity: 0.25;
+            width: 48px; height: 48px; z-index: 1;
+            opacity: 0.35;
         }
         .chakra-emblem svg { width: 100%; height: 100%; }
         </style>
@@ -2340,25 +2393,39 @@ def main():
             <div class="welcome-white">
                 <div class="chakra-emblem">
                     <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="50" cy="50" r="45" fill="none" stroke="#000080" stroke-width="2"/>
-                        <circle cx="50" cy="50" r="8" fill="none" stroke="#000080" stroke-width="2"/>
-                        <g stroke="#000080" stroke-width="1.5">
-                            <line x1="50" y1="5" x2="50" y2="20"/>
-                            <line x1="50" y1="80" x2="50" y2="95"/>
-                            <line x1="5" y1="50" x2="20" y2="50"/>
-                            <line x1="80" y1="50" x2="95" y2="50"/>
-                            <line x1="18.2" y1="18.2" x2="28.8" y2="28.8"/>
-                            <line x1="71.2" y1="71.2" x2="81.8" y2="81.8"/>
-                            <line x1="81.8" y1="18.2" x2="71.2" y2="28.8"/>
-                            <line x1="28.8" y1="71.2" x2="18.2" y2="81.8"/>
-                            <line x1="50" y1="5" x2="50" y2="20" transform="rotate(22.5 50 50)"/>
-                            <line x1="50" y1="80" x2="50" y2="95" transform="rotate(22.5 50 50)"/>
-                            <line x1="5" y1="50" x2="20" y2="50" transform="rotate(22.5 50 50)"/>
-                            <line x1="80" y1="50" x2="95" y2="50" transform="rotate(22.5 50 50)"/>
-                            <line x1="18.2" y1="18.2" x2="28.8" y2="28.8" transform="rotate(22.5 50 50)"/>
-                            <line x1="71.2" y1="71.2" x2="81.8" y2="81.8" transform="rotate(22.5 50 50)"/>
-                            <line x1="81.8" y1="18.2" x2="71.2" y2="28.8" transform="rotate(22.5 50 50)"/>
-                            <line x1="28.8" y1="71.2" x2="18.2" y2="81.8" transform="rotate(22.5 50 50)"/>
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="#000080" stroke-width="2.5"/>
+                        <circle cx="50" cy="50" r="10" fill="none" stroke="#000080" stroke-width="2"/>
+                        <g stroke="#000080" stroke-width="2">
+                            <line x1="50" y1="5" x2="50" y2="22"/>
+                            <line x1="50" y1="78" x2="50" y2="95"/>
+                            <line x1="5" y1="50" x2="22" y2="50"/>
+                            <line x1="78" y1="50" x2="95" y2="50"/>
+                            <line x1="18" y1="18" x2="30" y2="30"/>
+                            <line x1="70" y1="70" x2="82" y2="82"/>
+                            <line x1="82" y1="18" x2="70" y2="30"/>
+                            <line x1="30" y1="70" x2="18" y2="82"/>
+                        </g>
+                        <g stroke="#000080" stroke-width="1.5" transform="rotate(22.5 50 50)">
+                            <line x1="50" y1="5" x2="50" y2="22"/>
+                            <line x1="50" y1="78" x2="50" y2="95"/>
+                            <line x1="5" y1="50" x2="22" y2="50"/>
+                            <line x1="78" y1="50" x2="95" y2="50"/>
+                            <line x1="18" y1="18" x2="30" y2="30"/>
+                            <line x1="70" y1="70" x2="82" y2="82"/>
+                            <line x1="82" y1="18" x2="70" y2="30"/>
+                            <line x1="30" y1="70" x2="18" y2="82"/>
+                        </g>
+                        <g stroke="#000080" stroke-width="1.2" transform="rotate(45 50 50)">
+                            <line x1="50" y1="5" x2="50" y2="22"/>
+                            <line x1="50" y1="78" x2="50" y2="95"/>
+                            <line x1="5" y1="50" x2="22" y2="50"/>
+                            <line x1="78" y1="50" x2="95" y2="50"/>
+                        </g>
+                        <g stroke="#000080" stroke-width="1.2" transform="rotate(67.5 50 50)">
+                            <line x1="50" y1="5" x2="50" y2="22"/>
+                            <line x1="50" y1="78" x2="50" y2="95"/>
+                            <line x1="5" y1="50" x2="22" y2="50"/>
+                            <line x1="78" y1="50" x2="95" y2="50"/>
                         </g>
                     </svg>
                 </div>
