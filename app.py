@@ -290,12 +290,21 @@ EQ_HEADINGS = ['S/N', 'PNR', 'FROM', 'TO', 'BOARDING', 'T/N', 'CLASS', 'DOJ',
     'APPLICATION DATE', 'RAILWAY/ZONE/DIVISION', 'PREFERENCE']
 
 SHEET_CONFIG = {
-    "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "doj_col": 7, "headings": EQ_HEADINGS},
-    "DATA": {"start_row": 4, "pnr_col": 1, "train_col": 5, "doj_col": 7, "headings": EQ_HEADINGS},
-    "FINAL": {"start_row": 6, "pnr_col": 7, "train_col": 1, "doj_col": 12, "headings": EQ_HEADINGS},
-    "DATA2": {"start_row": 4, "pnr_col": 7, "train_col": 1, "doj_col": 12, "headings": EQ_HEADINGS},
-    "EMAIL_DATA": {"start_row": 2, "pnr_col": 7, "train_col": 8, "doj_col": 11, "headings": EQ_HEADINGS},
-    "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "doj_col": None, "headings": []}
+    # EQ & DATA: same layout — data rows start at row 5 (EQ) / row 4 (DATA)
+    # Cols: A=S/N, B=PNR, C=FROM, D=TO, E=BOARDING, F=T/N, G=CLASS, H=DOJ, I=PASS_NAME, J=PASS_PH,
+    #       K=T/BERTHS, L=PURPOSE, M=ADDRESS, N=DIARY_NO, O=RECOMMENDATION, P=DESIGNATION, Q=PHONE,
+    #       R=VIP_STATUS, S=WARRANT, T=PROC_DATE, U=APP_DATE, V=ZONE, W=PREFERENCE
+    "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "class_col": 6, "from_col": 2, "to_col": 3, "berth_col": 10, "doj_col": 7, "headings": EQ_HEADINGS},
+    "DATA": {"start_row": 4, "pnr_col": 1, "train_col": 5, "class_col": 6, "from_col": 2, "to_col": 3, "berth_col": 10, "doj_col": 7, "headings": EQ_HEADINGS},
+
+    # FINAL & DATA2: same layout — data rows start at row 6
+    # Cols: A=T/N, B=CLASS, C=FROM, D=TO, E=BOARDING, F=T/BERTHS, G=PASS_NAME, H=PASS_PH, I=PURPOSE,
+    #       J=ADDRESS, K=FROM_STN, L=TO_STN, M=DOJ, N=RECOMMENDATION ...
+    "FINAL": {"start_row": 6, "pnr_col": 7, "train_col": 1, "class_col": 2, "from_col": 10, "to_col": 11, "berth_col": 5, "doj_col": 12, "headings": EQ_HEADINGS},
+    "DATA2": {"start_row": 6, "pnr_col": 7, "train_col": 1, "class_col": 2, "from_col": 10, "to_col": 11, "berth_col": 5, "doj_col": 12, "headings": EQ_HEADINGS},
+
+    "EMAIL_DATA": {"start_row": 2, "pnr_col": 7, "train_col": 8, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": 11, "headings": EQ_HEADINGS},
+    "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": []}
 }
 
 # =====================================================================
@@ -1548,6 +1557,9 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important; margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important; }}
         body.sidebar-collapsed [data-testid="stSidebar"] {{ margin-left: -340px !important; opacity: 0 !important; pointer-events: none !important; }}
         body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important; }}
+        [data-testid="stSidebarCollapseButton"] {{ display: none !important; }}
+        [data-testid="collapsedControl"] {{ display: none !important; }}
+        button[kind="header"] {{ display: none !important; }}
         body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; }}
         .sidebar-toggle-btn {{
             position: fixed !important;
@@ -2110,17 +2122,34 @@ def main():
                             body.classList.remove('sidebar-collapsed');
                             toggleBtn.innerHTML = '✕';
                             toggleBtn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
-                            // Force sidebar visibility
                             var sb = doc.querySelector('[data-testid="stSidebar"]');
                             if (sb) { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
+                            try { localStorage.setItem('eqms_sidebar', 'open'); } catch(e) {}
                         } else {
                             body.classList.add('sidebar-collapsed');
                             toggleBtn.innerHTML = '☰';
                             toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
                             var sb = doc.querySelector('[data-testid="stSidebar"]');
                             if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
+                            try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
                         }
                     };
+                    try {
+                        var saved = localStorage.getItem('eqms_sidebar');
+                        if (saved === 'closed') {
+                            doc.body.classList.add('sidebar-collapsed');
+                            toggleBtn.innerHTML = '☰';
+                            toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                        }
+                    } catch(e) {}
+                    setInterval(function(){
+                        var sb = doc.querySelector('[data-testid="stSidebar"]');
+                        var isCollapsed = doc.body.classList.contains('sidebar-collapsed');
+                        if (sb) {
+                            if (isCollapsed) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
+                            else { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
+                        }
+                    }, 2000);
                     doc.body.appendChild(toggleBtn);
                 }
 
@@ -2222,7 +2251,7 @@ def main():
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
-        with st.expander("🌤️ Quick Weather", expanded=False):
+        with st.expander("🌤️ त्वरित मौसम", expanded=False):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city")
             if city != st.session_state.weather_city: st.session_state.weather_city = city
             if st.button("🌤️ Get Weather", key="sidebar_weather_btn", use_container_width=True):
@@ -2243,19 +2272,19 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
 
-        with st.expander("🔄 Sync & Status", expanded=False):
-            if st.button("🔄 Sync Now", use_container_width=True, key="sync_now_btn"):
+        with st.expander("🔄 सिंक और स्थिति", expanded=False):
+            if st.button("🔄 अभी सिंक करें", use_container_width=True, key="sync_now_btn"):
                 st.cache_data.clear()
                 st.session_state.last_refresh = time.time()
                 log_activity("🔄 Manual sync")
                 st.rerun()
-            st.caption(f"Last sync: {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST")
+            st.caption(f"अंतिम सिंक: {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST")
 
         sheet_link = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit"
         st.markdown(f'<a href="{sheet_link}" target="_blank" class="sheet-link-btn">📊 Open Google Sheet</a>', unsafe_allow_html=True)
 
         st.markdown("---")
-        st.markdown("### 🖨️ Print Options")
+        st.markdown("### 🖨️ प्रिंट विकल्प")
         components.html("""
         <div style="width:100%; margin-top:8px;">
             <button onclick="
@@ -2303,9 +2332,9 @@ def main():
         </div>
         """, height=50)
 
-        with st.expander("📤 Upload & Process", expanded=True):
-            st.caption("📷 Image • 📄 PDF • 📝 Text • 🎤 Audio")
-            mode = st.radio("Type", ["📷 Image / PDF", "📝 Text", "🎤 Voice / Audio"],
+        with st.expander("📤 अपलोड और प्रोसेस", expanded=True):
+            st.caption("📷 इमेज • 📄 PDF • 📝 टेक्स्ट • 🎤 ऑडियो")
+            mode = st.radio("प्रकार", ["📷 इमेज / PDF", "📝 टेक्स्ट", "🎤 वॉइस / ऑडियो"],
                 horizontal=True, label_visibility="collapsed", key="upload_mode_radio")
             uploaded = None
             text_data = ""
@@ -2319,16 +2348,16 @@ def main():
                     label_visibility="collapsed", key=f"text_input_area_{st.session_state.text_input_key}")
                 if text_data: st.caption(f"✓ {len(text_data)} characters ready")
             else:
-                st.caption("🎤 Mic se record karein")
+                st.caption("🎤 माइक से रिकॉर्ड करें")
                 audio_data = st.audio_input("Record", label_visibility="collapsed", key=f"audio_recorder_{st.session_state.audio_recorder_key}")
                 uploaded = st.file_uploader("Ya file upload", type=["mp3","wav","ogg","m4a"],
                     label_visibility="collapsed", key=f"audio_file_uploader_{st.session_state.audio_uploader_key}")
                 if audio_data: st.audio(audio_data, format='audio/wav')
                 elif uploaded: st.audio(uploaded, format='audio/mp3')
 
-            if st.button("🚀 Process & Save", type="primary", use_container_width=True, key="process_save_btn"):
-                if mode == "📝 Text" and not text_data.strip(): st.warning("Text daalein")
-                elif mode != "📝 Text" and not uploaded and not audio_data: st.warning("File select karein")
+            if st.button("🚀 प्रोसेस और सेव", type="primary", use_container_width=True, key="process_save_btn"):
+                if mode == "📝 Text" and not text_data.strip(): st.warning("टेक्स्ट डालें")
+                elif mode != "📝 Text" and not uploaded and not audio_data: st.warning("फ़ाइल चुनें")
                 else:
                     prog = st.progress(0)
                     status = st.empty()
@@ -2418,14 +2447,14 @@ def main():
                 c1, c2, c3 = st.columns(3)
                 with c1:
                     if st.session_state.last_uploaded_view_url:
-                        st.link_button("👁️ View", st.session_state.last_uploaded_view_url, use_container_width=True)
+                        st.link_button("👁️ देखें", st.session_state.last_uploaded_view_url, use_container_width=True)
                 with c2:
                     if st.session_state.last_uploaded_print_url:
-                        st.link_button("🖨️ Print File", st.session_state.last_uploaded_print_url, use_container_width=True)
+                        st.link_button("🖨️ फ़ाइल प्रिंट", st.session_state.last_uploaded_print_url, use_container_width=True)
                 with c3:
                     if st.session_state.last_uploaded_drive_id:
-                        st.link_button("📥 Download", f"https://drive.google.com/uc?export=download&id={st.session_state.last_uploaded_drive_id}", use_container_width=True)
-                if st.button("🗑️ Clear History", use_container_width=True, key="clear_history_btn"):
+                        st.link_button("📥 डाउनलोड", f"https://drive.google.com/uc?export=download&id={st.session_state.last_uploaded_drive_id}", use_container_width=True)
+                if st.button("🗑️ इतिहास साफ़ करें", use_container_width=True, key="clear_history_btn"):
                     st.session_state.last_uploaded_file = None
                     st.session_state.last_uploaded_drive_url = None
                     st.session_state.last_uploaded_view_url = None
@@ -2434,15 +2463,15 @@ def main():
                     st.session_state.upload_success = False
                     st.rerun()
 
-        with st.expander("📋 Activity Log", expanded=False):
+        with st.expander("📋 गतिविधि लॉग", expanded=False):
             if st.session_state.activity_log:
                 for log in reversed(st.session_state.activity_log[-20:]):
                     st.caption(f"{log.get('timestamp', '')} — {log.get('action', '')}")
-            else: st.caption("No activity yet")
+            else: st.caption("अभी तक कोई गतिविधि नहीं")
         st.markdown("---")
 
-        st.markdown("### 📑 Sheet Selection")
-        sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()),
+        st.markdown("### 📑 शीट चुनें")
+        sheet_choice = st.selectbox("शीट चुनें", list(SHEET_CONFIG.keys()),
             index=list(SHEET_CONFIG.keys()).index(st.session_state.selected_sheet)
             if st.session_state.selected_sheet in SHEET_CONFIG else 0, key="sheet_select")
         if sheet_choice != st.session_state.selected_sheet:
@@ -2452,23 +2481,31 @@ def main():
             st.rerun()
 
         if sheet_choice != "NOTE":
-            st.markdown("### 🔍 Filters")
+            st.markdown("### 🔍 फ़िल्टर")
             config = SHEET_CONFIG[sheet_choice]
             pnr_col_idx = config.get("pnr_col")
             train_col_idx = config.get("train_col")
+            class_col_idx = config.get("class_col")
             doj_col_idx = config.get("doj_col")
 
-            pnr_input = st.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
+            pnr_input = st.text_input("PNR (आंशिक)", value=st.session_state.pnr_val, key="pnr_filter_input")
             if pnr_input != st.session_state.pnr_val:
                 st.session_state.pnr_val = pnr_input
                 st.session_state.current_page = 1
                 st.rerun()
 
-            train_input = st.text_input("Train (partial)", value=st.session_state.train_val, key="train_filter_input")
+            train_input = st.text_input("ट्रेन (आंशिक)", value=st.session_state.train_val, key="train_filter_input")
             if train_input != st.session_state.train_val:
                 st.session_state.train_val = train_input
                 st.session_state.current_page = 1
                 st.rerun()
+
+            if class_col_idx is not None:
+                class_input = st.text_input("क्लास (आंशिक)", value=st.session_state.get('class_val', ''), key="class_filter_input")
+                if class_input != st.session_state.get('class_val', ''):
+                    st.session_state.class_val = class_input
+                    st.session_state.current_page = 1
+                    st.rerun()
 
             c1, c2 = st.columns(2)
             with c1:
@@ -2486,9 +2523,10 @@ def main():
                 st.session_state.current_page = 1
                 st.rerun()
 
-            if st.button("🧹 Clear All Filters", use_container_width=True, key="clear_filters_btn"):
+            if st.button("🧹 सभी फ़िल्टर हटाएँ", use_container_width=True, key="clear_filters_btn"):
                 st.session_state.pnr_val = ''
                 st.session_state.train_val = ''
+                st.session_state.class_val = ''
                 st.session_state.from_val = None
                 st.session_state.to_val = None
                 st.session_state.current_page = 1
@@ -2511,6 +2549,9 @@ def main():
         if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
             col_name = filtered_df.columns[train_col_idx]
             filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
+        if st.session_state.class_val and class_col_idx is not None and class_col_idx < len(filtered_df.columns):
+            col_name = filtered_df.columns[class_col_idx]
+            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.class_val, case=False, na=False)]
         if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
             col_name = filtered_df.columns[doj_col_idx]
             try:
@@ -2676,7 +2717,7 @@ def main():
             st.rerun()
 
         if filtered_df.empty:
-            st.info("📭 No data to show. Clear filters or select another sheet.")
+            st.info("📭 कोई डेटा नहीं। फ़िल्टर हटाएँ या दूसरी शीट चुनें।")
             has_structure = len(df_raw.columns) > 0
             empty_df = df_raw.drop(columns=['_sheet_row'], errors='ignore') if has_structure else pd.DataFrame()
             if has_structure and len(empty_df.columns) > 0:
@@ -2685,7 +2726,7 @@ def main():
                 display_empty.insert(0, "Select", False)
                 st.dataframe(display_empty, use_container_width=True, height=120)
             else:
-                st.caption("Sheet has headers but no data rows yet.")
+                st.caption("शीट में हेडर हैं लेकिन अभी कोई डेटा पंक्ति नहीं।")
         else:
             # Sorting
             sort_col = st.session_state.sort_column
@@ -2977,36 +3018,52 @@ def main():
             with st.expander("🔧 Extra Features", expanded=False):
                 feat1, feat2 = st.columns(2)
                 with feat1:
-                    st.markdown("**🎫 PNR Status Check**")
-                    pnr_check = st.text_input("Enter PNR", max_chars=10, key="pnr_status_input")
+                    st.markdown("**🎫 PNR स्थिति जांच**")
+                    pnr_check = st.text_input("PNR दर्ज करें", max_chars=10, key="pnr_status_input")
                     if pnr_check and len(pnr_check) == 10:
                         pnr_url = get_pnr_status_url(pnr_check)
-                        st.link_button("Check PNR Status", pnr_url, use_container_width=True)
-                    st.markdown("**📊 Quick Stats**")
+                        st.link_button("PNR स्थिति जांचें", pnr_url, use_container_width=True)
+                    st.markdown("**📊 त्वरित आँकड़े**")
                     if not filtered_df.empty and pnr_col:
                         valid_pnrs = filtered_df[pnr_col].astype(str).str.match(r'\d{10}').sum()
-                        st.caption(f"Valid PNRs: {valid_pnrs}")
+                        st.caption(f"वैध PNRs: {valid_pnrs}")
                     if not filtered_df.empty and doj_col is not None:
                         upcoming = sum(1 for _, r in filtered_df.iterrows() if not is_expired(r.get(doj_col, '')))
-                        st.caption(f"Upcoming DOJ: {upcoming}")
+                        st.caption(f"आगामी DOJ: {upcoming}")
                 with feat2:
-                    st.markdown("**🚆 Train Analysis**")
+                    st.markdown("**🚆 ट्रेन विश्लेषण**")
                     if train_col_metric and not filtered_df.empty:
                         most_common = filtered_df[train_col_metric].mode()
-                        if not most_common.empty: st.caption(f"Most frequent train: {most_common.iloc[0]}")
+                        if not most_common.empty: st.caption(f"सबसे अधिक ट्रेन: {most_common.iloc[0]}")
                         if pnr_col:
                             dupes = filtered_df[pnr_col].value_counts()
                             dupes = dupes[dupes > 1]
-                            if not dupes.empty: st.warning(f"⚠️ {len(dupes)} duplicate PNR(s) found!")
-                            else: st.success("✅ No duplicate PNRs")
-                    st.markdown("**⌨️ Shortcuts**")
-                    st.caption("D: Toggle Theme | Refresh button for data sync")
+                            if not dupes.empty: st.warning(f"⚠️ {len(dupes)} डुप्लीकेट PNR मिले!")
+                            else: st.success("✅ कोई डुप्लीकेट PNR नहीं")
+                    st.markdown("**⌨️ शॉर्टकट**")
+                    st.caption("D: थीम बदलें | डेटा सिंक के लिए रिफ्रेश बटन")
             st.markdown('</div>', unsafe_allow_html=True)
 
     # =====================================================================
     # VIEW: 📊 DASHBOARD
     # =====================================================================
     elif view == "📊 Dashboard":
+        st.markdown("""
+        <style>
+        @keyframes dash-fade-in { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes dash-scale-in { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+        @keyframes dash-pulse-glow { 0%,100% { box-shadow: 0 0 20px rgba(37,99,235,0.15); } 50% { box-shadow: 0 0 40px rgba(37,99,235,0.35); } }
+        @keyframes dash-gradient-shift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        .dash-anim-1 { animation: dash-fade-in 0.6s ease-out both; }
+        .dash-anim-2 { animation: dash-fade-in 0.6s ease-out 0.15s both; }
+        .dash-anim-3 { animation: dash-fade-in 0.6s ease-out 0.3s both; }
+        .dash-anim-4 { animation: dash-fade-in 0.6s ease-out 0.45s both; }
+        .dash-anim-5 { animation: dash-fade-in 0.6s ease-out 0.6s both; }
+        .dash-chart-anim { animation: dash-scale-in 0.7s ease-out both; }
+        .dash-metric-glow { animation: dash-pulse-glow 3s ease-in-out infinite; }
+        .dash-gradient-text { background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808, #FF9933); background-size: 300% 300%; -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; animation: dash-gradient-shift 4s ease infinite; font-weight: 800; }
+        </style>
+        """, unsafe_allow_html=True)
         st.subheader("📊 Analytics Dashboard")
 
         dash_sheet_options = ["EQ", "DATA", "FINAL", "DATA2", "EMAIL_DATA"]
@@ -3061,12 +3118,19 @@ def main():
         with kcol1: 
             st.markdown(f'<div class="metric-card"><h3>{total_records}</h3><p>Total Records</p></div>', unsafe_allow_html=True)
 
-        train_col_dash = find_column(dash_df, ['T/N', 'T_N', 'TRAIN', 'TRAIN NO', 'TRAIN NUMBER', 'T/N'])
-        class_col_dash = find_column(dash_df, ['CLASS', 'CL', 'CLASS CODE'])
-        vip_col_dash = find_column(dash_df, ['VIP', 'MP/MLA', 'PRIORITY', 'STATUS', 'MPMLAMRMINISTERVIPVVIP'])
-        from_col_dash = find_column(dash_df, ['FROM', 'SOURCE', 'ORIGIN'])
-        to_col_dash = find_column(dash_df, ['TO', 'DESTINATION', 'DEST'])
-        doj_col_dash = find_column(dash_df, ['DOJ', 'DATE OF JOURNEY', 'JOURNEY DATE'])
+        # Use SHEET_CONFIG for reliable column indices per sheet
+        dash_cfg = SHEET_CONFIG.get(dash_sheet, {})
+        def cfg_col(name):
+            idx = dash_cfg.get(name)
+            return dash_df.columns[idx] if idx is not None and idx < len(dash_df.columns) else None
+        train_col_dash = cfg_col('train_col')
+        class_col_dash = cfg_col('class_col')
+        from_col_dash = cfg_col('from_col')
+        to_col_dash = cfg_col('to_col')
+        berth_col_dash = cfg_col('berth_col')
+        doj_col_dash = cfg_col('doj_col')
+        # VIP column is always the same header across sheets — find by header name
+        vip_col_dash = next((c for c in dash_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper() or 'MINISTER' in c.upper()), None)
         if train_col_dash and column_has_data(dash_df, train_col_dash):
             unique_trains = dash_df[train_col_dash].dropna().astype(str).str.strip().ne('').nunique()
             with kcol2: 
@@ -3075,6 +3139,7 @@ def main():
             with kcol2: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Unique Trains</p></div>', unsafe_allow_html=True)
 
+        # vip_col_dash already detected above via find_column()
         if vip_col_dash and column_has_data(dash_df, vip_col_dash):
             vip_count = dash_df[vip_col_dash].astype(str).str.strip().ne('').sum()
             with kcol3: 
@@ -3083,6 +3148,7 @@ def main():
             with kcol3: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>VIP Records</p></div>', unsafe_allow_html=True)
 
+        # class_col_dash already detected above via find_column()
         if class_col_dash and column_has_data(dash_df, class_col_dash):
             class_counts = dash_df[class_col_dash].dropna().astype(str).str.strip()
             class_counts = class_counts[class_counts != ''].value_counts()
@@ -3093,6 +3159,7 @@ def main():
             with kcol4: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Top Class</p></div>', unsafe_allow_html=True)
 
+        # doj_col_dash already detected above via find_column()
         if doj_col_dash and column_has_data(dash_df, doj_col_dash):
             upcoming = sum(1 for _, r in dash_df.iterrows() if not is_expired(r.get(doj_col_dash, '')))
             with kcol5: 
@@ -3149,6 +3216,7 @@ def main():
 
             # Graph 3: Route-wise Distribution
             st.markdown("### 3️⃣ Route-wise Distribution")
+            # from_col_dash & to_col_dash set via cfg_col above
             if from_col_dash and to_col_dash and column_has_data(dash_df, from_col_dash) and column_has_data(dash_df, to_col_dash):
                 dash_df['ROUTE'] = dash_df[from_col_dash].astype(str) + " → " + dash_df[to_col_dash].astype(str)
                 route_counts = dash_df['ROUTE'].value_counts().head(12).reset_index()
@@ -3232,8 +3300,15 @@ def main():
             st.markdown("### 6️⃣ Rush Comparison — High Demand vs Low Demand")
             if train_col_dash and column_has_data(dash_df, train_col_dash):
                 try:
-                    train_demand = dash_df[train_col_dash].value_counts().reset_index()
-                    train_demand.columns = ['Train', 'Count']
+                    # Use berth/seat count for real demand if available, else fallback to record count
+                    if berth_col_dash and column_has_data(dash_df, berth_col_dash):
+                        train_demand = dash_df.groupby(train_col_dash)[berth_col_dash].apply(
+                            lambda x: pd.to_numeric(x, errors='coerce').fillna(1).sum()
+                        ).reset_index()
+                        train_demand.columns = ['Train', 'Count']
+                    else:
+                        train_demand = dash_df[train_col_dash].value_counts().reset_index()
+                        train_demand.columns = ['Train', 'Count']
                     if len(train_demand) > 0:
                         median_demand = train_demand['Count'].median()
                         train_demand['Demand'] = train_demand['Count'].apply(lambda x: 'High Demand 🔥' if x >= median_demand else 'Low Demand ❄️')
@@ -3292,6 +3367,23 @@ def main():
     # VIEW: 💬 CHAT
     # =====================================================================
     elif view == "💬 Chat":
+        st.markdown("""
+        <style>
+        @keyframes chat-bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        @keyframes chat-glow { 0%,100% { box-shadow: 0 0 15px rgba(96,165,250,0.2); } 50% { box-shadow: 0 0 30px rgba(96,165,250,0.5); } }
+        @keyframes chat-typing { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+        .chat-train-icon { font-size: 3rem; animation: chat-bounce 2s ease-in-out infinite; display: inline-block; filter: drop-shadow(0 0 10px rgba(96,165,250,0.5)); }
+        .chat-welcome { animation: chat-glow 3s ease-in-out infinite; border-radius: 16px; padding: 20px; }
+        .chat-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #60a5fa; animation: chat-typing 1.4s ease-in-out infinite; }
+        .chat-dot:nth-child(2) { animation-delay: 0.2s; }
+        .chat-dot:nth-child(3) { animation-delay: 0.4s; }
+        </style>
+        <div style="text-align: center; padding: 10px 0;">
+            <span class="chat-train-icon">🚂</span>
+            <div style="font-size: 1.5rem; font-weight: 700; margin-top: 8px;" class="dash-gradient-text">TSKEQ Bot</div>
+            <div style="color: #94a3b8; font-size: 0.9rem;">EQ डेटा, ट्रेन, कोटा, PNR या कुछ भी पूछें</div>
+        </div>
+        """, unsafe_allow_html=True)
         st.subheader("💬 Chat with TSKEQ Bot")
         st.caption("Ask about EQ data, trains, quota, PNR or anything else.")
         if prompt := st.chat_input("Type your question...", key="chat_input"):
@@ -3305,7 +3397,7 @@ def main():
             st.rerun()
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]): st.markdown(msg["content"])
-        st.markdown("**Quick questions**")
+        st.markdown("**त्वरित प्रश्न**")
         sugg_cols = st.columns(3)
         for i, suggestion in enumerate(st.session_state.chat_suggestions):
             with sugg_cols[i % 3]:
@@ -3315,7 +3407,7 @@ def main():
                         response = chat_with_gemini(suggestion, st.session_state.messages)
                         st.session_state.messages.append({"role": "assistant", "content": response})
                     st.rerun()
-        if st.button("🗑️ Clear Chat", use_container_width=True, key="clear_chat_btn"):
+        if st.button("🗑️ चैट साफ़ करें", use_container_width=True, key="clear_chat_btn"):
             st.session_state.messages = []
             st.rerun()
 
@@ -3548,13 +3640,13 @@ def main():
                 st.session_state.weather_lon = float(qp_lon)
             except: pass
 
-        city = st.text_input("🏙️ Enter City Name", value=st.session_state.weather_city,
+        city = st.text_input("🏙️ शहर का नाम दर्ज करें", value=st.session_state.weather_city,
                             placeholder="e.g., Tinsukia, New Delhi, Mumbai", key="weather_city_input")
         if city != st.session_state.weather_city: st.session_state.weather_city = city
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            if st.button("🌤️ Get Weather", key="weather_btn", use_container_width=True):
+            if st.button("🌤️ मौसम प्राप्त करें", key="weather_btn", use_container_width=True):
                 if city:
                     with st.spinner(f"Fetching weather for {city}..."):
                         data = get_weather(city)
@@ -3564,9 +3656,9 @@ def main():
                             if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
                             st.rerun()
                         else: st.error(data.get('error', 'Error fetching weather'))
-                else: st.warning("Please enter a city name.")
+                else: st.warning("कृपया शहर का नाम दर्ज करें।")
         with col2:
-            if st.button("🔄 Refresh", key="refresh_weather", use_container_width=True):
+            if st.button("🔄 रिफ्रेश", key="refresh_weather", use_container_width=True):
                 if city:
                     with st.spinner(f"Refreshing weather for {city}..."):
                         data = get_weather(city)
@@ -3576,7 +3668,7 @@ def main():
                             if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
                             st.rerun()
                         else: st.error(data.get('error', 'Error fetching weather'))
-                else: st.warning("Please enter a city name.")
+                else: st.warning("कृपया शहर का नाम दर्ज करें।")
         with col3:
             st.empty()
 
