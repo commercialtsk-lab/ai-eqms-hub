@@ -1830,6 +1830,9 @@ def get_pnr_status_url(pnr):
 # MAIN FUNCTION
 # =====================================================================
 def main():
+    # Always update last_refresh to current time on page load so sync time matches live time
+    st.session_state.last_refresh = time.time()
+
     # Splash Screen (shows once per page load)
     components.html("""
     <script>
