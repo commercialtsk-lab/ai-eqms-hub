@@ -264,6 +264,22 @@ def sanitize_latin(text):
     for k, v in replacements.items(): text = text.replace(k, v)
     return text.encode('latin-1', 'ignore').decode('latin-1')
 
+def find_column(df, keywords):
+    """Find column name in df matching any keyword (case-insensitive, stripped, fuzzy)."""
+    for col in df.columns:
+        col_clean = str(col).strip().upper().replace(' ', '').replace('_', '').replace('/', '').replace('-', '')
+        for kw in keywords:
+            kw_clean = kw.upper().replace(' ', '').replace('_', '').replace('/', '').replace('-', '')
+            if kw_clean in col_clean or col_clean in kw_clean:
+                return col
+    return None
+
+def column_has_data(df, col):
+    """Check if a column exists and has at least one non-empty value."""
+    if col is None or col not in df.columns:
+        return False
+    return df[col].astype(str).str.strip().ne('').any()
+
 # =====================================================================
 # Sheet Configuration
 # =====================================================================
@@ -1529,8 +1545,9 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
-        [data-testid="stSidebar"] {{ display: flex !important; visibility: visible !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important; margin-left: 0 !important; }}
-        body.sidebar-collapsed [data-testid="stSidebar"] {{ margin-left: -340px !important; opacity: 0 !important; visibility: hidden !important; }}
+        [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important; margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important; }}
+        body.sidebar-collapsed [data-testid="stSidebar"] {{ margin-left: -340px !important; opacity: 0 !important; pointer-events: none !important; }}
+        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important; }}
         body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; }}
         .sidebar-toggle-btn {{
             position: fixed !important;
@@ -1778,6 +1795,76 @@ def get_pnr_status_url(pnr):
 # MAIN FUNCTION
 # =====================================================================
 def main():
+    # Splash Screen (shows once per page load)
+    components.html("""
+    <script>
+    (function(){
+        var P = window.parent;
+        var doc = P.document;
+        if (doc.getElementById('eqms-splash')) return;
+
+        var style = doc.createElement('style');
+        style.textContent = `
+            #eqms-splash {
+                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+                z-index: 99999999; display: flex; flex-direction: column;
+                align-items: center; justify-content: center;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            .splash-train {
+                font-size: 7rem; filter: drop-shadow(0 0 40px rgba(255,153,51,0.7));
+                animation: splash-train-bob 1.5s ease-in-out infinite;
+            }
+            @keyframes splash-train-bob {
+                0%, 100% { transform: translateY(0) scale(1); }
+                50% { transform: translateY(-15px) scale(1.1); }
+            }
+            .splash-title {
+                color: #fff; font-size: 2.2rem; font-weight: 800; margin-top: 24px;
+                letter-spacing: 3px; text-shadow: 0 4px 20px rgba(0,0,0,0.6);
+            }
+            .splash-sub {
+                color: #94a3b8; font-size: 0.95rem; margin-top: 8px;
+                letter-spacing: 5px; text-transform: uppercase;
+            }
+            .splash-bar-wrap {
+                width: 220px; height: 4px; background: #334155;
+                border-radius: 2px; margin-top: 32px; overflow: hidden;
+            }
+            .splash-bar {
+                width: 0%; height: 100%;
+                background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808);
+                animation: splash-load 2s ease-in-out forwards;
+            }
+            @keyframes splash-load { to { width: 100%; } }
+            .splash-fade-out {
+                animation: splash-fade 0.6s ease-in-out 2.4s forwards;
+            }
+            @keyframes splash-fade {
+                to { opacity: 0; visibility: hidden; pointer-events: none; }
+            }
+        `;
+        doc.head.appendChild(style);
+
+        var div = doc.createElement('div');
+        div.id = 'eqms-splash';
+        div.className = 'splash-fade-out';
+        div.innerHTML = '<div class="splash-train">🚂</div><div class="splash-title">AI EQMS Hub Pro</div><div class="splash-sub">Indian Railways</div><div class="splash-bar-wrap"><div class="splash-bar"></div></div>';
+        doc.body.appendChild(div);
+
+        setTimeout(function(){
+            var el = doc.getElementById('eqms-splash');
+            if(el) {
+                el.style.transition = 'opacity 0.5s ease';
+                el.style.opacity = '0';
+                setTimeout(function(){ if(el) el.remove(); }, 600);
+            }
+        }, 2800);
+    })();
+    </script>
+    """, height=0)
+
     # Solar System Background
     bg_html = """
     <style>
@@ -1985,6 +2072,9 @@ def main():
             var doc = P.document;
             if (!P.__eqmsProInit) {
                 P.__eqmsProInit = true;
+                // Ensure sidebar starts open
+                var body = doc.body;
+                body.classList.remove('sidebar-collapsed');
 
                 doc.addEventListener('keydown', function(e) {
                     var t = (e.target.tagName || '').toLowerCase();
@@ -2020,10 +2110,15 @@ def main():
                             body.classList.remove('sidebar-collapsed');
                             toggleBtn.innerHTML = '✕';
                             toggleBtn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                            // Force sidebar visibility
+                            var sb = doc.querySelector('[data-testid="stSidebar"]');
+                            if (sb) { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
                         } else {
                             body.classList.add('sidebar-collapsed');
                             toggleBtn.innerHTML = '☰';
                             toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                            var sb = doc.querySelector('[data-testid="stSidebar"]');
+                            if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
                         }
                     };
                     doc.body.appendChild(toggleBtn);
@@ -2558,13 +2653,8 @@ def main():
                     st.rerun()
 
         # Train count summary cards
-        train_col_metric = None
-        doj_col = None
-        for c in filtered_df.columns:
-            if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
-                train_col_metric = c
-            if 'DOJ' in c.upper():
-                doj_col = c
+        train_col_metric = find_column(filtered_df, ['T/N', 'T_N', 'TRAIN', 'TRAIN NO', 'TRAIN NUMBER'])
+        doj_col = find_column(filtered_df, ['DOJ', 'DATE OF JOURNEY', 'JOURNEY DATE'])
 
         if not filtered_df.empty and sheet_choice != "NOTE":
             if train_col_metric:
@@ -2587,12 +2677,13 @@ def main():
 
         if filtered_df.empty:
             st.info("📭 No data to show. Clear filters or select another sheet.")
-            empty_df = df_raw.drop(columns=['_sheet_row'], errors='ignore') if not df_raw.empty else pd.DataFrame()
-            if not empty_df.empty and len(empty_df.columns) > 0:
+            has_structure = len(df_raw.columns) > 0
+            empty_df = df_raw.drop(columns=['_sheet_row'], errors='ignore') if has_structure else pd.DataFrame()
+            if has_structure and len(empty_df.columns) > 0:
                 st.markdown("**📋 Column Structure**")
                 display_empty = empty_df.head(0).copy()
                 display_empty.insert(0, "Select", False)
-                st.dataframe(display_empty, use_container_width=True, height=80)
+                st.dataframe(display_empty, use_container_width=True, height=120)
             else:
                 st.caption("Sheet has headers but no data rows yet.")
         else:
@@ -2970,11 +3061,13 @@ def main():
         with kcol1: 
             st.markdown(f'<div class="metric-card"><h3>{total_records}</h3><p>Total Records</p></div>', unsafe_allow_html=True)
 
-        train_col_dash = None
-        for c in dash_df.columns:
-            if 'T/N' in c.upper() or 'T_N' in c.upper() or 'TRAIN' in c.upper():
-                train_col_dash = c; break
-        if train_col_dash and not dash_df.empty and dash_df[train_col_dash].notna().sum() > 0:
+        train_col_dash = find_column(dash_df, ['T/N', 'T_N', 'TRAIN', 'TRAIN NO', 'TRAIN NUMBER', 'T/N'])
+        class_col_dash = find_column(dash_df, ['CLASS', 'CL', 'CLASS CODE'])
+        vip_col_dash = find_column(dash_df, ['VIP', 'MP/MLA', 'PRIORITY', 'STATUS', 'MPMLAMRMINISTERVIPVVIP'])
+        from_col_dash = find_column(dash_df, ['FROM', 'SOURCE', 'ORIGIN'])
+        to_col_dash = find_column(dash_df, ['TO', 'DESTINATION', 'DEST'])
+        doj_col_dash = find_column(dash_df, ['DOJ', 'DATE OF JOURNEY', 'JOURNEY DATE'])
+        if train_col_dash and column_has_data(dash_df, train_col_dash):
             unique_trains = dash_df[train_col_dash].dropna().astype(str).str.strip().ne('').nunique()
             with kcol2: 
                 st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#11998e,#38ef7d); color: white;"><h3 style="color: white;">{unique_trains}</h3><p style="color: rgba(255,255,255,0.9);">Unique Trains</p></div>', unsafe_allow_html=True)
@@ -2982,8 +3075,7 @@ def main():
             with kcol2: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Unique Trains</p></div>', unsafe_allow_html=True)
 
-        vip_col_dash = next((c for c in dash_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
-        if vip_col_dash and not dash_df.empty and dash_df[vip_col_dash].notna().sum() > 0:
+        if vip_col_dash and column_has_data(dash_df, vip_col_dash):
             vip_count = dash_df[vip_col_dash].astype(str).str.strip().ne('').sum()
             with kcol3: 
                 st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#f093fb,#f5576c); color: white;"><h3 style="color: white;">{vip_count}</h3><p style="color: rgba(255,255,255,0.9);">VIP Records</p></div>', unsafe_allow_html=True)
@@ -2991,8 +3083,7 @@ def main():
             with kcol3: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>VIP Records</p></div>', unsafe_allow_html=True)
 
-        class_col_dash = next((c for c in dash_df.columns if 'CLASS' in c.upper()), None)
-        if class_col_dash and not dash_df.empty and dash_df[class_col_dash].notna().sum() > 0:
+        if class_col_dash and column_has_data(dash_df, class_col_dash):
             class_counts = dash_df[class_col_dash].dropna().astype(str).str.strip()
             class_counts = class_counts[class_counts != ''].value_counts()
             top_class = class_counts.index[0] if len(class_counts) > 0 else "N/A"
@@ -3002,8 +3093,7 @@ def main():
             with kcol4: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Top Class</p></div>', unsafe_allow_html=True)
 
-        doj_col_dash = next((c for c in dash_df.columns if 'DOJ' in c.upper()), None)
-        if doj_col_dash and not dash_df.empty:
+        if doj_col_dash and column_has_data(dash_df, doj_col_dash):
             upcoming = sum(1 for _, r in dash_df.iterrows() if not is_expired(r.get(doj_col_dash, '')))
             with kcol5: 
                 st.markdown(f'<div class="metric-card" style="background:linear-gradient(135deg,#fa709a,#fee140); color: white;"><h3 style="color: white;">{upcoming}</h3><p style="color: rgba(255,255,255,0.9);">Upcoming</p></div>', unsafe_allow_html=True)
@@ -3018,7 +3108,7 @@ def main():
         else:
             # Graph 1: Train-wise Distribution
             st.markdown("### 1️⃣ Train-wise Distribution")
-            if train_col_dash and not dash_df.empty and dash_df[train_col_dash].notna().sum() > 0:
+            if train_col_dash and column_has_data(dash_df, train_col_dash):
                 tc = dash_df[train_col_dash].dropna().astype(str).str.strip()
                 tc = tc[tc != '']
                 if len(tc) > 0:
@@ -3039,7 +3129,7 @@ def main():
 
             # Graph 2: Class-wise Distribution
             st.markdown("### 2️⃣ Class-wise Distribution")
-            if class_col_dash and not dash_df.empty and dash_df[class_col_dash].notna().sum() > 0:
+            if class_col_dash and column_has_data(dash_df, class_col_dash):
                 cc = dash_df[class_col_dash].dropna().astype(str).str.strip()
                 cc = cc[cc != '']
                 if len(cc) > 0:
@@ -3059,9 +3149,7 @@ def main():
 
             # Graph 3: Route-wise Distribution
             st.markdown("### 3️⃣ Route-wise Distribution")
-            from_col_dash = next((c for c in dash_df.columns if c.upper() == 'FROM'), None)
-            to_col_dash = next((c for c in dash_df.columns if c.upper() == 'TO'), None)
-            if from_col_dash and to_col_dash:
+            if from_col_dash and to_col_dash and column_has_data(dash_df, from_col_dash) and column_has_data(dash_df, to_col_dash):
                 dash_df['ROUTE'] = dash_df[from_col_dash].astype(str) + " → " + dash_df[to_col_dash].astype(str)
                 route_counts = dash_df['ROUTE'].value_counts().head(12).reset_index()
                 route_counts.columns = ['Route', 'Count']
@@ -3076,7 +3164,7 @@ def main():
 
             # Graph 4: Train × Class Heatmap
             st.markdown("### 4️⃣ Train × Class Heatmap")
-            if train_col_dash and class_col_dash:
+            if train_col_dash and class_col_dash and column_has_data(dash_df, train_col_dash) and column_has_data(dash_df, class_col_dash):
                 try:
                     pivot_data = pd.crosstab(
                         dash_df[train_col_dash].fillna('Unknown').astype(str),
@@ -3118,7 +3206,7 @@ def main():
 
             # Graph 5: Train × Route Grouped Bar
             st.markdown("### 5️⃣ Train × Route Analysis")
-            if train_col_dash and from_col_dash and to_col_dash:
+            if train_col_dash and from_col_dash and to_col_dash and column_has_data(dash_df, train_col_dash):
                 try:
                     tr_df = dash_df.groupby([train_col_dash, 'ROUTE']).size().reset_index(name='Count')
                     if not tr_df.empty:
@@ -3142,7 +3230,7 @@ def main():
 
             # Graph 6: Rush Comparison
             st.markdown("### 6️⃣ Rush Comparison — High Demand vs Low Demand")
-            if train_col_dash:
+            if train_col_dash and column_has_data(dash_df, train_col_dash):
                 try:
                     train_demand = dash_df[train_col_dash].value_counts().reset_index()
                     train_demand.columns = ['Train', 'Count']
@@ -3184,7 +3272,7 @@ def main():
 
             # DOJ Timeline
             st.markdown("### 📅 DOJ Timeline")
-            if doj_col_dash:
+            if doj_col_dash and column_has_data(dash_df, doj_col_dash):
                 try:
                     dash_df['_date'] = pd.to_datetime(dash_df[doj_col_dash], format='%d-%m-%Y', errors='coerce')
                     if dash_df['_date'].isna().all(): dash_df['_date'] = pd.to_datetime(dash_df[doj_col_dash], errors='coerce')
@@ -3587,20 +3675,7 @@ def main():
                     sunset_dt = datetime.fromtimestamp(data['sunset'], tz=UTC).astimezone(IST)
                     sunrise = sunrise_dt.strftime('%I:%M %p')
                     sunset = sunset_dt.strftime('%I:%M %p')
-                    weather_html += f"""
-                <div class="sunrise-sunset">
-                    <div class="sun-item">
-                        <div class="sun-icon">🌅</div>
-                        <div class="sun-time">{sunrise}</div>
-                        <div class="sun-label">Sunrise</div>
-                    </div>
-                    <div class="sun-item">
-                        <div class="sun-icon">🌇</div>
-                        <div class="sun-time">{sunset}</div>
-                        <div class="sun-label">Sunset</div>
-                    </div>
-                </div>
-                    """
+                    weather_html += f'<div class="sunrise-sunset"><div class="sun-item"><div class="sun-icon">🌅</div><div class="sun-time">{sunrise}</div><div class="sun-label">Sunrise</div></div><div class="sun-item"><div class="sun-icon">🌇</div><div class="sun-time">{sunset}</div><div class="sun-label">Sunset</div></div></div>'
                 except: pass
 
             weather_html += "</div>"
