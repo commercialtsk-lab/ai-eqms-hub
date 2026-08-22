@@ -115,7 +115,7 @@ defaults = {
     'rows_per_page': 25, 'dashboard_sheet': 'EQ', 'adv_filters': {},
     'weather_lat': None, 'weather_lon': None, 'weather_location_name': None,
     'pnr_last_checked': None,
-    'class_val': '',  # Added missing class_val
+    'class_val': '',
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -1335,7 +1335,7 @@ def process_passport_image(data):
     return final if final else no_bg
 
 # =====================================================================
-# Apply Theme
+# Apply Theme & Full-screen CSS
 # =====================================================================
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
@@ -1415,6 +1415,20 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
 
     css = f"""
     <style>
+        /* Remove all default padding/margins to achieve full screen */
+        html, body, .stApp, .stAppViewContainer, .stMain, .stMainBlockContainer, .block-container {{
+            padding: 0 !important;
+            margin: 0 !important;
+            max-width: 100% !important;
+            width: 100% !important;
+            background: transparent !important;
+        }}
+        .main .block-container {{
+            padding: 0.5rem 0.2rem !important;
+            max-width: 100% !important;
+            min-height: 100vh !important;
+            background: transparent !important;
+        }}
         /* Hide default elements */
         #MainMenu {{visibility: hidden !important;}}
         footer {{visibility: hidden !important;}}
@@ -1423,26 +1437,15 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .viewerBadge_container__1QSob {{display: none !important;}}
         .stActionButton {{display: none !important;}}
 
-        /* Transparent main container */
-        .main .block-container {{
-            padding-top: 0.5rem !important;
-            padding-bottom: 0.5rem !important;
-            max-width: 100% !important;
-            min-height: 100vh !important;
-            background: transparent !important;
-        }}
-        .stApp, .stAppViewContainer, .stMain, .stMainBlockContainer, .block-container {{
-            background: transparent !important;
-        }}
-
         /* Transparent sidebar with blur */
         [data-testid="stSidebar"] {{
             background: {card_bg} !important;
             backdrop-filter: blur(12px) !important;
             border-right: 1px solid {border} !important;
+            min-width: 280px !important;
         }}
 
-        /* Glass effect for dataframes, editors, cards, expanders */
+        /* Glass effect for all containers */
         div[data-testid="stDataFrame"], div[data-testid="stDataEditor"],
         .stExpander, .stChatMessage, [data-testid="stMetric"], .action-box, .file-card,
         .stDataFrame, [data-testid="stDataFrame"], .stDataEditor, [data-testid="stDataEditor"],
@@ -1460,6 +1463,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             backdrop-filter: blur(4px) !important;
             border: 1px solid {border} !important;
             border-radius: 8px !important;
+            color: {text_color} !important;
         }}
 
         /* Glass buttons */
@@ -1666,11 +1670,11 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         /* Sidebar collapse */
         [data-testid="stSidebar"] {{
             display: flex !important; opacity: 1 !important; transform: none !important;
-            min-width: 320px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important;
+            min-width: 280px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important;
             margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important;
         }}
         body.sidebar-collapsed [data-testid="stSidebar"] {{
-            margin-left: -340px !important; opacity: 0 !important; pointer-events: none !important;
+            margin-left: -300px !important; opacity: 0 !important; pointer-events: none !important;
         }}
         body.sidebar-collapsed [data-testid="stMain"] {{
             margin-left: 0 !important; max-width: 100% !important;
@@ -1686,9 +1690,9 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         /* Marquee */
         .eqms-marquee-box {{
             background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808);
-            padding: 10px 0;
+            padding: 8px 0;
             border-radius: 8px;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
             overflow: hidden;
             white-space: nowrap;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
@@ -1707,6 +1711,75 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         @keyframes marquee-scroll {{
             0% {{ transform: translateX(0); }}
             100% {{ transform: translateX(-100%); }}
+        }}
+
+        /* Sidebar Indian Flag Animation */
+        .flag-container {{
+            position: relative;
+            width: 100%;
+            height: 60px;
+            overflow: hidden;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            background: #000;
+        }}
+        .flag-stripes {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 200%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                90deg,
+                #FF9933 0%,
+                #FF9933 33.33%,
+                #FFFFFF 33.33%,
+                #FFFFFF 66.66%,
+                #138808 66.66%,
+                #138808 100%
+            );
+            background-size: 300% 100%;
+            animation: wave-flag 4s ease-in-out infinite;
+            transform-origin: left;
+        }}
+        .flag-stripes::after {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg,
+                rgba(0,0,0,0) 0%,
+                rgba(255,255,255,0.15) 30%,
+                rgba(0,0,0,0) 60%
+            );
+            animation: shine-flag 3s ease-in-out infinite;
+        }}
+        @keyframes wave-flag {{
+            0% {{ transform: translateX(0) skewX(0deg); }}
+            25% {{ transform: translateX(-5%) skewX(2deg); }}
+            50% {{ transform: translateX(-10%) skewX(0deg); }}
+            75% {{ transform: translateX(-5%) skewX(-2deg); }}
+            100% {{ transform: translateX(0) skewX(0deg); }}
+        }}
+        @keyframes shine-flag {{
+            0% {{ transform: translateX(-100%); }}
+            100% {{ transform: translateX(100%); }}
+        }}
+        .flag-text {{
+            position: absolute;
+            bottom: 4px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: #fff;
+            font-weight: 700;
+            font-size: 0.7rem;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+            letter-spacing: 2px;
+            background: rgba(0,0,0,0.3);
+            padding: 2px 0;
         }}
     </style>
     """
@@ -2246,7 +2319,7 @@ def main():
                             toggleBtn.innerHTML = '☰';
                             toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
                             var sb = doc.querySelector('[data-testid="stSidebar"]');
-                            if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
+                            if (sb) { sb.style.marginLeft = '-300px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
                             try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
                         }
                     };
@@ -2262,7 +2335,7 @@ def main():
                         var sb = doc.querySelector('[data-testid="stSidebar"]');
                         var isCollapsed = doc.body.classList.contains('sidebar-collapsed');
                         if (sb) {
-                            if (isCollapsed) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
+                            if (isCollapsed) { sb.style.marginLeft = '-300px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
                             else { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
                         }
                     }, 2000);
@@ -2331,6 +2404,14 @@ def main():
     # SIDEBAR
     # =====================================================================
     with st.sidebar:
+        # Indian Flag Animation
+        st.markdown("""
+        <div class="flag-container">
+            <div class="flag-stripes"></div>
+            <div class="flag-text">🇮🇳 Jai Hind</div>
+        </div>
+        """, unsafe_allow_html=True)
+
         st.markdown("""
         <style>
         @keyframes welcome-glow {
