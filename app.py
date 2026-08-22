@@ -115,7 +115,6 @@ defaults = {
     'rows_per_page': 25, 'dashboard_sheet': 'EQ', 'adv_filters': {},
     'weather_lat': None, 'weather_lon': None, 'weather_location_name': None,
     'pnr_last_checked': None,
-    'class_val': '',
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -303,7 +302,6 @@ SHEET_CONFIG = {
     "FINAL": {"start_row": 6, "pnr_col": 7, "train_col": 1, "class_col": 2, "from_col": 10, "to_col": 11, "berth_col": 5, "doj_col": 12, "headings": EQ_HEADINGS},
     "DATA2": {"start_row": 6, "pnr_col": 7, "train_col": 1, "class_col": 2, "from_col": 10, "to_col": 11, "berth_col": 5, "doj_col": 12, "headings": EQ_HEADINGS},
 
-    # EMAIL_DATA: row 2, columns: I=train, J=from, K=to, L=DOJ, M=class, P=berths (total seats)
     "EMAIL_DATA": {"start_row": 2, "pnr_col": 6, "train_col": 8, "class_col": 12, "from_col": 9, "to_col": 10, "berth_col": 15, "doj_col": 11, "headings": EQ_HEADINGS},
     "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": []}
 }
@@ -1335,55 +1333,25 @@ def process_passport_image(data):
     return final if final else no_bg
 
 # =====================================================================
-# Apply Theme & Full-screen CSS
+# Apply Theme
 # =====================================================================
 def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
-        bg = "#f8fafc"
-        card_bg = "rgba(255,255,255,0.85)"
-        text_color = "#1e293b"
-        text_secondary = "#64748b"
-        border = "rgba(255,255,255,0.3)"
-        input_bg = "rgba(255,255,255,0.7)"
-        accent = "#2563eb"
-        accent_hover = "#1d4ed8"
-        success = "#16a34a"
-        danger = "#dc2626"
-        button_bg = "rgba(255,255,255,0.5)"
-        button_text = "#1e293b"
-        button_border = "rgba(255,255,255,0.5)"
-        button_hover_bg = accent
-        button_hover_text = "white"
-        button_hover_border = accent
-        number_color = "#2563eb"
-        table_header_bg = "#1e293b"
-        table_header_text = "#ffffff"
-        table_alt_row = "rgba(248,250,252,0.6)"
-        chart_bg = "rgba(0,0,0,0)"
+        bg = "transparent"; card_bg = "rgba(248, 250, 252, 0.82)"; text_color = "#1e293b"; text_secondary = "#475569"
+        border = "rgba(148, 163, 184, 0.4)"; input_bg = "rgba(255, 255, 255, 0.9)"; accent = "#2563eb"; accent_hover = "#1d4ed8"
+        success = "#16a34a"; danger = "#dc2626"; button_bg = "rgba(241, 245, 249, 0.85)"; button_text = "#1e293b"
+        button_border = "rgba(203, 213, 225, 0.6)"; button_hover_bg = accent; button_hover_text = "white"; button_hover_border = accent
+        number_color = "#2563eb"; table_header_bg = "#1e293b"; table_header_text = "#ffffff"
+        table_alt_row = "rgba(248, 250, 252, 0.6)"; chart_bg = "rgba(0,0,0,0)"
     elif theme == 'Dark':
-        bg = "#0f172a"
-        card_bg = "rgba(30,41,59,0.85)"
-        text_color = "#f1f5f9"
-        text_secondary = "#94a3b8"
-        border = "rgba(51,65,85,0.5)"
-        input_bg = "rgba(15,23,42,0.7)"
-        accent = "#60a5fa"
-        accent_hover = "#93c5fd"
-        success = "#4ade80"
-        danger = "#f87171"
-        button_bg = "rgba(51,65,85,0.5)"
-        button_text = "#f1f5f9"
-        button_border = "rgba(71,85,105,0.5)"
-        button_hover_bg = accent
-        button_hover_text = "white"
-        button_hover_border = accent
-        number_color = "#60a5fa"
-        table_header_bg = "#2563eb"
-        table_header_text = "#ffffff"
-        table_alt_row = "rgba(30,41,59,0.6)"
-        chart_bg = "rgba(0,0,0,0)"
+        bg = "transparent"; card_bg = "rgba(30, 41, 59, 0.78)"; text_color = "#f1f5f9"; text_secondary = "#94a3b8"
+        border = "rgba(148, 163, 184, 0.25)"; input_bg = "rgba(15, 23, 42, 0.85)"; accent = "#60a5fa"; accent_hover = "#93c5fd"
+        success = "#4ade80"; danger = "#f87171"; button_bg = "rgba(51, 65, 85, 0.75)"; button_text = "#f1f5f9"
+        button_border = "rgba(148, 163, 184, 0.35)"; button_hover_bg = accent; button_hover_text = "white"; button_hover_border = accent
+        number_color = "#60a5fa"; table_header_bg = "#2563eb"; table_header_text = "#ffffff"
+        table_alt_row = "rgba(30, 41, 59, 0.55)"; chart_bg = "rgba(0,0,0,0)"
     else:
-        bg = custom_bg if custom_bg else "#ffffff"
+        bg = "transparent"
         def is_dark_color(hex_color):
             try:
                 hex_color = hex_color.lstrip('#')
@@ -1391,45 +1359,21 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
                 brightness = (r * 299 + g * 587 + b * 114) / 1000
                 return brightness < 128
             except: return False
-        is_dark = is_dark_color(bg)
-        card_bg = bg if not is_dark else "rgba(30,41,59,0.85)"
+        is_dark = is_dark_color(custom_bg) if custom_bg else False
+        card_bg = custom_bg if custom_bg else ("rgba(30, 41, 59, 0.78)" if is_dark else "rgba(248, 250, 252, 0.82)")
         text_color = custom_text if custom_text else ("#f1f5f9" if is_dark else "#1e293b")
-        text_secondary = text_color
-        border = "#475569" if is_dark else "#e2e8f0"
-        input_bg = bg
-        accent = "#60a5fa" if is_dark else "#2563eb"
-        accent_hover = "#93c5fd" if is_dark else "#1d4ed8"
-        success = "#4ade80" if is_dark else "#16a34a"
-        danger = "#f87171" if is_dark else "#dc2626"
-        button_bg = bg
-        button_text = text_color
-        button_border = border
-        button_hover_bg = accent
-        button_hover_text = "white"
-        button_hover_border = accent
-        number_color = accent
-        table_header_bg = "#2563eb" if is_dark else "#1e293b"
-        table_header_text = "#ffffff"
-        table_alt_row = "rgba(30,41,59,0.6)" if is_dark else "rgba(248,250,252,0.6)"
-        chart_bg = "rgba(0,0,0,0)"
+        text_secondary = text_color; border = "rgba(148, 163, 184, 0.35)" if is_dark else "rgba(148, 163, 184, 0.4)"
+        input_bg = "rgba(15, 23, 42, 0.85)" if is_dark else "rgba(255, 255, 255, 0.9)"
+        accent = "#60a5fa" if is_dark else "#2563eb"; accent_hover = "#93c5fd" if is_dark else "#1d4ed8"
+        success = "#4ade80" if is_dark else "#16a34a"; danger = "#f87171" if is_dark else "#dc2626"
+        button_bg = "rgba(51, 65, 85, 0.75)" if is_dark else "rgba(241, 245, 249, 0.85)"
+        button_text = text_color; button_border = border; button_hover_bg = accent
+        button_hover_text = "white"; button_hover_border = accent; number_color = accent
+        table_header_bg = "#2563eb" if is_dark else "#1e293b"; table_header_text = "#ffffff"
+        table_alt_row = "rgba(30, 41, 59, 0.55)" if is_dark else "rgba(248, 250, 252, 0.6)"; chart_bg = "rgba(0,0,0,0)"
 
     css = f"""
     <style>
-        /* Remove all default padding/margins to achieve full screen */
-        html, body, .stApp, .stAppViewContainer, .stMain, .stMainBlockContainer, .block-container {{
-            padding: 0 !important;
-            margin: 0 !important;
-            max-width: 100% !important;
-            width: 100% !important;
-            background: transparent !important;
-        }}
-        .main .block-container {{
-            padding: 0.5rem 0.2rem !important;
-            max-width: 100% !important;
-            min-height: 100vh !important;
-            background: transparent !important;
-        }}
-        /* Hide default elements */
         #MainMenu {{visibility: hidden !important;}}
         footer {{visibility: hidden !important;}}
         header {{visibility: hidden !important;}}
@@ -1437,160 +1381,175 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .viewerBadge_container__1QSob {{display: none !important;}}
         .stActionButton {{display: none !important;}}
 
-        /* Transparent sidebar with blur */
-        [data-testid="stSidebar"] {{
-            background: {card_bg} !important;
-            backdrop-filter: blur(12px) !important;
-            border-right: 1px solid {border} !important;
-            min-width: 280px !important;
-        }}
-
-        /* Glass effect for all containers */
-        div[data-testid="stDataFrame"], div[data-testid="stDataEditor"],
-        .stExpander, .stChatMessage, [data-testid="stMetric"], .action-box, .file-card,
-        .stDataFrame, [data-testid="stDataFrame"], .stDataEditor, [data-testid="stDataEditor"],
-        [data-testid="stDataFrameResizable"], [data-testid="stDataEditorResizable"],
-        .stDataFrame table, .stDataEditor table {{
-            background: {card_bg} !important;
-            backdrop-filter: blur(8px) !important;
-            border: 1px solid {border} !important;
-        }}
-
-        /* Transparent inputs */
-        .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea,
-        .stSelectbox > div > div > div {{
-            background: {input_bg} !important;
-            backdrop-filter: blur(4px) !important;
-            border: 1px solid {border} !important;
-            border-radius: 8px !important;
-            color: {text_color} !important;
-        }}
-
-        /* Glass buttons */
-        .stButton > button {{
-            background: {button_bg} !important;
-            backdrop-filter: blur(4px) !important;
-            color: {button_text} !important;
-            border: 1px solid {button_border} !important;
-            border-radius: 8px !important;
-            font-weight: 500 !important;
-            transition: all 0.15s ease !important;
-        }}
-        .stButton > button:hover {{
-            background: {button_hover_bg} !important;
-            color: {button_hover_text} !important;
-            border-color: {button_hover_border} !important;
-        }}
-        .stButton > button[kind="primary"] {{
-            background: {accent} !important;
-            color: white !important;
-            border-color: {accent} !important;
-        }}
-        .stButton > button[kind="primary"]:hover {{
-            background: {accent_hover} !important;
-            border-color: {accent_hover} !important;
-        }}
-
-        /* Header with glass */
-        header[data-testid="stHeader"] {{
-            background: {card_bg} !important;
-            backdrop-filter: blur(12px) !important;
-            border-bottom: 1px solid {border} !important;
-        }}
-
-        /* Text colors */
-        h1, h2, h3, h4, h5, h6, .stMarkdown p, .stMarkdown div, .stMarkdown span,
-        .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
-        [data-testid="stMetricLabel"], [data-testid="stMetricValue"], .stCaption,
-        label, .stTextInput label, .stSelectbox label, .stDateInput label,
-        .stNumberInput label, .stTextArea label, .stRadio label, .stCheckbox label {{
-            color: {text_color} !important;
-        }}
-
-        /* Table headers and cells */
-        .stDataFrame th, .stDataEditor th {{
-            background: {table_header_bg} !important;
-            color: {table_header_text} !important;
-            border-bottom: 2px solid {border} !important;
-            font-weight: 600 !important;
-        }}
-        .stDataFrame tr:nth-child(even) td, .stDataEditor tr:nth-child(even) td {{
-            background: {table_alt_row} !important;
-        }}
-        .stDataFrame td, .stDataEditor td {{
-            text-align: center !important;
-            border: 1px solid {border} !important;
-            color: {text_color} !important;
-        }}
-
-        /* Scrollbar */
-        ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
-        ::-webkit-scrollbar-track {{ background: rgba(0,0,0,0.1); border-radius: 4px; }}
-        ::-webkit-scrollbar-thumb {{ background: rgba(255,255,255,0.3); border-radius: 4px; }}
-        ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
-
-        /* Status pill */
-        .status-pill {{ display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 500; }}
-        .status-live {{ background: rgba(63, 185, 80, 0.15); color: {success}; border: 1px solid {success}; animation: live-pulse 2s ease-in-out infinite; }}
-        @keyframes live-pulse {{ 0%,100%{{box-shadow:0 0 0 0 rgba(63,185,80,0.4);}} 50%{{box-shadow:0 0 0 8px rgba(63,185,80,0);}} }}
-
-        /* Train count cards */
-        .train-count-container {{ display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; margin: 10px 0; }}
-        .train-count-card {{
-            border: 1px solid {border}; border-radius: 10px; padding: 8px 16px;
-            min-width: 80px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-            transition: transform 0.15s ease, box-shadow 0.15s ease; background: {card_bg};
-            backdrop-filter: blur(4px);
-        }}
-        .train-count-number {{ color: {number_color}; font-weight: 800; font-size: 1.8rem; }}
-        .train-count-badge {{ display: inline-block; background: {accent}; color: white; font-size: 0.9rem; font-weight: 700; padding: 2px 10px; border-radius: 20px; }}
-        .train-total-card {{
-            border: 2px solid {success}; border-radius: 12px; padding: 8px 20px;
-            min-width: 120px; text-align: center; background: {card_bg};
-            backdrop-filter: blur(4px);
-        }}
-        .train-total-number {{ color: {success}; font-weight: 800; font-size: 1.5rem; }}
-        .train-total-label {{ color: {text_secondary}; font-size: 0.75rem; }}
-
-        /* Weather card */
-        .weather-card {{
-            background: {card_bg}; border: 1px solid {border}; border-radius: 16px;
-            padding: 20px; margin: 10px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-            backdrop-filter: blur(8px);
-        }}
-
-        /* Result box */
-        .result-box {{
-            background: {card_bg}; border: 2px solid {accent}; border-radius: 12px;
-            padding: 20px; margin: 15px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            backdrop-filter: blur(8px);
-        }}
-
-        /* Footer */
-        .pro-footer {{
-            color: {text_secondary} !important;
-            border-top: 1px solid {border} !important;
-            text-align: center !important;
-            padding: 18px 0 8px !important;
-            margin-top: 28px !important;
-            font-size: 0.85rem !important;
+        [data-testid="stAppViewContainer"], [data-testid="stApp"], .main, .block-container {{
             background: transparent !important;
         }}
+        .main .block-container {{
+            padding-top: 0.5rem !important; padding-bottom: 0.5rem !important;
+            max-width: 100% !important; width: 100% !important; min-height: 100vh !important;
+            margin: 0 auto !important;
+        }}
+        div[data-testid="stDataFrame"] {{ max-height: 75vh !important; overflow: auto !important; z-index: 100 !important; position: relative !important; }}
+        div[data-testid="stDataFrame"] > div {{ max-height: 75vh !important; z-index: 100 !important; }}
+        [data-testid="stMain"] .block-container {{ z-index: 50 !important; position: relative !important; }}
 
-        /* Sheet link button */
+        ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
+        ::-webkit-scrollbar-track {{ background: {bg}; border-radius: 4px; }}
+        ::-webkit-scrollbar-thumb {{ background: {border}; border-radius: 4px; }}
+        ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
+
+        [data-testid="stSidebar"] > div:first-child {{ padding-top: 0 !important; }}
+        [data-testid="stSidebar"] {{ background-color: {card_bg} !important; border-right: 1px solid {border} !important; backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%); }}
+        [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown div,
+        [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
+        [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] .stDateInput label,
+        [data-testid="stSidebar"] .stNumberInput label, [data-testid="stSidebar"] .stTextArea label,
+        [data-testid="stSidebar"] .stRadio label, [data-testid="stSidebar"] .stCheckbox label {{
+            color: {text_color} !important;
+        }}
+        header[data-testid="stHeader"] {{ background-color: {card_bg} !important; border-bottom: 1px solid {border} !important; }}
+        h1, h2, h3, h4, h5, h6, .stMarkdown p, .stMarkdown div, .stMarkdown span,
+        .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
+        [data-testid="stMetricLabel"], [data-testid="stMetricValue"], .stCaption {{
+            color: {text_color} !important;
+        }}
+        .stTextInput input, .stNumberInput input, .stDateInput input, .stTextArea textarea,
+        .stSelectbox > div > div > div {{
+            background-color: {input_bg} !important; color: {text_color} !important;
+            border: 1px solid {border} !important; border-radius: 8px !important;
+            backdrop-filter: blur(12px) !important; -webkit-backdrop-filter: blur(12px) !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+        }}
+        .stButton > button {{
+            background-color: {button_bg} !important; color: {button_text} !important;
+            border: 1px solid {button_border} !important; border-radius: 8px !important;
+            font-weight: 500 !important; transition: all 0.15s ease !important;
+        }}
+        .stButton > button:hover {{
+            background-color: {button_hover_bg} !important; color: {button_hover_text} !important;
+            border-color: {button_hover_border} !important;
+        }}
+        .stButton > button:disabled {{ opacity: 0.45 !important; cursor: not-allowed !important; }}
+        .stButton > button[kind="primary"] {{
+            background-color: {accent} !important; color: white !important; border-color: {accent} !important;
+        }}
+        .stButton > button[kind="primary"]:hover {{
+            background-color: {accent_hover} !important; border-color: {accent_hover} !important;
+        }}
+        .stFileUploader {{
+            background-color: {input_bg} !important; border: 2px dashed {border} !important;
+            border-radius: 12px !important; padding: 16px !important;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        }}
+        .stFileUploader:hover {{ border-color: {accent} !important; }}
+        .stFileUploader label {{ color: {text_secondary} !important; }}
+
+        .stDataFrame, [data-testid="stDataFrame"], .stDataEditor, [data-testid="stDataEditor"],
+        [data-testid="stDataFrameResizable"], [data-testid="stDataEditorResizable"],
+        .stDataFrame table, .stDataEditor table, .stDataFrame th, .stDataEditor th,
+        .stDataFrame td, .stDataEditor td, .stDataEditor input, .stDataEditor textarea {{
+            background-color: {card_bg} !important; color: {text_color} !important;
+            border-color: {border} !important;
+            backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        }}
+        .stDataFrame th, .stDataEditor th {{
+            background-color: {table_header_bg} !important; color: {table_header_text} !important;
+            border-bottom: 2px solid {border} !important; font-weight: 600 !important;
+        }}
+        .stDataFrame tr:nth-child(even) td, .stDataEditor tr:nth-child(even) td {{
+            background-color: {table_alt_row} !important;
+        }}
+        .stDataFrame td, .stDataEditor td {{
+            text-align: center !important; border: 1px solid {border} !important;
+        }}
+
+        .js-plotly-plot .plotly text {{ fill: {text_color} !important; }}
+        .js-plotly-plot .plotly .gtitle {{ fill: {text_color} !important; }}
+
+        .stExpander {{ background-color: {card_bg} !important; border: 1px solid {border} !important; border-radius: 8px !important; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
+        .streamlit-expanderHeader {{ color: {text_color} !important; font-weight: 600 !important; }}
+        .stChatMessage {{ background-color: {card_bg} !important; border: 1px solid {border} !important;
+            border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
+        .stChatInput {{ background-color: {input_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; }}
+        .stChatInput input {{ color: {text_color} !important; }}
+        [data-testid="stMetric"] {{ background-color: {card_bg} !important; border: 1px solid {border} !important;
+            border-radius: 10px !important; padding: 14px !important;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
+        .stTabs [data-baseweb="tab-list"] {{ background-color: {card_bg} !important; border-bottom: 1px solid {border} !important;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
+        .stTabs [data-baseweb="tab"] {{ color: {text_secondary} !important; }}
+        .stTabs [data-baseweb="tab-highlight"] {{ background-color: {accent} !important; }}
+        html, body, [data-testid="stMain"], [data-testid="stAppViewContainer"] {{ scroll-behavior: smooth !important; margin: 0 !important; padding: 0 !important; }}
+        footer {{ display: none !important; }}
+
+        .action-box {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 18px; margin-bottom: 16px; backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%); }}
+        .glass-card {{ background: {card_bg} !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; border: 1px solid {border} !important; border-radius: 16px !important; box-shadow: 0 8px 32px rgba(0,0,0,0.15) !important; }}
+        .glow-border {{ position: relative; }}
+        .glow-border::before {{ content: ''; position: absolute; inset: -2px; border-radius: 18px; background: linear-gradient(45deg, #FF9933, #FFFFFF, #138808, #FF9933); background-size: 400% 400%; animation: glow-rotate 4s linear infinite; z-index: -1; opacity: 0.6; }}
+        @keyframes glow-rotate {{ 0%{{background-position:0% 50%;}} 50%{{background-position:100% 50%;}} 100%{{background-position:0% 50%;}} }}
+        .file-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 14px; margin: 10px 0; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
+        .file-card-title {{ color: {text_color}; font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }}
+        .file-card-meta {{ color: {text_secondary}; font-size: 0.8rem; margin-bottom: 10px; }}
+        .pro-footer {{ color: {text_secondary} !important; border-top: 1px solid {border} !important;
+            text-align: center !important; padding: 18px 0 8px !important; margin-top: 28px !important; font-size: 0.85rem !important; }}
         .sheet-link-btn {{
             display: inline-block !important; padding: 9px 16px !important;
             background: {button_bg} !important; color: {accent} !important;
             border: 1px solid {button_border} !important; border-radius: 8px !important;
             text-decoration: none !important; text-align: center !important; width: 100% !important;
             transition: all 0.15s !important; font-weight: 500 !important; font-size: 0.9rem !important;
-            backdrop-filter: blur(4px);
         }}
         .sheet-link-btn:hover {{ background: {accent} !important; color: white !important; border-color: {accent} !important; }}
-
-        /* Print only */
+        .status-pill {{ display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 500; }}
+        .status-live {{ background: rgba(63, 185, 80, 0.15); color: {success}; border: 1px solid {success}; animation: live-pulse 2s ease-in-out infinite; }}
+        @keyframes live-pulse {{ 0%,100%{{box-shadow:0 0 0 0 rgba(63,185,80,0.4);}} 50%{{box-shadow:0 0 0 8px rgba(63,185,80,0);}} }}
+        .train-count-container {{ display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-start; margin: 10px 0; }}
+        .train-count-card {{
+            border: 1px solid {border}; border-radius: 10px; padding: 8px 16px;
+            min-width: 80px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            transition: transform 0.15s ease, box-shadow 0.15s ease; background: {card_bg};
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        }}
+        .train-count-card:hover {{ transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.12); border-color: {accent}; }}
+        .train-count-number {{
+            color: {number_color}; font-weight: 800; font-size: 1.8rem; line-height: 1.2; letter-spacing: -0.5px;
+        }}
+        .train-count-badge {{
+            display: inline-block; background: {accent}; color: white; font-size: 0.9rem;
+            font-weight: 700; padding: 2px 10px; border-radius: 20px; margin-top: 2px;
+        }}
+        .train-total-card {{
+            border: 2px solid {success}; border-radius: 12px; padding: 8px 20px;
+            min-width: 120px; text-align: center; background: {card_bg};
+            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        }}
+        .train-total-number {{ color: {success}; font-weight: 800; font-size: 1.5rem; line-height: 1.2; }}
+        .train-total-label {{ color: {text_secondary}; font-size: 0.75rem; margin-top: 2px; }}
+        .weather-card {{
+            background: {card_bg}; border: 1px solid {border}; border-radius: 16px;
+            padding: 20px; margin: 10px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        }}
+        .weather-temp {{ font-size: 3.5rem; font-weight: 700; color: {number_color}; }}
+        .weather-desc {{ font-size: 1.2rem; color: {text_color}; }}
+        .weather-detail {{ font-size: 0.95rem; color: {text_secondary}; padding: 4px 0; }}
+        .result-box {{
+            background: {card_bg}; border: 2px solid {accent}; border-radius: 12px;
+            padding: 20px; margin: 15px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        }}
+        .result-box pre {{
+            white-space: pre-wrap; word-wrap: break-word; font-family: inherit;
+            font-size: 0.95rem; line-height: 1.6; margin: 0; color: {text_color};
+        }}
         .print-only {{ display: none; }}
         @media print {{
+            @page {{ margin: 1cm; size: A4 landscape; }}
+            body {{ background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
+            .eqms-bg {{ display: none !important; }}
+            [data-testid="stAppViewContainer"] {{ background: white !important; }}
+            .main {{ background: white !important; }}
             .no-print, header, footer, .stSidebar, .stButton, .stExpander, .stTabs,
             .stSelectbox, .stTextInput, .stDateInput, .stNumberInput, .stTextArea, .stRadio,
             .stCheckbox, .stFileUploader, .stCaption, .stImage, .stVideo, .stAudio, .stPlotlyChart,
@@ -1614,10 +1573,17 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
                 font-size: 8pt !important; color: #000 !important; word-wrap: break-word !important;
             }}
             .print-only tr:nth-child(even) {{ background: #f5f5f5 !important; }}
-            body {{ background: white !important; }}
         }}
-
-        /* Sidebar toggle button */
+        * {{ transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease; }}
+        .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
+        .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
+        [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important; margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important; }}
+        body.sidebar-collapsed [data-testid="stSidebar"] {{ margin-left: -340px !important; opacity: 0 !important; pointer-events: none !important; }}
+        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important; }}
+        [data-testid="stSidebarCollapseButton"] {{ display: none !important; }}
+        [data-testid="collapsedControl"] {{ display: none !important; }}
+        button[kind="header"] {{ display: none !important; }}
+        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; }}
         .sidebar-toggle-btn {{
             position: fixed !important;
             top: 12px !important;
@@ -1644,142 +1610,21 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .sidebar-toggle-btn.collapsed {{
             background: linear-gradient(135deg, #138808, #0d6e05) !important;
         }}
-
-        /* Metric card */
-        .metric-card {{
-            background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 16px; text-align: center;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s ease; backdrop-filter: blur(8px);
-        }}
+        .metric-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); transition: transform 0.2s ease; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
         .metric-card:hover {{ transform: translateY(-3px); box-shadow: 0 4px 16px rgba(0,0,0,0.1); }}
         .metric-card h3 {{ margin: 0; font-size: 2.2rem; color: {accent}; font-weight: 800; }}
         .metric-card p {{ margin: 4px 0 0 0; color: {text_secondary}; font-size: 0.9rem; font-weight: 500; }}
-
-        /* File card */
-        .file-card {{
-            background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 14px; margin: 10px 0;
-            backdrop-filter: blur(8px);
-        }}
-        .file-card-title {{ color: {text_color}; font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }}
-        .file-card-meta {{ color: {text_secondary}; font-size: 0.8rem; margin-bottom: 10px; }}
-
-        /* Plotly chart background */
-        .js-plotly-plot .plotly text {{ fill: {text_color} !important; }}
-        .js-plotly-plot .plotly .gtitle {{ fill: {text_color} !important; }}
-        [data-testid="stMain"] .block-container {{ z-index: 50 !important; position: relative !important; }}
-
-        /* Sidebar collapse */
-        [data-testid="stSidebar"] {{
-            display: flex !important; opacity: 1 !important; transform: none !important;
-            min-width: 280px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important;
-            margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important;
-        }}
-        body.sidebar-collapsed [data-testid="stSidebar"] {{
-            margin-left: -300px !important; opacity: 0 !important; pointer-events: none !important;
-        }}
-        body.sidebar-collapsed [data-testid="stMain"] {{
-            margin-left: 0 !important; max-width: 100% !important;
-            transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        }}
-        [data-testid="stSidebarCollapseButton"] {{ display: none !important; }}
-        [data-testid="collapsedControl"] {{ display: none !important; }}
-        button[kind="header"] {{ display: none !important; }}
-        body.sidebar-collapsed [data-testid="stMain"] {{
-            margin-left: 0 !important; max-width: 100% !important;
-        }}
-
-        /* Marquee */
-        .eqms-marquee-box {{
-            background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808);
-            padding: 8px 0;
-            border-radius: 8px;
-            margin-bottom: 8px;
-            overflow: hidden;
-            white-space: nowrap;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            backdrop-filter: blur(2px);
-        }}
-        .eqms-marquee-box .scroll-text {{
-            display: inline-block;
-            padding-left: 100%;
-            animation: marquee-scroll 25s linear infinite;
-            color: #000000 !important;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            font-size: 15px;
-            font-family: 'Segoe UI', Arial, sans-serif;
-        }}
-        @keyframes marquee-scroll {{
-            0% {{ transform: translateX(0); }}
-            100% {{ transform: translateX(-100%); }}
-        }}
-
-        /* Sidebar Indian Flag Animation */
-        .flag-container {{
-            position: relative;
-            width: 100%;
-            height: 60px;
-            overflow: hidden;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            background: #000;
-        }}
-        .flag-stripes {{
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 200%;
-            height: 100%;
-            background: repeating-linear-gradient(
-                90deg,
-                #FF9933 0%,
-                #FF9933 33.33%,
-                #FFFFFF 33.33%,
-                #FFFFFF 66.66%,
-                #138808 66.66%,
-                #138808 100%
-            );
-            background-size: 300% 100%;
-            animation: wave-flag 4s ease-in-out infinite;
-            transform-origin: left;
-        }}
-        .flag-stripes::after {{
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg,
-                rgba(0,0,0,0) 0%,
-                rgba(255,255,255,0.15) 30%,
-                rgba(0,0,0,0) 60%
-            );
-            animation: shine-flag 3s ease-in-out infinite;
-        }}
-        @keyframes wave-flag {{
-            0% {{ transform: translateX(0) skewX(0deg); }}
-            25% {{ transform: translateX(-5%) skewX(2deg); }}
-            50% {{ transform: translateX(-10%) skewX(0deg); }}
-            75% {{ transform: translateX(-5%) skewX(-2deg); }}
-            100% {{ transform: translateX(0) skewX(0deg); }}
-        }}
-        @keyframes shine-flag {{
-            0% {{ transform: translateX(-100%); }}
-            100% {{ transform: translateX(100%); }}
-        }}
-        .flag-text {{
-            position: absolute;
-            bottom: 4px;
-            left: 0;
-            width: 100%;
-            text-align: center;
-            color: #fff;
-            font-weight: 700;
-            font-size: 0.7rem;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.8);
-            letter-spacing: 2px;
-            background: rgba(0,0,0,0.3);
-            padding: 2px 0;
+        .weather-scene {{ display: flex; justify-content: center; align-items: center; gap: 30px; margin: 20px 0; flex-wrap: wrap; }}
+        .weather-char {{ text-align: center; animation: weather-bounce 2.5s ease-in-out infinite; }}
+        .weather-char:nth-child(2) {{ animation-delay: 0.3s; }}
+        .weather-char:nth-child(3) {{ animation-delay: 0.6s; }}
+        .weather-char .emoji {{ font-size: 5rem; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }}
+        .weather-char .label {{ font-size: 1rem; font-weight: 600; color: #475569; margin-top: 8px; }}
+        .rain-anim {{ animation: rain-fall 0.8s linear infinite; display: inline-block; }}
+        @keyframes rain-fall {{ 0% {{ transform: translateY(-15px); opacity: 0; }} 30% {{ opacity: 1; }} 100% {{ transform: translateY(25px); opacity: 0; }} }}
+        @keyframes weather-bounce {{ 0%,100% {{ transform: translateY(0); }} 50% {{ transform: translateY(-12px); }} }}
+        .stDataFrame [data-testid="stDataFrameResizable"] {{
+            border: 1px solid {border} !important; border-radius: 8px !important;
         }}
     </style>
     """
@@ -2055,7 +1900,7 @@ def main():
     </script>
     """, height=0)
 
-    # Solar System Background with Train Engine and Coaches (full screen)
+    # Solar System Background
     bg_html = """
     <style>
     .eqms-bg {
@@ -2063,204 +1908,165 @@ def main():
         z-index: -1; pointer-events: none; overflow: hidden;
         background: radial-gradient(ellipse at center, #0a0a1a 0%, #000000 70%);
     }
-    .stars {
-        position: absolute; top: 0; left: 0; width: 2px; height: 2px;
-        background: transparent;
-        box-shadow:
-            80px 50px #fff, 150px 80px #fff, 220px 30px #fff, 300px 120px #fff,
-            400px 60px #fff, 500px 150px #fff, 600px 40px #fff, 700px 100px #fff,
-            80px 150px #fff, 180px 200px #fff, 280px 180px #fff, 380px 220px #fff,
-            480px 160px #fff, 580px 240px #fff, 680px 190px #fff, 750px 280px #fff,
-            50px 280px #fff, 120px 320px #fff, 200px 300px #fff, 320px 350px #fff,
-            420px 310px #fff, 520px 360px #fff, 620px 330px #fff, 720px 370px #fff,
-            90px 400px #fff, 170px 450px #fff, 250px 420px #fff, 350px 480px #fff,
-            450px 440px #fff, 550px 490px #fff, 650px 460px #fff, 730px 500px #fff,
-            30px 520px #fff, 110px 560px #fff, 190px 540px #fff, 290px 580px #fff,
-            390px 550px #fff, 490px 590px #fff, 590px 570px #fff, 690px 600px #fff,
-            70px 650px #fff, 160px 680px #fff, 260px 660px #fff, 360px 700px #fff,
-            460px 670px #fff, 560px 710px #fff, 660px 690px #fff, 740px 720px #fff,
-            100px 750px #fff, 200px 780px #fff, 300px 760px #fff, 400px 790px #fff,
-            500px 770px #fff, 600px 800px #fff, 700px 740px #fff, 770px 790px #fff,
-            850px 120px #fff, 920px 200px #fff, 1050px 90px #fff, 1150px 300px #fff,
-            1250px 180px #fff, 1350px 400px #fff, 1450px 250px #fff, 1550px 500px #fff,
-            80px 850px #fff, 180px 920px #fff, 280px 880px #fff, 380px 950px #fff,
-            480px 910px #fff, 580px 970px #fff, 680px 930px #fff, 780px 990px #fff;
-        animation: twinkle-stars 3s ease-in-out infinite alternate;
-    }
-    @keyframes twinkle-stars {
-        0% { opacity: 0.3; }
-        100% { opacity: 1; }
+    .stars-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    @keyframes twinkle-star {
+        0%, 100% { opacity: 0.3; transform: scale(0.8); }
+        50% { opacity: 1; transform: scale(1.2); }
     }
     .sun-wrap {
         position: absolute; top: 50%; left: 50%;
         transform: translate(-50%, -50%);
-        width: 100px; height: 100px;
+        width: 80px; height: 80px;
     }
     .sun-core {
         position: absolute; top: 50%; left: 50%;
         transform: translate(-50%, -50%);
-        width: 60px; height: 60px;
-        background: radial-gradient(circle, #FFD700 0%, #FF8C00 50%, #FF4500 100%);
+        width: 64px; height: 64px;
+        background: radial-gradient(circle at 35% 35%, #FFD700 0%, #FF8C00 40%, #FF4500 80%, #8B0000 100%);
         border-radius: 50%;
-        box-shadow: 0 0 40px 15px rgba(255,140,0,0.6), 0 0 80px 30px rgba(255,69,0,0.3);
-        animation: sun-glow 3s ease-in-out infinite alternate;
+        box-shadow: 0 0 50px 20px rgba(255,140,0,0.5), 0 0 100px 40px rgba(255,69,0,0.25), inset -6px -6px 12px rgba(0,0,0,0.3);
+        animation: sun-glow 4s ease-in-out infinite alternate;
     }
     @keyframes sun-glow {
-        0% { transform: translate(-50%, -50%) scale(1); }
-        100% { transform: translate(-50%, -50%) scale(1.15); }
+        0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 50px 20px rgba(255,140,0,0.5), 0 0 100px 40px rgba(255,69,0,0.25); }
+        100% { transform: translate(-50%, -50%) scale(1.12); box-shadow: 0 0 70px 30px rgba(255,140,0,0.6), 0 0 140px 50px rgba(255,69,0,0.35); }
     }
-    .sun-rays {
+    .orbit-ring {
         position: absolute; top: 50%; left: 50%;
         transform: translate(-50%, -50%);
-        width: 100px; height: 100px;
-        animation: ray-spin 20s linear infinite;
-    }
-    .sun-rays::before, .sun-rays::after {
-        content: ''; position: absolute; top: 50%; left: 50%;
-        width: 50px; height: 2px; background: rgba(255,200,0,0.6);
-        transform-origin: 0 50%;
-    }
-    .sun-rays::before { transform: rotate(0deg); }
-    .sun-rays::after { transform: rotate(90deg); }
-    @keyframes ray-spin {
-        from { transform: translate(-50%, -50%) rotate(0deg); }
-        to { transform: translate(-50%, -50%) rotate(360deg); }
-    }
-    .ring-1 {
-        position: absolute; top: 50%; left: 50%;
-        transform: translate(-50%, -50%);
-        width: 260px; height: 260px;
-        border: 1px dashed rgba(255,153,51,0.25);
         border-radius: 50%;
-        animation: ring-pulse-1 4s ease-in-out infinite;
+        border: 1px dashed rgba(255,255,255,0.12);
     }
-    .ring-2 {
-        position: absolute; top: 50%; left: 50%;
-        transform: translate(-50%, -50%);
-        width: 400px; height: 400px;
-        border: 1px dashed rgba(19,136,8,0.25);
-        border-radius: 50%;
-        animation: ring-pulse-2 4s ease-in-out infinite;
-        animation-delay: 2s;
-    }
+    .ring-1 { width: 260px; height: 260px; animation: ring-pulse-1 5s ease-in-out infinite; }
+    .ring-2 { width: 400px; height: 400px; animation: ring-pulse-2 5s ease-in-out infinite; animation-delay: 1.5s; }
+    .ring-3 { width: 540px; height: 540px; animation: ring-pulse-1 5s ease-in-out infinite; animation-delay: 3s; border-color: rgba(200,180,140,0.12); }
+    .ring-4 { width: 680px; height: 680px; animation: ring-pulse-2 5s ease-in-out infinite; animation-delay: 4.5s; border-color: rgba(180,140,100,0.12); }
     @keyframes ring-pulse-1 {
-        0%, 100% { border-color: rgba(255,153,51,0.15); }
-        50% { border-color: rgba(255,153,51,0.45); }
+        0%, 100% { border-color: rgba(255,153,51,0.1); }
+        50% { border-color: rgba(255,153,51,0.35); }
     }
     @keyframes ring-pulse-2 {
-        0%, 100% { border-color: rgba(19,136,8,0.15); }
-        50% { border-color: rgba(19,136,8,0.45); }
+        0%, 100% { border-color: rgba(19,136,8,0.1); }
+        50% { border-color: rgba(19,136,8,0.35); }
     }
-    /* Orbit 1: Engine + 3 coaches */
-    .orbit-1 {
+    .orbit {
         position: absolute; top: 50%; left: 50%;
-        width: 260px; height: 260px;
         transform: translate(-50%, -50%);
-        animation: spin-1 22s linear infinite;
     }
-    @keyframes spin-1 {
-        from { transform: translate(-50%, -50%) rotate(0deg); }
-        to { transform: translate(-50%, -50%) rotate(360deg); }
+    .orbit-1 { width: 260px; height: 260px; animation: spin-1 24s linear infinite; }
+    .orbit-2 { width: 400px; height: 400px; animation: spin-2 38s linear infinite reverse; }
+    .orbit-3 { width: 540px; height: 540px; animation: spin-3 52s linear infinite; }
+    .orbit-4 { width: 680px; height: 680px; animation: spin-4 70s linear infinite reverse; }
+    @keyframes spin-1 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+    @keyframes spin-2 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+    @keyframes spin-3 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+    @keyframes spin-4 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+
+    .train-engine-1 { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 30px; filter: drop-shadow(0 0 12px rgba(255,153,51,0.9)); }
+    .train-coach-1 { position: absolute; top: -18px; left: 50%; font-size: 26px; filter: drop-shadow(0 0 8px rgba(255,153,51,0.7)); }
+    .tc1-1 { transform: translateX(calc(-50% - 40px)); }
+    .tc1-2 { transform: translateX(calc(-50% - 76px)); }
+    .tc1-3 { transform: translateX(calc(-50% - 110px)); }
+
+    .train-engine-2 { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 28px; filter: drop-shadow(0 0 12px rgba(19,136,8,0.9)); }
+    .train-coach-2 { position: absolute; top: -16px; left: 50%; font-size: 24px; filter: drop-shadow(0 0 8px rgba(19,136,8,0.7)); }
+    .tc2-1 { transform: translateX(calc(-50% - 38px)); }
+    .tc2-2 { transform: translateX(calc(-50% - 72px)); }
+    .tc2-3 { transform: translateX(calc(-50% - 104px)); }
+    .tc2-4 { transform: translateX(calc(-50% - 134px)); }
+    .tc2-5 { transform: translateX(calc(-50% - 162px)); }
+
+    .planet-saturn {
+        position: absolute; top: -24px; left: 50%; transform: translateX(-50%);
+        font-size: 36px; filter: drop-shadow(0 0 18px rgba(210,180,140,0.6));
+        animation: planet-bob 3.5s ease-in-out infinite;
     }
-    .t1 { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 28px; filter: drop-shadow(0 0 10px rgba(255,153,51,0.9)); animation: bob-1 0.9s ease-in-out infinite alternate; }
-    .t1-b1 { transform: translateX(-50%) translateX(-36px); animation-delay: 0.04s; }
-    .t1-b2 { transform: translateX(-50%) translateX(-68px); animation-delay: 0.08s; }
-    .t1-b3 { transform: translateX(-50%) translateX(-96px); animation-delay: 0.12s; }
-    @keyframes bob-1 {
-        from { transform: translateX(-50%) translateY(0) scale(1); }
-        to { transform: translateX(-50%) translateY(-5px) scale(1.07); }
-    }
-    /* Orbit 2: Engine + 5 coaches */
-    .orbit-2 {
-        position: absolute; top: 50%; left: 50%;
-        width: 400px; height: 400px;
-        transform: translate(-50%, -50%);
-        animation: spin-2 32s linear infinite reverse;
-    }
-    @keyframes spin-2 {
-        from { transform: translate(-50%, -50%) rotate(0deg); }
-        to { transform: translate(-50%, -50%) rotate(360deg); }
-    }
-    .t2 { position: absolute; top: -20px; left: 50%; transform: translateX(-50%); font-size: 28px; filter: drop-shadow(0 0 10px rgba(19,136,8,0.9)); animation: bob-2 1s ease-in-out infinite alternate; }
-    .t2-b1 { transform: translateX(-50%) translateX(-34px); animation-delay: 0.04s; }
-    .t2-b2 { transform: translateX(-50%) translateX(-64px); animation-delay: 0.08s; }
-    .t2-b3 { transform: translateX(-50%) translateX(-90px); animation-delay: 0.12s; }
-    .t2-b4 { transform: translateX(-50%) translateX(-116px); animation-delay: 0.16s; }
-    .t2-b5 { transform: translateX(-50%) translateX(-142px); animation-delay: 0.20s; }
-    @keyframes bob-2 {
-        from { transform: translateX(-50%) translateY(0) scale(1); }
-        to { transform: translateX(-50%) translateY(-4px) scale(1.05); }
-    }
-    /* Planets */
-    .planet-1 {
-        position: absolute; top: 12%; right: 18%;
-        width: 16px; height: 16px;
-        background: radial-gradient(circle, #ff6b6b, #c92a2a);
+    .planet-jupiter {
+        position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+        width: 32px; height: 32px;
+        background: radial-gradient(circle at 30% 30%, #e8b89d, #c07848, #8b4513);
         border-radius: 50%;
-        box-shadow: 0 0 15px rgba(255,107,107,0.4);
-        animation: float-1 7s ease-in-out infinite;
+        box-shadow: 0 0 22px rgba(192,120,72,0.5), inset -5px -5px 10px rgba(0,0,0,0.35);
+        animation: planet-bob 4.5s ease-in-out infinite;
     }
-    .planet-2 {
-        position: absolute; bottom: 22%; left: 10%;
-        width: 12px; height: 12px;
-        background: radial-gradient(circle, #4ecdc4, #087f5b);
-        border-radius: 50%;
-        box-shadow: 0 0 12px rgba(78,205,196,0.4);
-        animation: float-2 7s ease-in-out infinite;
-        animation-delay: -3s;
+    .planet-jupiter::before {
+        content: ''; position: absolute; top: 40%; left: 10%; width: 80%; height: 3px;
+        background: rgba(139,69,19,0.4); border-radius: 2px;
     }
-    .planet-3 {
-        position: absolute; top: 68%; right: 12%;
-        width: 20px; height: 20px;
-        background: radial-gradient(circle, #ffe66d, #f59f00);
-        border-radius: 50%;
-        box-shadow: 0 0 20px rgba(255,230,109,0.4);
-        animation: float-3 7s ease-in-out infinite;
-        animation-delay: -6s;
+    .planet-jupiter::after {
+        content: ''; position: absolute; top: 60%; left: 15%; width: 70%; height: 2px;
+        background: rgba(160,82,45,0.35); border-radius: 2px;
     }
-    @keyframes float-1 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
-    @keyframes float-2 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-    @keyframes float-3 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+    @keyframes planet-bob {
+        0%, 100% { transform: translateX(-50%) translateY(0); }
+        50% { transform: translateX(-50%) translateY(-6px); }
+    }
     .shooting {
         position: absolute; top: 10%; left: 10%;
-        width: 100px; height: 2px;
+        width: 120px; height: 2px;
         background: linear-gradient(90deg, rgba(255,255,255,1), transparent);
         transform: rotate(-45deg);
         opacity: 0;
-        animation: shoot 5s linear infinite;
+        animation: shoot 6s linear infinite;
     }
     @keyframes shoot {
         0% { transform: translateX(0) translateY(0) rotate(-45deg); opacity: 1; }
-        100% { transform: translateX(500px) translateY(500px) rotate(-45deg); opacity: 0; }
+        100% { transform: translateX(600px) translateY(600px) rotate(-45deg); opacity: 0; }
     }
     </style>
     <div class="eqms-bg">
-        <div class="stars"></div>
+        <div class="stars-container" id="stars-container"></div>
         <div class="sun-wrap">
-            <div class="sun-rays"></div>
             <div class="sun-core"></div>
         </div>
-        <div class="ring-1"></div>
-        <div class="ring-2"></div>
-        <div class="orbit-1">
-            <div class="t1">🚂</div>
-            <div class="t1 t1-b1">🚃</div>
-            <div class="t1 t1-b2">🚃</div>
-            <div class="t1 t1-b3">🚃</div>
+        <div class="orbit-ring ring-1"></div>
+        <div class="orbit-ring ring-2"></div>
+        <div class="orbit-ring ring-3"></div>
+        <div class="orbit-ring ring-4"></div>
+        <div class="orbit orbit-1">
+            <div class="train-engine-1">🚂</div>
+            <div class="train-coach-1 tc1-1">🚃</div>
+            <div class="train-coach-1 tc1-2">🚃</div>
+            <div class="train-coach-1 tc1-3">🚃</div>
         </div>
-        <div class="orbit-2">
-            <div class="t2">🚂</div>
-            <div class="t2 t2-b1">🚃</div>
-            <div class="t2 t2-b2">🚃</div>
-            <div class="t2 t2-b3">🚃</div>
-            <div class="t2 t2-b4">🚃</div>
-            <div class="t2 t2-b5">🚃</div>
+        <div class="orbit orbit-2">
+            <div class="train-engine-2">🚂</div>
+            <div class="train-coach-2 tc2-1">🚋</div>
+            <div class="train-coach-2 tc2-2">🚋</div>
+            <div class="train-coach-2 tc2-3">🚋</div>
+            <div class="train-coach-2 tc2-4">🚋</div>
+            <div class="train-coach-2 tc2-5">🚋</div>
         </div>
-        <div class="planet-1"></div>
-        <div class="planet-2"></div>
-        <div class="planet-3"></div>
+        <div class="orbit orbit-3">
+            <div class="planet-saturn">🪐</div>
+        </div>
+        <div class="orbit orbit-4">
+            <div class="planet-jupiter"></div>
+        </div>
         <div class="shooting"></div>
     </div>
+    <script>
+    (function(){
+        var container = document.getElementById('stars-container');
+        if(container && container.children.length === 0){
+            for(var i=0; i<180; i++){
+                var s = document.createElement('div');
+                s.style.position = 'absolute';
+                var sz = Math.random() > 0.85 ? '3px' : '2px';
+                s.style.width = sz; s.style.height = sz;
+                s.style.background = Math.random() > 0.92 ? '#FFD700' : '#fff';
+                s.style.borderRadius = '50%';
+                s.style.left = (Math.random() * 100) + '%';
+                s.style.top = (Math.random() * 100) + '%';
+                s.style.opacity = (Math.random() * 0.6 + 0.2).toFixed(2);
+                s.style.boxShadow = '0 0 ' + (Math.random()*4+1).toFixed(1) + 'px ' + s.style.background;
+                s.style.animation = 'twinkle-star ' + (Math.random()*4+2).toFixed(1) + 's ease-in-out infinite alternate';
+                s.style.animationDelay = (Math.random()*5).toFixed(1) + 's';
+                container.appendChild(s);
+            }
+        }
+    })();
+    </script>
     """
     st.markdown(bg_html, unsafe_allow_html=True)
 
@@ -2319,7 +2125,7 @@ def main():
                             toggleBtn.innerHTML = '☰';
                             toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
                             var sb = doc.querySelector('[data-testid="stSidebar"]');
-                            if (sb) { sb.style.marginLeft = '-300px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
+                            if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
                             try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
                         }
                     };
@@ -2335,7 +2141,7 @@ def main():
                         var sb = doc.querySelector('[data-testid="stSidebar"]');
                         var isCollapsed = doc.body.classList.contains('sidebar-collapsed');
                         if (sb) {
-                            if (isCollapsed) { sb.style.marginLeft = '-300px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
+                            if (isCollapsed) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
                             else { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
                         }
                     }, 2000);
@@ -2404,43 +2210,50 @@ def main():
     # SIDEBAR
     # =====================================================================
     with st.sidebar:
-        # Indian Flag Animation
-        st.markdown("""
-        <div class="flag-container">
-            <div class="flag-stripes"></div>
-            <div class="flag-text">🇮🇳 Jai Hind</div>
-        </div>
-        """, unsafe_allow_html=True)
-
         st.markdown("""
         <style>
         @keyframes welcome-glow {
-            0%, 100% { box-shadow: 0 4px 20px rgba(255,153,51,0.3); }
-            33% { box-shadow: 0 4px 20px rgba(255,255,255,0.3); }
-            66% { box-shadow: 0 4px 20px rgba(19,136,8,0.3); }
+            0%, 100% { box-shadow: 0 4px 25px rgba(255,153,51,0.35); }
+            33% { box-shadow: 0 4px 25px rgba(255,255,255,0.35); }
+            66% { box-shadow: 0 4px 25px rgba(19,136,8,0.35); }
         }
-        .welcome-card, .welcome-card * {
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
-            text-shadow: none !important;
-            opacity: 1 !important;
+        .welcome-flag-card {
+            border-radius: 14px; overflow: hidden; margin-bottom: 14px;
+            animation: welcome-glow 4s ease-in-out infinite;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .welcome-saffron {
+            background: linear-gradient(135deg, #FF9933, #FF8C00);
+            padding: 12px 16px; text-align: center;
+        }
+        .welcome-white {
+            background: #FFFFFF; padding: 12px 16px; text-align: center; position: relative;
+        }
+        .welcome-green {
+            background: linear-gradient(135deg, #138808, #0d6e05);
+            padding: 12px 16px; text-align: center;
+        }
+        .welcome-text {
+            font-size: 1.15em; font-weight: 700; color: #000; letter-spacing: 0.5px;
+            text-shadow: 0 1px 2px rgba(255,255,255,0.3);
+        }
+        .welcome-white .welcome-text { color: #000; position: relative; z-index: 2; }
+        .chakra-overlay {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); opacity: 0.12;
+            font-size: 2.8rem; z-index: 1;
         }
         </style>
-        <div class="welcome-card" style="background: linear-gradient(135deg, #FF9933 0%, #FF9933 33%, #FFFFFF 33%, #FFFFFF 66%, #138808 66%, #138808 100%); padding: 3px; border-radius: 14px; margin-bottom: 14px; animation: welcome-glow 4s ease-in-out infinite;">
-            <div style="background: #ffffff; border-radius: 12px; padding: 14px 16px; text-align: center;">
-                <p style="margin: 0 0 10px 0; font-size: 1.35em; font-weight: 800; letter-spacing: 0.5px; line-height: 1.4;">🙏 Namaste</p>
-                <div style="display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 7px 12px; border-radius: 8px; margin: 5px 0; background: linear-gradient(90deg, rgba(255,153,51,0.18), transparent);">
-                    <span style="font-size: 1.3rem; font-weight: 900; color: #FF9933; -webkit-text-fill-color: #FF9933;">●</span>
-                    <span style="font-size: 0.95em; font-weight: 600; line-height: 1.4;">Aapka Swagat Hai</span>
-                </div>
-                <div style="display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 7px 12px; border-radius: 8px; margin: 5px 0; background: linear-gradient(90deg, rgba(200,200,200,0.12), transparent);">
-                    <span style="font-size: 1.3rem; font-weight: 900; color: #BBBBBB; -webkit-text-fill-color: #BBBBBB;">●</span>
-                    <span style="font-size: 0.95em; font-weight: 600; line-height: 1.4;">Ham Bharat ke Log</span>
-                </div>
-                <div style="display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 7px 12px; border-radius: 8px; margin: 5px 0; background: linear-gradient(90deg, rgba(19,136,8,0.18), transparent);">
-                    <span style="font-size: 1.3rem; font-weight: 900; color: #138808; -webkit-text-fill-color: #138808;">●</span>
-                    <span style="font-size: 0.95em; font-weight: 600; line-height: 1.4;">🇮🇳 Jai Hind</span>
-                </div>
+        <div class="welcome-flag-card">
+            <div class="welcome-saffron">
+                <div class="welcome-text">🙏 Namaste<br>Aapka Swagat Hai</div>
+            </div>
+            <div class="welcome-white">
+                <div class="chakra-overlay">☸</div>
+                <div class="welcome-text">Ham Bharat Ke Log</div>
+            </div>
+            <div class="welcome-green">
+                <div class="welcome-text">🇮🇳 Jai Hind</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -2530,7 +2343,7 @@ def main():
         """, height=50)
 
         with st.expander("📤 Upload & Process", expanded=True):
-            st.caption("Image • PDF • Text • Voice")
+            st.caption("📷 इमेज • 📄 PDF • 📝 टेक्स्ट • 🎤 ऑडियो")
             mode = st.radio("Type", ["📷 Image / PDF", "📝 Text", "🎤 Voice / Audio"],
                 horizontal=True, label_visibility="collapsed", key="upload_mode_radio")
             uploaded = None
@@ -2541,20 +2354,20 @@ def main():
                     label_visibility="collapsed", key=f"img_pdf_uploader_{st.session_state.img_uploader_key}")
             elif mode == "📝 Text":
                 text_data = st.text_area("📝 Paste text", height=150,
-                    placeholder="Paste messy text here...",
+                    placeholder="Messy text yahan paste karein...",
                     label_visibility="collapsed", key=f"text_input_area_{st.session_state.text_input_key}")
                 if text_data: st.caption(f"✓ {len(text_data)} characters ready")
             else:
-                st.caption("🎤 Record from microphone")
+                st.caption("🎤 Record from mic")
                 audio_data = st.audio_input("Record", label_visibility="collapsed", key=f"audio_recorder_{st.session_state.audio_recorder_key}")
-                uploaded = st.file_uploader("Or upload file", type=["mp3","wav","ogg","m4a"],
+                uploaded = st.file_uploader("Ya file upload", type=["mp3","wav","ogg","m4a"],
                     label_visibility="collapsed", key=f"audio_file_uploader_{st.session_state.audio_uploader_key}")
                 if audio_data: st.audio(audio_data, format='audio/wav')
                 elif uploaded: st.audio(uploaded, format='audio/mp3')
 
             if st.button("🚀 Process & Save", type="primary", use_container_width=True, key="process_save_btn"):
-                if mode == "📝 Text" and not text_data.strip(): st.warning("Please enter text")
-                elif mode != "📝 Text" and not uploaded and not audio_data: st.warning("Please choose a file")
+                if mode == "📝 Text" and not text_data.strip(): st.warning("Enter text")
+                elif mode != "📝 Text" and not uploaded and not audio_data: st.warning("Select file")
                 else:
                     prog = st.progress(0)
                     status = st.empty()
@@ -2647,7 +2460,7 @@ def main():
                         st.link_button("👁️ View", st.session_state.last_uploaded_view_url, use_container_width=True)
                 with c2:
                     if st.session_state.last_uploaded_print_url:
-                        st.link_button("🖨️ Print File", st.session_state.last_uploaded_print_url, use_container_width=True)
+                        st.link_button("🖨️ File Print", st.session_state.last_uploaded_print_url, use_container_width=True)
                 with c3:
                     if st.session_state.last_uploaded_drive_id:
                         st.link_button("📥 Download", f"https://drive.google.com/uc?export=download&id={st.session_state.last_uploaded_drive_id}", use_container_width=True)
@@ -2685,21 +2498,21 @@ def main():
             class_col_idx = config.get("class_col")
             doj_col_idx = config.get("doj_col")
 
-            pnr_input = st.text_input("PNR (partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
+            pnr_input = st.text_input("PNR (Partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
             if pnr_input != st.session_state.pnr_val:
                 st.session_state.pnr_val = pnr_input
                 st.session_state.current_page = 1
                 st.rerun()
 
-            train_input = st.text_input("Train (partial)", value=st.session_state.train_val, key="train_filter_input")
+            train_input = st.text_input("Train (Partial)", value=st.session_state.train_val, key="train_filter_input")
             if train_input != st.session_state.train_val:
                 st.session_state.train_val = train_input
                 st.session_state.current_page = 1
                 st.rerun()
 
             if class_col_idx is not None:
-                class_input = st.text_input("Class (partial)", value=st.session_state.class_val, key="class_filter_input")
-                if class_input != st.session_state.class_val:
+                class_input = st.text_input("Class (Partial)", value=st.session_state.get('class_val', ''), key="class_filter_input")
+                if class_input != st.session_state.get('class_val', ''):
                     st.session_state.class_val = class_input
                     st.session_state.current_page = 1
                     st.rerun()
@@ -2767,6 +2580,31 @@ def main():
 
     # Top bar with marquee
     st.markdown("""
+    <style>
+    .eqms-marquee-box { 
+        background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808); 
+        padding: 10px 0; 
+        border-radius: 8px; 
+        margin-bottom: 12px;
+        overflow: hidden;
+        white-space: nowrap;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .eqms-marquee-box .scroll-text {
+        display: inline-block;
+        padding-left: 100%;
+        animation: marquee-scroll 25s linear infinite;
+        color: #000000 !important;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        font-size: 15px;
+        font-family: 'Segoe UI', Arial, sans-serif;
+    }
+    @keyframes marquee-scroll {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-100%); }
+    }
+    </style>
     <div class="eqms-marquee-box">
         <span class="scroll-text">🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save</span>
     </div>
@@ -2889,7 +2727,7 @@ def main():
             st.rerun()
 
         if filtered_df.empty:
-            st.info("📭 No data. Clear filters or choose another sheet.")
+            st.info("📭 No data. Clear filters or select another sheet.")
             has_structure = len(df_raw.columns) > 0
             empty_df = df_raw.drop(columns=['_sheet_row'], errors='ignore') if has_structure else pd.DataFrame()
             if has_structure and len(empty_df.columns) > 0:
@@ -3206,14 +3044,14 @@ def main():
                     st.markdown("**🚆 Train Analysis**")
                     if train_col_metric and not filtered_df.empty:
                         most_common = filtered_df[train_col_metric].mode()
-                        if not most_common.empty: st.caption(f"Most common train: {most_common.iloc[0]}")
+                        if not most_common.empty: st.caption(f"Most frequent train: {most_common.iloc[0]}")
                         if pnr_col:
                             dupes = filtered_df[pnr_col].value_counts()
                             dupes = dupes[dupes > 1]
-                            if not dupes.empty: st.warning(f"⚠️ {len(dupes)} duplicate PNRs found!")
+                            if not dupes.empty: st.warning(f"⚠️ {len(dupes)} Duplicate PNRs found!")
                             else: st.success("✅ No duplicate PNRs")
                     st.markdown("**⌨️ Shortcuts**")
-                    st.caption("D: Toggle theme | Refresh button to sync data")
+                    st.caption("D: Toggle Theme | Refresh button to sync data")
             st.markdown('</div>', unsafe_allow_html=True)
 
     # =====================================================================
@@ -3553,7 +3391,7 @@ def main():
         <div style="text-align: center; padding: 10px 0;">
             <span class="chat-train-icon">🚂</span>
             <div style="font-size: 1.5rem; font-weight: 700; margin-top: 8px;" class="dash-gradient-text">TSKEQ Bot</div>
-            <div style="color: #94a3b8; font-size: 0.9rem;">Ask about EQ data, trains, quota, PNR or anything else</div>
+            <div style="color: #94a3b8; font-size: 0.9rem;">Ask about EQ data, trains, quota, PNR or anything</div>
         </div>
         """, unsafe_allow_html=True)
         st.subheader("💬 Chat with TSKEQ Bot")
@@ -3812,7 +3650,7 @@ def main():
                 st.session_state.weather_lon = float(qp_lon)
             except: pass
 
-        city = st.text_input("🏙️ Enter city name", value=st.session_state.weather_city,
+        city = st.text_input("🏙️ Enter City Name", value=st.session_state.weather_city,
                             placeholder="e.g., Tinsukia, New Delhi, Mumbai", key="weather_city_input")
         if city != st.session_state.weather_city: st.session_state.weather_city = city
 
@@ -3847,37 +3685,6 @@ def main():
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
 
-            # Detect weather condition for background
-            weather_condition = str(data.get('weather', '')).lower()
-            temp = data.get('temp', 25)
-            is_night = False
-            try:
-                sunrise_ts = data.get('sunrise')
-                sunset_ts = data.get('sunset')
-                if sunrise_ts and sunset_ts:
-                    now_ts = datetime.now().timestamp()
-                    is_night = not (sunrise_ts <= now_ts <= sunset_ts)
-            except:
-                pass
-
-            # Choose sky class
-            sky_class = "w-sunny"
-            if 'rain' in weather_condition or 'drizz' in weather_condition:
-                sky_class = "w-rainy"
-            elif 'cloud' in weather_condition:
-                sky_class = "w-cloudy"
-            elif 'thunder' in weather_condition or 'storm' in weather_condition:
-                sky_class = "w-thunder"
-            elif 'snow' in weather_condition or 'frost' in weather_condition or 'freez' in weather_condition:
-                sky_class = "w-snowy"
-            elif 'mist' in weather_condition or 'fog' in weather_condition or 'haz' in weather_condition:
-                sky_class = "w-foggy"
-            elif is_night:
-                sky_class = "w-night"
-            elif temp > 30:
-                sky_class = "w-hot"
-
-            # Build main weather card with dynamic class
             weather_html = f"""
             <style>
             @keyframes weather-float {{
@@ -3976,139 +3783,109 @@ def main():
             weather_html += "</div>"
             st.markdown(weather_html, unsafe_allow_html=True)
 
-            # Detailed Animated Weather Scene (background reflects weather)
-            scene_html = f"""
+            # Animated Weather Scene
+            weather_condition = str(data.get('weather', '')).lower()
+
+            weather_scene_html = """
             <style>
-            .w-scene-wrap {{
-                position: relative; width: 100%; height: 240px; border-radius: 20px; overflow: hidden;
-                margin: 15px 0; box-shadow: 0 8px 32px rgba(0,0,0,0.25);
-                transition: all 0.5s ease;
-            }}
-            .w-sky {{
-                position: absolute; width: 100%; height: 100%; top: 0; left: 0;
-                transition: background 1s ease;
-            }}
-            .w-sunny {{ background: linear-gradient(180deg, #4facfe 0%, #00f2fe 100%); }}
-            .w-rainy {{ background: linear-gradient(180deg, #2c3e50 0%, #4a5568 100%); }}
-            .w-cloudy {{ background: linear-gradient(180deg, #7f8c8d 0%, #95a5a6 100%); }}
-            .w-thunder {{ background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%); }}
-            .w-snowy {{ background: linear-gradient(180deg, #e0e7ff 0%, #c7d2fe 100%); }}
-            .w-foggy {{ background: linear-gradient(180deg, #d5d8dc 0%, #aab7b8 100%); }}
-            .w-night {{ background: linear-gradient(180deg, #0c1445 0%, #1a1a3a 100%); }}
-            .w-hot {{ background: linear-gradient(180deg, #f7971e 0%, #ffd200 100%); }}
+            .w-scene-wrap { position: relative; width: 100%; height: 220px; border-radius: 20px; overflow: hidden; margin: 15px 0; box-shadow: 0 8px 32px rgba(0,0,0,0.25); }
+            .w-sky { position: absolute; width: 100%; height: 100%; top: 0; left: 0; }
+            .w-sunny { background: linear-gradient(180deg, #4facfe 0%, #00f2fe 100%); }
+            .w-rainy { background: linear-gradient(180deg, #2c3e50 0%, #4a5568 100%); }
+            .w-cloudy { background: linear-gradient(180deg, #7f8c8d 0%, #95a5a6 100%); }
+            .w-thunder { background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%); }
+            .w-snowy { background: linear-gradient(180deg, #e0e7ff 0%, #c7d2fe 100%); }
+            .w-foggy { background: linear-gradient(180deg, #d5d8dc 0%, #aab7b8 100%); }
 
-            @keyframes w-sun-pulse {{ 0%,100%{{transform:scale(1);opacity:0.9;}} 50%{{transform:scale(1.2);opacity:1;}} }}
-            .w-sun {{
-                position: absolute; top: 15px; right: 30px; width: 70px; height: 70px;
-                background: radial-gradient(circle, #FFD700 0%, #FFA500 60%, transparent 100%);
-                border-radius: 50%; animation: w-sun-pulse 3s ease-in-out infinite;
-                box-shadow: 0 0 50px 15px rgba(255,215,0,0.4);
-            }}
-            .w-moon {{
-                position: absolute; top: 20px; right: 40px; width: 50px; height: 50px;
-                background: radial-gradient(circle, #f0f0f0 0%, #c0c0c0 100%);
-                border-radius: 50%; box-shadow: 0 0 40px 10px rgba(200,200,200,0.3);
-            }}
+            @keyframes w-sun-pulse { 0%,100%{transform:scale(1);opacity:0.9;} 50%{transform:scale(1.2);opacity:1;} }
+            .w-sun { position: absolute; top: 15px; right: 30px; width: 70px; height: 70px; background: radial-gradient(circle, #FFD700 0%, #FFA500 60%, transparent 100%); border-radius: 50%; animation: w-sun-pulse 3s ease-in-out infinite; box-shadow: 0 0 50px 15px rgba(255,215,0,0.4); }
 
-            @keyframes w-ray-spin {{ from{{transform:translate(-50%,-50%) rotate(0deg);}} to{{transform:translate(-50%,-50%) rotate(360deg);}} }}
-            .w-ray {{ position: absolute; top: 50%; left: 50%; width: 100px; height: 3px; background: linear-gradient(90deg, transparent, #FFD700, transparent); transform-origin: center; animation: w-ray-spin 10s linear infinite; }}
+            @keyframes w-ray-spin { from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(360deg);} }
+            .w-ray { position: absolute; top: 50%; left: 50%; width: 100px; height: 3px; background: linear-gradient(90deg, transparent, #FFD700, transparent); transform-origin: center; animation: w-ray-spin 10s linear infinite; }
 
-            @keyframes w-cloud-move {{ from{{transform:translateX(-120px);}} to{{transform:translateX(calc(100% + 120px));}} }}
-            .w-cloud {{
-                position: absolute; background: rgba(255,255,255,0.85); border-radius: 40px;
-                animation: w-cloud-move linear infinite;
-            }}
-            .w-cloud::before {{ content: ''; position: absolute; background: rgba(255,255,255,0.85); border-radius: 50%; }}
-            .w-cloud::after {{ content: ''; position: absolute; background: rgba(255,255,255,0.85); border-radius: 50%; }}
+            @keyframes w-cloud-move { from{transform:translateX(-120px);} to{transform:translateX(calc(100% + 120px));} }
+            .w-cloud { position: absolute; background: rgba(255,255,255,0.85); border-radius: 40px; animation: w-cloud-move linear infinite; }
+            .w-cloud::before { content: ''; position: absolute; background: rgba(255,255,255,0.85); border-radius: 50%; }
+            .w-cloud::after { content: ''; position: absolute; background: rgba(255,255,255,0.85); border-radius: 50%; }
 
-            @keyframes w-rain-fall {{ from{{transform:translateY(-20px);opacity:0;}} 10%{{opacity:0.8;}} 90%{{opacity:0.8;}} to{{transform:translateY(260px);opacity:0;}} }}
-            .w-rain {{ position: absolute; width: 2px; height: 14px; background: linear-gradient(180deg, transparent, #64b5f6); border-radius: 0 0 2px 2px; animation: w-rain-fall linear infinite; }}
+            @keyframes w-rain-fall { from{transform:translateY(-20px);opacity:0;} 10%{opacity:0.8;} 90%{opacity:0.8;} to{transform:translateY(240px);opacity:0;} }
+            .w-rain { position: absolute; width: 2px; height: 14px; background: linear-gradient(180deg, transparent, #64b5f6); border-radius: 0 0 2px 2px; animation: w-rain-fall linear infinite; }
 
-            @keyframes w-lightning {{ 0%,90%,100%{{background:rgba(255,255,255,0);}} 91%{{background:rgba(255,255,255,0.25);}} 92%{{background:rgba(255,255,255,0);}} 93%{{background:rgba(255,255,255,0.4);}} 94%{{background:rgba(255,255,255,0);}} }}
-            .w-lightning {{ position: absolute; top: 0; left: 0; width: 100%; height: 100%; animation: w-lightning 4s ease-in-out infinite; }}
+            @keyframes w-lightning { 0%,90%,100%{background:rgba(255,255,255,0);} 91%{background:rgba(255,255,255,0.25);} 92%{background:rgba(255,255,255,0);} 93%{background:rgba(255,255,255,0.4);} 94%{background:rgba(255,255,255,0);} }
+            .w-lightning { position: absolute; top: 0; left: 0; width: 100%; height: 100%; animation: w-lightning 4s ease-in-out infinite; }
 
-            @keyframes w-snow-fall {{ from{{transform:translateY(-20px) rotate(0deg);opacity:0;}} 10%{{opacity:1;}} 90%{{opacity:1;}} to{{transform:translateY(260px) rotate(360deg);opacity:0;}} }}
-            .w-snow {{ position: absolute; color: white; font-size: 13px; animation: w-snow-fall linear infinite; text-shadow: 0 0 4px rgba(255,255,255,0.8); }}
+            @keyframes w-snow-fall { from{transform:translateY(-20px) rotate(0deg);opacity:0;} 10%{opacity:1;} 90%{opacity:1;} to{transform:translateY(240px) rotate(360deg);opacity:0;} }
+            .w-snow { position: absolute; color: white; font-size: 13px; animation: w-snow-fall linear infinite; text-shadow: 0 0 4px rgba(255,255,255,0.8); }
 
-            @keyframes w-fog-drift {{ from{{transform:translateX(-50%);}} to{{transform:translateX(0%);}} }}
-            .w-fog {{ position: absolute; width: 200%; height: 50px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent); animation: w-fog-drift linear infinite; }}
+            @keyframes w-fog-drift { from{transform:translateX(-50%);} to{transform:translateX(0%);} }
+            .w-fog { position: absolute; width: 200%; height: 50px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent); animation: w-fog-drift linear infinite; }
 
-            .w-ground {{
-                position: absolute; bottom: 0; left: 0; width: 100%; height: 35px;
-                background: linear-gradient(180deg, #2d5016 0%, #1a3009 100%);
-                border-radius: 50% 50% 0 0 / 15px 15px 0 0;
-            }}
-            @keyframes w-tree-sway {{ 0%,100%{{transform:rotate(-4deg);}} 50%{{transform:rotate(4deg);}} }}
-            .w-tree {{ position: absolute; bottom: 28px; font-size: 22px; animation: w-tree-sway 3s ease-in-out infinite; }}
-            @keyframes w-hot-haze {{ 0%,100%{{opacity:0.6;}} 50%{{opacity:1;}} }}
-            .w-haze {{ position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(ellipse, rgba(255,200,100,0.2), transparent); animation: w-hot-haze 2s ease-in-out infinite; }}
+            .w-ground { position: absolute; bottom: 0; left: 0; width: 100%; height: 35px; background: linear-gradient(180deg, #2d5016 0%, #1a3009 100%); border-radius: 50% 50% 0 0 / 15px 15px 0 0; }
+            @keyframes w-tree-sway { 0%,100%{transform:rotate(-4deg);} 50%{transform:rotate(4deg);} }
+            .w-tree { position: absolute; bottom: 28px; font-size: 22px; animation: w-tree-sway 3s ease-in-out infinite; }
             </style>
             <div class="w-scene-wrap">
-                <div class="w-sky {sky_class}">
             """
 
             if 'rain' in weather_condition or 'drizz' in weather_condition:
-                scene_html += '<div class="w-lightning"></div>'
-                for i in range(30):
-                    scene_html += f'<div class="w-rain" style="left:{(i*3.3)%100}%;animation-duration:{0.4+(i%3)*0.15}s;animation-delay:{(i*0.1)%1.5}s;"></div>'
-                scene_html += '<div class="w-cloud" style="top:12px;left:-100px;width:90px;height:32px;animation-duration:22s;"><div style="position:absolute;top:-14px;left:12px;width:32px;height:32px;"></div><div style="position:absolute;top:-10px;left:38px;width:24px;height:24px;"></div></div>'
-                scene_html += '<div class="w-cloud" style="top:22px;left:-100px;width:110px;height:38px;animation-duration:28s;animation-delay:6s;"><div style="position:absolute;top:-16px;left:18px;width:38px;height:38px;"></div><div style="position:absolute;top:-12px;left:48px;width:28px;height:28px;"></div></div>'
-            elif 'cloud' in weather_condition:
-                scene_html += '<div class="w-sun" style="opacity:0.35;"></div>'
-                for i in range(5):
-                    scene_html += f'<div class="w-cloud" style="top:{12+(i%2)*18}px;left:-100px;width:{70+(i%2)*30}px;height:{28+(i%2)*10}px;animation-duration:{20+i*6}s;animation-delay:{i*4}s;"><div style="position:absolute;top:-{12+(i%2)*6}px;left:{14+(i%2)*6}px;width:{30+(i%2)*12}px;height:{30+(i%2)*12}px;"></div><div style="position:absolute;top:-{8+(i%2)*4}px;left:{36+(i%2)*10}px;width:{22+(i%2)*8}px;height:{22+(i%2)*8}px;"></div></div>'
-            elif 'clear' in weather_condition or 'sun' in weather_condition:
-                if is_night:
-                    scene_html += '<div class="w-moon"></div>'
-                    for i in range(20):
-                        scene_html += f'<div style="position:absolute;top:{5+(i*4)%70}%;left:{3+(i*7)%90}%;width:3px;height:3px;background:white;border-radius:50%;box-shadow:0 0 6px rgba(255,255,255,0.8);animation:twinkle-stars {2+(i%3)}s ease-in-out infinite alternate;"></div>'
-                else:
-                    scene_html += '<div class="w-sun">'
-                    for angle in range(0, 360, 30):
-                        scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
-                    scene_html += '</div>'
-                    for i in range(3):
-                        scene_html += f'<div class="w-cloud" style="top:{18+i*14}px;left:-100px;width:65px;height:24px;animation-duration:{24+i*6}s;animation-delay:{i*5}s;opacity:0.6;"><div style="position:absolute;top:-10px;left:10px;width:26px;height:26px;"></div></div>'
-            elif 'thunder' in weather_condition or 'storm' in weather_condition:
-                scene_html += '<div class="w-lightning" style="animation-duration:2.5s;"></div>'
+                weather_scene_html += '<div class="w-sky w-rainy">'
+                weather_scene_html += '<div class="w-lightning"></div>'
                 for i in range(25):
-                    scene_html += f'<div class="w-rain" style="left:{(i*4)%100}%;animation-duration:{0.3+(i%3)*0.12}s;animation-delay:{(i*0.08)%1.2}s;background:linear-gradient(180deg,transparent,#90caf9);"></div>'
-                scene_html += '<div class="w-cloud" style="top:8px;left:-100px;width:100px;height:38px;background:#546e7a;animation-duration:32s;"><div style="position:absolute;top:-16px;left:16px;width:40px;height:40px;background:#546e7a;"></div><div style="position:absolute;top:-12px;left:46px;width:32px;height:32px;background:#546e7a;"></div></div>'
-            elif 'snow' in weather_condition or 'frost' in weather_condition or 'freez' in weather_condition:
-                snowflakes = ['&#10052;', '&#10053;', '&#10054;', '&#10042;', '&#10043;']
-                for i in range(40):
-                    scene_html += f'<div class="w-snow" style="left:{(i*2.5)%100}%;font-size:{10+(i%4)*3}px;animation-duration:{2+(i%4)*1.2}s;animation-delay:{(i*0.15)%3}s;">{snowflakes[i%5]}</div>'
-                scene_html += '<div class="w-cloud" style="top:8px;left:-100px;width:80px;height:30px;background:rgba(255,255,255,0.8);animation-duration:26s;"><div style="position:absolute;top:-12px;left:12px;width:34px;height:34px;background:rgba(255,255,255,0.8);"></div></div>'
-            elif 'mist' in weather_condition or 'fog' in weather_condition or 'haz' in weather_condition:
-                for i in range(6):
-                    scene_html += f'<div class="w-fog" style="top:{10+i*30}px;animation-duration:{12+i*4}s;animation-delay:{i*2}s;opacity:{0.25+(i%3)*0.15};"></div>'
-            elif is_night:
-                scene_html += '<div class="w-moon"></div>'
-                for i in range(30):
-                    scene_html += f'<div style="position:absolute;top:{5+(i*3)%70}%;left:{2+(i*5)%90}%;width:{2+(i%3)}px;height:{2+(i%3)}px;background:white;border-radius:50%;box-shadow:0 0 6px rgba(255,255,255,0.8);animation:twinkle-stars {2+(i%3)}s ease-in-out infinite alternate;"></div>'
-            elif temp > 30:
-                scene_html += '<div class="w-sun"></div>'
-                scene_html += '<div class="w-haze"></div>'
-                for i in range(5):
-                    scene_html += f'<div style="position:absolute;bottom:{20+i*8}%;left:10%;width:80%;height:4px;background:linear-gradient(90deg,transparent,rgba(255,200,100,0.3),transparent);border-radius:50%;animation:heat-wave {2+i*0.5}s ease-in-out infinite;"></div>'
-            else:
-                # default sunny
-                scene_html += '<div class="w-sun">'
+                    weather_scene_html += f'<div class="w-rain" style="left:{(i*4)%100}%;animation-duration:{0.4+(i%3)*0.15}s;animation-delay:{(i*0.1)%1.5}s;"></div>'
+                weather_scene_html += '<div class="w-cloud" style="top:12px;left:-100px;width:90px;height:32px;animation-duration:22s;"><div style="position:absolute;top:-14px;left:12px;width:32px;height:32px;"></div><div style="position:absolute;top:-10px;left:38px;width:24px;height:24px;"></div></div>'
+                weather_scene_html += '<div class="w-cloud" style="top:22px;left:-100px;width:110px;height:38px;animation-duration:28s;animation-delay:6s;"><div style="position:absolute;top:-16px;left:18px;width:38px;height:38px;"></div><div style="position:absolute;top:-12px;left:48px;width:28px;height:28px;"></div></div>'
+
+            elif 'cloud' in weather_condition:
+                weather_scene_html += '<div class="w-sky w-cloudy">'
+                weather_scene_html += '<div class="w-sun" style="opacity:0.35;"></div>'
+                for i in range(4):
+                    weather_scene_html += f'<div class="w-cloud" style="top:{12+(i%2)*18}px;left:-100px;width:{70+(i%2)*30}px;height:{28+(i%2)*10}px;animation-duration:{20+i*6}s;animation-delay:{i*4}s;"><div style="position:absolute;top:-{12+(i%2)*6}px;left:{14+(i%2)*6}px;width:{30+(i%2)*12}px;height:{30+(i%2)*12}px;"></div><div style="position:absolute;top:-{8+(i%2)*4}px;left:{36+(i%2)*10}px;width:{22+(i%2)*8}px;height:{22+(i%2)*8}px;"></div></div>'
+
+            elif 'clear' in weather_condition or 'sun' in weather_condition:
+                weather_scene_html += '<div class="w-sky w-sunny">'
+                weather_scene_html += '<div class="w-sun">'
                 for angle in range(0, 360, 45):
-                    scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
-                scene_html += '</div>'
+                    weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
+                weather_scene_html += '</div>'
+                for i in range(3):
+                    weather_scene_html += f'<div class="w-cloud" style="top:{18+i*14}px;left:-100px;width:65px;height:24px;animation-duration:{24+i*6}s;animation-delay:{i*5}s;opacity:0.6;"><div style="position:absolute;top:-10px;left:10px;width:26px;height:26px;"></div></div>'
+
+            elif 'thunder' in weather_condition or 'storm' in weather_condition:
+                weather_scene_html += '<div class="w-sky w-thunder">'
+                weather_scene_html += '<div class="w-lightning" style="animation-duration:2.5s;"></div>'
+                for i in range(20):
+                    weather_scene_html += f'<div class="w-rain" style="left:{(i*5)%100}%;animation-duration:{0.3+(i%3)*0.12}s;animation-delay:{(i*0.08)%1.2}s;background:linear-gradient(180deg,transparent,#90caf9);"></div>'
+                weather_scene_html += '<div class="w-cloud" style="top:8px;left:-100px;width:100px;height:38px;background:#546e7a;animation-duration:32s;"><div style="position:absolute;top:-16px;left:16px;width:40px;height:40px;background:#546e7a;"></div><div style="position:absolute;top:-12px;left:46px;width:32px;height:32px;background:#546e7a;"></div></div>'
+
+            elif 'snow' in weather_condition or 'frost' in weather_condition or 'freez' in weather_condition:
+                weather_scene_html += '<div class="w-sky w-snowy">'
+                snowflakes = ['&#10052;', '&#10053;', '&#10054;', '&#10042;', '&#10043;']
+                for i in range(35):
+                    weather_scene_html += f'<div class="w-snow" style="left:{(i*3)%100}%;font-size:{10+(i%4)*3}px;animation-duration:{2+(i%4)*1.2}s;animation-delay:{(i*0.15)%3}s;">{snowflakes[i%5]}</div>'
+                weather_scene_html += '<div class="w-cloud" style="top:8px;left:-100px;width:80px;height:30px;background:rgba(255,255,255,0.8);animation-duration:26s;"><div style="position:absolute;top:-12px;left:12px;width:34px;height:34px;background:rgba(255,255,255,0.8);"></div></div>'
+
+            elif 'mist' in weather_condition or 'fog' in weather_condition or 'haz' in weather_condition:
+                weather_scene_html += '<div class="w-sky w-foggy">'
+                for i in range(5):
+                    weather_scene_html += f'<div class="w-fog" style="top:{15+i*30}px;animation-duration:{12+i*4}s;animation-delay:{i*2}s;opacity:{0.25+(i%3)*0.15};"></div>'
+
+            else:
+                weather_scene_html += '<div class="w-sky w-sunny">'
+                weather_scene_html += '<div class="w-sun">'
+                for angle in range(0, 360, 45):
+                    weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
+                weather_scene_html += '</div>'
                 for i in range(2):
-                    scene_html += f'<div class="w-cloud" style="top:{20+i*12}px;left:-100px;width:55px;height:20px;animation-duration:{22+i*5}s;animation-delay:{i*6}s;opacity:0.5;"><div style="position:absolute;top:-8px;left:8px;width:22px;height:22px;"></div></div>'
+                    weather_scene_html += f'<div class="w-cloud" style="top:{20+i*12}px;left:-100px;width:55px;height:20px;animation-duration:{22+i*5}s;animation-delay:{i*6}s;opacity:0.5;"><div style="position:absolute;top:-8px;left:8px;width:22px;height:22px;"></div></div>'
 
-            # ground and trees
-            scene_html += '<div class="w-ground"></div>'
-            scene_html += '<div class="w-tree" style="left:5%;">🌲</div>'
-            scene_html += '<div class="w-tree" style="left:20%;animation-delay:0.6s;">🌳</div>'
-            scene_html += '<div class="w-tree" style="left:65%;animation-delay:1.2s;">🌲</div>'
-            scene_html += '<div class="w-tree" style="left:80%;animation-delay:1.8s;">🌳</div>'
-            scene_html += '</div></div>'
+            weather_scene_html += '<div class="w-ground"></div>'
+            weather_scene_html += '<div class="w-tree" style="left:8%;">🌲</div>'
+            weather_scene_html += '<div class="w-tree" style="left:22%;animation-delay:0.6s;">🌳</div>'
+            weather_scene_html += '<div class="w-tree" style="left:68%;animation-delay:1.2s;">🌲</div>'
+            weather_scene_html += '<div class="w-tree" style="left:82%;animation-delay:1.8s;">🌳</div>'
+            weather_scene_html += '</div></div>'
 
-            st.markdown(scene_html, unsafe_allow_html=True)
+            st.markdown(weather_scene_html, unsafe_allow_html=True)
 
             if data.get('icon'):
                 icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
