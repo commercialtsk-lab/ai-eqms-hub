@@ -2553,193 +2553,84 @@ EARTH_BG_HTML = """
 # =====================================================================
 OCEAN_BG_HTML = """
 <style>
-.ocean-bg-scene {
-    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-    z-index: -1; pointer-events: none; overflow: hidden;
-    background: linear-gradient(180deg, #006994 0%, #005073 25%, #00334e 50%, #001a2e 75%, #000d1a 100%);
+.chat-video-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -1;
+    pointer-events: none;
+    overflow: hidden;
+    background: #000810;
 }
-.ocean-surface {
-    position: absolute; top: 0; left: 0; width: 100%; height: 15%;
-    background: linear-gradient(180deg, #4fc3f7 0%, #29b6f6 40%, #0288d1 80%, transparent 100%);
-    opacity: 0.4;
-    animation: ocean-surface-shimmer 3s ease-in-out infinite alternate;
+.chat-video-bg video {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    min-width: 100vw;
+    min-height: 100vh;
+    width: auto;
+    height: auto;
+    transform: translate(-50%, -50%);
+    object-fit: cover;
+    opacity: 0.92;
 }
-@keyframes ocean-surface-shimmer {
-    0% { opacity: 0.35; }
-    100% { opacity: 0.5; }
-}
-.ocean-light-ray {
-    position: absolute; top: 0; width: 3px; height: 65vh;
-    background: linear-gradient(180deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05), transparent);
-    animation: ocean-ray-sway 6s ease-in-out infinite alternate;
-    border-radius: 2px;
-}
-@keyframes ocean-ray-sway {
-    0% { transform: translateX(0) rotate(-2deg); opacity: 0.15; }
-    100% { transform: translateX(15px) rotate(2deg); opacity: 0.35; }
-}
-.ocean-bubble {
-    position: absolute; bottom: -20px;
-    background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.85), rgba(255,255,255,0.3));
-    border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.25);
-    animation: ocean-bubble-rise linear infinite;
-}
-@keyframes ocean-bubble-rise {
-    0% { transform: translateY(0) scale(1); opacity: 0; }
-    8% { opacity: 0.7; }
-    92% { opacity: 0.4; }
-    100% { transform: translateY(-110vh) scale(1.3); opacity: 0; }
-}
-.ocean-fish {
-    position: absolute; font-size: 2rem;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-    animation: ocean-fish-swim linear infinite;
-    opacity: 0.85;
-}
-@keyframes ocean-fish-swim {
-    0% { transform: translateX(-120px) scaleX(1); }
-    48% { transform: translateX(calc(100vw + 120px)) scaleX(1); }
-    50% { transform: translateX(calc(100vw + 120px)) scaleX(-1); }
-    98% { transform: translateX(-120px) scaleX(-1); }
-    100% { transform: translateX(-120px) scaleX(1); }
-}
-.ocean-coral {
-    position: absolute; bottom: 0; font-size: 2.8rem;
-    filter: drop-shadow(0 -2px 6px rgba(0,0,0,0.4));
-    animation: ocean-coral-sway 4s ease-in-out infinite alternate;
-    transform-origin: bottom center;
-}
-@keyframes ocean-coral-sway {
-    0% { transform: rotate(-2deg); }
-    100% { transform: rotate(2deg); }
-}
-.ocean-seaweed {
-    position: absolute; bottom: 0; font-size: 2.2rem;
-    animation: ocean-seaweed-sway 3s ease-in-out infinite alternate;
-    transform-origin: bottom center;
-    opacity: 0.8;
-}
-@keyframes ocean-seaweed-sway {
-    0% { transform: rotate(-5deg) scaleY(1); }
-    100% { transform: rotate(5deg) scaleY(1.08); }
-}
-.ocean-jellyfish {
-    position: absolute; font-size: 2.2rem;
-    animation: ocean-jelly-float 10s ease-in-out infinite;
-    opacity: 0.55;
-    filter: drop-shadow(0 0 8px rgba(255,255,255,0.25));
-}
-@keyframes ocean-jelly-float {
-    0%, 100% { transform: translateY(0) translateX(0); }
-    20% { transform: translateY(-25px) translateX(12px); }
-    40% { transform: translateY(-8px) translateX(-8px); }
-    60% { transform: translateY(-35px) translateX(5px); }
-    80% { transform: translateY(-15px) translateX(-12px); }
-}
-.ocean-plankton {
-    position: absolute; width: 2px; height: 2px;
-    background: rgba(255,255,255,0.5);
-    border-radius: 50%;
-    animation: ocean-plankton-drift 12s linear infinite;
-}
-@keyframes ocean-plankton-drift {
-    0% { transform: translateY(0) translateX(0); opacity: 0; }
-    15% { opacity: 0.7; }
-    85% { opacity: 0.5; }
-    100% { transform: translateY(-50vh) translateX(25px); opacity: 0; }
-}
-.ocean-sand {
-    position: absolute; bottom: 0; left: 0; width: 100%; height: 50px;
-    background: linear-gradient(180deg, #c2b280 0%, #a8956b 50%, #8b7355 100%);
-    border-radius: 50% 50% 0 0 / 15px 15px 0 0;
-    opacity: 0.35;
-}
-.ocean-starfish {
-    position: absolute; bottom: 35px; font-size: 1.2rem;
-    animation: ocean-star-twinkle 3s ease-in-out infinite alternate;
-    opacity: 0.7;
-}
-@keyframes ocean-star-twinkle {
-    0% { opacity: 0.4; transform: scale(1); }
-    100% { opacity: 0.9; transform: scale(1.1); }
-}
-.ocean-shell {
-    position: absolute; bottom: 30px; font-size: 1rem;
-    opacity: 0.6;
-    animation: ocean-shell-bob 4s ease-in-out infinite;
-}
-@keyframes ocean-shell-bob {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-3px); }
+.chat-video-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(0,5,20,0.2) 0%, rgba(0,0,0,0.05) 50%, rgba(0,5,20,0.3) 100%);
+    pointer-events: none;
 }
 </style>
-<div class="ocean-bg-scene">
-    <div class="ocean-surface"></div>
-    <div class="ocean-light-ray" style="left: 8%; animation-delay: 0s; height: 60vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 22%; animation-delay: 1.5s; height: 50vh; width: 3px;"></div>
-    <div class="ocean-light-ray" style="left: 38%; animation-delay: 3s; height: 65vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 55%; animation-delay: 0.8s; height: 55vh; width: 4px;"></div>
-    <div class="ocean-light-ray" style="left: 72%; animation-delay: 2.2s; height: 58vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 88%; animation-delay: 4s; height: 62vh; width: 3px;"></div>
-    <div class="ocean-bubble" style="left: 5%; width: 6px; height: 6px; animation-duration: 7s; animation-delay: 0s;"></div>
-    <div class="ocean-bubble" style="left: 12%; width: 10px; height: 10px; animation-duration: 9s; animation-delay: 1s;"></div>
-    <div class="ocean-bubble" style="left: 18%; width: 5px; height: 5px; animation-duration: 6s; animation-delay: 2.5s;"></div>
-    <div class="ocean-bubble" style="left: 28%; width: 8px; height: 8px; animation-duration: 8s; animation-delay: 0.5s;"></div>
-    <div class="ocean-bubble" style="left: 35%; width: 4px; height: 4px; animation-duration: 10s; animation-delay: 3s;"></div>
-    <div class="ocean-bubble" style="left: 42%; width: 12px; height: 12px; animation-duration: 7.5s; animation-delay: 1.5s;"></div>
-    <div class="ocean-bubble" style="left: 48%; width: 6px; height: 6px; animation-duration: 9s; animation-delay: 0.2s;"></div>
-    <div class="ocean-bubble" style="left: 58%; width: 9px; height: 9px; animation-duration: 6.5s; animation-delay: 2s;"></div>
-    <div class="ocean-bubble" style="left: 65%; width: 7px; height: 7px; animation-duration: 8.5s; animation-delay: 0.8s;"></div>
-    <div class="ocean-bubble" style="left: 72%; width: 11px; height: 11px; animation-duration: 7s; animation-delay: 3.5s;"></div>
-    <div class="ocean-bubble" style="left: 78%; width: 5px; height: 5px; animation-duration: 9s; animation-delay: 1.2s;"></div>
-    <div class="ocean-bubble" style="left: 85%; width: 8px; height: 8px; animation-duration: 8s; animation-delay: 4s;"></div>
-    <div class="ocean-bubble" style="left: 92%; width: 6px; height: 6px; animation-duration: 7s; animation-delay: 2.2s;"></div>
-    <div class="ocean-bubble" style="left: 3%; width: 10px; height: 10px; animation-duration: 10s; animation-delay: 5s;"></div>
-    <div class="ocean-bubble" style="left: 50%; width: 5px; height: 5px; animation-duration: 6s; animation-delay: 1.8s;"></div>
-    <div class="ocean-fish" style="top: 22%; animation-duration: 20s; animation-delay: 0s; font-size: 2.2rem;">🐠</div>
-    <div class="ocean-fish" style="top: 38%; animation-duration: 25s; animation-delay: 4s; font-size: 1.8rem;">🐟</div>
-    <div class="ocean-fish" style="top: 52%; animation-duration: 28s; animation-delay: 8s; font-size: 2.5rem;">🐡</div>
-    <div class="ocean-fish" style="top: 16%; animation-duration: 22s; animation-delay: 12s; font-size: 1.6rem;">🐠</div>
-    <div class="ocean-fish" style="top: 68%; animation-duration: 32s; animation-delay: 2s; font-size: 2.8rem;">🦈</div>
-    <div class="ocean-fish" style="top: 30%; animation-duration: 26s; animation-delay: 16s; font-size: 2rem;">🐬</div>
-    <div class="ocean-fish" style="top: 45%; animation-duration: 21s; animation-delay: 6s; font-size: 1.5rem;">🐟</div>
-    <div class="ocean-fish" style="top: 60%; animation-duration: 29s; animation-delay: 10s; font-size: 2.3rem;">🐠</div>
-    <div class="ocean-fish" style="top: 75%; animation-duration: 24s; animation-delay: 14s; font-size: 1.9rem;">🐟</div>
-    <div class="ocean-jellyfish" style="left: 15%; top: 25%; animation-delay: 0s; font-size: 2.5rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 60%; top: 45%; animation-delay: 5s; font-size: 2rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 40%; top: 18%; animation-delay: 10s; font-size: 1.8rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 80%; top: 55%; animation-delay: 3s; font-size: 2.2rem;">🪼</div>
-    <div class="ocean-plankton" style="left: 10%; bottom: 25%; animation-delay: 0s; animation-duration: 14s;"></div>
-    <div class="ocean-plankton" style="left: 25%; bottom: 45%; animation-delay: 2s; animation-duration: 16s;"></div>
-    <div class="ocean-plankton" style="left: 40%; bottom: 20%; animation-delay: 5s; animation-duration: 12s;"></div>
-    <div class="ocean-plankton" style="left: 55%; bottom: 55%; animation-delay: 1s; animation-duration: 15s;"></div>
-    <div class="ocean-plankton" style="left: 70%; bottom: 30%; animation-delay: 7s; animation-duration: 13s;"></div>
-    <div class="ocean-plankton" style="left: 85%; bottom: 50%; animation-delay: 3s; animation-duration: 17s;"></div>
-    <div class="ocean-plankton" style="left: 15%; bottom: 65%; animation-delay: 9s; animation-duration: 11s;"></div>
-    <div class="ocean-plankton" style="left: 50%; bottom: 40%; animation-delay: 6s; animation-duration: 14s;"></div>
-    <div class="ocean-coral" style="left: 3%; font-size: 3rem;">🪸</div>
-    <div class="ocean-coral" style="left: 15%; font-size: 2.4rem; animation-delay: 0.5s;">🪸</div>
-    <div class="ocean-coral" style="left: 30%; font-size: 3.2rem; animation-delay: 1s;">🪸</div>
-    <div class="ocean-coral" style="left: 48%; font-size: 2.2rem; animation-delay: 1.5s;">🪸</div>
-    <div class="ocean-coral" style="left: 62%; font-size: 2.8rem; animation-delay: 0.8s;">🪸</div>
-    <div class="ocean-coral" style="left: 78%; font-size: 3rem; animation-delay: 2s;">🪸</div>
-    <div class="ocean-coral" style="left: 90%; font-size: 2.5rem; animation-delay: 1.2s;">🪸</div>
-    <div class="ocean-seaweed" style="left: 8%;">🌿</div>
-    <div class="ocean-seaweed" style="left: 22%; font-size: 2.8rem; animation-delay: 0.7s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 38%; font-size: 1.9rem; animation-delay: 1.3s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 52%; font-size: 2.6rem; animation-delay: 0.4s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 68%; font-size: 2rem; animation-delay: 1.8s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 82%; font-size: 2.9rem; animation-delay: 1.1s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 95%; font-size: 2.3rem; animation-delay: 0.9s;">🌿</div>
-    <div class="ocean-starfish" style="left: 10%;">⭐</div>
-    <div class="ocean-starfish" style="left: 35%; animation-delay: 1s;">⭐</div>
-    <div class="ocean-starfish" style="left: 58%; animation-delay: 0.5s;">⭐</div>
-    <div class="ocean-starfish" style="left: 82%; animation-delay: 2s;">⭐</div>
-    <div class="ocean-shell" style="left: 20%;">🐚</div>
-    <div class="ocean-shell" style="left: 45%; animation-delay: 1.5s;">🐚</div>
-    <div class="ocean-shell" style="left: 70%; animation-delay: 0.8s;">🐚</div>
-    <div class="ocean-sand"></div>
+<div class="chat-video-bg">
+    <video autoplay muted loop playsinline>
+        <source src="https://assets.mixkit.co/videos/preview/mixkit-aquarium-with-colorful-fish-1230-large.mp4" type="video/mp4">
+    </video>
+    <div class="chat-video-overlay"></div>
+</div>
+"""
+
+# =====================================================================
+# Railway Sea Shore Video Background
+# =====================================================================
+RAILWAY_BG_HTML = """
+<style>
+.railway-video-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: -1;
+    pointer-events: none;
+    overflow: hidden;
+    background: #001a33;
+}
+.railway-video-bg video {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    min-width: 100vw;
+    min-height: 100vh;
+    width: auto;
+    height: auto;
+    transform: translate(-50%, -50%);
+    object-fit: cover;
+    opacity: 0.9;
+}
+.railway-video-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(0,10,30,0.25) 0%, rgba(0,0,0,0.05) 40%, rgba(0,10,30,0.35) 100%);
+    pointer-events: none;
+}
+</style>
+<div class="railway-video-bg">
+    <video autoplay muted loop playsinline>
+        <source src="https://assets.mixkit.co/videos/preview/mixkit-waves-coming-to-the-beach-5016-large.mp4" type="video/mp4">
+    </video>
+    <div class="railway-video-overlay"></div>
 </div>
 """
 
@@ -3127,6 +3018,8 @@ def main():
         pass  # Weather bg rendered later
     elif view_bg == "💬 Chat":
         st.markdown(OCEAN_BG_HTML, unsafe_allow_html=True)
+    elif view_bg == "🚂 Railway":
+        st.markdown(RAILWAY_BG_HTML, unsafe_allow_html=True)
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
@@ -4825,6 +4718,57 @@ def main():
     # VIEW: 💬 CHAT
     # =====================================================================
     elif view == "💬 Chat":
+        # ---- Stamp Style Chat Box & Messages ----
+        st.markdown("""
+        <style>
+        /* Postage Stamp Chat Input */
+        div[data-testid="stChatInput"] {
+            background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%) !important;
+            border: 2px solid #2c3e50 !important;
+            outline: 2px dashed #2c3e50 !important;
+            outline-offset: 6px !important;
+            border-radius: 4px !important;
+            box-shadow: 0 0 0 4px #ffffff, 0 0 0 6px #2c3e50, 0 12px 40px rgba(0,0,0,0.3) !important;
+            position: relative !important;
+            margin: 20px 10px !important;
+        }
+        div[data-testid="stChatInput"]::before {
+            content: '✉ TSKEQ' !important;
+            position: absolute !important;
+            top: -14px !important;
+            right: 20px !important;
+            font-size: 11px !important;
+            font-weight: 700 !important;
+            color: #2c3e50 !important;
+            background: #fff !important;
+            padding: 2px 8px !important;
+            border: 1px solid #2c3e50 !important;
+            border-radius: 3px !important;
+            z-index: 100 !important;
+            letter-spacing: 1px !important;
+        }
+        div[data-testid="stChatInput"] input {
+            background: transparent !important;
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            font-weight: 600 !important;
+        }
+        /* Glass Stamp Chat Messages */
+        div[data-testid="stChatMessage"] {
+            background: rgba(255, 255, 255, 0.93) !important;
+            border: 1px solid rgba(0,0,0,0.2) !important;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.9) !important;
+            border-radius: 12px !important;
+            backdrop-filter: blur(12px) !important;
+            margin-bottom: 12px !important;
+        }
+        div[data-testid="stChatMessage"] img {
+            border: 2px solid #2c3e50 !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
         st.markdown("""
         <style>
         @keyframes chat-bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
