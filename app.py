@@ -2554,39 +2554,23 @@ EARTH_BG_HTML = """
 OCEAN_BG_HTML = """
 <style>
 .chat-video-bg {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: -1;
-    pointer-events: none;
-    overflow: hidden;
-    background: #000810;
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    z-index: -999; pointer-events: none; overflow: hidden;
 }
 .chat-video-bg video {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    min-width: 100vw;
-    min-height: 100vh;
-    width: auto;
-    height: auto;
-    transform: translate(-50%, -50%);
-    object-fit: cover;
-    opacity: 0.92;
+    position: absolute; top: 50%; left: 50%;
+    min-width: 100vw; min-height: 100vh; width: auto; height: auto;
+    transform: translate(-50%, -50%); object-fit: cover; opacity: 0.95;
 }
 .chat-video-overlay {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, rgba(0,5,20,0.2) 0%, rgba(0,0,0,0.05) 50%, rgba(0,5,20,0.3) 100%);
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(0,5,20,0.15) 0%, rgba(0,0,0,0.05) 50%, rgba(0,5,20,0.25) 100%);
     pointer-events: none;
 }
 </style>
 <div class="chat-video-bg">
-    <video autoplay muted loop playsinline>
-        <!-- 👇 APNI ORIGINAL AQUARIUM VIDEO YAHAN RAKHEIN -->
-        <source src="aquarium.mp4" type="video/mp4">
+    <video autoplay muted loop playsinline poster="">
+        <source src="https://assets.mixkit.co/videos/preview/mixkit-aquarium-with-colorful-fish-1230-large.mp4" type="video/mp4">
     </video>
     <div class="chat-video-overlay"></div>
 </div>
@@ -2598,39 +2582,23 @@ OCEAN_BG_HTML = """
 RAILWAY_BG_HTML = """
 <style>
 .railway-video-bg {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: -1;
-    pointer-events: none;
-    overflow: hidden;
-    background: #001a33;
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    z-index: -999; pointer-events: none; overflow: hidden;
 }
 .railway-video-bg video {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    min-width: 100vw;
-    min-height: 100vh;
-    width: auto;
-    height: auto;
-    transform: translate(-50%, -50%);
-    object-fit: cover;
-    opacity: 0.9;
+    position: absolute; top: 50%; left: 50%;
+    min-width: 100vw; min-height: 100vh; width: auto; height: auto;
+    transform: translate(-50%, -50%); object-fit: cover; opacity: 0.92;
 }
 .railway-video-overlay {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, rgba(0,10,30,0.25) 0%, rgba(0,0,0,0.05) 40%, rgba(0,10,30,0.35) 100%);
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(0,10,30,0.2) 0%, rgba(0,0,0,0.05) 40%, rgba(0,10,30,0.3) 100%);
     pointer-events: none;
 }
 </style>
 <div class="railway-video-bg">
-    <video autoplay muted loop playsinline>
-        <!-- 👇 APNI ORIGINAL SEA SHORE VIDEO YAHAN RAKHEIN -->
-        <source src="seashore.mp4" type="video/mp4">
+    <video autoplay muted loop playsinline poster="">
+        <source src="https://assets.mixkit.co/videos/preview/mixkit-waves-coming-to-the-beach-5016-large.mp4" type="video/mp4">
     </video>
     <div class="railway-video-overlay"></div>
 </div>
@@ -4720,10 +4688,10 @@ def main():
     # VIEW: 💬 CHAT
     # =====================================================================
     elif view == "💬 Chat":
-        # ---- Postage Stamp Chat Box ----
+        # ---- Stamp Style Chat ----
         st.markdown("""
         <style>
-        /* Stamp-style Chat Input */
+        /* Postage Stamp Chat Input */
         div[data-testid="stChatInput"] {
             background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%) !important;
             border: 2px solid #2c3e50 !important;
