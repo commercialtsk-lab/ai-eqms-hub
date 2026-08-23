@@ -2585,7 +2585,8 @@ OCEAN_BG_HTML = """
 </style>
 <div class="chat-video-bg">
     <video autoplay muted loop playsinline>
-        <source src="https://assets.mixkit.co/videos/preview/mixkit-aquarium-with-colorful-fish-1230-large.mp4" type="video/mp4">
+        <!-- 👇 APNI ORIGINAL AQUARIUM VIDEO YAHAN RAKHEIN -->
+        <source src="aquarium.mp4" type="video/mp4">
     </video>
     <div class="chat-video-overlay"></div>
 </div>
@@ -2628,7 +2629,8 @@ RAILWAY_BG_HTML = """
 </style>
 <div class="railway-video-bg">
     <video autoplay muted loop playsinline>
-        <source src="https://assets.mixkit.co/videos/preview/mixkit-waves-coming-to-the-beach-5016-large.mp4" type="video/mp4">
+        <!-- 👇 APNI ORIGINAL SEA SHORE VIDEO YAHAN RAKHEIN -->
+        <source src="seashore.mp4" type="video/mp4">
     </video>
     <div class="railway-video-overlay"></div>
 </div>
@@ -4718,10 +4720,10 @@ def main():
     # VIEW: 💬 CHAT
     # =====================================================================
     elif view == "💬 Chat":
-        # ---- Stamp Style Chat Box & Messages ----
+        # ---- Postage Stamp Chat Box ----
         st.markdown("""
         <style>
-        /* Postage Stamp Chat Input */
+        /* Stamp-style Chat Input */
         div[data-testid="stChatInput"] {
             background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%) !important;
             border: 2px solid #2c3e50 !important;
@@ -4753,7 +4755,7 @@ def main():
             -webkit-text-fill-color: #000000 !important;
             font-weight: 600 !important;
         }
-        /* Glass Stamp Chat Messages */
+        /* Glass Chat Messages */
         div[data-testid="stChatMessage"] {
             background: rgba(255, 255, 255, 0.93) !important;
             border: 1px solid rgba(0,0,0,0.2) !important;
