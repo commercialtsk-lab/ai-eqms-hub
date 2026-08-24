@@ -1,3 +1,4 @@
+
 # =====================================================================
 # AI EQMS Hub Pro - Complete Streamlit Application
 # =====================================================================
@@ -2426,7 +2427,7 @@ def render_audio_controls(current_scene):
             }} else {{
                 engine.stopAll();
                 status.textContent = 'Move slider to enable sound';
-            }}
+            }
         }});
 
         engine.setScene('{scene}');
@@ -2548,200 +2549,6 @@ EARTH_BG_HTML = """
 </div>
 """
 
-# =====================================================================
-# Ocean Background for Chat View
-# =====================================================================
-OCEAN_BG_HTML = """
-<style>
-.ocean-bg-scene {
-    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-    z-index: -1; pointer-events: none; overflow: hidden;
-    background: linear-gradient(180deg, #006994 0%, #005073 25%, #00334e 50%, #001a2e 75%, #000d1a 100%);
-}
-.ocean-surface {
-    position: absolute; top: 0; left: 0; width: 100%; height: 15%;
-    background: linear-gradient(180deg, #4fc3f7 0%, #29b6f6 40%, #0288d1 80%, transparent 100%);
-    opacity: 0.4;
-    animation: ocean-surface-shimmer 3s ease-in-out infinite alternate;
-}
-@keyframes ocean-surface-shimmer {
-    0% { opacity: 0.35; }
-    100% { opacity: 0.5; }
-}
-.ocean-light-ray {
-    position: absolute; top: 0; width: 3px; height: 65vh;
-    background: linear-gradient(180deg, rgba(255,255,255,0.2), rgba(255,255,255,0.05), transparent);
-    animation: ocean-ray-sway 6s ease-in-out infinite alternate;
-    border-radius: 2px;
-}
-@keyframes ocean-ray-sway {
-    0% { transform: translateX(0) rotate(-2deg); opacity: 0.15; }
-    100% { transform: translateX(15px) rotate(2deg); opacity: 0.35; }
-}
-.ocean-bubble {
-    position: absolute; bottom: -20px;
-    background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.85), rgba(255,255,255,0.3));
-    border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.25);
-    animation: ocean-bubble-rise linear infinite;
-}
-@keyframes ocean-bubble-rise {
-    0% { transform: translateY(0) scale(1); opacity: 0; }
-    8% { opacity: 0.7; }
-    92% { opacity: 0.4; }
-    100% { transform: translateY(-110vh) scale(1.3); opacity: 0; }
-}
-.ocean-fish {
-    position: absolute; font-size: 2rem;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-    animation: ocean-fish-swim linear infinite;
-    opacity: 0.85;
-}
-@keyframes ocean-fish-swim {
-    0% { transform: translateX(-120px) scaleX(1); }
-    48% { transform: translateX(calc(100vw + 120px)) scaleX(1); }
-    50% { transform: translateX(calc(100vw + 120px)) scaleX(-1); }
-    98% { transform: translateX(-120px) scaleX(-1); }
-    100% { transform: translateX(-120px) scaleX(1); }
-}
-.ocean-coral {
-    position: absolute; bottom: 0; font-size: 2.8rem;
-    filter: drop-shadow(0 -2px 6px rgba(0,0,0,0.4));
-    animation: ocean-coral-sway 4s ease-in-out infinite alternate;
-    transform-origin: bottom center;
-}
-@keyframes ocean-coral-sway {
-    0% { transform: rotate(-2deg); }
-    100% { transform: rotate(2deg); }
-}
-.ocean-seaweed {
-    position: absolute; bottom: 0; font-size: 2.2rem;
-    animation: ocean-seaweed-sway 3s ease-in-out infinite alternate;
-    transform-origin: bottom center;
-    opacity: 0.8;
-}
-@keyframes ocean-seaweed-sway {
-    0% { transform: rotate(-5deg) scaleY(1); }
-    100% { transform: rotate(5deg) scaleY(1.08); }
-}
-.ocean-jellyfish {
-    position: absolute; font-size: 2.2rem;
-    animation: ocean-jelly-float 10s ease-in-out infinite;
-    opacity: 0.55;
-    filter: drop-shadow(0 0 8px rgba(255,255,255,0.25));
-}
-@keyframes ocean-jelly-float {
-    0%, 100% { transform: translateY(0) translateX(0); }
-    20% { transform: translateY(-25px) translateX(12px); }
-    40% { transform: translateY(-8px) translateX(-8px); }
-    60% { transform: translateY(-35px) translateX(5px); }
-    80% { transform: translateY(-15px) translateX(-12px); }
-}
-.ocean-plankton {
-    position: absolute; width: 2px; height: 2px;
-    background: rgba(255,255,255,0.5);
-    border-radius: 50%;
-    animation: ocean-plankton-drift 12s linear infinite;
-}
-@keyframes ocean-plankton-drift {
-    0% { transform: translateY(0) translateX(0); opacity: 0; }
-    15% { opacity: 0.7; }
-    85% { opacity: 0.5; }
-    100% { transform: translateY(-50vh) translateX(25px); opacity: 0; }
-}
-.ocean-sand {
-    position: absolute; bottom: 0; left: 0; width: 100%; height: 50px;
-    background: linear-gradient(180deg, #c2b280 0%, #a8956b 50%, #8b7355 100%);
-    border-radius: 50% 50% 0 0 / 15px 15px 0 0;
-    opacity: 0.35;
-}
-.ocean-starfish {
-    position: absolute; bottom: 35px; font-size: 1.2rem;
-    animation: ocean-star-twinkle 3s ease-in-out infinite alternate;
-    opacity: 0.7;
-}
-@keyframes ocean-star-twinkle {
-    0% { opacity: 0.4; transform: scale(1); }
-    100% { opacity: 0.9; transform: scale(1.1); }
-}
-.ocean-shell {
-    position: absolute; bottom: 30px; font-size: 1rem;
-    opacity: 0.6;
-    animation: ocean-shell-bob 4s ease-in-out infinite;
-}
-@keyframes ocean-shell-bob {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-3px); }
-}
-</style>
-<div class="ocean-bg-scene">
-    <div class="ocean-surface"></div>
-    <div class="ocean-light-ray" style="left: 8%; animation-delay: 0s; height: 60vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 22%; animation-delay: 1.5s; height: 50vh; width: 3px;"></div>
-    <div class="ocean-light-ray" style="left: 38%; animation-delay: 3s; height: 65vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 55%; animation-delay: 0.8s; height: 55vh; width: 4px;"></div>
-    <div class="ocean-light-ray" style="left: 72%; animation-delay: 2.2s; height: 58vh; width: 2px;"></div>
-    <div class="ocean-light-ray" style="left: 88%; animation-delay: 4s; height: 62vh; width: 3px;"></div>
-    <div class="ocean-bubble" style="left: 5%; width: 6px; height: 6px; animation-duration: 7s; animation-delay: 0s;"></div>
-    <div class="ocean-bubble" style="left: 12%; width: 10px; height: 10px; animation-duration: 9s; animation-delay: 1s;"></div>
-    <div class="ocean-bubble" style="left: 18%; width: 5px; height: 5px; animation-duration: 6s; animation-delay: 2.5s;"></div>
-    <div class="ocean-bubble" style="left: 28%; width: 8px; height: 8px; animation-duration: 8s; animation-delay: 0.5s;"></div>
-    <div class="ocean-bubble" style="left: 35%; width: 4px; height: 4px; animation-duration: 10s; animation-delay: 3s;"></div>
-    <div class="ocean-bubble" style="left: 42%; width: 12px; height: 12px; animation-duration: 7.5s; animation-delay: 1.5s;"></div>
-    <div class="ocean-bubble" style="left: 48%; width: 6px; height: 6px; animation-duration: 9s; animation-delay: 0.2s;"></div>
-    <div class="ocean-bubble" style="left: 58%; width: 9px; height: 9px; animation-duration: 6.5s; animation-delay: 2s;"></div>
-    <div class="ocean-bubble" style="left: 65%; width: 7px; height: 7px; animation-duration: 8.5s; animation-delay: 0.8s;"></div>
-    <div class="ocean-bubble" style="left: 72%; width: 11px; height: 11px; animation-duration: 7s; animation-delay: 3.5s;"></div>
-    <div class="ocean-bubble" style="left: 78%; width: 5px; height: 5px; animation-duration: 9s; animation-delay: 1.2s;"></div>
-    <div class="ocean-bubble" style="left: 85%; width: 8px; height: 8px; animation-duration: 8s; animation-delay: 4s;"></div>
-    <div class="ocean-bubble" style="left: 92%; width: 6px; height: 6px; animation-duration: 7s; animation-delay: 2.2s;"></div>
-    <div class="ocean-bubble" style="left: 3%; width: 10px; height: 10px; animation-duration: 10s; animation-delay: 5s;"></div>
-    <div class="ocean-bubble" style="left: 50%; width: 5px; height: 5px; animation-duration: 6s; animation-delay: 1.8s;"></div>
-    <div class="ocean-fish" style="top: 22%; animation-duration: 20s; animation-delay: 0s; font-size: 2.2rem;">🐠</div>
-    <div class="ocean-fish" style="top: 38%; animation-duration: 25s; animation-delay: 4s; font-size: 1.8rem;">🐟</div>
-    <div class="ocean-fish" style="top: 52%; animation-duration: 28s; animation-delay: 8s; font-size: 2.5rem;">🐡</div>
-    <div class="ocean-fish" style="top: 16%; animation-duration: 22s; animation-delay: 12s; font-size: 1.6rem;">🐠</div>
-    <div class="ocean-fish" style="top: 68%; animation-duration: 32s; animation-delay: 2s; font-size: 2.8rem;">🦈</div>
-    <div class="ocean-fish" style="top: 30%; animation-duration: 26s; animation-delay: 16s; font-size: 2rem;">🐬</div>
-    <div class="ocean-fish" style="top: 45%; animation-duration: 21s; animation-delay: 6s; font-size: 1.5rem;">🐟</div>
-    <div class="ocean-fish" style="top: 60%; animation-duration: 29s; animation-delay: 10s; font-size: 2.3rem;">🐠</div>
-    <div class="ocean-fish" style="top: 75%; animation-duration: 24s; animation-delay: 14s; font-size: 1.9rem;">🐟</div>
-    <div class="ocean-jellyfish" style="left: 15%; top: 25%; animation-delay: 0s; font-size: 2.5rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 60%; top: 45%; animation-delay: 5s; font-size: 2rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 40%; top: 18%; animation-delay: 10s; font-size: 1.8rem;">🪼</div>
-    <div class="ocean-jellyfish" style="left: 80%; top: 55%; animation-delay: 3s; font-size: 2.2rem;">🪼</div>
-    <div class="ocean-plankton" style="left: 10%; bottom: 25%; animation-delay: 0s; animation-duration: 14s;"></div>
-    <div class="ocean-plankton" style="left: 25%; bottom: 45%; animation-delay: 2s; animation-duration: 16s;"></div>
-    <div class="ocean-plankton" style="left: 40%; bottom: 20%; animation-delay: 5s; animation-duration: 12s;"></div>
-    <div class="ocean-plankton" style="left: 55%; bottom: 55%; animation-delay: 1s; animation-duration: 15s;"></div>
-    <div class="ocean-plankton" style="left: 70%; bottom: 30%; animation-delay: 7s; animation-duration: 13s;"></div>
-    <div class="ocean-plankton" style="left: 85%; bottom: 50%; animation-delay: 3s; animation-duration: 17s;"></div>
-    <div class="ocean-plankton" style="left: 15%; bottom: 65%; animation-delay: 9s; animation-duration: 11s;"></div>
-    <div class="ocean-plankton" style="left: 50%; bottom: 40%; animation-delay: 6s; animation-duration: 14s;"></div>
-    <div class="ocean-coral" style="left: 3%; font-size: 3rem;">🪸</div>
-    <div class="ocean-coral" style="left: 15%; font-size: 2.4rem; animation-delay: 0.5s;">🪸</div>
-    <div class="ocean-coral" style="left: 30%; font-size: 3.2rem; animation-delay: 1s;">🪸</div>
-    <div class="ocean-coral" style="left: 48%; font-size: 2.2rem; animation-delay: 1.5s;">🪸</div>
-    <div class="ocean-coral" style="left: 62%; font-size: 2.8rem; animation-delay: 0.8s;">🪸</div>
-    <div class="ocean-coral" style="left: 78%; font-size: 3rem; animation-delay: 2s;">🪸</div>
-    <div class="ocean-coral" style="left: 90%; font-size: 2.5rem; animation-delay: 1.2s;">🪸</div>
-    <div class="ocean-seaweed" style="left: 8%;">🌿</div>
-    <div class="ocean-seaweed" style="left: 22%; font-size: 2.8rem; animation-delay: 0.7s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 38%; font-size: 1.9rem; animation-delay: 1.3s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 52%; font-size: 2.6rem; animation-delay: 0.4s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 68%; font-size: 2rem; animation-delay: 1.8s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 82%; font-size: 2.9rem; animation-delay: 1.1s;">🌿</div>
-    <div class="ocean-seaweed" style="left: 95%; font-size: 2.3rem; animation-delay: 0.9s;">🌿</div>
-    <div class="ocean-starfish" style="left: 10%;">⭐</div>
-    <div class="ocean-starfish" style="left: 35%; animation-delay: 1s;">⭐</div>
-    <div class="ocean-starfish" style="left: 58%; animation-delay: 0.5s;">⭐</div>
-    <div class="ocean-starfish" style="left: 82%; animation-delay: 2s;">⭐</div>
-    <div class="ocean-shell" style="left: 20%;">🐚</div>
-    <div class="ocean-shell" style="left: 45%; animation-delay: 1.5s;">🐚</div>
-    <div class="ocean-shell" style="left: 70%; animation-delay: 0.8s;">🐚</div>
-    <div class="ocean-sand"></div>
-</div>
-"""
 
 def main():
     # Always update last_refresh to current time on page load so sync time matches live time
@@ -3126,7 +2933,7 @@ def main():
     elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         pass  # Weather bg rendered later
     elif view_bg == "💬 Chat":
-        st.markdown(OCEAN_BG_HTML, unsafe_allow_html=True)
+        pass  # Clean chat view — no heavy animation
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
@@ -3165,6 +2972,7 @@ def main():
 
         # ---- DAY / NIGHT DETECTION ----
         time_of_day = 'day'
+        weather_mode = 'day'  # <-- FIXED: Define weather_mode
         try:
             now_ts = int(time.time())
             sunrise = st.session_state.weather_data.get('sunrise')
@@ -3174,14 +2982,19 @@ def main():
                 sunset = int(sunset)
                 if now_ts < sunrise - 1800:
                     time_of_day = 'night'
+                    weather_mode = 'night'
                 elif now_ts < sunrise + 1800:
                     time_of_day = 'dawn'
+                    weather_mode = 'day'
                 elif now_ts < sunset - 1800:
                     time_of_day = 'day'
+                    weather_mode = 'day'
                 elif now_ts < sunset + 1800:
                     time_of_day = 'dusk'
+                    weather_mode = 'day'
                 else:
                     time_of_day = 'night'
+                    weather_mode = 'night'
         except Exception:
             pass
 
@@ -3289,8 +3102,7 @@ def main():
             bg_style = "background: linear-gradient(180deg, #000000 0%, #0a0a1a 20%, #1a1a3e 50%, #2d1b4e 80%, #1a1a2e 100%);"
             for i in range(80):
                 left = (i * 3.7) % 100
-                top = (i * 2.3) % 50
-                delay = (i * 0.2) % 3
+                top = (i * 2.3) % 50                delay = (i * 0.2) % 3
                 size = 1 + (i % 3)
                 opacity = 0.3 + (i % 5) * 0.15
                 elements += f'<div style="position:absolute;left:{left}%;top:{top}%;width:{size}px;height:{size}px;background:#fff;border-radius:50%;opacity:{opacity};animation:twinkle 2s ease-in-out {delay}s infinite;z-index:1;"></div>'
@@ -4006,7 +3818,6 @@ def main():
                 if st.button(icon, key=f"nav_btn_{name}", help=name, use_container_width=True,
                              type="primary" if st.session_state.view_mode == name else "secondary"):
                     st.session_state.view_mode = name
-                    st.query_params['__view'] = name
                     st.rerun()
     with top_c2:
         st.markdown(f"<div style='padding-top:6px; text-align:right;'><span class='status-pill status-live'>● Live</span> &nbsp; <span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span></div>", unsafe_allow_html=True)
@@ -5150,6 +4961,7 @@ def main():
 
             # Day/Night detection for styling
             time_of_day = 'day'
+            weather_mode = 'day'  # <-- FIXED: Define weather_mode
             try:
                 now_ts = int(time.time())
                 sunrise = data.get('sunrise')
@@ -5157,11 +4969,21 @@ def main():
                 if sunrise and sunset and str(sunrise) not in ['', 'N/A', 'None']:
                     sunrise = int(sunrise)
                     sunset = int(sunset)
-                    if now_ts < sunrise - 1800: time_of_day = 'night'
-                    elif now_ts < sunrise + 1800: time_of_day = 'dawn'
-                    elif now_ts < sunset - 1800: time_of_day = 'day'
-                    elif now_ts < sunset + 1800: time_of_day = 'dusk'
-                    else: time_of_day = 'night'
+                    if now_ts < sunrise - 1800:
+                        time_of_day = 'night'
+                        weather_mode = 'night'
+                    elif now_ts < sunrise + 1800:
+                        time_of_day = 'dawn'
+                        weather_mode = 'day'
+                    elif now_ts < sunset - 1800:
+                        time_of_day = 'day'
+                        weather_mode = 'day'
+                    elif now_ts < sunset + 1800:
+                        time_of_day = 'dusk'
+                        weather_mode = 'day'
+                    else:
+                        time_of_day = 'night'
+                        weather_mode = 'night'
             except: pass
 
             # Location banner
@@ -5169,59 +4991,49 @@ def main():
             loc_country = data.get('country', '')
             loc_full = data['city'] + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
             day_night_icon = "🌙" if time_of_day in ['night', 'dusk'] else "☀️" if time_of_day == 'day' else "🌅"
+            banner_text = "#ffffff" if weather_mode == "night" else "#000000"
+            banner_shadow = "0 1px 3px rgba(0,0,0,0.5)" if weather_mode == "night" else "0 1px 3px rgba(255,255,255,0.6)"
             st.markdown(f'''<div style="text-align:center; margin-bottom:15px;">
-                <div style="display:inline-block; background: linear-gradient(135deg, rgba(255,153,51,0.2), rgba(255,255,255,0.1), rgba(19,136,8,0.2)); 
-                    border: 1px solid rgba(0,0,0,0.15); border-radius: 50px; padding: 10px 30px; 
-                    backdrop-filter: blur(12px); color: #000000 !important; text-shadow: none !important; font-weight: 700; font-size: 1.1rem;">
+                <div style="display:inline-block; background: rgba(255,255,255,0.08); 
+                    border: 1px solid rgba(255,255,255,0.15); border-radius: 50px; padding: 10px 30px; 
+                    backdrop-filter: blur(12px); color: {banner_text} !important; text-shadow: {banner_shadow} !important; font-weight: 700; font-size: 1.1rem;">
                     {day_night_icon} {loc_full} • {time_of_day.title()}
                 </div>
             </div>''', unsafe_allow_html=True)
 
             weather_html = f"""
             <style>
-            @keyframes weather-float {{
-                0%, 100% {{ transform: translateY(0px); }}
-                50% {{ transform: translateY(-8px); }}
-            }}
-            @keyframes weather-glow {{
-                0%, 100% {{ box-shadow: 0 4px 20px rgba(37, 99, 235, 0.15); }}
-                50% {{ box-shadow: 0 8px 40px rgba(37, 99, 235, 0.3); }}
-            }}
-            @keyframes sun-pulse {{
-                0%, 100% {{ transform: scale(1); opacity: 0.8; }}
-                50% {{ transform: scale(1.15); opacity: 1; }}
-            }}
             .weather-main-card {{
-                background: rgba(255,255,255,0.9); border: 1px solid rgba(0,0,0,0.1);
-                border-radius: 24px; padding: 30px; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);
-                box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
-                animation: weather-float 4s ease-in-out infinite, weather-glow 3s ease-in-out infinite;
+                background: {"rgba(0,0,0,0.25)" if weather_mode == "night" else "rgba(255,255,255,0.15)"}; 
+                border: 1px solid {"rgba(255,255,255,0.2)" if weather_mode == "night" else "rgba(0,0,0,0.1)"};
+                border-radius: 24px; padding: 30px; 
+                color: {"#ffffff" if weather_mode == "night" else "#000000"};
+                text-shadow: 0 1px 3px {"rgba(0,0,0,0.5)" if weather_mode == "night" else "rgba(255,255,255,0.6)"};
+                box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+                backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
                 position: relative; overflow: hidden;
             }}
-            .weather-main-card::before {{
-                content: ''; position: absolute; top: -50%; right: -50%;
-                width: 200%; height: 200%;
-                background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
-                animation: rotate 20s linear infinite;
-            }}
-            @keyframes rotate {{ from {{ transform: rotate(0deg); }} to {{ transform: rotate(360deg); }} }}
             .weather-temp-big {{ font-size: 4.5rem; font-weight: 800; line-height: 1; text-shadow: 0 4px 20px rgba(0,0,0,0.3); }}
             .weather-city {{ font-size: 1.8rem; font-weight: 700; margin-bottom: 4px; }}
             .weather-desc {{ font-size: 1.3rem; opacity: 0.95; }}
             .weather-detail-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 20px; }}
             .weather-detail-item {{
-                background: rgba(255,255,255,0.5); border-radius: 12px; padding: 12px; border: 1px solid rgba(0,0,0,0.08);
+                background: {"rgba(255,255,255,0.08)" if weather_mode == "night" else "rgba(255,255,255,0.4)"}; 
+                border-radius: 12px; padding: 12px; 
+                border: 1px solid {"rgba(255,255,255,0.15)" if weather_mode == "night" else "rgba(0,0,0,0.08)"};
                 text-align: center; backdrop-filter: blur(10px);
+                color: {"#ffffff" if weather_mode == "night" else "#000000"};
+                text-shadow: 0 1px 3px {"rgba(0,0,0,0.5)" if weather_mode == "night" else "rgba(255,255,255,0.6)"};
             }}
             .weather-detail-icon {{ font-size: 1.5rem; margin-bottom: 4px; }}
             .weather-detail-label {{ font-size: 0.8rem; opacity: 0.8; }}
             .weather-detail-value {{ font-size: 1.1rem; font-weight: 700; }}
             .sunrise-sunset {{
                 display: flex; justify-content: center; gap: 40px; margin-top: 16px;
-                padding-top: 16px; border-top: 1px solid rgba(0,0,0,0.15);
+                padding-top: 16px; border-top: 1px solid {"rgba(255,255,255,0.2)" if weather_mode == "night" else "rgba(0,0,0,0.15)"};
             }}
             .sun-item {{ text-align: center; }}
-            .sun-icon {{ font-size: 2rem; animation: sun-pulse 2s ease-in-out infinite; }}
+            .sun-icon {{ font-size: 2rem; }}
             .sun-time {{ font-size: 1.2rem; font-weight: 700; }}
             .sun-label {{ font-size: 0.85rem; opacity: 0.8; }}
             </style>
@@ -5406,16 +5218,14 @@ def main():
 
                             st.markdown(f"""
                             <style>
-                            @keyframes forecast-bounce {{
-                                0%, 100% {{ transform: translateY(0); }}
-                                50% {{ transform: translateY(-5px); }}
-                            }}
                             .forecast-card-{idx} {{
-                                background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
-                                border-radius: 20px; padding: 18px; text-align: center; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);
-                                box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
-                                animation: forecast-bounce 3s ease-in-out infinite;
-                                animation-delay: {idx * 0.3}s;
+                                background: var(--forecast-bg, rgba(255,255,255,0.08)); 
+                                border: 1px solid var(--forecast-border, rgba(255,255,255,0.15));
+                                border-radius: 20px; padding: 18px; text-align: center; 
+                                color: var(--weather-input-color, #000000); 
+                                text-shadow: 0 1px 3px var(--weather-text-shadow, rgba(255,255,255,0.6));
+                                box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+                                backdrop-filter: blur(10px);
                             }}
                             </style>
                             <div class="forecast-card-{idx}">
