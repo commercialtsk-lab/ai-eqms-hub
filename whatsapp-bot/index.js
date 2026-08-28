@@ -1,4 +1,13 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const fs = require('fs');
+
+// 🔥 Force session delete
+if (process.env.RESET_SESSION === 'true') {
+    console.log('🔄 Resetting session...');
+    if (fs.existsSync('auth_info')) {
+        fs.rmSync('auth_info', { recursive: true, force: true });
+    }
+    console.log('✅ Session deleted!');
+}const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const express = require('express');
 const qrcode = require('qrcode');
 const fs = require('fs');
