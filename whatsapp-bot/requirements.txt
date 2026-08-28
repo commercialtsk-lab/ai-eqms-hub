@@ -5,3 +5,5 @@ openpyxl
 google-generativeai
 flask
 gunicorn
+qrcode
+pillow
