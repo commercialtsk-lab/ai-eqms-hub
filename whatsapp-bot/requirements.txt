@@ -3,5 +3,3 @@ gunicorn
 qrcode
 pillow
 baileys
-asyncio
-threading
