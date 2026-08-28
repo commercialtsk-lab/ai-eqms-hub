@@ -7,7 +7,6 @@ const PORT = process.env.PORT || 10000;
 
 let qrData = null;
 let isConnected = false;
-let sock = null;
 
 // ==============================================
 // 🔥 WHATSAPP BOT START
@@ -19,19 +18,20 @@ async function startBot() {
         
         const { state, saveCreds } = await useMultiFileAuthState('auth_info');
         
-        sock = makeWASocket({
+        const sock = makeWASocket({
             auth: state,
             browser: ['Chrome', 'Windows', '10.0'],
             syncFullHistory: false,
             markOnlineOnConnect: false,
-            connectTimeoutMs: 30000
+            connectTimeoutMs: 30000,
+            // 🔥 Keep connection alive
+            keepAliveIntervalMs: 10000,
+            patchMessageBeforeSending: (msg) => msg
         });
 
-        // Save credentials
         sock.ev.on('creds.update', saveCreds);
 
-        // Connection events
-        sock.ev.on('connection.update', (update) => {
+        sock.ev.on('connection.update', async (update) => {
             const { connection, qr, lastDisconnect } = update;
             
             if (qr) {
@@ -48,60 +48,53 @@ async function startBot() {
                 const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
                 console.log('🔄 Connection closed, reconnecting:', shouldReconnect);
                 isConnected = false;
+                
                 if (shouldReconnect) {
-                    setTimeout(startBot, 5000);
+                    // 🔥 Exponential backoff
+                    const delay = Math.min(5000 * Math.pow(1.5, Math.floor(Math.random() * 3)), 30000);
+                    console.log(`⏳ Reconnecting in ${delay/1000}s...`);
+                    setTimeout(startBot, delay);
+                } else {
+                    console.log('❌ Logged out. Please scan QR again.');
                 }
             }
         });
 
-        // ==============================================
-        // 🔥 MESSAGE HANDLER
-        // ==============================================
-
+        // 🔥 Message Handler
         sock.ev.on('messages.upsert', async (m) => {
             try {
                 const msg = m.messages[0];
                 if (!msg || msg.key.fromMe) return;
                 
                 const sender = msg.key.remoteJid;
-                const message = msg.message;
-                
-                // Text message extract
                 let text = '';
-                if (message.conversation) {
-                    text = message.conversation;
-                } else if (message.extendedTextMessage) {
-                    text = message.extendedTextMessage.text;
-                } else if (message.imageMessage) {
-                    text = message.imageMessage.caption || '[Image]';
-                } else if (message.documentMessage) {
-                    text = '[Document]';
+                
+                if (msg.message?.conversation) {
+                    text = msg.message.conversation;
+                } else if (msg.message?.extendedTextMessage) {
+                    text = msg.message.extendedTextMessage.text;
+                } else if (msg.message?.imageMessage) {
+                    text = msg.message.imageMessage.caption || '[Image]';
                 } else {
-                    text = '[Other Media]';
+                    text = '[Media]';
                 }
                 
-                console.log(`📩 [${sender}] ${text.substring(0, 100)}`);
+                console.log(`📩 [${sender}] ${text.substring(0, 80)}`);
                 
-                // 🔥 Sirf "Sharique" ke messages filter karein
+                // 🔥 Sirf "Sharique" ke messages
                 if (sender.toLowerCase().includes('sharique') || 
-                    sender.includes('91XXXXXXXXXX')) { // 🔥 Apna number daalein
+                    sender.includes('91XXXXXXXXXX')) {
                     console.log('🎯 Sharique message detected!');
-                    
-                    // Yahan Gemini + Excel logic add karein
-                    // await processMessage(sender, text);
                 }
                 
             } catch (err) {
-                console.log('⚠️ Message handler error:', err.message);
+                console.log('⚠️ Message error:', err.message);
             }
         });
 
-        // ==============================================
-        // 🔥 PRESENCE UPDATE (Optional)
-        // ==============================================
-
-        sock.ev.on('presence.update', (update) => {
-            // console.log('👤 Presence update:', update);
+        // 🔥 Error Handler
+        sock.ev.on('error', (err) => {
+            console.log('⚠️ Socket error:', err.message);
         });
 
     } catch (err) {
@@ -118,7 +111,7 @@ app.get('/', (req, res) => {
     res.send(`
         <h2>🤖 WhatsApp Bot</h2>
         <p>Status: ${isConnected ? '✅ Connected' : '⏳ Connecting...'}</p>
-        <p>QR: <a href="/qr">Click here to scan</a></p>
+        <p><a href="/qr">Scan QR</a> | <a href="/status">Status</a></p>
     `);
 });
 
@@ -127,21 +120,20 @@ app.get('/qr', async (req, res) => {
         return res.send(`
             <h2>⏳ QR Code Not Ready</h2>
             <p>Please wait 5 seconds and refresh.</p>
-            <p><a href="/qr">Refresh</a></p>
+            <a href="/qr">Refresh</a>
         `);
     }
-    
     try {
         const qrImage = await qrcode.toDataURL(qrData);
         res.send(`
             <h2>🔲 Scan QR with WhatsApp</h2>
             <p>Open WhatsApp → Linked Devices → Link a Device</p>
-            <img src="${qrImage}" alt="QR Code" style="max-width:300px;"/>
+            <img src="${qrImage}" alt="QR" style="max-width:300px;"/>
             <br><br>
-            <p><a href="/">Home</a> | <a href="/status">Status</a></p>
+            <a href="/">Home</a> | <a href="/status">Status</a>
         `);
     } catch (err) {
-        res.send('❌ Error generating QR: ' + err.message);
+        res.send('❌ Error: ' + err.message);
     }
 });
 
@@ -159,6 +151,6 @@ app.get('/status', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
-    console.log(`🌐 URL: https://ai-eqms-hub-5.onrender.com`);
+    console.log(`🌐 ${process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`}`);
     startBot();
 });
