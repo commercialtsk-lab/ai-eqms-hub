@@ -1,9 +1,7 @@
-selenium
-webdriver-manager
-pandas
-openpyxl
-google-generativeai
 flask
 gunicorn
 qrcode
 pillow
+baileys
+asyncio
+threading
