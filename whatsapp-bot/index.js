@@ -1,9 +1,8 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const express = require('express');
 const qrcode = require('qrcode');
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const XLSX = require('xlsx');
 const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -12,129 +11,148 @@ let qrData = null;
 let isConnected = false;
 let sock = null;
 
-// Gemini setup
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// Excel file path (Render temporary storage)
-const EXCEL_PATH = '/tmp/whatsapp_data.xlsx';
-
 // ==============================================
-// WHATSAPP BOT
+// 📱 WHATSAPP BOT
 // ==============================================
 
-async function startBot() {
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info');
-    
-    sock = makeWASocket({
-        printQRInTerminal: true,
-        auth: state,
-        browser: ['WhatsApp Bot', 'Chrome', '1.0.0']
-    });
+async function startWhatsApp() {
+    try {
+        const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+        
+        sock = makeWASocket({
+            printQRInTerminal: true,
+            auth: state,
+            browser: ['WhatsApp Bot', 'Chrome', '1.0.0']
+        });
 
-    sock.ev.on('creds.update', saveCreds);
+        sock.ev.on('creds.update', saveCreds);
 
-    sock.ev.on('connection.update', (update) => {
-        const { connection, qr } = update;
-        if (qr) {
-            qrData = qr;
-            console.log('✅ QR Code generated');
-        }
-        if (connection === 'open') {
-            isConnected = true;
-            console.log('✅ WhatsApp Connected!');
-        }
-    });
-
-    // 🔥 MESSAGE LISTENER - YEHI MISSING THA
-    sock.ev.on('messages.upsert', async (m) => {
-        const msg = m.messages[0];
-        if (!msg.message) return;
-
-        const sender = msg.key.remoteJid || 'unknown';
-        const messageText = msg.message.conversation || msg.message.extendedTextMessage?.text;
-
-        if (!messageText) return;
-
-        console.log(`📩 New message from ${sender}: ${messageText}`);
-
-        // Sirf "Sharique" ke messages filter karein
-        if (sender.includes('Sharique') || sender.includes('@s.whatsapp.net')) {
-            console.log('🤖 Processing with Gemini...');
+        sock.ev.on('connection.update', (update) => {
+            const { connection, lastDisconnect, qr } = update;
             
-            try {
-                const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-                const prompt = `Extract railway revenue data from this message: ${messageText}`;
-                const result = await model.generateContent(prompt);
-                const geminiResponse = result.response.text();
-                
-                console.log(`✅ Gemini Response: ${geminiResponse}`);
-                
-                // Excel mein save karein
-                await updateExcel(messageText, geminiResponse);
-                console.log('✅ Excel updated!');
-                
-            } catch (error) {
-                console.error('❌ Error:', error);
+            if (qr) {
+                qrData = qr;
+                console.log('✅ QR Code generated');
+                console.log('📱 Scan this QR with WhatsApp');
             }
-        }
-    });
-}
 
-// ==============================================
-// EXCEL FUNCTION
-// ==============================================
+            if (connection === 'close') {
+                const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+                if (shouldReconnect) {
+                    console.log('🔄 Reconnecting...');
+                    startWhatsApp();
+                } else {
+                    console.log('❌ Logged out');
+                    isConnected = false;
+                }
+            } else if (connection === 'open') {
+                console.log('✅ WhatsApp Connected!');
+                isConnected = true;
+                console.log('📡 Monitoring messages...');
+            }
+        });
 
-async function updateExcel(originalMessage, geminiData) {
-    let workbook;
-    
-    if (fs.existsSync(EXCEL_PATH)) {
-        workbook = XLSX.readFile(EXCEL_PATH);
-    } else {
-        workbook = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet([
-            ['Timestamp', 'Sender', 'Original Message', 'Gemini Response']
-        ]);
-        XLSX.utils.book_append_sheet(workbook, ws, 'Sheet1');
+        // 📩 MESSAGE HANDLER
+        sock.ev.on('messages.upsert', async (m) => {
+            const msg = m.messages[0];
+            if (!msg.message) return;
+            
+            const sender = msg.key.remoteJid;
+            const messageText = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
+            
+            console.log(`📩 Message from: ${sender}`);
+            console.log(`📝 Text: ${messageText}`);
+            
+            // 🔥 SIRF "Sharique" KE MESSAGES PROCESS KAREIN
+            if (sender.includes('Sharique') || sender.includes('@s.whatsapp.net')) {
+                console.log('🎯 Target message received!');
+                // Gemini integration yahan add karein
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Error:', error);
+        setTimeout(startWhatsApp, 5000);
     }
-    
-    const ws = workbook.Sheets['Sheet1'];
-    const newRow = [
-        new Date().toISOString(),
-        'Sharique',
-        originalMessage,
-        geminiData
-    ];
-    XLSX.utils.sheet_add_aoa(ws, [newRow], { origin: -1 });
-    
-    XLSX.writeFile(workbook, EXCEL_PATH);
-    console.log('✅ Excel saved at:', EXCEL_PATH);
 }
 
 // ==============================================
-// EXPRESS ROUTES
+// 🌐 EXPRESS SERVER
 // ==============================================
 
 app.get('/', (req, res) => {
-    res.send(isConnected ? '✅ WhatsApp Bot Connected!' : '⏳ Waiting for QR...');
+    res.send(`
+        <h2>🤖 WhatsApp Bot</h2>
+        <p>Status: ${isConnected ? '✅ Connected' : '⏳ Connecting...'}</p>
+        <a href="/qr">📱 Scan QR</a>
+        <br><br>
+        <a href="/status">📊 Status</a>
+    `);
 });
 
 app.get('/qr', async (req, res) => {
     if (!qrData) {
-        return res.send('⏳ QR Code not ready. Refresh in 5 seconds.');
+        return res.send(`
+            <h2>⏳ QR Code not ready</h2>
+            <p>Refresh in 5 seconds...</p>
+            <meta http-equiv="refresh" content="5">
+        `);
     }
-    const qrImage = await qrcode.toDataURL(qrData);
-    res.send(`<h2>Scan QR with WhatsApp</h2><img src="${qrImage}" alt="QR Code"/>`);
+    
+    try {
+        const qrImage = await qrcode.toDataURL(qrData);
+        res.send(`
+            <h2>📱 Scan QR with WhatsApp</h2>
+            <img src="${qrImage}" alt="QR Code" style="max-width:300px;"/>
+            <br><br>
+            <p>Status: ${isConnected ? '✅ Connected' : '⏳ Waiting...'}</p>
+            <p>Open WhatsApp → Linked Devices → Link a Device</p>
+            <br>
+            <a href="/restart">🔄 Restart Session</a>
+        `);
+    } catch (error) {
+        res.send('❌ Error generating QR: ' + error.message);
+    }
 });
 
-app.get('/download-excel', (req, res) => {
-    if (fs.existsSync(EXCEL_PATH)) {
-        res.download(EXCEL_PATH);
-    } else {
-        res.send('❌ Excel file not found.');
+app.get('/status', (req, res) => {
+    res.json({
+        connected: isConnected,
+        qr_ready: qrData !== null,
+        timestamp: new Date().toISOString()
+    });
+});
+
+app.get('/restart', async (req, res) => {
+    try {
+        // Session delete karein
+        const authPath = path.join(__dirname, 'auth_info');
+        if (fs.existsSync(authPath)) {
+            fs.rmSync(authPath, { recursive: true, force: true });
+        }
+        qrData = null;
+        isConnected = false;
+        res.send('🔄 Restarting... Go to /qr in 10 seconds');
+        setTimeout(() => {
+            startWhatsApp();
+        }, 3000);
+    } catch (error) {
+        res.send('❌ Error: ' + error.message);
     }
 });
 
-app.listen(PORT, () => {
+// ==============================================
+// 🚀 START SERVER
+// ==============================================
+
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ Server running on port ${PORT}`);
-    startBot();
+    console.log(`📱 QR URL: https://ai-eqms-hub-5.onrender.com/qr`);
+    startWhatsApp();
+});
+
+// Handle shutdown
+process.on('SIGINT', () => {
+    console.log('🛑 Shutting down...');
+    process.exit(0);
 });
