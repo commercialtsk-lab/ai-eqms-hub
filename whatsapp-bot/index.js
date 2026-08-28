@@ -1,13 +1,4 @@
-const fs = require('fs');
-
-// 🔥 Force session delete
-if (process.env.RESET_SESSION === 'true') {
-    console.log('🔄 Resetting session...');
-    if (fs.existsSync('auth_info')) {
-        fs.rmSync('auth_info', { recursive: true, force: true });
-    }
-    console.log('✅ Session deleted!');
-}const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const express = require('express');
 const qrcode = require('qrcode');
 const fs = require('fs');
@@ -19,6 +10,20 @@ let qrData = null;
 let isConnected = false;
 
 // ============================================================
+// 🔥 FORCE SESSION DELETE (Render Free Plan Fix)
+// ============================================================
+
+const SESSION_DIR = 'auth_info';
+
+if (fs.existsSync(SESSION_DIR)) {
+    console.log('🔄 Deleting old session...');
+    fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+    console.log('✅ Session deleted!');
+} else {
+    console.log('ℹ️ No existing session found.');
+}
+
+// ============================================================
 // ✅ WHATSAPP BOT START
 // ============================================================
 
@@ -26,7 +31,7 @@ async function startBot() {
     try {
         console.log('🔄 Bot starting...');
 
-        const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+        const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
 
         const sock = makeWASocket({
             auth: state,
