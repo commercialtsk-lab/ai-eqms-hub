@@ -64,3 +64,12 @@ app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     startBot();
 });
+const sock = makeWASocket({
+    auth: state,
+    browser: ['WhatsApp Bot', 'Chrome', '1.0.0'],
+    // 🔥 Yeh options add karein
+    syncFullHistory: false,
+    markOnlineOnConnect: false,
+    connectTimeoutMs: 60000,
+    keepAliveIntervalMs: 10000
+});
