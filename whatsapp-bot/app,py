@@ -1,11 +1,66 @@
-from flask import Flask
+from flask import Flask, send_file, jsonify
 import os
+import qrcode
+from io import BytesIO
+import asyncio
+import threading
+from baileys import Baileys, QRCode
 
 app = Flask(__name__)
 
+# WhatsApp Client
+client = None
+qr_code = None
+is_connected = False
+
+def start_whatsapp():
+    global client, qr_code, is_connected
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    client = Baileys()
+    
+    @client.on('qr')
+    def on_qr(qr):
+        global qr_code
+        qr_code = qr
+        print("New QR Code generated")
+    
+    @client.on('connected')
+    def on_connected():
+        global is_connected
+        is_connected = True
+        print("✅ WhatsApp Connected!")
+    
+    loop.run_until_complete(client.start())
+
+# Background thread start
+thread = threading.Thread(target=start_whatsapp)
+thread.daemon = True
+thread.start()
+
 @app.route('/')
 def home():
-    return "WhatsApp Bot is Running!"
+    if is_connected:
+        return "✅ WhatsApp Bot is Connected & Running!"
+    return "⚠️ WhatsApp Bot is starting... Please wait."
+
+@app.route('/qr')
+def get_qr():
+    if qr_code:
+        img = qrcode.make(qr_code)
+        img_io = BytesIO()
+        img.save(img_io, 'PNG')
+        img_io.seek(0)
+        return send_file(img_io, mimetype='image/png')
+    return "⏳ QR Code not ready yet. Refresh in 5 seconds."
+
+@app.route('/status')
+def status():
+    return jsonify({
+        "connected": is_connected,
+        "qr_ready": qr_code is not None
+    })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
