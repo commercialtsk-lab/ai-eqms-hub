@@ -63,6 +63,31 @@ app.get('/status', (req, res) => {
     res.json({ connected: isConnected });
 });
 console.log('✅ QR Code generated. Scan with WhatsApp.');
+// Message receive karne ka listener
+sock.ev.on('messages.upsert', async (m) => {
+    const msg = m.messages[0];
+    if (!msg.message) return;
+
+    const sender = msg.key.remoteJid;
+    const messageText = msg.message.conversation || msg.message.extendedTextMessage?.text;
+
+    if (!messageText) return;
+
+    console.log(`📩 New message from ${sender}: ${messageText}`);
+
+    // Sirf "Sharique" ke messages filter karein
+    if (sender.includes('Sharique') || sender.includes('@s.whatsapp.net')) {
+        console.log('🤖 Processing with Gemini...');
+        
+        // Gemini se process karein
+        const geminiResponse = await processWithGemini(messageText);
+        console.log(`✅ Gemini Response: ${geminiResponse}`);
+
+        // Excel mein update karein
+        await updateExcel(geminiResponse);
+        console.log('✅ Excel updated!');
+    }
+});
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
     startWhatsApp();
