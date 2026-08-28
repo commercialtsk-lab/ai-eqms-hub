@@ -1,6 +1,7 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const express = require('express');
 const qrcode = require('qrcode');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -8,35 +9,33 @@ const PORT = process.env.PORT || 10000;
 let qrData = null;
 let isConnected = false;
 
-// ==============================================
-// 🔥 WHATSAPP BOT START
-// ==============================================
+// ============================================================
+// ✅ WHATSAPP BOT START
+// ============================================================
 
 async function startBot() {
     try {
-        console.log('🔄 Starting WhatsApp Bot...');
-        
+        console.log('🔄 Bot starting...');
+
         const { state, saveCreds } = await useMultiFileAuthState('auth_info');
-        
+
         const sock = makeWASocket({
             auth: state,
             browser: ['Chrome', 'Windows', '10.0'],
             syncFullHistory: false,
             markOnlineOnConnect: false,
             connectTimeoutMs: 30000,
-            // 🔥 Keep connection alive
-            keepAliveIntervalMs: 10000,
-            patchMessageBeforeSending: (msg) => msg
+            keepAliveIntervalMs: 10000
         });
 
         sock.ev.on('creds.update', saveCreds);
 
-        sock.ev.on('connection.update', async (update) => {
+        sock.ev.on('connection.update', (update) => {
             const { connection, qr, lastDisconnect } = update;
-            
+
             if (qr) {
                 qrData = qr;
-                console.log('✅ QR Code generated. Scan with WhatsApp.');
+                console.log('✅ QR Code generated');
             }
 
             if (connection === 'open') {
@@ -46,29 +45,22 @@ async function startBot() {
 
             if (connection === 'close') {
                 const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-                console.log('🔄 Connection closed, reconnecting:', shouldReconnect);
                 isConnected = false;
-                
+                console.log('🔄 Connection closed, reconnecting:', shouldReconnect);
                 if (shouldReconnect) {
-                    // 🔥 Exponential backoff
-                    const delay = Math.min(5000 * Math.pow(1.5, Math.floor(Math.random() * 3)), 30000);
-                    console.log(`⏳ Reconnecting in ${delay/1000}s...`);
-                    setTimeout(startBot, delay);
-                } else {
-                    console.log('❌ Logged out. Please scan QR again.');
+                    setTimeout(startBot, 5000);
                 }
             }
         });
 
-        // 🔥 Message Handler
         sock.ev.on('messages.upsert', async (m) => {
             try {
                 const msg = m.messages[0];
                 if (!msg || msg.key.fromMe) return;
-                
+
                 const sender = msg.key.remoteJid;
                 let text = '';
-                
+
                 if (msg.message?.conversation) {
                     text = msg.message.conversation;
                 } else if (msg.message?.extendedTextMessage) {
@@ -78,21 +70,18 @@ async function startBot() {
                 } else {
                     text = '[Media]';
                 }
-                
+
                 console.log(`📩 [${sender}] ${text.substring(0, 80)}`);
-                
-                // 🔥 Sirf "Sharique" ke messages
-                if (sender.toLowerCase().includes('sharique') || 
-                    sender.includes('91XXXXXXXXXX')) {
+
+                if (sender.toLowerCase().includes('sharique')) {
                     console.log('🎯 Sharique message detected!');
                 }
-                
+
             } catch (err) {
                 console.log('⚠️ Message error:', err.message);
             }
         });
 
-        // 🔥 Error Handler
         sock.ev.on('error', (err) => {
             console.log('⚠️ Socket error:', err.message);
         });
@@ -103,9 +92,9 @@ async function startBot() {
     }
 }
 
-// ==============================================
-// 🔥 EXPRESS SERVER
-// ==============================================
+// ============================================================
+// ✅ EXPRESS ROUTES
+// ============================================================
 
 app.get('/', (req, res) => {
     res.send(`
@@ -116,24 +105,29 @@ app.get('/', (req, res) => {
 });
 
 app.get('/qr', async (req, res) => {
+    console.log('📱 QR page accessed');
+    console.log('qrData:', qrData ? '✅ Available' : '❌ Not ready');
+
     if (!qrData) {
         return res.send(`
             <h2>⏳ QR Code Not Ready</h2>
-            <p>Please wait 5 seconds and refresh.</p>
-            <a href="/qr">Refresh</a>
+            <p>Please wait 10 seconds and refresh.</p>
+            <p><a href="/qr">Refresh</a></p>
+            <p><a href="/status">Check Status</a></p>
         `);
     }
+
     try {
         const qrImage = await qrcode.toDataURL(qrData);
         res.send(`
             <h2>🔲 Scan QR with WhatsApp</h2>
             <p>Open WhatsApp → Linked Devices → Link a Device</p>
-            <img src="${qrImage}" alt="QR" style="max-width:300px;"/>
+            <img src="${qrImage}" alt="QR Code" style="max-width:300px;"/>
             <br><br>
-            <a href="/">Home</a> | <a href="/status">Status</a>
+            <p><a href="/">Home</a> | <a href="/status">Status</a></p>
         `);
     } catch (err) {
-        res.send('❌ Error: ' + err.message);
+        res.send('❌ Error generating QR: ' + err.message);
     }
 });
 
@@ -145,9 +139,9 @@ app.get('/status', (req, res) => {
     });
 });
 
-// ==============================================
-// 🔥 SERVER START
-// ==============================================
+// ============================================================
+// ✅ SERVER START
+// ============================================================
 
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
