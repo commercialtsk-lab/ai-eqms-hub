@@ -62,7 +62,7 @@ app.get('/qr', (req, res) => {
 app.get('/status', (req, res) => {
     res.json({ connected: isConnected });
 });
-
+console.log('✅ QR Code generated. Scan with WhatsApp.');
 app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
     startWhatsApp();
