@@ -3,7 +3,7 @@
 # AI EQMS Hub Pro - Complete Streamlit Application
 # =====================================================================
 # Created by: Sharique
-# Version: 3.0 (Full)
+# Version: 4.0
 # Description: Emergency Quota Management System for Indian Railways
 # =====================================================================
 
@@ -2059,10 +2059,6 @@ def get_pnr_status_url(pnr):
     return f"https://www.confirmtkt.com/pnr-status/{pnr}"
 
 # =====================================================================
-# MAIN FUNCTION
-# =====================================================================
-
-# =====================================================================
 # Audio Engine & Earth Background
 # =====================================================================
 
@@ -2963,238 +2959,6 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
-    weather_bg_html = ""
-    if st.session_state.weather_data and 'error' not in st.session_state.weather_data and st.session_state.view_mode == "🌤️ Weather":
-        weather_cond = str(st.session_state.weather_data.get('weather', '')).lower()
-        city_name = st.session_state.weather_data.get('city', 'Weather')
-        temp = st.session_state.weather_data.get('temp', '--')
-        desc = st.session_state.weather_data.get('weather', '').title()
-
-        # ---- DAY / NIGHT DETECTION ----
-        time_of_day = 'day'
-        weather_mode = 'day'  # <-- FIXED: Define weather_mode
-        try:
-            now_ts = int(time.time())
-            sunrise = st.session_state.weather_data.get('sunrise')
-            sunset = st.session_state.weather_data.get('sunset')
-            if sunrise and sunset and str(sunrise) not in ['', 'N/A', 'None']:
-                sunrise = int(sunrise)
-                sunset = int(sunset)
-                if now_ts < sunrise - 1800:
-                    time_of_day = 'night'
-                    weather_mode = 'night'
-                elif now_ts < sunrise + 1800:
-                    time_of_day = 'dawn'
-                    weather_mode = 'day'
-                elif now_ts < sunset - 1800:
-                    time_of_day = 'day'
-                    weather_mode = 'day'
-                elif now_ts < sunset + 1800:
-                    time_of_day = 'dusk'
-                    weather_mode = 'day'
-                else:
-                    time_of_day = 'night'
-                    weather_mode = 'night'
-        except Exception:
-            pass
-
-        # ---- WEATHER TYPE (respects day/night) ----
-        if 'rain' in weather_cond or 'drizz' in weather_cond:
-            scene = 'rain' if time_of_day in ['day', 'dawn', 'dusk'] else 'night-rain'
-        elif 'thunder' in weather_cond or 'storm' in weather_cond:
-            scene = 'thunder'
-        elif 'snow' in weather_cond or 'frost' in weather_cond or 'freez' in weather_cond:
-            scene = 'snow'
-        elif 'mist' in weather_cond or 'fog' in weather_cond or 'haz' in weather_cond:
-            scene = 'fog'
-        elif 'cloud' in weather_cond:
-            scene = 'cloudy' if time_of_day in ['day', 'dawn', 'dusk'] else 'night'
-        else:
-            scene = 'night' if time_of_day in ['night', 'dusk'] else 'sunny'
-
-        # ---- CSS & HTML ----
-        bg_style = ""
-        elements = ""
-        info_html = ""  # Initialize to prevent UnboundLocalError
-
-        if scene in ('rain', 'night-rain'):
-            bg_style = "background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 35%, #2d3a4a 70%, #1a2332 100%);"
-            elements += '<div style="position:absolute;top:0;left:0;width:100%;height:90px;background:linear-gradient(180deg,#1a1a2e 0%,#2d3748 50%,transparent 100%);border-radius:0 0 50% 50% / 0 0 30px 30px;opacity:0.95;z-index:2;"></div>'
-            elements += '<div style="position:absolute;top:-10px;left:10%;width:200px;height:60px;background:#4a5568;border-radius:50px;opacity:0.9;z-index:3;box-shadow:0 10px 30px rgba(0,0,0,0.5);"></div>'
-            elements += '<div style="position:absolute;top:5px;left:25%;width:160px;height:50px;background:#4a5568;border-radius:50px;opacity:0.85;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:-5px;left:55%;width:220px;height:65px;background:#4a5568;border-radius:50px;opacity:0.9;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:8px;left:75%;width:180px;height:55px;background:#4a5568;border-radius:50px;opacity:0.85;z-index:3;"></div>'
-            for i in range(60):
-                left = (i * 1.7) % 100
-                delay = (i * 0.08) % 1.5
-                dur = 0.5 + (i % 4) * 0.15
-                height = 15 + (i % 5) * 8
-                elements += f'<div style="position:absolute;left:{left}%;top:60px;width:2px;height:{height}px;background:linear-gradient(180deg,transparent,#64b5f6,#90caf9);border-radius:0 0 2px 2px;opacity:0.7;animation:rainFall {dur}s linear {delay}s infinite;z-index:4;"></div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:120px;background:linear-gradient(180deg,#1a3a4a 0%,#0d1b2a 100%);z-index:5;"></div>'
-            elements += '<div style="position:absolute;bottom:90px;left:0;width:100%;height:30px;background:linear-gradient(180deg,rgba(100,181,246,0.3) 0%,transparent 100%);z-index:6;"></div>'
-            for i in range(8):
-                left = 5 + (i * 12)
-                width = 40 + (i % 3) * 20
-                delay = (i * 0.3) % 2
-                elements += f'<div style="position:absolute;bottom:{15 + (i%2)*10}px;left:{left}%;width:{width}px;height:8px;background:rgba(100,181,246,0.4);border-radius:50%;animation:waterShimmer 2s ease-in-out {delay}s infinite;z-index:7;"></div>'
-            elements += '<div style="position:absolute;bottom:100px;left:5%;font-size:60px;z-index:8;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">🏠</div>'
-            elements += '<div style="position:absolute;bottom:100px;left:15%;font-size:55px;z-index:8;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">🏡</div>'
-            elements += '<div style="position:absolute;bottom:100px;left:70%;font-size:65px;z-index:8;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">🏠</div>'
-            elements += '<div style="position:absolute;bottom:100px;left:82%;font-size:50px;z-index:8;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.5));">🏡</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:25%;font-size:50px;z-index:9;animation:treeSway 3s ease-in-out infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:35%;font-size:55px;z-index:9;animation:treeSway 3s ease-in-out 0.5s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:55%;font-size:48px;z-index:9;animation:treeSway 3s ease-in-out 1s infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:90%;font-size:52px;z-index:9;animation:treeSway 3s ease-in-out 1.5s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#2d3748;z-index:10;"></div>'
-            elements += '<div style="position:absolute;bottom:5px;left:0;width:100%;height:2px;background:rgba(100,181,246,0.3);z-index:11;"></div>'
-
-        elif scene == 'thunder':
-            bg_style = "background: linear-gradient(180deg, #050510 0%, #0d0d1a 35%, #1a0a2e 70%, #0d0d1a 100%);"
-            elements += '<div style="position:absolute;top:0;left:0;width:100%;height:100px;background:linear-gradient(180deg,#1a1a2e 0%,#374151 50%,transparent 100%);border-radius:0 0 50% 50% / 0 0 40px 40px;opacity:0.95;z-index:2;"></div>'
-            elements += '<div style="position:absolute;top:-15px;left:5%;width:250px;height:70px;background:#1f2937;border-radius:50px;opacity:0.95;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:0;left:30%;width:200px;height:60px;background:#1f2937;border-radius:50px;opacity:0.9;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:-10px;left:60%;width:280px;height:75px;background:#1f2937;border-radius:50px;opacity:0.95;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.08);animation:lightning 3s ease-in-out infinite;z-index:4;pointer-events:none;"></div>'
-            elements += '<div style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(255,255,255,0.05);animation:lightning 3s ease-in-out 1.5s infinite;z-index:4;pointer-events:none;"></div>'
-            for i in range(80):
-                left = (i * 1.3) % 100
-                delay = (i * 0.06) % 1.2
-                dur = 0.3 + (i % 3) * 0.1
-                height = 20 + (i % 6) * 10
-                elements += f'<div style="position:absolute;left:{left}%;top:70px;width:2px;height:{height}px;background:linear-gradient(180deg,transparent,#90caf9,#e3f2fd);border-radius:0 0 2px 2px;opacity:0.8;animation:rainFall {dur}s linear {delay}s infinite;z-index:5;"></div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:120px;background:linear-gradient(180deg,#1a1a2e 0%,#0d0d1a 100%);z-index:6;"></div>'
-            elements += '<div style="position:absolute;bottom:90px;left:0;width:100%;height:30px;background:linear-gradient(180deg,rgba(144,202,249,0.2) 0%,transparent 100%);z-index:7;"></div>'
-            elements += '<div style="position:absolute;bottom:100px;left:8%;font-size:55px;z-index:8;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:100px;left:72%;font-size:60px;z-index:8;">🏡</div>'
-            elements += '<div style="position:absolute;bottom:100px;left:85%;font-size:50px;z-index:8;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:22%;font-size:50px;z-index:9;animation:treeSway 2.5s ease-in-out infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:38%;font-size:52px;z-index:9;animation:treeSway 2.5s ease-in-out 0.7s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:58%;font-size:48px;z-index:9;animation:treeSway 2.5s ease-in-out 1.4s infinite;">🌲</div>'
-            for i in range(6):
-                left = 8 + (i * 15)
-                delay = (i * 0.4) % 2
-                elements += f'<div style="position:absolute;bottom:{12 + (i%2)*8}px;left:{left}%;width:50px;height:6px;background:rgba(144,202,249,0.35);border-radius:50%;animation:waterShimmer 1.5s ease-in-out {delay}s infinite;z-index:10;"></div>'
-
-        elif scene == 'sunny':
-            bg_style = "background: linear-gradient(180deg, #0288d1 0%, #29b6f6 20%, #4fc3f7 40%, #81d4fa 60%, #b3e5fc 80%, #e1f5fe 100%);"
-            elements += '<div style="position:absolute;top:30px;right:80px;width:120px;height:120px;background:radial-gradient(circle,#fff9c4 0%,#ffeb3b 30%,#ffc107 60%,transparent 70%);border-radius:50%;animation:sunPulse 3s ease-in-out infinite;z-index:2;box-shadow:0 0 80px 30px rgba(255,235,59,0.5),0 0 120px 50px rgba(255,193,7,0.3);"></div>'
-            for angle in range(0, 360, 30):
-                elements += f'<div style="position:absolute;top:90px;right:20px;width:180px;height:3px;background:linear-gradient(90deg,transparent,rgba(255,235,59,0.6),transparent);transform-origin:center;transform:translate(-50%,-50%) rotate({angle}deg);animation:raySpin 20s linear infinite;z-index:1;"></div>'
-            elements += '<div style="position:absolute;top:40px;left:10%;width:180px;height:55px;background:rgba(255,255,255,0.85);border-radius:50px;animation:cloudDrift 35s linear infinite;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:50px;left:40%;width:140px;height:45px;background:rgba(255,255,255,0.75);border-radius:50px;animation:cloudDrift 40s linear infinite;animation-delay:-15s;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:35px;left:65%;width:200px;height:60px;background:rgba(255,255,255,0.8);border-radius:50px;animation:cloudDrift 30s linear infinite;animation-delay:-8s;z-index:3;"></div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:130px;background:linear-gradient(180deg,#43a047 0%,#2e7d32 40%,#1b5e20 100%);z-index:4;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
-            elements += '<div style="position:absolute;bottom:110px;left:0;width:100%;height:25px;background:linear-gradient(180deg,rgba(129,199,132,0.5) 0%,transparent 100%);z-index:5;"></div>'
-            elements += '<div style="position:absolute;bottom:110px;left:6%;font-size:60px;z-index:6;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:18%;font-size:55px;z-index:6;">🏡</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:68%;font-size:65px;z-index:6;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:82%;font-size:50px;z-index:6;">🏡</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:30%;font-size:55px;z-index:7;animation:treeSway 4s ease-in-out infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:42%;font-size:60px;z-index:7;animation:treeSway 4s ease-in-out 0.8s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:55%;font-size:52px;z-index:7;animation:treeSway 4s ease-in-out 1.6s infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:92%;font-size:58px;z-index:7;animation:treeSway 4s ease-in-out 2.4s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:18px;background:#795548;z-index:8;"></div>'
-            elements += '<div style="position:absolute;bottom:8px;left:0;width:100%;height:3px;background:rgba(255,255,255,0.2);z-index:9;"></div>'
-            elements += '<div style="position:absolute;top:25%;left:20%;font-size:20px;animation:birdFly 15s linear infinite;z-index:10;">🕊️</div>'
-            elements += '<div style="position:absolute;top:20%;left:50%;font-size:18px;animation:birdFly 18s linear infinite;animation-delay:-5s;z-index:10;">🐦</div>'
-
-        elif scene == 'night':
-            bg_style = "background: linear-gradient(180deg, #000000 0%, #0a0a1a 20%, #1a1a3e 50%, #2d1b4e 80%, #1a1a2e 100%);"
-            for i in range(80):
-                left = (i * 3.7) % 100
-                top = (i * 2.3) % 50
-                delay = (i * 0.2) % 3
-                size = 1 + (i % 3)
-                opacity = 0.3 + (i % 5) * 0.15
-                elements += f'<div style="position:absolute;left:{left}%;top:{top}%;width:{size}px;height:{size}px;background:#fff;border-radius:50%;opacity:{opacity};animation:twinkle 2s ease-in-out {delay}s infinite;z-index:1;"></div>'
-            elements += '<div style="position:absolute;top:40px;right:100px;width:100px;height:100px;background:radial-gradient(circle at 35% 35%,#fff9c4,#f5f5dc,#e0e0e0);border-radius:50%;animation:moonGlow 4s ease-in-out infinite;z-index:2;box-shadow:0 0 60px 20px rgba(245,245,220,0.3),0 0 100px 40px rgba(245,245,220,0.15);"></div>'
-            elements += '<div style="position:absolute;top:55px;right:155px;width:15px;height:15px;background:rgba(200,200,200,0.4);border-radius:50%;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:80px;right:130px;width:10px;height:10px;background:rgba(200,200,200,0.35);border-radius:50%;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:65px;right:115px;width:12px;height:12px;background:rgba(200,200,200,0.3);border-radius:50%;z-index:3;"></div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:130px;background:linear-gradient(180deg,#1a1a2e 0%,#0d0d1a 50%,#000000 100%);z-index:4;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
-            elements += '<div style="position:absolute;bottom:110px;left:8%;font-size:55px;z-index:5;filter:drop-shadow(0 0 10px rgba(255,235,59,0.3));">🏠</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:20%;font-size:50px;z-index:5;filter:drop-shadow(0 0 8px rgba(255,235,59,0.2));">🏡</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:70%;font-size:60px;z-index:5;filter:drop-shadow(0 0 12px rgba(255,235,59,0.3));">🏠</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:85%;font-size:48px;z-index:5;filter:drop-shadow(0 0 8px rgba(255,235,59,0.2));">🏡</div>'
-            elements += '<div style="position:absolute;bottom:140px;left:10%;width:6px;height:6px;background:#ffeb3b;border-radius:1px;animation:windowLight 3s ease-in-out infinite;z-index:6;"></div>'
-            elements += '<div style="position:absolute;bottom:140px;left:13%;width:6px;height:6px;background:#ffeb3b;border-radius:1px;animation:windowLight 3s ease-in-out 1s infinite;z-index:6;"></div>'
-            elements += '<div style="position:absolute;bottom:145px;left:73%;width:6px;height:6px;background:#ffeb3b;border-radius:1px;animation:windowLight 3s ease-in-out 0.5s infinite;z-index:6;"></div>'
-            elements += '<div style="position:absolute;bottom:115px;left:32%;font-size:50px;z-index:7;animation:treeSway 5s ease-in-out infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:45%;font-size:55px;z-index:7;animation:treeSway 5s ease-in-out 1s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:58%;font-size:48px;z-index:7;animation:treeSway 5s ease-in-out 2s infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:92%;font-size:52px;z-index:7;animation:treeSway 5s ease-in-out 3s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#1a1a1a;z-index:8;"></div>'
-
-        elif scene == 'cloudy':
-            bg_style = "background: linear-gradient(180deg, #546e7a 0%, #78909c 30%, #90a4ae 60%, #b0bec5 100%);"
-            elements += '<div style="position:absolute;top:20px;left:5%;width:220px;height:70px;background:rgba(255,255,255,0.6);border-radius:50px;animation:cloudDrift 40s linear infinite;z-index:2;"></div>'
-            elements += '<div style="position:absolute;top:40px;left:35%;width:180px;height:60px;background:rgba(255,255,255,0.5);border-radius:50px;animation:cloudDrift 45s linear infinite;animation-delay:-10s;z-index:2;"></div>'
-            elements += '<div style="position:absolute;top:15px;left:65%;width:250px;height:75px;background:rgba(255,255,255,0.55);border-radius:50px;animation:cloudDrift 35s linear infinite;animation-delay:-20s;z-index:2;"></div>'
-            elements += '<div style="position:absolute;top:50px;left:85%;width:160px;height:55px;background:rgba(255,255,255,0.45);border-radius:50px;animation:cloudDrift 50s linear infinite;animation-delay:-5s;z-index:2;"></div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:120px;background:linear-gradient(180deg,#558b2f 0%,#33691e 50%,#1b5e20 100%);z-index:3;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
-            elements += '<div style="position:absolute;bottom:105px;left:7%;font-size:55px;z-index:4;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:72%;font-size:60px;z-index:4;">🏡</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:85%;font-size:50px;z-index:4;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:22%;font-size:52px;z-index:5;animation:treeSway 4s ease-in-out infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:38%;font-size:58px;z-index:5;animation:treeSway 4s ease-in-out 0.8s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:55%;font-size:50px;z-index:5;animation:treeSway 4s ease-in-out 1.6s infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#5d4037;z-index:6;"></div>'
-
-        elif scene == 'snow':
-            bg_style = "background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 40%, #90caf9 70%, #e1f5fe 100%);"
-            elements += '<div style="position:absolute;top:10px;left:0;width:100%;height:80px;background:linear-gradient(180deg,rgba(255,255,255,0.9) 0%,rgba(255,255,255,0.6) 50%,transparent 100%);border-radius:0 0 50% 50% / 0 0 30px 30px;z-index:2;"></div>'
-            elements += '<div style="position:absolute;top:0;left:15%;width:200px;height:65px;background:rgba(255,255,255,0.85);border-radius:50px;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:5px;left:50%;width:250px;height:70px;background:rgba(255,255,255,0.8);border-radius:50px;z-index:3;"></div>'
-            elements += '<div style="position:absolute;top:0;left:75%;width:180px;height:60px;background:rgba(255,255,255,0.85);border-radius:50px;z-index:3;"></div>'
-            snow_chars = ['❄', '❅', '❆', '✻', '✼']
-            for i in range(50):
-                left = (i * 2.1) % 100
-                delay = (i * 0.12) % 3
-                dur = 2 + (i % 4) * 1.5
-                size = 12 + (i % 4) * 4
-                char = snow_chars[i % 5]
-                elements += f'<div style="position:absolute;left:{left}%;top:-20px;font-size:{size}px;color:#fff;opacity:0.8;text-shadow:0 0 4px rgba(255,255,255,0.8);animation:snowFall {dur}s linear {delay}s infinite;z-index:4;">{char}</div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:130px;background:linear-gradient(180deg,#fff 0%,#e3f2fd 40%,#bbdefb 100%);z-index:5;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
-            elements += '<div style="position:absolute;bottom:110px;left:6%;font-size:55px;z-index:6;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:18%;font-size:50px;z-index:6;">🏡</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:70%;font-size:60px;z-index:6;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:84%;font-size:48px;z-index:6;">🏡</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:30%;font-size:55px;z-index:7;animation:treeSway 5s ease-in-out infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:42%;font-size:60px;z-index:7;animation:treeSway 5s ease-in-out 1s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:56%;font-size:52px;z-index:7;animation:treeSway 5s ease-in-out 2s infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:115px;left:92%;font-size:58px;z-index:7;animation:treeSway 5s ease-in-out 3s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#e0e0e0;z-index:8;"></div>'
-
-        else:  # fog
-            bg_style = "background: linear-gradient(180deg, #cfd8dc 0%, #b0bec5 50%, #90a4ae 100%);"
-            for i in range(6):
-                top = 10 + i * 14
-                delay = (i * 0.5) % 3
-                dur = 20 + i * 5
-                opacity = 0.15 + (i % 3) * 0.1
-                elements += f'<div style="position:absolute;top:{top}%;left:-50%;width:200%;height:60px;background:linear-gradient(90deg,transparent,rgba(255,255,255,{opacity}),transparent);animation:fogDrift {dur}s linear {delay}s infinite;z-index:2;filter:blur(3px);"></div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:120px;background:linear-gradient(180deg,#78909c 0%,#546e7a 50%,#37474f 100%);z-index:3;border-radius:50% 50% 0 0 / 20px 20px 0 0;"></div>'
-            elements += '<div style="position:absolute;bottom:105px;left:10%;font-size:50px;z-index:4;opacity:0.7;">🏠</div>'
-            elements += '<div style="position:absolute;bottom:105px;left:75%;font-size:55px;z-index:4;opacity:0.7;">🏡</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:28%;font-size:48px;z-index:5;opacity:0.6;animation:treeSway 6s ease-in-out infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:45%;font-size:52px;z-index:5;opacity:0.6;animation:treeSway 6s ease-in-out 1.5s infinite;">🌳</div>'
-            elements += '<div style="position:absolute;bottom:110px;left:60%;font-size:45px;z-index:5;opacity:0.6;animation:treeSway 6s ease-in-out 3s infinite;">🌲</div>'
-            elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#455a64;z-index:6;"></div>'
-
-            loc_detail = city_name
-            if st.session_state.weather_data.get('state'):
-                loc_detail += f", {st.session_state.weather_data['state']}"
-            if st.session_state.weather_data.get('country'):
-                loc_detail += f", {st.session_state.weather_data['country']}"
-            info_html = f"""<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:100;pointer-events:none;"><div style="font-size:2.6rem;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);letter-spacing:2px;">{loc_detail}</div><div style="font-size:7rem;font-weight:900;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);line-height:1;margin:10px 0;">{temp}°</div><div style="font-size:1.6rem;font-weight:600;color:#ffffff;text-shadow:0 2px 8px rgba(0,0,0,0.9),0 0 20px rgba(0,0,0,0.5);text-transform:capitalize;">{desc}</div></div>"""
-
-        weather_bg_html = f"""<style>@keyframes rainFall{{from{{transform:translateY(-20px);opacity:0;}}10%{{opacity:0.8;}}90%{{opacity:0.8;}}to{{transform:translateY(110vh);opacity:0;}}}}@keyframes snowFall{{from{{transform:translateY(-20px) rotate(0deg);opacity:0;}}10%{{opacity:1;}}90%{{opacity:1;}}to{{transform:translateY(110vh) rotate(360deg);opacity:0;}}}}@keyframes cloudDrift{{from{{transform:translateX(-300px);}}to{{transform:translateX(calc(100vw + 300px));}}}}@keyframes sunPulse{{0%,100%{{transform:scale(1);opacity:0.9;}}50%{{transform:scale(1.15);opacity:1;}}}}@keyframes raySpin{{from{{transform:translate(-50%,-50%) rotate(0deg);}}to{{transform:translate(-50%,-50%) rotate(360deg);}}}}@keyframes moonGlow{{0%,100%{{box-shadow:0 0 60px 20px rgba(245,245,220,0.3);}}50%{{box-shadow:0 0 80px 30px rgba(245,245,220,0.5);}}}}@keyframes twinkle{{0%,100%{{opacity:0.3;}}50%{{opacity:1;}}}}@keyframes treeSway{{0%,100%{{transform:rotate(-3deg);}}50%{{transform:rotate(3deg);}}}}@keyframes waterShimmer{{0%,100%{{opacity:0.3;transform:scaleX(1);}}50%{{opacity:0.7;transform:scaleX(1.2);}}}}@keyframes lightning{{0%,90%,100%{{opacity:0;}}91%{{opacity:0.3;}}92%{{opacity:0;}}93%{{opacity:0.6;}}94%{{opacity:0;}}}}@keyframes windowLight{{0%,100%{{opacity:0.6;}}50%{{opacity:1;}}}}@keyframes birdFly{{from{{transform:translateX(-50px);}}to{{transform:translateX(calc(100vw + 50px));}}}}@keyframes fogDrift{{from{{transform:translateX(-50%);}}to{{transform:translateX(0%);}}}}</style><div style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;overflow:hidden;{bg_style}">{elements}{info_html}</div>"""
-
-    if weather_bg_html:
-        st.markdown(weather_bg_html, unsafe_allow_html=True)
-
-
-
     # Sidebar Toggle + Back-to-Top Button
     components.html("""
     <script>
@@ -3729,41 +3493,6 @@ def main():
                 st.session_state.current_page = 1
                 st.rerun()
 
-    # Load data for selected sheet
-    df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
-    filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
-
-    # Apply filters (skip for NOTE sheet)
-    if not filtered_df.empty and sheet_choice != "NOTE":
-        config = SHEET_CONFIG[sheet_choice]
-        pnr_col_idx = config.get("pnr_col")
-        train_col_idx = config.get("train_col")
-        class_col_idx = config.get("class_col")
-        doj_col_idx = config.get("doj_col")
-
-        if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
-            col_name = filtered_df.columns[pnr_col_idx]
-            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.pnr_val, case=False, na=False)]
-        if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
-            col_name = filtered_df.columns[train_col_idx]
-            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
-        if st.session_state.get('class_val', '') and class_col_idx is not None and class_col_idx < len(filtered_df.columns):
-            col_name = filtered_df.columns[class_col_idx]
-            filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.get('class_val', ''), case=False, na=False)]
-        if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
-            col_name = filtered_df.columns[doj_col_idx]
-            try:
-                filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
-                if filtered_df['_temp'].isna().all():
-                    filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
-            except Exception:
-                filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
-            if st.session_state.from_val:
-                filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
-            if st.session_state.to_val:
-                filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
-            filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
-
     view = st.session_state.view_mode
 
     # Top bar with marquee
@@ -3830,6 +3559,42 @@ def main():
     # VIEW: 📋 DATA TABLE
     # =====================================================================
     if view == "📋 Data Table":
+        # Load data for selected sheet
+        df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
+        filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
+
+        # Apply filters (skip for NOTE sheet)
+        if not filtered_df.empty and sheet_choice != "NOTE":
+            config = SHEET_CONFIG[sheet_choice]
+            pnr_col_idx = config.get("pnr_col")
+            train_col_idx = config.get("train_col")
+            class_col_idx = config.get("class_col")
+            doj_col_idx = config.get("doj_col")
+
+            if st.session_state.pnr_val and pnr_col_idx is not None and pnr_col_idx < len(filtered_df.columns):
+                col_name = filtered_df.columns[pnr_col_idx]
+                filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.pnr_val, case=False, na=False)]
+            if st.session_state.train_val and train_col_idx is not None and train_col_idx < len(filtered_df.columns):
+                col_name = filtered_df.columns[train_col_idx]
+                filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.train_val, case=False, na=False)]
+            if st.session_state.get('class_val', '') and class_col_idx is not None and class_col_idx < len(filtered_df.columns):
+                col_name = filtered_df.columns[class_col_idx]
+                filtered_df = filtered_df[filtered_df[col_name].astype(str).str.contains(st.session_state.get('class_val', ''), case=False, na=False)]
+            if (st.session_state.from_val or st.session_state.to_val) and doj_col_idx is not None and doj_col_idx < len(filtered_df.columns):
+                col_name = filtered_df.columns[doj_col_idx]
+                try:
+                    filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], format='%d-%m-%Y', errors='coerce')
+                    if filtered_df['_temp'].isna().all():
+                        filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
+                except Exception:
+                    filtered_df['_temp'] = pd.to_datetime(filtered_df[col_name], errors='coerce')
+                if st.session_state.from_val:
+                    filtered_df = filtered_df[filtered_df['_temp'] >= pd.to_datetime(st.session_state.from_val)]
+                if st.session_state.to_val:
+                    filtered_df = filtered_df[filtered_df['_temp'] <= pd.to_datetime(st.session_state.to_val)]
+                filtered_df = filtered_df.drop('_temp', axis=1, errors='ignore')
+
+
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
 
         # Global Search
@@ -5087,110 +4852,6 @@ def main():
 
             weather_html += "</div>"
             st.markdown(weather_html, unsafe_allow_html=True)
-
-            # Animated Weather Scene
-            weather_condition = str(data.get('weather', '')).lower()
-
-            weather_scene_html = """
-            <style>
-            .w-scene-wrap { position: relative; width: 100%; height: 220px; border-radius: 20px; overflow: hidden; margin: 15px 0; box-shadow: 0 8px 32px rgba(0,0,0,0.25); }
-            .w-sky { position: absolute; width: 100%; height: 100%; top: 0; left: 0; }
-            .w-sunny { background: linear-gradient(180deg, #4facfe 0%, #00f2fe 100%); }
-            .w-rainy { background: linear-gradient(180deg, #2c3e50 0%, #4a5568 100%); }
-            .w-cloudy { background: linear-gradient(180deg, #7f8c8d 0%, #95a5a6 100%); }
-            .w-thunder { background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%); }
-            .w-snowy { background: linear-gradient(180deg, #e0e7ff 0%, #c7d2fe 100%); }
-            .w-foggy { background: linear-gradient(180deg, #d5d8dc 0%, #aab7b8 100%); }
-
-            @keyframes w-sun-pulse { 0%,100%{transform:scale(1);opacity:0.9;} 50%{transform:scale(1.2);opacity:1;} }
-            .w-sun { position: absolute; top: 15px; right: 30px; width: 70px; height: 70px; background: radial-gradient(circle, #FFD700 0%, #FFA500 60%, transparent 100%); border-radius: 50%; animation: w-sun-pulse 3s ease-in-out infinite; box-shadow: 0 0 50px 15px rgba(255,215,0,0.4); }
-
-            @keyframes w-ray-spin { from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(360deg);} }
-            .w-ray { position: absolute; top: 50%; left: 50%; width: 100px; height: 3px; background: linear-gradient(90deg, transparent, #FFD700, transparent); transform-origin: center; animation: w-ray-spin 10s linear infinite; }
-
-            @keyframes w-cloud-move { from{transform:translateX(-120px);} to{transform:translateX(calc(100% + 120px));} }
-            .w-cloud { position: absolute; background: rgba(255,255,255,0.85); border-radius: 40px; animation: w-cloud-move linear infinite; }
-            .w-cloud::before { content: ''; position: absolute; background: rgba(255,255,255,0.85); border-radius: 50%; }
-            .w-cloud::after { content: ''; position: absolute; background: rgba(255,255,255,0.85); border-radius: 50%; }
-
-            @keyframes w-rain-fall { from{transform:translateY(-20px);opacity:0;} 10%{opacity:0.8;} 90%{opacity:0.8;} to{transform:translateY(240px);opacity:0;} }
-            .w-rain { position: absolute; width: 2px; height: 14px; background: linear-gradient(180deg, transparent, #64b5f6); border-radius: 0 0 2px 2px; animation: w-rain-fall linear infinite; }
-
-            @keyframes w-lightning { 0%,90%,100%{background:rgba(255,255,255,0);} 91%{background:rgba(255,255,255,0.25);} 92%{background:rgba(255,255,255,0);} 93%{background:rgba(255,255,255,0.4);} 94%{background:rgba(255,255,255,0);} }
-            .w-lightning { position: absolute; top: 0; left: 0; width: 100%; height: 100%; animation: w-lightning 4s ease-in-out infinite; }
-
-            @keyframes w-snow-fall { from{transform:translateY(-20px) rotate(0deg);opacity:0;} 10%{opacity:1;} 90%{opacity:1;} to{transform:translateY(240px) rotate(360deg);opacity:0;} }
-            .w-snow { position: absolute; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6); font-size: 13px; animation: w-snow-fall linear infinite; text-shadow: 0 0 4px rgba(255,255,255,0.8); }
-
-            @keyframes w-fog-drift { from{transform:translateX(-50%);} to{transform:translateX(0%);} }
-            .w-fog { position: absolute; width: 200%; height: 50px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent); animation: w-fog-drift linear infinite; }
-
-            .w-ground { position: absolute; bottom: 0; left: 0; width: 100%; height: 35px; background: linear-gradient(180deg, #2d5016 0%, #1a3009 100%); border-radius: 50% 50% 0 0 / 15px 15px 0 0; }
-            @keyframes w-tree-sway { 0%,100%{transform:rotate(-4deg);} 50%{transform:rotate(4deg);} }
-            .w-tree { position: absolute; bottom: 28px; font-size: 22px; animation: w-tree-sway 3s ease-in-out infinite; }
-            </style>
-            <div class="w-scene-wrap">
-            """
-
-            if 'rain' in weather_condition or 'drizz' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-rainy">'
-                weather_scene_html += '<div class="w-lightning"></div>'
-                for i in range(25):
-                    weather_scene_html += f'<div class="w-rain" style="left:{(i*4)%100}%;animation-duration:{0.4+(i%3)*0.15}s;animation-delay:{(i*0.1)%1.5}s;"></div>'
-                weather_scene_html += '<div class="w-cloud" style="top:12px;left:-100px;width:90px;height:32px;animation-duration:22s;"><div style="position:absolute;top:-14px;left:12px;width:32px;height:32px;"></div><div style="position:absolute;top:-10px;left:38px;width:24px;height:24px;"></div></div>'
-                weather_scene_html += '<div class="w-cloud" style="top:22px;left:-100px;width:110px;height:38px;animation-duration:28s;animation-delay:6s;"><div style="position:absolute;top:-16px;left:18px;width:38px;height:38px;"></div><div style="position:absolute;top:-12px;left:48px;width:28px;height:28px;"></div></div>'
-
-            elif 'cloud' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-cloudy">'
-                weather_scene_html += '<div class="w-sun" style="opacity:0.35;"></div>'
-                for i in range(4):
-                    weather_scene_html += f'<div class="w-cloud" style="top:{12+(i%2)*18}px;left:-100px;width:{70+(i%2)*30}px;height:{28+(i%2)*10}px;animation-duration:{20+i*6}s;animation-delay:{i*4}s;"><div style="position:absolute;top:-{12+(i%2)*6}px;left:{14+(i%2)*6}px;width:{30+(i%2)*12}px;height:{30+(i%2)*12}px;"></div><div style="position:absolute;top:-{8+(i%2)*4}px;left:{36+(i%2)*10}px;width:{22+(i%2)*8}px;height:{22+(i%2)*8}px;"></div></div>'
-
-            elif 'clear' in weather_condition or 'sun' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-sunny">'
-                weather_scene_html += '<div class="w-sun">'
-                for angle in range(0, 360, 45):
-                    weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
-                weather_scene_html += '</div>'
-                for i in range(3):
-                    weather_scene_html += f'<div class="w-cloud" style="top:{18+i*14}px;left:-100px;width:65px;height:24px;animation-duration:{24+i*6}s;animation-delay:{i*5}s;opacity:0.6;"><div style="position:absolute;top:-10px;left:10px;width:26px;height:26px;"></div></div>'
-
-            elif 'thunder' in weather_condition or 'storm' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-thunder">'
-                weather_scene_html += '<div class="w-lightning" style="animation-duration:2.5s;"></div>'
-                for i in range(20):
-                    weather_scene_html += f'<div class="w-rain" style="left:{(i*5)%100}%;animation-duration:{0.3+(i%3)*0.12}s;animation-delay:{(i*0.08)%1.2}s;background:linear-gradient(180deg,transparent,#90caf9);"></div>'
-                weather_scene_html += '<div class="w-cloud" style="top:8px;left:-100px;width:100px;height:38px;background:#546e7a;animation-duration:32s;"><div style="position:absolute;top:-16px;left:16px;width:40px;height:40px;background:#546e7a;"></div><div style="position:absolute;top:-12px;left:46px;width:32px;height:32px;background:#546e7a;"></div></div>'
-
-            elif 'snow' in weather_condition or 'frost' in weather_condition or 'freez' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-snowy">'
-                snowflakes = ['&#10052;', '&#10053;', '&#10054;', '&#10042;', '&#10043;']
-                for i in range(35):
-                    weather_scene_html += f'<div class="w-snow" style="left:{(i*3)%100}%;font-size:{10+(i%4)*3}px;animation-duration:{2+(i%4)*1.2}s;animation-delay:{(i*0.15)%3}s;">{snowflakes[i%5]}</div>'
-                weather_scene_html += '<div class="w-cloud" style="top:8px;left:-100px;width:80px;height:30px;background:rgba(255,255,255,0.8);animation-duration:26s;"><div style="position:absolute;top:-12px;left:12px;width:34px;height:34px;background:rgba(255,255,255,0.8);"></div></div>'
-
-            elif 'mist' in weather_condition or 'fog' in weather_condition or 'haz' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-foggy">'
-                for i in range(5):
-                    weather_scene_html += f'<div class="w-fog" style="top:{15+i*30}px;animation-duration:{12+i*4}s;animation-delay:{i*2}s;opacity:{0.25+(i%3)*0.15};"></div>'
-
-            else:
-                weather_scene_html += '<div class="w-sky w-sunny">'
-                weather_scene_html += '<div class="w-sun">'
-                for angle in range(0, 360, 45):
-                    weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
-                weather_scene_html += '</div>'
-                for i in range(2):
-                    weather_scene_html += f'<div class="w-cloud" style="top:{20+i*12}px;left:-100px;width:55px;height:20px;animation-duration:{22+i*5}s;animation-delay:{i*6}s;opacity:0.5;"><div style="position:absolute;top:-8px;left:8px;width:22px;height:22px;"></div></div>'
-
-            weather_scene_html += '<div class="w-ground"></div>'
-            weather_scene_html += '<div class="w-tree" style="left:8%;">🌲</div>'
-            weather_scene_html += '<div class="w-tree" style="left:22%;animation-delay:0.6s;">🌳</div>'
-            weather_scene_html += '<div class="w-tree" style="left:68%;animation-delay:1.2s;">🌲</div>'
-            weather_scene_html += '<div class="w-tree" style="left:82%;animation-delay:1.8s;">🌳</div>'
-            weather_scene_html += '</div></div>'
-
-            st.markdown(weather_scene_html, unsafe_allow_html=True)
 
             if data.get('icon'):
                 icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
