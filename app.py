@@ -3,7 +3,7 @@
 # AI EQMS Hub Pro - Complete Streamlit Application
 # =====================================================================
 # Created by: Sharique
-# Version: 3.2 (Pro Level)
+# Version: 3.1 (Fully Fixed)
 # Description: Emergency Quota Management System for Indian Railways
 # =====================================================================
 
@@ -4748,27 +4748,38 @@ def main():
         .chat-dot:nth-child(2) { animation-delay: 0.2s; }
         .chat-dot:nth-child(3) { animation-delay: 0.4s; }
 
-        /* CHAT TAB: All text BLACK */
+        /* CHAT TAB: All text BLACK + BOLD */
         [data-testid="stMain"] .stChatMessage,
         [data-testid="stMain"] .stChatMessage * {
             color: #000000 !important;
             -webkit-text-fill-color: #000000 !important;
             text-shadow: none !important;
+            font-weight: 600 !important;
         }
         [data-testid="stMain"] .stChatMessage [data-testid="stChatMessageContent"] {
             color: #000000 !important;
             -webkit-text-fill-color: #000000 !important;
+            font-weight: 600 !important;
+            font-size: 1.05rem !important;
         }
         [data-testid="stMain"] .stChatMessage [data-testid="stChatMessageAvatar"] {
             color: #000000 !important;
             -webkit-text-fill-color: #000000 !important;
+            font-weight: 700 !important;
         }
         [data-testid="stMain"] h1, [data-testid="stMain"] h2, [data-testid="stMain"] h3,
-        [data-testid="stMain"] h4, [data-testid="stMain"] h5, [data-testid="stMain"] h6,
-        [data-testid="stMain"] p, [data-testid="stMain"] span, [data-testid="stMain"] div {
+        [data-testid="stMain"] h4, [data-testid="stMain"] h5, [data-testid="stMain"] h6 {
             color: #000000 !important;
             -webkit-text-fill-color: #000000 !important;
             text-shadow: none !important;
+            font-weight: 700 !important;
+        }
+        [data-testid="stMain"] p, [data-testid="stMain"] span, [data-testid="stMain"] div,
+        [data-testid="stMain"] label, [data-testid="stMain"] .stMarkdown {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+            font-weight: 600 !important;
         }
 
         /* CHAT INPUT: Transparent background */
@@ -4790,6 +4801,8 @@ def main():
             text-shadow: none !important;
             border: none !important;
             box-shadow: none !important;
+            font-weight: 600 !important;
+            font-size: 1.05rem !important;
         }
         [data-testid="stMain"] .stChatInput input::placeholder,
         [data-testid="stMain"] .stChatInput textarea::placeholder {
@@ -4802,6 +4815,8 @@ def main():
             -webkit-text-fill-color: #000000 !important;
             background: rgba(255,255,255,0.3) !important;
             border: 1px solid rgba(0,0,0,0.2) !important;
+            font-weight: 600 !important;
+            font-size: 0.95rem !important;
         }
         [data-testid="stMain"] .stButton > button:hover {
             background: rgba(255,255,255,0.5) !important;
@@ -4849,10 +4864,7 @@ def main():
     elif view == "🚂 Railway":
         st.markdown("""
         <style>
-        .railway-bg-video {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            z-index: -1; object-fit: cover; pointer-events: none;
-        }
+        .railway-bg-video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; object-fit: cover; pointer-events: none; }
         </style>
         <video class="railway-bg-video" autoplay muted loop playsinline>
             <source src="https://videos.pexels.com/video-files/1536322/1536322-hd_1920_1080_30fps.mp4" type="video/mp4">
