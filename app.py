@@ -751,14 +751,23 @@ Previous conversation:
 # Weather Functions
 # =====================================================================
 def get_weather(city_name):
-    if not city_name: return {'error': 'Please enter a city name'}
+    if not city_name or not str(city_name).strip(): return {'error': 'Please enter a city name'}
+    city_name = " ".join(str(city_name).strip().split())  # collapse extra/stray spaces
     try:
         # Step 1: Geocode to get lat, lon, name, state, country
-        geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=1&appid={WEATHER_API_KEY}"
-        geo_resp = requests.get(geo_url, timeout=10)
+        # Try the name as typed first, then fall back to Title Case so any
+        # capitalization the user types (all caps, all lowercase, mixed) works.
+        geo_data = None
+        for attempt in (city_name, city_name.title()):
+            geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={urllib.parse.quote(attempt)}&limit=1&appid={WEATHER_API_KEY}"
+            geo_resp = requests.get(geo_url, timeout=10)
+            if geo_resp.status_code == 200:
+                data_try = geo_resp.json()
+                if data_try and len(data_try) > 0:
+                    geo_data = data_try
+                    break
         lat, lon, found_name, country, state = None, None, city_name, '', ''
-        if geo_resp.status_code == 200:
-            geo_data = geo_resp.json()
+        if geo_data:
             if geo_data and len(geo_data) > 0:
                 lat = geo_data[0].get('lat')
                 lon = geo_data[0].get('lon')
@@ -782,7 +791,7 @@ def get_weather(city_name):
                     'lat': lat, 'lon': lon}
 
         # Fallback: direct city name API (no state available)
-        url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
+        url = f"https://api.openweathermap.org/data/2.5/weather?q={urllib.parse.quote(city_name)}&appid={WEATHER_API_KEY}&units=metric"
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
@@ -1776,10 +1785,4 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
 
         [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important; margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important; }}
         body.sidebar-collapsed [data-testid="stSidebar"] {{ margin-left: -340px !important; opacity: 0 !important; pointer-events: none !important; }}
-        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important; }}
-        [data-testid="stSidebarCollapseButton"] {{ display: none !important; }}
-        [data-testid="collapsedControl"] {{ display: none !important; }}
-        button[kind="header"] {{ display: none !important; }}
-        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; }}
-        .sidebar-toggle-btn {{
-            posi
+        body.sideba
