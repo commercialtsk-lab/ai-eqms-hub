@@ -3,7 +3,7 @@
 # AI EQMS Hub Pro - Complete Streamlit Application
 # =====================================================================
 # Created by: Sharique
-# Version: 3.1 (Fully Fixed)
+# Version: 3.2 (Pro Level)
 # Description: Emergency Quota Management System for Indian Railways
 # =====================================================================
 
@@ -4849,7 +4849,10 @@ def main():
     elif view == "🚂 Railway":
         st.markdown("""
         <style>
-        .railway-bg-video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; object-fit: cover; pointer-events: none; }
+        .railway-bg-video {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -1; object-fit: cover; pointer-events: none;
+        }
         </style>
         <video class="railway-bg-video" autoplay muted loop playsinline>
             <source src="https://videos.pexels.com/video-files/1536322/1536322-hd_1920_1080_30fps.mp4" type="video/mp4">
