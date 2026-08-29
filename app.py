@@ -1773,9 +1773,13 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             background: transparent !important;
         }}
 
+        [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important; margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important; }}
+        body.sidebar-collapsed [data-testid="stSidebar"] {{ margin-left: -340px !important; opacity: 0 !important; pointer-events: none !important; }}
+        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important; }}
         [data-testid="stSidebarCollapseButton"] {{ display: none !important; }}
         [data-testid="collapsedControl"] {{ display: none !important; }}
         button[kind="header"] {{ display: none !important; }}
+        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; }}
         .sidebar-toggle-btn {{
             position: fixed !important;
             top: 12px !important;
@@ -2423,7 +2427,7 @@ def render_audio_controls(current_scene):
             }} else {{
                 engine.stopAll();
                 status.textContent = 'Move slider to enable sound';
-            }}
+            }
         }});
 
         engine.setScene('{scene}');
@@ -2968,7 +2972,7 @@ def main():
 
         # ---- DAY / NIGHT DETECTION ----
         time_of_day = 'day'
-        weather_mode = 'day'
+        weather_mode = 'day'  # <-- FIXED: Define weather_mode
         try:
             now_ts = int(time.time())
             sunrise = st.session_state.weather_data.get('sunrise')
@@ -3098,8 +3102,7 @@ def main():
             bg_style = "background: linear-gradient(180deg, #000000 0%, #0a0a1a 20%, #1a1a3e 50%, #2d1b4e 80%, #1a1a2e 100%);"
             for i in range(80):
                 left = (i * 3.7) % 100
-                top = (i * 2.3) % 50
-                delay = (i * 0.2) % 3
+                top = (i * 2.3) % 50                delay = (i * 0.2) % 3
                 size = 1 + (i % 3)
                 opacity = 0.3 + (i % 5) * 0.15
                 elements += f'<div style="position:absolute;left:{left}%;top:{top}%;width:{size}px;height:{size}px;background:#fff;border-radius:50%;opacity:{opacity};animation:twinkle 2s ease-in-out {delay}s infinite;z-index:1;"></div>'
@@ -3184,15 +3187,6 @@ def main():
                 loc_detail += f", {st.session_state.weather_data['country']}"
             info_html = f"""<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:100;pointer-events:none;"><div style="font-size:2.6rem;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);letter-spacing:2px;">{loc_detail}</div><div style="font-size:7rem;font-weight:900;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);line-height:1;margin:10px 0;">{temp}°</div><div style="font-size:1.6rem;font-weight:600;color:#ffffff;text-shadow:0 2px 8px rgba(0,0,0,0.9),0 0 20px rgba(0,0,0,0.5);text-transform:capitalize;">{desc}</div></div>"""
 
-        # Ensure info_html is always defined
-        if 'info_html' not in locals():
-            loc_detail = city_name
-            if st.session_state.weather_data.get('state'):
-                loc_detail += f", {st.session_state.weather_data['state']}"
-            if st.session_state.weather_data.get('country'):
-                loc_detail += f", {st.session_state.weather_data['country']}"
-            info_html = f"""<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:100;pointer-events:none;"><div style="font-size:2.6rem;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);letter-spacing:2px;">{loc_detail}</div><div style="font-size:7rem;font-weight:900;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);line-height:1;margin:10px 0;">{temp}°</div><div style="font-size:1.6rem;font-weight:600;color:#ffffff;text-shadow:0 2px 8px rgba(0,0,0,0.9),0 0 20px rgba(0,0,0,0.5);text-transform:capitalize;">{desc}</div></div>"""
-
         weather_bg_html = f"""<style>@keyframes rainFall{{from{{transform:translateY(-20px);opacity:0;}}10%{{opacity:0.8;}}90%{{opacity:0.8;}}to{{transform:translateY(110vh);opacity:0;}}}}@keyframes snowFall{{from{{transform:translateY(-20px) rotate(0deg);opacity:0;}}10%{{opacity:1;}}90%{{opacity:1;}}to{{transform:translateY(110vh) rotate(360deg);opacity:0;}}}}@keyframes cloudDrift{{from{{transform:translateX(-300px);}}to{{transform:translateX(calc(100vw + 300px));}}}}@keyframes sunPulse{{0%,100%{{transform:scale(1);opacity:0.9;}}50%{{transform:scale(1.15);opacity:1;}}}}@keyframes raySpin{{from{{transform:translate(-50%,-50%) rotate(0deg);}}to{{transform:translate(-50%,-50%) rotate(360deg);}}}}@keyframes moonGlow{{0%,100%{{box-shadow:0 0 60px 20px rgba(245,245,220,0.3);}}50%{{box-shadow:0 0 80px 30px rgba(245,245,220,0.5);}}}}@keyframes twinkle{{0%,100%{{opacity:0.3;}}50%{{opacity:1;}}}}@keyframes treeSway{{0%,100%{{transform:rotate(-3deg);}}50%{{transform:rotate(3deg);}}}}@keyframes waterShimmer{{0%,100%{{opacity:0.3;transform:scaleX(1);}}50%{{opacity:0.7;transform:scaleX(1.2);}}}}@keyframes lightning{{0%,90%,100%{{opacity:0;}}91%{{opacity:0.3;}}92%{{opacity:0;}}93%{{opacity:0.6;}}94%{{opacity:0;}}}}@keyframes windowLight{{0%,100%{{opacity:0.6;}}50%{{opacity:1;}}}}@keyframes birdFly{{from{{transform:translateX(-50px);}}to{{transform:translateX(calc(100vw + 50px));}}}}@keyframes fogDrift{{from{{transform:translateX(-50%);}}to{{transform:translateX(0%);}}}}</style><div style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;overflow:hidden;{bg_style}">{elements}{info_html}</div>"""
 
     if weather_bg_html:
@@ -3209,12 +3203,9 @@ def main():
             var doc = P.document;
             if (!P.__eqmsProInit) {
                 P.__eqmsProInit = true;
-
-                var style = doc.createElement('style');
-                style.textContent = '.eqms-sidebar-hidden [data-testid="stSidebar"]{display:none!important}.eqms-sidebar-hidden [data-testid="stMain"]{max-width:100%!important;margin-left:0!important}';
-                doc.head.appendChild(style);
-
+                // Ensure sidebar starts open
                 var body = doc.body;
+                body.classList.remove('sidebar-collapsed');
 
                 doc.addEventListener('keydown', function(e) {
                     var t = (e.target.tagName || '').toLowerCase();
@@ -3230,36 +3221,47 @@ def main():
                 if (!doc.getElementById('eqms-sidebar-toggle')) {
                     var toggleBtn = doc.createElement('button');
                     toggleBtn.id = 'eqms-sidebar-toggle';
-                    toggleBtn.title = 'Toggle Sidebar';
+                    toggleBtn.title = 'Toggle Sidebar (Click to Open/Close)';
                     toggleBtn.innerHTML = '☰';
                     toggleBtn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:9999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;';
 
+                    toggleBtn.onmouseenter = function(){ 
+                        toggleBtn.style.transform = 'scale(1.15) rotate(90deg)'; 
+                        toggleBtn.style.boxShadow = '0 6px 25px rgba(255,107,53,0.7)'; 
+                    };
+                    toggleBtn.onmouseleave = function(){ 
+                        toggleBtn.style.transform = 'scale(1) rotate(0deg)'; 
+                        toggleBtn.style.boxShadow = '0 4px 15px rgba(255,107,53,0.5)'; 
+                    };
+
                     toggleBtn.onclick = function() {
-                        var isHidden = body.classList.contains('eqms-sidebar-hidden');
-                        if (isHidden) {
-                            body.classList.remove('eqms-sidebar-hidden');
+                        var body = doc.body;
+                        var isCollapsed = body.classList.contains('sidebar-collapsed');
+                        if (isCollapsed) {
+                            body.classList.remove('sidebar-collapsed');
                             toggleBtn.innerHTML = '✕';
                             toggleBtn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                            var sb = doc.querySelector('[data-testid="stSidebar"]');
+                            if (sb) { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
                             try { localStorage.setItem('eqms_sidebar', 'open'); } catch(e) {}
                         } else {
-                            body.classList.add('eqms-sidebar-hidden');
+                            body.classList.add('sidebar-collapsed');
                             toggleBtn.innerHTML = '☰';
                             toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                            var sb = doc.querySelector('[data-testid="stSidebar"]');
+                            if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
                             try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
                         }
                     };
-
                     try {
                         var saved = localStorage.getItem('eqms_sidebar');
                         if (saved === 'closed') {
-                            body.classList.add('eqms-sidebar-hidden');
+                            doc.body.classList.add('sidebar-collapsed');
                             toggleBtn.innerHTML = '☰';
                             toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
-                        } else {
-                            toggleBtn.innerHTML = '✕';
                         }
-                    } catch(e) { toggleBtn.innerHTML = '✕'; }
-
+                    } catch(e) {}
+                    // Sidebar state managed by CSS + class toggle only — no polling
                     doc.body.appendChild(toggleBtn);
                 }
 
@@ -4634,10 +4636,8 @@ def main():
     # VIEW: 💬 CHAT
     # =====================================================================
     elif view == "💬 Chat":
-        # Underwater ocean video background for Chat
         st.markdown("""
         <style>
-        .chat-bg-video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; object-fit: cover; pointer-events: none; }
         @keyframes chat-bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
         @keyframes chat-glow { 0%,100% { box-shadow: 0 0 15px rgba(96,165,250,0.2); } 50% { box-shadow: 0 0 30px rgba(96,165,250,0.5); } }
         @keyframes chat-typing { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
@@ -4647,13 +4647,10 @@ def main():
         .chat-dot:nth-child(2) { animation-delay: 0.2s; }
         .chat-dot:nth-child(3) { animation-delay: 0.4s; }
         </style>
-        <video class="chat-bg-video" autoplay muted loop playsinline>
-            <source src="https://videos.pexels.com/video-files/3571264/3571264-uhd_2560_1440_30fps.mp4" type="video/mp4">
-        </video>
         <div style="text-align: center; padding: 10px 0;">
             <span class="chat-train-icon">🚂</span>
-            <div style="font-size: 1.5rem; font-weight: 700; margin-top: 8px; color: #ffffff; text-shadow: 0 2px 10px rgba(0,0,0,0.8);">TSKEQ Bot</div>
-            <div style="color: #e2e8f0; font-size: 0.9rem; text-shadow: 0 1px 5px rgba(0,0,0,0.6);">Ask about EQ data, trains, quota, PNR or anything</div>
+            <div style="font-size: 1.5rem; font-weight: 700; margin-top: 8px;" class="dash-gradient-text">TSKEQ Bot</div>
+            <div style="color: #94a3b8; font-size: 0.9rem;">Ask about EQ data, trains, quota, PNR or anything</div>
         </div>
         """, unsafe_allow_html=True)
         st.subheader("💬 Chat with TSKEQ Bot")
@@ -4687,15 +4684,6 @@ def main():
     # VIEW: 🚂 RAILWAY
     # =====================================================================
     elif view == "🚂 Railway":
-        # Ocean waves video background for Railway
-        st.markdown("""
-        <style>
-        .railway-bg-video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; object-fit: cover; pointer-events: none; }
-        </style>
-        <video class="railway-bg-video" autoplay muted loop playsinline>
-            <source src="https://videos.pexels.com/video-files/1536322/1536322-hd_1920_1080_30fps.mp4" type="video/mp4">
-        </video>
-        """, unsafe_allow_html=True)
         st.subheader("🚂 Indian Railways - Real-time Info")
 
         if not NTES_AVAILABLE:
@@ -4973,7 +4961,7 @@ def main():
 
             # Day/Night detection for styling
             time_of_day = 'day'
-            weather_mode = 'day'
+            weather_mode = 'day'  # <-- FIXED: Define weather_mode
             try:
                 now_ts = int(time.time())
                 sunrise = data.get('sunrise')
@@ -5288,93 +5276,90 @@ def main():
     # This CSS block is rendered LAST and overrides all previous styles
     st.markdown("""
     <style>
-    /* === UNIVERSAL TEXT VISIBILITY FIX === */
-    /* All text on main content area - FORCE white with shadow for dark backgrounds */
-    [data-testid="stMain"] * {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+    /* === FORCE ALL FORM LABELS BLACK === */
+    div[data-testid="stMain"] .stTextInput label p,
+    div[data-testid="stMain"] .stTextInput label span,
+    div[data-testid="stMain"] .stSelectbox label p,
+    div[data-testid="stMain"] .stSelectbox label span,
+    div[data-testid="stMain"] .stDateInput label p,
+    div[data-testid="stMain"] .stDateInput label span,
+    div[data-testid="stMain"] .stNumberInput label p,
+    div[data-testid="stMain"] .stNumberInput label span,
+    div[data-testid="stMain"] .stTextArea label p,
+    div[data-testid="stMain"] .stTextArea label span,
+    div[data-testid="stMain"] .stRadio label p,
+    div[data-testid="stMain"] .stRadio label span,
+    div[data-testid="stMain"] .stCheckbox label p,
+    div[data-testid="stMain"] .stCheckbox label span,
+    div[data-testid="stMain"] [data-testid="stWidgetLabel"] p,
+    div[data-testid="stMain"] [data-testid="stWidgetLabel"] span,
+    div[data-testid="stMain"] [data-testid="stWidgetLabel"] {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+        font-weight: 600 !important;
     }
-    /* Form inputs - black text on light backgrounds */
-    [data-testid="stMain"] .stTextInput input,
-    [data-testid="stMain"] .stSelectbox div[data-baseweb="select"] div,
-    [data-testid="stMain"] .stDateInput input,
-    [data-testid="stMain"] .stNumberInput input,
-    [data-testid="stMain"] .stTextArea textarea {
+    /* === FORCE ALL FORM INPUT VALUES BLACK === */
+    div[data-testid="stMain"] .stTextInput input,
+    div[data-testid="stMain"] .stSelectbox div[data-baseweb="select"] div,
+    div[data-testid="stMain"] .stDateInput input,
+    div[data-testid="stMain"] .stNumberInput input {
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
     }
-    /* Form labels - white with shadow */
-    [data-testid="stMain"] .stTextInput label,
-    [data-testid="stMain"] .stSelectbox label,
-    [data-testid="stMain"] .stDateInput label,
-    [data-testid="stMain"] .stNumberInput label,
-    [data-testid="stMain"] .stTextArea label,
-    [data-testid="stMain"] .stRadio label,
-    [data-testid="stMain"] .stCheckbox label,
-    [data-testid="stMain"] [data-testid="stWidgetLabel"] {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 4px rgba(0,0,0,0.9) !important;
+    /* === EXPANDER HEADERS BLACK === */
+    div[data-testid="stMain"] .streamlit-expanderHeader,
+    div[data-testid="stMain"] .streamlit-expanderHeader p,
+    div[data-testid="stMain"] .streamlit-expanderHeader span {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
         font-weight: 700 !important;
     }
-    /* Expander headers */
-    [data-testid="stMain"] .streamlit-expanderHeader {
+    /* === CAPTIONS BLACK === */
+    div[data-testid="stMain"] .stCaption,
+    div[data-testid="stMain"] [data-testid="stCaption"] {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+    }
+    /* === SUBHEADERS & SMALL TEXT BLACK === */
+    div[data-testid="stMain"] .stMarkdown p[data-testid="stMarkdownContainer"] p,
+    div[data-testid="stMain"] .stMarkdown small,
+    div[data-testid="stMain"] .stMarkdown strong {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+    }
+    /* === WEATHER SECTION SPECIFIC === */
+    div[data-testid="stMain"] input[key="weather_city_input"] {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+    }
+    /* Weather labels - WHITE for dark bg */
+    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label p,
+    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label span {
         color: #ffffff !important;
         -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 4px rgba(0,0,0,0.9) !important;
-        font-weight: 700 !important;
-    }
-    /* Captions */
-    [data-testid="stMain"] .stCaption,
-    [data-testid="stMain"] [data-testid="stCaption"] {
-        color: #e2e8f0 !important;
-        -webkit-text-fill-color: #e2e8f0 !important;
         text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        font-weight: 700 !important;
     }
-    /* Data table headers */
-    [data-testid="stMain"] .stDataFrame th,
-    [data-testid="stMain"] .stDataEditor th {
+    /* === DATA TABLE HEADERS === */
+    div[data-testid="stMain"] .stDataFrame th,
+    div[data-testid="stMain"] .stDataEditor th {
         color: #ffffff !important;
         -webkit-text-fill-color: #ffffff !important;
         text-shadow: none !important;
         font-weight: 700 !important;
     }
-    /* Data table cells */
-    [data-testid="stMain"] .stDataFrame td,
-    [data-testid="stMain"] .stDataEditor td {
+    /* === DATA TABLE CELLS === */
+    div[data-testid="stMain"] .stDataFrame td,
+    div[data-testid="stMain"] .stDataEditor td {
         color: #1e293b !important;
         -webkit-text-fill-color: #1e293b !important;
         text-shadow: none !important;
-    }
-    /* Buttons */
-    [data-testid="stMain"] .stButton > button {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important;
-    }
-    /* Links */
-    [data-testid="stMain"] a {
-        color: #60a5fa !important;
-        -webkit-text-fill-color: #60a5fa !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
-    }
-    /* Chat messages */
-    [data-testid="stMain"] .stChatMessage {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-    }
-    /* Metrics */
-    [data-testid="stMain"] [data-testid="stMetricLabel"] {
-        color: #e2e8f0 !important;
-        -webkit-text-fill-color: #e2e8f0 !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
-    }
-    [data-testid="stMain"] [data-testid="stMetricValue"] {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 2px 5px rgba(0,0,0,0.8) !important;
     }
     </style>
     """, unsafe_allow_html=True)
