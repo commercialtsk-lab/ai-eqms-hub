@@ -2427,7 +2427,7 @@ def render_audio_controls(current_scene):
             }} else {{
                 engine.stopAll();
                 status.textContent = 'Move slider to enable sound';
-            }
+            }}
         }});
 
         engine.setScene('{scene}');
@@ -3102,7 +3102,8 @@ def main():
             bg_style = "background: linear-gradient(180deg, #000000 0%, #0a0a1a 20%, #1a1a3e 50%, #2d1b4e 80%, #1a1a2e 100%);"
             for i in range(80):
                 left = (i * 3.7) % 100
-                top = (i * 2.3) % 50                delay = (i * 0.2) % 3
+                top = (i * 2.3) % 50
+                delay = (i * 0.2) % 3
                 size = 1 + (i % 3)
                 opacity = 0.3 + (i % 5) * 0.15
                 elements += f'<div style="position:absolute;left:{left}%;top:{top}%;width:{size}px;height:{size}px;background:#fff;border-radius:50%;opacity:{opacity};animation:twinkle 2s ease-in-out {delay}s infinite;z-index:1;"></div>'
