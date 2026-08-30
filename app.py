@@ -1,5 +1,4 @@
 
-
 # =====================================================================
 # AI EQMS Hub Pro - Complete Streamlit Application
 # =====================================================================
@@ -75,6 +74,25 @@ def format_date(dt=None):
 def format_datetime(dt=None):
     if dt is None: dt = now_ist()
     return dt.strftime("%d-%m-%Y %H:%M:%S")
+
+def get_smart_theme():
+    """Returns 'day' or 'night' based on IST time and weather sunrise/sunset if available."""
+    now = now_ist()
+    now_ts = int(now.timestamp())
+    # Priority 1: Weather data sunrise/sunset
+    wd = st.session_state.get('weather_data')
+    if wd and 'sunrise' in wd and 'sunset' in wd:
+        try:
+            sr = int(wd['sunrise'])
+            ss = int(wd['sunset'])
+            if sr and ss:
+                return 'night' if (now_ts < sr or now_ts > ss) else 'day'
+        except Exception:
+            pass
+    # Priority 2: Hour based (6 AM to 7 PM = day)
+    h = now.hour
+    return 'night' if h < 6 or h >= 19 else 'day'
+
 
 # =====================================================================
 # Secrets & Configuration
@@ -751,51 +769,46 @@ Previous conversation:
 # Weather Functions
 # =====================================================================
 def get_weather(city_name):
-    if not city_name or not str(city_name).strip(): return {'error': 'Please enter a city name'}
-    city_name = " ".join(str(city_name).strip().split())  # collapse extra/stray spaces
+    if not city_name or not str(city_name).strip(): 
+        return {'error': 'Please enter a city name'}
+    city_name = str(city_name).strip()
     try:
-        # Step 1: Geocode to get lat, lon, name, state, country
-        # Try the name as typed first, then fall back to Title Case so any
-        # capitalization the user types (all caps, all lowercase, mixed) works.
-        geo_data = None
-        for attempt in (city_name, city_name.title()):
-            geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={urllib.parse.quote(attempt)}&limit=1&appid={WEATHER_API_KEY}"
-            geo_resp = requests.get(geo_url, timeout=10)
-            if geo_resp.status_code == 200:
-                data_try = geo_resp.json()
-                if data_try and len(data_try) > 0:
-                    geo_data = data_try
-                    break
-        lat, lon, found_name, country, state = None, None, city_name, '', ''
-        if geo_data:
+        # Step 1: Geocode with up to 5 results for better small-town coverage
+        geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=5&appid={WEATHER_API_KEY}"
+        geo_resp = requests.get(geo_url, timeout=12)
+
+        # Step 2: Try each geocode result until weather succeeds
+        if geo_resp.status_code == 200:
+            geo_data = geo_resp.json()
             if geo_data and len(geo_data) > 0:
-                lat = geo_data[0].get('lat')
-                lon = geo_data[0].get('lon')
-                found_name = geo_data[0].get('name', city_name)
-                country = geo_data[0].get('country', '')
-                state = geo_data[0].get('state', '')
+                for g in geo_data:
+                    lat = g.get('lat')
+                    lon = g.get('lon')
+                    found_name = g.get('name', city_name)
+                    country = g.get('country', '')
+                    state = g.get('state', '')
+                    if lat and lon:
+                        coord_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
+                        coord_resp = requests.get(coord_url, timeout=12)
+                        if coord_resp.status_code == 200:
+                            data = coord_resp.json()
+                            return {'city': found_name, 'country': country, 'state': state,
+                                'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
+                                'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
+                                'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
+                                'icon': data.get('weather', [{}])[0].get('icon', ''),
+                                'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
+                                'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
+                                'lat': lat, 'lon': lon}
+                        elif coord_resp.status_code == 401:
+                            return {'error': 'Weather API key invalid or expired.'}
 
-        # Step 2: Get weather by coordinates (most accurate)
-        if lat and lon:
-            coord_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
-            coord_resp = requests.get(coord_url, timeout=10)
-            if coord_resp.status_code == 200:
-                data = coord_resp.json()
-                return {'city': found_name, 'country': country, 'state': state,
-                    'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
-                    'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
-                    'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
-                    'icon': data.get('weather', [{}])[0].get('icon', ''),
-                    'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
-                    'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
-                    'lat': lat, 'lon': lon}
-
-        # Fallback: direct city name API (no state available)
-        url = f"https://api.openweathermap.org/data/2.5/weather?q={urllib.parse.quote(city_name)}&appid={WEATHER_API_KEY}&units=metric"
-        response = requests.get(url, timeout=10)
+        # Fallback: direct city name API
+        url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
+        response = requests.get(url, timeout=12)
         if response.status_code == 200:
             data = response.json()
-            return {'city': data.get('name', city_name), 'country': data.get('sys', {}).get('country', ''), 'state': state,
+            return {'city': data.get('name', city_name), 'country': data.get('sys', {}).get('country', ''), 'state': '',
                 'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
                 'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
                 'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
@@ -803,68 +816,84 @@ def get_weather(city_name):
                 'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
                 'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
                 'lat': data.get('coord', {}).get('lat'), 'lon': data.get('coord', {}).get('lon')}
+        elif response.status_code == 404:
+            return {'error': f'City "{city_name}" not found. Try a different spelling or nearby major city.'}
+        elif response.status_code == 401:
+            return {'error': 'Weather API key invalid or expired.'}
+        else:
+            return {'error': f'Weather API error (HTTP {response.status_code}). Please try again.'}
 
-        return {'error': 'City not found. Try a nearby major city.'}
-    except Exception as e: return {'error': f'Error fetching weather: {str(e)}'}
+    except requests.exceptions.Timeout:
+        return {'error': 'Weather request timed out. Please try again.'}
+    except requests.exceptions.ConnectionError:
+        return {'error': 'Network error. Check your internet connection.'}
+    except Exception as e: 
+        return {'error': f'Error fetching weather: {str(e)}'}
 
 def get_weather_forecast(city_name):
-    if not city_name: return {'error': 'Please enter a city name'}
+    if not city_name or not str(city_name).strip(): 
+        return {'error': 'Please enter a city name'}
+    city_name = str(city_name).strip()
     try:
+        # Try direct city first
         url = f"https://api.openweathermap.org/data/2.5/forecast?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=12)
         if response.status_code == 200:
             data = response.json()
-            forecast_list = data.get('list', [])
-            daily_forecast = {}
-            for item in forecast_list:
-                date = item.get('dt_txt', '')[:10]
-                if date not in daily_forecast:
-                    daily_forecast[date] = {'temps': [], 'weather': item['weather'][0]['main'] if item.get('weather') else 'N/A',
-                        'icon': item['weather'][0]['icon'] if item.get('weather') else '', 'humidity': item['main']['humidity'],
-                        'wind': item['wind']['speed'], 'pressure': item['main']['pressure'],
-                        'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'}
-                daily_forecast[date]['temps'].append(item['main']['temp'])
-            result = []
-            for date, info in list(daily_forecast.items())[:5]:
-                result.append({'date': date, 'temp': round(sum(info['temps'])/len(info['temps']), 1),
-                    'min_temp': round(min(info['temps']), 1), 'max_temp': round(max(info['temps']), 1),
-                    'weather': info['weather'], 'description': info['description'].title(),
-                    'icon': info['icon'], 'humidity': info['humidity'], 'wind': info['wind'], 'pressure': info['pressure']})
-            return {'forecast': result, 'city': data.get('city', {}).get('name', city_name), 'country': data.get('city', {}).get('country', '')}
-        # Fallback: geocoding then forecast by coords
-        geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=1&appid={WEATHER_API_KEY}"
-        geo_resp = requests.get(geo_url, timeout=10)
+            return _parse_forecast(data, data.get('city', {}).get('name', city_name), data.get('city', {}).get('country', ''))
+
+        # Fallback: geocode then forecast by coords (try up to 5 results)
+        geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=5&appid={WEATHER_API_KEY}"
+        geo_resp = requests.get(geo_url, timeout=12)
         if geo_resp.status_code == 200:
             geo_data = geo_resp.json()
             if geo_data and len(geo_data) > 0:
-                lat = geo_data[0].get('lat')
-                lon = geo_data[0].get('lon')
-                found_name = geo_data[0].get('name', city_name)
-                country = geo_data[0].get('country', '')
-                if lat and lon:
-                    coord_url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
-                    coord_resp = requests.get(coord_url, timeout=10)
-                    if coord_resp.status_code == 200:
-                        data = coord_resp.json()
-                        forecast_list = data.get('list', [])
-                        daily_forecast = {}
-                        for item in forecast_list:
-                            date = item.get('dt_txt', '')[:10]
-                            if date not in daily_forecast:
-                                daily_forecast[date] = {'temps': [], 'weather': item['weather'][0]['main'] if item.get('weather') else 'N/A',
-                                    'icon': item['weather'][0]['icon'] if item.get('weather') else '', 'humidity': item['main']['humidity'],
-                                    'wind': item['wind']['speed'], 'pressure': item['main']['pressure'],
-                                    'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'}
-                            daily_forecast[date]['temps'].append(item['main']['temp'])
-                        result = []
-                        for date, info in list(daily_forecast.items())[:5]:
-                            result.append({'date': date, 'temp': round(sum(info['temps'])/len(info['temps']), 1),
-                                'min_temp': round(min(info['temps']), 1), 'max_temp': round(max(info['temps']), 1),
-                                'weather': info['weather'], 'description': info['description'].title(),
-                                'icon': info['icon'], 'humidity': info['humidity'], 'wind': info['wind'], 'pressure': info['pressure']})
-                        return {'forecast': result, 'city': found_name, 'country': country}
-        return {'error': 'City not found. Try a nearby major city.'}
-    except Exception as e: return {'error': f'Error fetching forecast: {str(e)}'}
+                for g in geo_data:
+                    lat = g.get('lat')
+                    lon = g.get('lon')
+                    found_name = g.get('name', city_name)
+                    country = g.get('country', '')
+                    if lat and lon:
+                        coord_url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
+                        coord_resp = requests.get(coord_url, timeout=12)
+                        if coord_resp.status_code == 200:
+                            data = coord_resp.json()
+                            return _parse_forecast(data, found_name, country)
+                        elif coord_resp.status_code == 401:
+                            return {'error': 'Weather API key invalid or expired.'}
+
+        if response.status_code == 404:
+            return {'error': f'City "{city_name}" not found. Try a different spelling or nearby major city.'}
+        elif response.status_code == 401:
+            return {'error': 'Weather API key invalid or expired.'}
+        else:
+            return {'error': f'Forecast API error (HTTP {response.status_code}). Please try again.'}
+
+    except requests.exceptions.Timeout:
+        return {'error': 'Forecast request timed out. Please try again.'}
+    except requests.exceptions.ConnectionError:
+        return {'error': 'Network error. Check your internet connection.'}
+    except Exception as e: 
+        return {'error': f'Error fetching forecast: {str(e)}'}
+
+def _parse_forecast(data, city_name, country):
+    forecast_list = data.get('list', [])
+    daily_forecast = {}
+    for item in forecast_list:
+        date = item.get('dt_txt', '')[:10]
+        if date not in daily_forecast:
+            daily_forecast[date] = {'temps': [], 'weather': item['weather'][0]['main'] if item.get('weather') else 'N/A',
+                'icon': item['weather'][0]['icon'] if item.get('weather') else '', 'humidity': item['main']['humidity'],
+                'wind': item['wind']['speed'], 'pressure': item['main']['pressure'],
+                'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'}
+        daily_forecast[date]['temps'].append(item['main']['temp'])
+    result = []
+    for date, info in list(daily_forecast.items())[:5]:
+        result.append({'date': date, 'temp': round(sum(info['temps'])/len(info['temps']), 1),
+            'min_temp': round(min(info['temps']), 1), 'max_temp': round(max(info['temps']), 1),
+            'weather': info['weather'], 'description': info['description'].title(),
+            'icon': info['icon'], 'humidity': info['humidity'], 'wind': info['wind'], 'pressure': info['pressure']})
+    return {'forecast': result, 'city': city_name, 'country': country}
 
 def get_weather_by_coords(lat, lon):
     try:
@@ -1408,7 +1437,9 @@ def process_passport_image(data):
 # =====================================================================
 # Apply Theme
 # =====================================================================
-def apply_theme(theme, custom_bg=None, custom_text=None):
+@st.cache_data(ttl=300, show_spinner=False)
+def _generate_theme_css(theme, custom_bg, custom_text):
+    """Generate theme CSS once and cache it."""
     if theme == 'Day':
         bg = "transparent"; card_bg = "rgba(248, 250, 252, 0.15)"; text_color = "#1e293b"; text_secondary = "#475569"
         border = "rgba(148, 163, 184, 0.25)"; input_bg = "rgba(255, 255, 255, 0.12)"; accent = "#2563eb"; accent_hover = "#1d4ed8"
@@ -1870,6 +1901,10 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
     </style>
     """
+    return css
+
+def apply_theme(theme, custom_bg=None, custom_text=None):
+    css = _generate_theme_css(theme, custom_bg, custom_text)
     st.markdown(css, unsafe_allow_html=True)
 
 # =====================================================================
@@ -2570,13 +2605,15 @@ def main():
     if 'current_page' not in st.session_state or not isinstance(st.session_state.get('current_page'), int) or st.session_state.get('current_page') <= 0:
         st.session_state.current_page = 1
 
-    # Splash Screen (shows once per page load)
-    components.html("""
-    <script>
-    (function(){
-        var P = window.parent;
-        var doc = P.document;
-        if (doc.getElementById('eqms-splash')) return;
+    # Splash Screen (shows once per session only)
+    if 'splash_shown' not in st.session_state:
+        st.session_state.splash_shown = True
+        components.html("""
+        <script>
+        (function(){
+            var P = window.parent;
+            var doc = P.document;
+            if (doc.getElementById('eqms-splash')) return;
 
         var style = doc.createElement('style');
         style.textContent = `
@@ -2638,7 +2675,7 @@ def main():
         }, 2800);
     })();
     </script>
-    """, height=0)
+        """, height=0)
 
     # Solar System Background
     bg_html = """
@@ -2950,35 +2987,26 @@ def main():
     # =====================================================================
     # WEATHER ANIMATED BACKGROUND (Replaces Solar when Weather is active)
     # =====================================================================
-    # Smart day/night text detection for the weather tab.
-    # (Main card / detail items / sunrise-sunset already compute their own
-    # correct day-or-night color further down, so they are left alone here.
-    # Only the forecast cards read CSS variables that were never defined
-    # anywhere, so they always fell back to plain black — this defines
-    # those variables from the real sunrise/sunset so forecast text is
-    # readable in both day and night scenes.)
-    _wx_is_night = False
-    if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
-        try:
-            _wx_now = int(time.time())
-            _wx_sunrise = st.session_state.weather_data.get('sunrise')
-            _wx_sunset = st.session_state.weather_data.get('sunset')
-            if _wx_sunrise and _wx_sunset and str(_wx_sunrise) not in ['', 'N/A', 'None']:
-                _wx_is_night = _wx_now < int(_wx_sunrise) or _wx_now > int(_wx_sunset)
-        except Exception:
-            pass
-    _wx_text_color = "#ffffff" if _wx_is_night else "#000000"
-    _wx_text_shadow = "0 1px 3px rgba(0,0,0,0.6)" if _wx_is_night else "0 1px 3px rgba(255,255,255,0.7)"
-    _wx_forecast_bg = "rgba(255,255,255,0.08)" if _wx_is_night else "rgba(255,255,255,0.4)"
-    _wx_forecast_border = "rgba(255,255,255,0.15)" if _wx_is_night else "rgba(0,0,0,0.08)"
-    st.markdown(f"""
+    # Force black text for all weather elements to override global white text
+    st.markdown("""
     <style>
-    :root {{
-        --weather-input-color: {_wx_text_color};
-        --weather-text-shadow: {_wx_text_shadow};
-        --forecast-bg: {_wx_forecast_bg};
-        --forecast-border: {_wx_forecast_border};
-    }}
+    /* Weather section text override - force black */
+    .weather-main-card, .weather-main-card *,
+    .weather-detail-item, .weather-detail-item *,
+    .sunrise-sunset, .sunrise-sunset *,
+    .forecast-card-0, .forecast-card-0 *,
+    .forecast-card-1, .forecast-card-1 *,
+    .forecast-card-2, .forecast-card-2 *,
+    .forecast-card-3, .forecast-card-3 *,
+    .forecast-card-4, .forecast-card-4 *,
+    div[data-testid="stMain"] .weather-main-card,
+    div[data-testid="stMain"] .weather-main-card *,
+    div[data-testid="stMain"] .forecast-card-0,
+    div[data-testid="stMain"] .forecast-card-0 * {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -3337,8 +3365,7 @@ def main():
 
     effective_theme = theme_choice
     if theme_choice == 'Auto (System)':
-        h = now_ist().hour
-        effective_theme = 'Day' if 6 <= h < 19 else 'Dark'
+        effective_theme = get_smart_theme().title()
 
     if effective_theme == 'Custom':
         custom_bg = st.sidebar.color_picker("Background Color", value=st.session_state.custom_bg, key="custom_bg_picker")
@@ -3838,7 +3865,7 @@ def main():
                 if st.button(icon, key=f"nav_btn_{name}", help=name, use_container_width=True,
                              type="primary" if st.session_state.view_mode == name else "secondary"):
                     st.session_state.view_mode = name
-                    st.query_params['__view'] = name
+                    st.rerun()
     with top_c2:
         st.markdown(f"<div style='padding-top:6px; text-align:right;'><span class='status-pill status-live'>● Live</span> &nbsp; <span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span></div>", unsafe_allow_html=True)
 
@@ -5109,6 +5136,7 @@ def main():
 
             # Animated Weather Scene
             weather_condition = str(data.get('weather', '')).lower()
+            is_night = time_of_day in ['night', 'dusk']
 
             weather_scene_html = """
             <style>
@@ -5116,13 +5144,20 @@ def main():
             .w-sky { position: absolute; width: 100%; height: 100%; top: 0; left: 0; }
             .w-sunny { background: linear-gradient(180deg, #4facfe 0%, #00f2fe 100%); }
             .w-rainy { background: linear-gradient(180deg, #2c3e50 0%, #4a5568 100%); }
+            .w-rainy-night { background: linear-gradient(180deg, #050510 0%, #0d0d1a 50%, #1a0a2e 100%); }
             .w-cloudy { background: linear-gradient(180deg, #7f8c8d 0%, #95a5a6 100%); }
+            .w-cloudy-night { background: linear-gradient(180deg, #1a1a2e 0%, #2d2d44 100%); }
             .w-thunder { background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%); }
-            .w-snowy { background: linear-gradient(180deg, #e0e7ff 0%, #c7d2fe 100%); }
-            .w-foggy { background: linear-gradient(180deg, #d5d8dc 0%, #aab7b8 100%); }
+            .w-snowy { background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 100%); }
+            .w-snowy-night { background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 100%); }
+            .w-foggy { background: linear-gradient(180deg, #cfd8dc 0%, #b0bec5 100%); }
+            .w-foggy-night { background: linear-gradient(180deg, #1a1a2e 0%, #2d2d44 100%); }
+            .w-night-clear { background: linear-gradient(180deg, #000000 0%, #0a0a1a 40%, #1a1a3e 80%, #2d1b4e 100%); }
 
             @keyframes w-sun-pulse { 0%,100%{transform:scale(1);opacity:0.9;} 50%{transform:scale(1.2);opacity:1;} }
             .w-sun { position: absolute; top: 15px; right: 30px; width: 70px; height: 70px; background: radial-gradient(circle, #FFD700 0%, #FFA500 60%, transparent 100%); border-radius: 50%; animation: w-sun-pulse 3s ease-in-out infinite; box-shadow: 0 0 50px 15px rgba(255,215,0,0.4); }
+            .w-moon { position: absolute; top: 15px; right: 30px; width: 60px; height: 60px; background: radial-gradient(circle at 35% 35%, #fff9c4, #f5f5dc, #e0e0e0); border-radius: 50%; animation: w-moon-pulse 4s ease-in-out infinite; box-shadow: 0 0 40px 15px rgba(245,245,220,0.3); }
+            @keyframes w-moon-pulse { 0%,100%{box-shadow:0 0 40px 15px rgba(245,245,220,0.3);} 50%{box-shadow:0 0 60px 25px rgba(245,245,220,0.5);} }
 
             @keyframes w-ray-spin { from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(360deg);} }
             .w-ray { position: absolute; top: 50%; left: 50%; width: 100px; height: 3px; background: linear-gradient(90deg, transparent, #FFD700, transparent); transform-origin: center; animation: w-ray-spin 10s linear infinite; }
@@ -5131,78 +5166,123 @@ def main():
             .w-cloud { position: absolute; background: rgba(255,255,255,0.85); border-radius: 40px; animation: w-cloud-move linear infinite; }
             .w-cloud::before { content: ''; position: absolute; background: rgba(255,255,255,0.85); border-radius: 50%; }
             .w-cloud::after { content: ''; position: absolute; background: rgba(255,255,255,0.85); border-radius: 50%; }
+            .w-cloud-dark { position: absolute; background: rgba(100,100,120,0.7); border-radius: 40px; animation: w-cloud-move linear infinite; }
+            .w-cloud-dark::before { content: ''; position: absolute; background: rgba(100,100,120,0.7); border-radius: 50%; }
+            .w-cloud-dark::after { content: ''; position: absolute; background: rgba(100,100,120,0.7); border-radius: 50%; }
 
             @keyframes w-rain-fall { from{transform:translateY(-20px);opacity:0;} 10%{opacity:0.8;} 90%{opacity:0.8;} to{transform:translateY(240px);opacity:0;} }
             .w-rain { position: absolute; width: 2px; height: 14px; background: linear-gradient(180deg, transparent, #64b5f6); border-radius: 0 0 2px 2px; animation: w-rain-fall linear infinite; }
+            .w-rain-bright { background: linear-gradient(180deg, transparent, #90caf9); }
 
             @keyframes w-lightning { 0%,90%,100%{background:rgba(255,255,255,0);} 91%{background:rgba(255,255,255,0.25);} 92%{background:rgba(255,255,255,0);} 93%{background:rgba(255,255,255,0.4);} 94%{background:rgba(255,255,255,0);} }
             .w-lightning { position: absolute; top: 0; left: 0; width: 100%; height: 100%; animation: w-lightning 4s ease-in-out infinite; }
 
             @keyframes w-snow-fall { from{transform:translateY(-20px) rotate(0deg);opacity:0;} 10%{opacity:1;} 90%{opacity:1;} to{transform:translateY(240px) rotate(360deg);opacity:0;} }
-            .w-snow { position: absolute; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6); font-size: 13px; animation: w-snow-fall linear infinite; text-shadow: 0 0 4px rgba(255,255,255,0.8); }
+            .w-snow { position: absolute; color: #fff; font-size: 13px; animation: w-snow-fall linear infinite; text-shadow: 0 0 4px rgba(255,255,255,0.8); }
+            .w-snow-dark { color: #e3f2fd; text-shadow: 0 0 4px rgba(227,242,253,0.8); }
 
             @keyframes w-fog-drift { from{transform:translateX(-50%);} to{transform:translateX(0%);} }
             .w-fog { position: absolute; width: 200%; height: 50px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent); animation: w-fog-drift linear infinite; }
+            .w-fog-dark { background: linear-gradient(90deg, transparent, rgba(200,200,220,0.2), transparent); }
 
             .w-ground { position: absolute; bottom: 0; left: 0; width: 100%; height: 35px; background: linear-gradient(180deg, #2d5016 0%, #1a3009 100%); border-radius: 50% 50% 0 0 / 15px 15px 0 0; }
+            .w-ground-night { background: linear-gradient(180deg, #0d1b2a 0%, #050510 100%); }
             @keyframes w-tree-sway { 0%,100%{transform:rotate(-4deg);} 50%{transform:rotate(4deg);} }
             .w-tree { position: absolute; bottom: 28px; font-size: 22px; animation: w-tree-sway 3s ease-in-out infinite; }
+            .w-star { position: absolute; background: #fff; border-radius: 50%; animation: twinkle 2s ease-in-out infinite; }
+            @keyframes twinkle { 0%,100%{opacity:0.3;} 50%{opacity:1;} }
             </style>
             <div class="w-scene-wrap">
             """
 
             if 'rain' in weather_condition or 'drizz' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-rainy">'
-                weather_scene_html += '<div class="w-lightning"></div>'
+                if is_night:
+                    weather_scene_html += '<div class="w-sky w-rainy-night">'
+                    weather_scene_html += '<div class="w-lightning"></div>'
+                else:
+                    weather_scene_html += '<div class="w-sky w-rainy">'
                 for i in range(25):
-                    weather_scene_html += f'<div class="w-rain" style="left:{(i*4)%100}%;animation-duration:{0.4+(i%3)*0.15}s;animation-delay:{(i*0.1)%1.5}s;"></div>'
-                weather_scene_html += '<div class="w-cloud" style="top:12px;left:-100px;width:90px;height:32px;animation-duration:22s;"><div style="position:absolute;top:-14px;left:12px;width:32px;height:32px;"></div><div style="position:absolute;top:-10px;left:38px;width:24px;height:24px;"></div></div>'
-                weather_scene_html += '<div class="w-cloud" style="top:22px;left:-100px;width:110px;height:38px;animation-duration:28s;animation-delay:6s;"><div style="position:absolute;top:-16px;left:18px;width:38px;height:38px;"></div><div style="position:absolute;top:-12px;left:48px;width:28px;height:28px;"></div></div>'
+                    weather_scene_html += f'<div class="w-rain {'w-rain-bright' if is_night else ''}" style="left:{(i*4)%100}%;animation-duration:{0.4+(i%3)*0.15}s;animation-delay:{(i*0.1)%1.5}s;"></div>'
+                if is_night:
+                    weather_scene_html += '<div class="w-cloud-dark" style="top:12px;left:-100px;width:90px;height:32px;animation-duration:22s;"><div style="position:absolute;top:-14px;left:12px;width:32px;height:32px;"></div><div style="position:absolute;top:-10px;left:38px;width:24px;height:24px;"></div></div>'
+                else:
+                    weather_scene_html += '<div class="w-cloud" style="top:12px;left:-100px;width:90px;height:32px;animation-duration:22s;"><div style="position:absolute;top:-14px;left:12px;width:32px;height:32px;"></div><div style="position:absolute;top:-10px;left:38px;width:24px;height:24px;"></div></div>'
 
             elif 'cloud' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-cloudy">'
-                weather_scene_html += '<div class="w-sun" style="opacity:0.35;"></div>'
+                if is_night:
+                    weather_scene_html += '<div class="w-sky w-cloudy-night">'
+                    weather_scene_html += '<div class="w-moon" style="opacity:0.8;"></div>'
+                    for i in range(30):
+                        weather_scene_html += f'<div class="w-star" style="left:{(i*7)%100}%;top:{(i*5)%60}%;width:{1+(i%3)}px;height:{1+(i%3)}px;opacity:{0.3+(i%5)*0.15};animation-delay:{(i*0.2)%3}s;"></div>'
+                else:
+                    weather_scene_html += '<div class="w-sky w-cloudy">'
+                    weather_scene_html += '<div class="w-sun" style="opacity:0.35;"></div>'
                 for i in range(4):
-                    weather_scene_html += f'<div class="w-cloud" style="top:{12+(i%2)*18}px;left:-100px;width:{70+(i%2)*30}px;height:{28+(i%2)*10}px;animation-duration:{20+i*6}s;animation-delay:{i*4}s;"><div style="position:absolute;top:-{12+(i%2)*6}px;left:{14+(i%2)*6}px;width:{30+(i%2)*12}px;height:{30+(i%2)*12}px;"></div><div style="position:absolute;top:-{8+(i%2)*4}px;left:{36+(i%2)*10}px;width:{22+(i%2)*8}px;height:{22+(i%2)*8}px;"></div></div>'
+                    cloud_class = 'w-cloud-dark' if is_night else 'w-cloud'
+                    weather_scene_html += f'<div class="{cloud_class}" style="top:{12+(i%2)*18}px;left:-100px;width:{70+(i%2)*30}px;height:{28+(i%2)*10}px;animation-duration:{20+i*6}s;animation-delay:{i*4}s;"><div style="position:absolute;top:-{12+(i%2)*6}px;left:{14+(i%2)*6}px;width:{30+(i%2)*12}px;height:{30+(i%2)*12}px;"></div><div style="position:absolute;top:-{8+(i%2)*4}px;left:{36+(i%2)*10}px;width:{22+(i%2)*8}px;height:{22+(i%2)*8}px;"></div></div>'
 
             elif 'clear' in weather_condition or 'sun' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-sunny">'
-                weather_scene_html += '<div class="w-sun">'
-                for angle in range(0, 360, 45):
-                    weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
-                weather_scene_html += '</div>'
-                for i in range(3):
-                    weather_scene_html += f'<div class="w-cloud" style="top:{18+i*14}px;left:-100px;width:65px;height:24px;animation-duration:{24+i*6}s;animation-delay:{i*5}s;opacity:0.6;"><div style="position:absolute;top:-10px;left:10px;width:26px;height:26px;"></div></div>'
+                if is_night:
+                    weather_scene_html += '<div class="w-sky w-night-clear">'
+                    weather_scene_html += '<div class="w-moon"></div>'
+                    for i in range(40):
+                        weather_scene_html += f'<div class="w-star" style="left:{(i*7)%100}%;top:{(i*5)%60}%;width:{1+(i%3)}px;height:{1+(i%3)}px;opacity:{0.3+(i%5)*0.15};animation-delay:{(i*0.2)%3}s;"></div>'
+                else:
+                    weather_scene_html += '<div class="w-sky w-sunny">'
+                    weather_scene_html += '<div class="w-sun">'
+                    for angle in range(0, 360, 45):
+                        weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
+                    weather_scene_html += '</div>'
+                if not is_night:
+                    for i in range(3):
+                        weather_scene_html += f'<div class="w-cloud" style="top:{18+i*14}px;left:-100px;width:65px;height:24px;animation-duration:{24+i*6}s;animation-delay:{i*5}s;opacity:0.6;"><div style="position:absolute;top:-10px;left:10px;width:26px;height:26px;"></div></div>'
 
             elif 'thunder' in weather_condition or 'storm' in weather_condition:
                 weather_scene_html += '<div class="w-sky w-thunder">'
                 weather_scene_html += '<div class="w-lightning" style="animation-duration:2.5s;"></div>'
                 for i in range(20):
-                    weather_scene_html += f'<div class="w-rain" style="left:{(i*5)%100}%;animation-duration:{0.3+(i%3)*0.12}s;animation-delay:{(i*0.08)%1.2}s;background:linear-gradient(180deg,transparent,#90caf9);"></div>'
-                weather_scene_html += '<div class="w-cloud" style="top:8px;left:-100px;width:100px;height:38px;background:#546e7a;animation-duration:32s;"><div style="position:absolute;top:-16px;left:16px;width:40px;height:40px;background:#546e7a;"></div><div style="position:absolute;top:-12px;left:46px;width:32px;height:32px;background:#546e7a;"></div></div>'
+                    weather_scene_html += f'<div class="w-rain w-rain-bright" style="left:{(i*5)%100}%;animation-duration:{0.3+(i%3)*0.12}s;animation-delay:{(i*0.08)%1.2}s;"></div>'
+                weather_scene_html += '<div class="w-cloud-dark" style="top:8px;left:-100px;width:100px;height:38px;animation-duration:32s;"><div style="position:absolute;top:-16px;left:16px;width:40px;height:40px;"></div><div style="position:absolute;top:-12px;left:46px;width:32px;height:32px;"></div></div>'
 
             elif 'snow' in weather_condition or 'frost' in weather_condition or 'freez' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-snowy">'
+                if is_night:
+                    weather_scene_html += '<div class="w-sky w-snowy-night">'
+                else:
+                    weather_scene_html += '<div class="w-sky w-snowy">'
                 snowflakes = ['&#10052;', '&#10053;', '&#10054;', '&#10042;', '&#10043;']
+                snow_class = 'w-snow-dark' if is_night else 'w-snow'
                 for i in range(35):
-                    weather_scene_html += f'<div class="w-snow" style="left:{(i*3)%100}%;font-size:{10+(i%4)*3}px;animation-duration:{2+(i%4)*1.2}s;animation-delay:{(i*0.15)%3}s;">{snowflakes[i%5]}</div>'
-                weather_scene_html += '<div class="w-cloud" style="top:8px;left:-100px;width:80px;height:30px;background:rgba(255,255,255,0.8);animation-duration:26s;"><div style="position:absolute;top:-12px;left:12px;width:34px;height:34px;background:rgba(255,255,255,0.8);"></div></div>'
+                    weather_scene_html += f'<div class="{snow_class}" style="left:{(i*3)%100}%;font-size:{10+(i%4)*3}px;animation-duration:{2+(i%4)*1.2}s;animation-delay:{(i*0.15)%3}s;">{snowflakes[i%5]}</div>'
+                cloud_class = 'w-cloud-dark' if is_night else 'w-cloud'
+                weather_scene_html += f'<div class="{cloud_class}" style="top:8px;left:-100px;width:80px;height:30px;animation-duration:26s;"><div style="position:absolute;top:-12px;left:12px;width:34px;height:34px;"></div></div>'
 
             elif 'mist' in weather_condition or 'fog' in weather_condition or 'haz' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-foggy">'
+                if is_night:
+                    weather_scene_html += '<div class="w-sky w-foggy-night">'
+                else:
+                    weather_scene_html += '<div class="w-sky w-foggy">'
+                fog_class = 'w-fog-dark' if is_night else 'w-fog'
                 for i in range(5):
-                    weather_scene_html += f'<div class="w-fog" style="top:{15+i*30}px;animation-duration:{12+i*4}s;animation-delay:{i*2}s;opacity:{0.25+(i%3)*0.15};"></div>'
+                    weather_scene_html += f'<div class="{fog_class}" style="top:{15+i*30}px;animation-duration:{12+i*4}s;animation-delay:{i*2}s;opacity:{0.25+(i%3)*0.15};"></div>'
 
             else:
-                weather_scene_html += '<div class="w-sky w-sunny">'
-                weather_scene_html += '<div class="w-sun">'
-                for angle in range(0, 360, 45):
-                    weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
-                weather_scene_html += '</div>'
-                for i in range(2):
-                    weather_scene_html += f'<div class="w-cloud" style="top:{20+i*12}px;left:-100px;width:55px;height:20px;animation-duration:{22+i*5}s;animation-delay:{i*6}s;opacity:0.5;"><div style="position:absolute;top:-8px;left:8px;width:22px;height:22px;"></div></div>'
+                if is_night:
+                    weather_scene_html += '<div class="w-sky w-night-clear">'
+                    weather_scene_html += '<div class="w-moon"></div>'
+                    for i in range(40):
+                        weather_scene_html += f'<div class="w-star" style="left:{(i*7)%100}%;top:{(i*5)%60}%;width:{1+(i%3)}px;height:{1+(i%3)}px;opacity:{0.3+(i%5)*0.15};animation-delay:{(i*0.2)%3}s;"></div>'
+                else:
+                    weather_scene_html += '<div class="w-sky w-sunny">'
+                    weather_scene_html += '<div class="w-sun">'
+                    for angle in range(0, 360, 45):
+                        weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
+                    weather_scene_html += '</div>'
+                if not is_night:
+                    for i in range(2):
+                        weather_scene_html += f'<div class="w-cloud" style="top:{20+i*12}px;left:-100px;width:55px;height:20px;animation-duration:{22+i*5}s;animation-delay:{i*6}s;opacity:0.5;"><div style="position:absolute;top:-8px;left:8px;width:22px;height:22px;"></div></div>'
 
-            weather_scene_html += '<div class="w-ground"></div>'
+            ground_class = 'w-ground-night' if is_night else 'w-ground'
+            weather_scene_html += f'<div class="{ground_class}"></div>'
             weather_scene_html += '<div class="w-tree" style="left:8%;">🌲</div>'
             weather_scene_html += '<div class="w-tree" style="left:22%;animation-delay:0.6s;">🌳</div>'
             weather_scene_html += '<div class="w-tree" style="left:68%;animation-delay:1.2s;">🌲</div>'
@@ -5210,6 +5290,12 @@ def main():
             weather_scene_html += '</div></div>'
 
             st.markdown(weather_scene_html, unsafe_allow_html=True)
+
+            if data.get('icon'):
+                icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
+                c1, c2, c3 = st.columns([1,1,1])
+                with c2:
+                    st.image(icon_url, caption=data['weather'].title(), width=120)
 
             # 5-Day Forecast
             if st.session_state.weather_forecast and 'error' not in st.session_state.weather_forecast:
@@ -5286,10 +5372,33 @@ def main():
         else:
             st.info("Enter a city name and click 'Get Weather' to see detailed weather information.")
 
-    # === COMPREHENSIVE TEXT VISIBILITY FIX ===
-    # This CSS block is rendered LAST and overrides all previous styles
-    st.markdown("""
+    # === SMART THEME CSS VARIABLES ===
+    smart_now = get_smart_theme()
+    text_primary = '#f1f5f9' if smart_now == 'night' else '#1e293b'
+    text_secondary = '#94a3b8' if smart_now == 'night' else '#475569'
+    bg_glass = 'rgba(15,23,42,0.25)' if smart_now == 'night' else 'rgba(255,255,255,0.15)'
+
+    st.markdown(f"""
     <style>
+    :root {{
+        --eqms-text-primary: {text_primary};
+        --eqms-text-secondary: {text_secondary};
+        --eqms-bg-glass: {bg_glass};
+        --eqms-is-night: {'1' if smart_now == 'night' else '0'};
+    }}
+    /* === NAV BUTTONS LOOK LIKE TABS === */
+    div[data-testid="stMain"] .stButton > button[key^="nav_btn_"] {{
+        border-radius: 10px 10px 0 0 !important;
+        border-bottom: 3px solid transparent !important;
+        margin-bottom: -2px !important;
+        position: relative !important;
+        z-index: 10 !important;
+        transition: all 0.2s ease !important;
+    }}
+    div[data-testid="stMain"] .stButton > button[key^="nav_btn_"][kind="primary"] {{
+        border-bottom: 3px solid #FF9933 !important;
+        background: linear-gradient(180deg, rgba(37,99,235,0.15), rgba(37,99,235,0.05)) !important;
+    }}
     /* === FORCE ALL FORM LABELS BLACK === */
     div[data-testid="stMain"] .stTextInput label p,
     div[data-testid="stMain"] .stTextInput label span,
@@ -5307,74 +5416,74 @@ def main():
     div[data-testid="stMain"] .stCheckbox label span,
     div[data-testid="stMain"] [data-testid="stWidgetLabel"] p,
     div[data-testid="stMain"] [data-testid="stWidgetLabel"] span,
-    div[data-testid="stMain"] [data-testid="stWidgetLabel"] {
+    div[data-testid="stMain"] [data-testid="stWidgetLabel"] {{
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
         font-weight: 600 !important;
-    }
+    }}
     /* === FORCE ALL FORM INPUT VALUES BLACK === */
     div[data-testid="stMain"] .stTextInput input,
     div[data-testid="stMain"] .stSelectbox div[data-baseweb="select"] div,
     div[data-testid="stMain"] .stDateInput input,
-    div[data-testid="stMain"] .stNumberInput input {
+    div[data-testid="stMain"] .stNumberInput input {{
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
-    }
+    }}
     /* === EXPANDER HEADERS BLACK === */
     div[data-testid="stMain"] .streamlit-expanderHeader,
     div[data-testid="stMain"] .streamlit-expanderHeader p,
-    div[data-testid="stMain"] .streamlit-expanderHeader span {
+    div[data-testid="stMain"] .streamlit-expanderHeader span {{
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
         font-weight: 700 !important;
-    }
+    }}
     /* === CAPTIONS BLACK === */
     div[data-testid="stMain"] .stCaption,
-    div[data-testid="stMain"] [data-testid="stCaption"] {
+    div[data-testid="stMain"] [data-testid="stCaption"] {{
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
-    }
+    }}
     /* === SUBHEADERS & SMALL TEXT BLACK === */
     div[data-testid="stMain"] .stMarkdown p[data-testid="stMarkdownContainer"] p,
     div[data-testid="stMain"] .stMarkdown small,
-    div[data-testid="stMain"] .stMarkdown strong {
+    div[data-testid="stMain"] .stMarkdown strong {{
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
-    }
+    }}
     /* === WEATHER SECTION SPECIFIC === */
-    div[data-testid="stMain"] input[key="weather_city_input"] {
+    div[data-testid="stMain"] input[key="weather_city_input"] {{
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
-    }
+    }}
     /* Weather labels - WHITE for dark bg */
     div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label p,
-    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label span {
+    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label span {{
         color: #ffffff !important;
         -webkit-text-fill-color: #ffffff !important;
         text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
         font-weight: 700 !important;
-    }
+    }}
     /* === DATA TABLE HEADERS === */
     div[data-testid="stMain"] .stDataFrame th,
-    div[data-testid="stMain"] .stDataEditor th {
+    div[data-testid="stMain"] .stDataEditor th {{
         color: #ffffff !important;
         -webkit-text-fill-color: #ffffff !important;
         text-shadow: none !important;
         font-weight: 700 !important;
-    }
+    }}
     /* === DATA TABLE CELLS === */
     div[data-testid="stMain"] .stDataFrame td,
-    div[data-testid="stMain"] .stDataEditor td {
+    div[data-testid="stMain"] .stDataEditor td {{
         color: #1e293b !important;
         -webkit-text-fill-color: #1e293b !important;
         text-shadow: none !important;
-    }
+    }}
     </style>
     """, unsafe_allow_html=True)
 
