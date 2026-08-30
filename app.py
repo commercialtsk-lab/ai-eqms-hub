@@ -1633,15 +1633,11 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .streamlit-expanderHeader {{ color: #000000 !important; font-weight: 700 !important; text-shadow: none !important; -webkit-text-fill-color: #000000 !important; }}
         .stCaption {{ color: #000000 !important; text-shadow: none !important; -webkit-text-fill-color: #000000 !important; }}
         [data-testid="stMain"] .stCaption {{ color: #000000 !important; text-shadow: none !important; }}
-        .stChatMessage {{ background: rgba(255,255,255,0.06) !important; border: 1px solid rgba(255,255,255,0.15) !important;
-            border-radius: 16px !important; padding: 14px !important; margin-bottom: 10px !important;
-            backdrop-filter: blur(24px) saturate(180%) !important; -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important; }}
-        .stChatMessage [data-testid="stChatMessageContent"] {{ color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; text-shadow: 0 1px 4px rgba(0,0,0,0.7) !important; }}
-        .stChatMessage [data-testid="stChatMessageAvatar"] {{ background: rgba(255,255,255,0.15) !important; border: 1px solid rgba(255,255,255,0.2) !important; }}
-        .stChatInput {{ background: rgba(255,255,255,0.06) !important; border: 1px solid rgba(255,255,255,0.18) !important; border-radius: 20px !important; backdrop-filter: blur(24px) saturate(180%) !important; -webkit-backdrop-filter: blur(24px) saturate(180%) !important; box-shadow: 0 8px 32px rgba(0,0,0,0.2) !important; padding: 8px 16px !important; }}
-        .stChatInput input {{ color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; text-shadow: 0 1px 4px rgba(0,0,0,0.7) !important; background: transparent !important; font-weight: 500 !important; }}
-        .stChatInput input::placeholder {{ color: rgba(255,255,255,0.55) !important; text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important; }}
+        .stChatMessage {{ background-color: {card_bg} !important; border: 1px solid {border} !important;
+            border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important;
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
+        .stChatInput {{ background-color: {input_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; }}
+        .stChatInput input {{ color: {text_color} !important; }}
         [data-testid="stMetric"] {{ background-color: {card_bg} !important; border: 1px solid {border} !important;
             border-radius: 10px !important; padding: 14px !important;
             backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
@@ -1747,17 +1743,17 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
 
-        /* Weather Input Stamp Style - BLACK TEXT */
+        /* Weather Input Stamp Style - WHITE TEXT on LIGHT BLUE TRANSPARENT */
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input {{
-            background-color: rgba(255, 255, 255, 0.95) !important;
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
-            border: 2px solid rgba(0, 0, 0, 0.2) !important;
+            background: rgba(173, 216, 230, 0.25) !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            border: 2px solid rgba(255, 255, 255, 0.3) !important;
             box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
             font-weight: 600 !important;
-            backdrop-filter: blur(10px) !important;
-            -webkit-backdrop-filter: blur(10px) !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
             border-radius: 10px !important;
             padding: 6px 14px !important;
             font-size: 0.95rem !important;
@@ -1765,10 +1761,10 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
-            color: #000000 !important;
+            color: #ffffff !important;
             font-weight: 700 !important;
-            text-shadow: none !important;
-            -webkit-text-fill-color: #000000 !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+            -webkit-text-fill-color: #ffffff !important;
             font-size: 0.95rem !important;
         }}
         [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) > div > div,
@@ -1830,11 +1826,11 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input,
         [data-testid="stMain"] input[key="weather_city_input"],
         [data-testid="stMain"] input[key="sidebar_weather_city"] {{
-            background-color: rgba(255, 255, 255, 0.95) !important;
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
-            caret-color: #000000 !important;
-            border: 2px solid rgba(0, 0, 0, 0.2) !important;
+            background: rgba(173, 216, 230, 0.25) !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            caret-color: #ffffff !important;
+            border: 2px solid rgba(255, 255, 255, 0.3) !important;
             box-shadow: 0 0 20px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2) !important;
             font-weight: 700 !important;
             font-size: 1.05rem !important;
@@ -1845,7 +1841,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
             color: #ffffff !important;
             font-weight: 800 !important;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.9) !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
             -webkit-text-fill-color: #ffffff !important;
             font-size: 1.05rem !important;
             letter-spacing: 0.5px !important;
@@ -1855,13 +1851,11 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             background: transparent !important;
         }}
         .weather-input-wrapper {{
-            background: rgba(173, 216, 230, 0.22) !important;
+            background: rgba(173, 216, 230, 0.15) !important;
             border-radius: 16px !important;
             padding: 12px 16px !important;
-            border: 1px solid rgba(173, 216, 230, 0.4) !important;
-            backdrop-filter: blur(16px) saturate(150%) !important;
-            -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08) !important;
+            border: 1px solid rgba(255,255,255,0.2) !important;
+            backdrop-filter: blur(12px) !important;
         }}
     </style>
     """
@@ -2076,8 +2070,8 @@ def render_audio_controls(current_scene):
     scene_map = {
         "📋 Data Table": "solar",
         "📊 Dashboard": "dashboard",
-        "💬 Chat": "solar",
-        "🚂 Railway": "solar",
+        "💬 Chat": "ocean",
+        "🚂 Railway": "railway",
         "🌤️ Weather": "weather-sunny"
     }
     scene = scene_map.get(current_scene, "solar")
@@ -2176,6 +2170,8 @@ def render_audio_controls(current_scene):
                 switch(scene) {{
                     case 'solar': this.playSolar(); break;
                     case 'dashboard': this.playDashboard(); break;
+                    case 'ocean': this.playOcean(); break;
+                    case 'railway': this.playRailway(); break;
                     case 'weather-rain': this.playRain(); break;
                     case 'weather-thunder': this.playThunder(); break;
                     case 'weather-sunny': this.playSunny(); break;
@@ -2406,6 +2402,106 @@ def render_audio_controls(current_scene):
                 src.start();
                 this.nodes.fog = src;
             }}
+
+            playOcean() {{
+                var self = this;
+                var noise = this.ctx.createBufferSource();
+                noise.buffer = this.noiseBuffer();
+                noise.loop = true;
+                var noiseFilter = this.ctx.createBiquadFilter();
+                noiseFilter.type = 'lowpass';
+                noiseFilter.frequency.value = 120;
+                var noiseGain = this.ctx.createGain();
+                noiseGain.gain.value = 0.25;
+                noise.connect(noiseFilter);
+                noiseFilter.connect(noiseGain);
+                noiseGain.connect(this.master);
+                noise.start();
+                this.nodes.oceanNoise = noise;
+                var swish = this.ctx.createOscillator();
+                swish.type = 'sine';
+                swish.frequency.value = 0.18;
+                var swishGain = this.ctx.createGain();
+                swishGain.gain.value = 0.12;
+                swish.connect(swishGain);
+                swishGain.connect(this.master);
+                swish.start();
+                this.nodes.swish = swish;
+                var bubblePop = function() {{
+                    if (self.scene !== 'ocean') return;
+                    var t = self.ctx.currentTime;
+                    var osc = self.ctx.createOscillator();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(600 + Math.random() * 400, t);
+                    osc.frequency.exponentialRampToValueAtTime(200, t + 0.08);
+                    var g = self.ctx.createGain();
+                    g.gain.setValueAtTime(0.06, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+                    osc.connect(g);
+                    g.connect(self.master);
+                    osc.start(t);
+                    osc.stop(t + 0.12);
+                    self._chirpTimeout = setTimeout(bubblePop, 800 + Math.random() * 2500);
+                }};
+                bubblePop();
+            }}
+
+            playRailway() {{
+                var self = this;
+                var chuff = function() {{
+                    if (self.scene !== 'railway') return;
+                    var t = self.ctx.currentTime;
+                    var osc1 = self.ctx.createOscillator();
+                    osc1.type = 'sawtooth';
+                    osc1.frequency.value = 55 + Math.random() * 10;
+                    var g1 = self.ctx.createGain();
+                    g1.gain.setValueAtTime(0.2, t);
+                    g1.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+                    osc1.connect(g1);
+                    g1.connect(self.master);
+                    osc1.start(t);
+                    osc1.stop(t + 0.15);
+                    var osc2 = self.ctx.createOscillator();
+                    osc2.type = 'sawtooth';
+                    osc2.frequency.value = 50 + Math.random() * 8;
+                    var g2 = self.ctx.createGain();
+                    g2.gain.setValueAtTime(0.18, t + 0.25);
+                    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+                    osc2.connect(g2);
+                    g2.connect(self.master);
+                    osc2.start(t + 0.25);
+                    osc2.stop(t + 0.4);
+                    if (Math.random() < 0.08) {{
+                        var wh = self.ctx.createOscillator();
+                        wh.type = 'triangle';
+                        wh.frequency.setValueAtTime(440, t + 0.5);
+                        wh.frequency.linearRampToValueAtTime(520, t + 0.7);
+                        wh.frequency.linearRampToValueAtTime(440, t + 0.9);
+                        var wg = self.ctx.createGain();
+                        wg.gain.setValueAtTime(0.15, t + 0.5);
+                        wg.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+                        wh.connect(wg);
+                        wg.connect(self.master);
+                        wh.start(t + 0.5);
+                        wh.stop(t + 1.2);
+                    }}
+                    self._chirpTimeout = setTimeout(chuff, 900 + Math.random() * 400);
+                }};
+                chuff();
+                var trackNoise = this.ctx.createBufferSource();
+                trackNoise.buffer = this.noiseBuffer();
+                trackNoise.loop = true;
+                var trackFilter = this.ctx.createBiquadFilter();
+                trackFilter.type = 'lowpass';
+                trackFilter.frequency.value = 200;
+                var trackGain = this.ctx.createGain();
+                trackGain.gain.value = 0.08;
+                trackNoise.connect(trackFilter);
+                trackFilter.connect(trackGain);
+                trackGain.connect(this.master);
+                trackNoise.start();
+                this.nodes.trackNoise = trackNoise;
+            }}
         }}
 
         if (!P.eqmsSoundEngine) {{
@@ -2415,19 +2511,12 @@ def render_audio_controls(current_scene):
         var slider = document.getElementById('eqms-vol');
         var status = document.getElementById('eqms-sound-status');
 
-        var savedVol = P.eqmsVolume || 25;
+        var savedVol = P.eqmsVolume !== undefined ? P.eqmsVolume : 15;
         slider.value = savedVol;
-        engine.setVolume(savedVol);
-        status.textContent = 'Scene: {scene} | Vol: ' + savedVol + '%';
-
-        // Resume audio context on first user interaction
-        var resumeAudio = function() {{
-            if (engine.ctx && engine.ctx.state === 'suspended') {{
-                engine.ctx.resume();
-            }}
-        }};
-        doc.addEventListener('click', resumeAudio, {{once:true}});
-        doc.addEventListener('touchstart', resumeAudio, {{once:true}});
+        if (savedVol > 0) {{
+            status.textContent = 'Scene: {scene} | Vol: ' + savedVol + '%';
+            engine.setVolume(savedVol);
+        }}
 
         slider.addEventListener('input', function() {{
             var v = parseInt(this.value);
@@ -2435,8 +2524,6 @@ def render_audio_controls(current_scene):
             engine.setVolume(v);
             status.textContent = 'Scene: {scene} | Vol: ' + v + '%';
             if (v > 0) {{
-                engine.stopAll();
-                engine.scene = null;
                 engine.setScene('{scene}');
             }} else {{
                 engine.stopAll();
@@ -2444,8 +2531,6 @@ def render_audio_controls(current_scene):
             }}
         }});
 
-        engine.stopAll();
-        engine.scene = null;
         engine.setScene('{scene}');
     }})();
     </script>
@@ -2568,35 +2653,31 @@ EARTH_BG_HTML = """
 # =====================================================================
 # Ocean Background for Chat View
 # =====================================================================
-AQUARIUM_BG_HTML = """
+CHAT_VIDEO_BG_HTML = """
 <style>
-.aquarium-bg-scene {
+.chat-video-bg {
     position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
     z-index: -1; pointer-events: none; overflow: hidden;
 }
-.aquarium-video {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    object-fit: cover; opacity: 0.92;
+.chat-video-bg video {
+    position: absolute; top: 50%; left: 50%;
+    min-width: 100%; min-height: 100%;
+    width: auto; height: auto;
+    transform: translate(-50%, -50%);
+    object-fit: cover;
 }
-.aquarium-overlay {
+.chat-video-overlay {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background: linear-gradient(180deg, rgba(0,30,60,0.3) 0%, rgba(0,20,50,0.4) 50%, rgba(0,10,30,0.55) 100%);
-    pointer-events: none;
-}
-.aquarium-vignette {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    box-shadow: inset 0 0 150px rgba(0,0,0,0.6);
+    background: linear-gradient(180deg, rgba(0,30,60,0.45) 0%, rgba(0,15,40,0.35) 50%, rgba(0,30,60,0.45) 100%);
     pointer-events: none;
 }
 </style>
-<div class="aquarium-bg-scene">
-    <video class="aquarium-video" autoplay muted loop playsinline preload="auto">
-        <source src="https://videos.pexels.com/video-files/32173602/32173602-uhd_3840_2160_30fps.mp4" type="video/mp4">
-        <source src="https://videos.pexels.com/video-files/32173602/32173602-hd_1920_1080_30fps.mp4" type="video/mp4">
-        <source src="https://videos.pexels.com/video-files/32173602/32173602-hd_1280_720_30fps.mp4" type="video/mp4">
+<div class="chat-video-bg">
+    <video autoplay muted loop playsinline poster="https://images.unsplash.com/photo-1582967788606-a171f1080ca8?w=1920">
+        <source src="https://assets.mixkit.co/videos/preview/mixkit-fish-underwater-7055-large.mp4" type="video/mp4">
+        <source src="https://assets.mixkit.co/videos/preview/mixkit-school-of-fish-1170-large.mp4" type="video/mp4">
     </video>
-    <div class="aquarium-overlay"></div>
-    <div class="aquarium-vignette"></div>
+    <div class="chat-video-overlay"></div>
 </div>
 """
 
@@ -2983,7 +3064,7 @@ def main():
     elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         pass  # Weather bg rendered later
     elif view_bg == "💬 Chat":
-        st.markdown(AQUARIUM_BG_HTML, unsafe_allow_html=True)
+        st.markdown(CHAT_VIDEO_BG_HTML, unsafe_allow_html=True)
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
@@ -3710,84 +3791,6 @@ def main():
                     st.caption(f"{log.get('timestamp', '')} — {log.get('action', '')}")
             else: st.caption("No activity yet")
         st.markdown("---")
-
-        
-        st.markdown("---")
-        st.markdown("### 🚂 Live Engine View")
-        components.html("""
-        <style>
-        .sidebar-train-wrap {
-            position: relative;
-            width: 100%;
-            height: 280px;
-            overflow: hidden;
-            border-radius: 16px;
-            margin: 10px 0;
-            background: linear-gradient(180deg, #1a1a2e 0%, #0d0d1a 100%);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-            border: 2px solid rgba(255,153,51,0.3);
-        }
-        .sidebar-train-video {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 500px;
-            height: 280px;
-            transform: translate(-50%, -50%) rotate(-90deg);
-            object-fit: cover;
-            opacity: 0.95;
-        }
-        .sidebar-train-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(180deg, rgba(255,107,53,0.1) 0%, transparent 30%, transparent 70%, rgba(19,136,8,0.1) 100%);
-            pointer-events: none;
-            z-index: 2;
-        }
-        .sidebar-train-label {
-            position: absolute;
-            bottom: 10px;
-            left: 0;
-            width: 100%;
-            text-align: center;
-            color: #fff;
-            font-weight: 700;
-            font-size: 0.85rem;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.9);
-            z-index: 3;
-            letter-spacing: 1px;
-        }
-        .sidebar-train-glow {
-            position: absolute;
-            top: -2px;
-            left: -2px;
-            right: -2px;
-            bottom: -2px;
-            border-radius: 18px;
-            background: linear-gradient(180deg, #FF9933, #FFFFFF, #138808);
-            background-size: 100% 200%;
-            animation: train-glow-shift 3s linear infinite;
-            z-index: 0;
-            opacity: 0.6;
-        }
-        @keyframes train-glow-shift {
-            0% { background-position: 0% 0%; }
-            100% { background-position: 0% 100%; }
-        }
-        </style>
-        <div class="sidebar-train-wrap">
-            <div class="sidebar-train-glow"></div>
-            <video class="sidebar-train-video" autoplay muted loop playsinline preload="auto">
-                <source src="https://videos.pexels.com/video-files/18855089/18855089-hd_1920_1080_25fps.mp4" type="video/mp4">
-                <source src="https://videos.pexels.com/video-files/18855089/18855089-hd_1280_720_25fps.mp4" type="video/mp4">
-            </video>
-            <div class="sidebar-train-overlay"></div>
-            <div class="sidebar-train-label">🚂 Indian Railways — Bottom to Top</div>
-        </div>
-        """, height=300)
 
         st.markdown("### 📑 Select Sheet")
         sheet_choice = st.selectbox("Select Sheet", list(SHEET_CONFIG.keys()),
@@ -4805,188 +4808,263 @@ def main():
             st.rerun()
 
     # =====================================================================
-    # VIEW: 🚂 RAILWAY → 🌊 REALISTIC UNDERWATER WORLD
+    # VIEW: 🚂 RAILWAY
     # =====================================================================
     elif view == "🚂 Railway":
+        st.subheader("🚂 Indian Railways - Real-time Info")
+
+        # India Map Slideshow - Full Cover
         st.markdown("""
         <style>
-        .seashore-bg-scene {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            z-index: -1; pointer-events: none; overflow: hidden;
-        }
-        .seashore-video {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            object-fit: cover; opacity: 0.9;
-        }
-        .seashore-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(180deg, rgba(0,50,90,0.2) 0%, rgba(0,60,100,0.15) 40%, rgba(0,40,70,0.35) 100%);
-            pointer-events: none;
-        }
-        .seashore-vignette {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            box-shadow: inset 0 0 120px rgba(0,0,0,0.5);
-            pointer-events: none;
-        }
-        .seashore-title-card {
-            position: relative; z-index: 10;
-            background: rgba(0,40,80,0.25); backdrop-filter: blur(24px) saturate(160%);
-            border: 1px solid rgba(255,255,255,0.12); border-radius: 24px;
-            padding: 28px 36px; text-align: center; margin: 25px auto; max-width: 650px;
-            box-shadow: 0 12px 48px rgba(0,0,0,0.35);
-        }
-        .seashore-title-card h2 {
-            color: #ffffff !important; text-shadow: 0 2px 12px rgba(0,0,0,0.8) !important;
-            margin: 0; font-size: 1.7rem; font-weight: 800; letter-spacing: 1px;
-        }
-        .seashore-title-card p {
-            color: rgba(255,255,255,0.85) !important;
-            text-shadow: 0 1px 6px rgba(0,0,0,0.6) !important;
-            margin: 10px 0 0 0; font-size: 0.95rem;
-        }
-        .railway-tool-card {
-            background: rgba(0,40,80,0.2); backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
-            padding: 20px; transition: all 0.35s ease;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.2);
-        }
-        .railway-tool-card:hover {
-            transform: translateY(-4px); border-color: rgba(255,255,255,0.25);
-            box-shadow: 0 10px 40px rgba(0,0,0,0.35);
-        }
-        .railway-tool-card h4 {
-            color: #ffffff !important; text-shadow: 0 1px 5px rgba(0,0,0,0.7) !important;
-            margin: 0 0 12px 0; font-size: 1rem; font-weight: 700;
-        }
-        .railway-tool-card label {
-            color: #000000 !important; font-weight: 600 !important;
-            text-shadow: none !important;
-        }
-        .railway-tool-card input {
-            color: #000000 !important; -webkit-text-fill-color: #000000 !important;
-        }
+        @keyframes india-fade-1 { 0%,100% { opacity: 1; } 20% { opacity: 1; } 25% { opacity: 0; } 95% { opacity: 0; } }
+        @keyframes india-fade-2 { 0%,24% { opacity: 0; } 25% { opacity: 1; } 45% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 0; } }
+        @keyframes india-fade-3 { 0%,49% { opacity: 0; } 50% { opacity: 1; } 70% { opacity: 1; } 75% { opacity: 0; } 100% { opacity: 0; } }
+        @keyframes india-fade-4 { 0%,74% { opacity: 0; } 75% { opacity: 1; } 95% { opacity: 1; } 100% { opacity: 0; } }
+        @keyframes india-glow { 0%,100% { box-shadow: 0 0 20px rgba(255,153,51,0.3); } 50% { box-shadow: 0 0 40px rgba(19,136,8,0.4); } }
+        .india-map-box { position: relative; width: 100%; max-width: 1200px; margin: 0 auto 20px auto; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,0.4); border: 2px solid rgba(255,153,51,0.3); animation: india-glow 4s ease-in-out infinite; background: #0a0e27; }
+        .india-map-box::before { content: ''; position: absolute; inset: 0; border-radius: 16px; padding: 3px; background: linear-gradient(45deg, #FF9933, #FFFFFF, #138808, #FF9933); background-size: 400% 400%; animation: glow-rotate 6s linear infinite; -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; z-index: 10; }
+        .india-map-img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; padding: 8px; box-sizing: border-box; }
+        .india-map-lbl { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 8px 24px; border-radius: 30px; font-size: 1rem; font-weight: 700; letter-spacing: 1px; z-index: 5; border: 1px solid rgba(255,153,51,0.4); white-space: nowrap; }
+        .india-tag { position: absolute; background: rgba(255,153,51,0.9); color: #000; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 12px; border: 1px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.4); z-index: 6; animation: monument-pop 2s ease-in-out infinite alternate; }
+        @keyframes monument-pop { 0% { transform: scale(1); } 100% { transform: scale(1.08); } }
+        .im1 { animation: india-fade-1 24s ease-in-out infinite; z-index: 4; }
+        .im2 { animation: india-fade-2 24s ease-in-out infinite; z-index: 3; }
+        .im3 { animation: india-fade-3 24s ease-in-out infinite; z-index: 2; }
+        .im4 { animation: india-fade-4 24s ease-in-out infinite; z-index: 1; }
         </style>
-        <div class="seashore-bg-scene">
-            <video class="seashore-video" autoplay muted loop playsinline preload="auto">
-                <source src="https://videos.pexels.com/video-files/10450109/10450109-uhd_3840_2160_25fps.mp4" type="video/mp4">
-                <source src="https://videos.pexels.com/video-files/10450109/10450109-hd_1920_1080_25fps.mp4" type="video/mp4">
-                <source src="https://videos.pexels.com/video-files/10450109/10450109-hd_1280_720_25fps.mp4" type="video/mp4">
-            </video>
-            <div class="seashore-overlay"></div>
-            <div class="seashore-vignette"></div>
+        <div class="india-map-box" style="aspect-ratio: 4/3;">
+            <img class="india-map-img im1" src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2e/Political_map_of_India_HI.svg/1024px-Political_map_of_India_HI.svg.png" alt="Political">
+            <div class="india-map-lbl im1">🇮🇳 India Political Map — States & UTs</div>
+            <img class="india-map-img im2" src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Physical_Map_of_India.jpg/1024px-Physical_Map_of_India.jpg" alt="Physical">
+            <div class="india-map-lbl im2">⛰️ Mountains, Rivers & Peaks</div>
+            <img class="india-map-img im3" src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/India_Geographic_Map.jpg/1024px-India_Geographic_Map.jpg" alt="Monuments">
+            <div class="india-map-lbl im3">🏛️ Famous Monuments & Heritage</div>
+            <div class="india-tag im3" style="top: 32%; left: 42%;">🕌 Taj Mahal</div>
+            <div class="india-tag im3" style="top: 22%; left: 28%;">🕍 Golden Temple</div>
+            <div class="india-tag im3" style="top: 55%; left: 48%;">⛩️ Konark Sun Temple</div>
+            <div class="india-tag im3" style="top: 65%; left: 35%;">🗼 Gateway of India</div>
+            <div class="india-tag im3" style="top: 45%; left: 58%;">🏯 Victoria Memorial</div>
+            <div class="india-tag im3" style="top: 72%; left: 45%;">🏛️ Meenakshi Temple</div>
+            <div class="india-tag im3" style="top: 60%; left: 22%;">🕌 Hawa Mahal</div>
+            <div class="india-tag im3" style="top: 38%; left: 55%;">🛕 Mahabodhi Temple</div>
+            <img class="india-map-img im4" src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Map_of_India.png/1024px-Map_of_India.png" alt="Simple">
+            <div class="india-map-lbl im4">🗺️ Simple States Outline</div>
         </div>
-        <div class="seashore-title-card">
-            <h2>🌊 Sea Shore Railway Hub</h2>
-            <p>Coastal railway operations with live sea shore ambience</p>
-        </div>
+        <div style="text-align:center; margin:8px 0 20px 0; color:#94a3b8; font-size:0.85rem;">🎬 Maps cycle every 6 seconds • Source: Wikimedia Commons</div>
         """, unsafe_allow_html=True)
 
-        st.markdown("<div style='height:20vh;'></div>", unsafe_allow_html=True)
+        if not NTES_AVAILABLE:
+            st.error("❌ 'ntes-client' library not installed. Please run: `pip install ntes-client`")
+            st.info("💡 Using alternative web-based PNR and train status services...")
+            st.markdown("### 🔍 PNR Status (via ConfirmTkt)")
+            pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr_alt")
+            if pnr_input and len(pnr_input) == 10 and pnr_input.isdigit():
+                pnr_url = f"https://www.confirmtkt.com/pnr-status/{pnr_input}"
+                st.link_button("🔍 Check PNR Status", pnr_url, use_container_width=True)
+            st.markdown("### 🚂 Live Train Status (via RailYatri)")
+            train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train_alt")
+            if train_no and train_no.isdigit() and (3 <= len(train_no) <= 5):
+                train_url = f"https://www.railyatri.in/live-train-status/{train_no}"
+                st.link_button("🚂 Check Live Status", train_url, use_container_width=True)
+            st.markdown("### 📋 Train Schedule (via RailYatri)")
+            train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch_alt")
+            if train_no_sch and train_no_sch.isdigit() and (3 <= len(train_no_sch) <= 5):
+                sch_url = f"https://www.railyatri.in/train-schedule/{train_no_sch}"
+                st.link_button("📋 View Schedule", sch_url, use_container_width=True)
+        else:
+            tab1, tab2, tab3, tab4 = st.tabs(["🔍 PNR Status", "🚂 Live Train", "📋 Train Schedule", "📸 Passport Photo"])
 
-        # Railway Tools
-        st.markdown("### 🚂 Railway Operations")
-        rail_col1, rail_col2 = st.columns(2)
-        with rail_col1:
-            with st.container():
-                st.markdown("<div class='railway-tool-card'>", unsafe_allow_html=True)
-                st.markdown("**🎫 PNR Status Check**")
-                pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="railway_pnr_input")
-                if pnr_input and len(pnr_input) == 10:
-                    with st.spinner("Checking PNR..."):
-                        pnr_data = get_pnr_status(pnr_input)
-                        st.markdown(f"<div class='result-box'><pre>{format_pnr_result(pnr_data)}</pre></div>", unsafe_allow_html=True)
-                elif pnr_input:
-                    st.warning("PNR must be exactly 10 digits")
-                st.markdown("</div>", unsafe_allow_html=True)
-        with rail_col2:
-            with st.container():
-                st.markdown("<div class='railway-tool-card'>", unsafe_allow_html=True)
-                st.markdown("**🚆 Live Train Status**")
-                train_input = st.text_input("Enter Train Number", key="railway_train_input")
-                date_input = st.date_input("Journey Date", value=datetime.now(), key="railway_date_input", format="DD-MM-YYYY")
-                if st.button("🔍 Get Live Status", key="railway_status_btn", use_container_width=True):
-                    if train_input:
-                        with st.spinner("Fetching live status..."):
-                            train_data = get_live_train_status(train_input, date_input.strftime("%d-%b-%Y"))
-                            msg, _ = format_live_train_result(train_data)
-                            st.markdown(f"<div class='result-box'><pre>{msg}</pre></div>", unsafe_allow_html=True)
-                    else:
-                        st.warning("Enter train number")
-                st.markdown("</div>", unsafe_allow_html=True)
+            with tab1:
+                st.markdown("### PNR Status Check")
+                pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr")
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Check PNR", key="pnr_check", use_container_width=True):
+                        if not pnr_input or len(pnr_input) != 10 or not pnr_input.isdigit():
+                            st.error("Please enter a valid 10-digit PNR.")
+                        else:
+                            with st.spinner("Fetching PNR details..."):
+                                data = get_pnr_status(pnr_input)
+                                if data and isinstance(data, dict) and data.get('error'):
+                                    if data['error'] == "FLUSHED_PNR": st.error("❌ FLUSHED PNR / PNR NOT YET GENERATED")
+                                    else: st.error(f"❌ {data['error']}")
+                                elif data:
+                                    st.session_state.pnr_result = data
+                                    st.session_state.pnr_last_checked = time.time()
+                                    st.rerun()
+                                else: st.error("❌ PNR not found or flushed.")
+                with c2:
+                    if st.button("🔄 Refresh PNR", key="refresh_pnr", use_container_width=True):
+                        if pnr_input and len(pnr_input) == 10 and pnr_input.isdigit():
+                            with st.spinner("Refreshing PNR..."):
+                                data = get_pnr_status(pnr_input)
+                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
+                                elif data:
+                                    st.session_state.pnr_result = data
+                                    st.session_state.pnr_last_checked = time.time()
+                                    st.rerun()
+                                else: st.error("❌ PNR not found or flushed.")
+                        else: st.warning("Please enter a valid PNR first.")
 
-        st.markdown("---")
-        st.markdown("### 🔍 Train Search & Schedule")
-        search_col1, search_col2 = st.columns(2)
-        with search_col1:
-            with st.container():
-                st.markdown("<div class='railway-tool-card'>", unsafe_allow_html=True)
-                st.markdown("**🔍 Train Search**")
-                search_query = st.text_input("Search by name/number", key="railway_search_input")
-                if st.button("🔍 Search Trains", key="railway_search_btn", use_container_width=True):
-                    if search_query:
-                        with st.spinner("Searching..."):
-                            search_data = search_trains(search_query)
-                            st.markdown(f"<div class='result-box'><pre>{format_train_search(search_data)}</pre></div>", unsafe_allow_html=True)
-                    else:
-                        st.warning("Enter search query")
-                st.markdown("</div>", unsafe_allow_html=True)
-        with search_col2:
-            with st.container():
-                st.markdown("<div class='railway-tool-card'>", unsafe_allow_html=True)
-                st.markdown("**📋 Schedule Lookup**")
-                sch_train = st.text_input("Train Number", key="railway_sch_input")
-                if st.button("📋 Get Schedule", key="railway_sch_btn", use_container_width=True):
-                    if sch_train:
-                        with st.spinner("Loading schedule..."):
-                            sch_data = get_train_schedule(sch_train)
-                            msg, _ = format_schedule_result(sch_data)
-                            st.markdown(f"<div class='result-box'><pre>{msg}</pre></div>", unsafe_allow_html=True)
-                    else:
-                        st.warning("Enter train number")
-                st.markdown("</div>", unsafe_allow_html=True)
+                if st.session_state.pnr_result and st.session_state.pnr_last_checked:
+                    elapsed = time.time() - st.session_state.pnr_last_checked
+                    if elapsed > 300:
+                        with st.spinner("Auto-refreshing PNR..."):
+                            current_pnr = st.session_state.pnr_result.get('pnr')
+                            if current_pnr:
+                                data = get_pnr_status(current_pnr)
+                                if data and not isinstance(data, dict) or not data.get('error'):
+                                    st.session_state.pnr_result = data
+                                    st.session_state.pnr_last_checked = time.time()
+                                    st.rerun()
 
-        st.markdown("---")
-        st.markdown("<div style='height:15vh;'></div>", unsafe_allow_html=True)
+                if st.session_state.pnr_result:
+                    with st.container():
+                        st.markdown('<div class="result-box">', unsafe_allow_html=True)
+                        st.markdown(format_pnr_result(st.session_state.pnr_result))
+                        st.markdown('</div>', unsafe_allow_html=True)
+                        if st.session_state.pnr_last_checked:
+                            last_check = datetime.fromtimestamp(st.session_state.pnr_last_checked).strftime('%H:%M:%S')
+                            st.caption(f"⏱️ Last checked: {last_check} IST (auto-refreshes every 5 min)")
 
-        # Sea Shore Info Cards
-        st.markdown("### 🌊 Coastal Facts")
-        st.markdown("""
-        <style>
-        .coastal-card {
-            background: rgba(0,50,90,0.2); backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
-            padding: 20px; text-align: center; transition: all 0.35s ease;
-        }
-        .coastal-card:hover { transform: translateY(-6px); border-color: rgba(255,255,255,0.25); box-shadow: 0 10px 40px rgba(0,0,0,0.35); }
-        .coastal-card .icon-wrap { width:56px; height:56px; margin:0 auto 10px; background:linear-gradient(135deg, rgba(100,180,255,0.3), rgba(80,150,220,0.2)); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.6rem; border:1px solid rgba(255,255,255,0.15); }
-        .coastal-card h4 { color:#ffffff !important; text-shadow:0 1px 5px rgba(0,0,0,0.7) !important; margin:0; font-size:0.95rem; font-weight:700; }
-        .coastal-card p { color:rgba(255,255,255,0.75) !important; text-shadow:0 1px 4px rgba(0,0,0,0.5) !important; font-size:0.78rem; margin:6px 0 0 0; line-height:1.4; }
-        </style>
-        """, unsafe_allow_html=True)
-        c1, c2, c3, c4, c5 = st.columns(5)
-        with c1:
-            st.markdown('<div class="coastal-card"><div class="icon-wrap">🌊</div><h4>Indian Coastline</h4><p>7,500+ km of coastline</p></div>', unsafe_allow_html=True)
-        with c2:
-            st.markdown('<div class="coastal-card"><div class="icon-wrap">🚂</div><h4>Konkan Railway</h4><p>760 km scenic route</p></div>', unsafe_allow_html=True)
-        with c3:
-            st.markdown('<div class="coastal-card"><div class="icon-wrap">🌉</div><h4>Sea Bridges</h4><p>Pamban, Vidyasagar Setu</p></div>', unsafe_allow_html=True)
-        with c4:
-            st.markdown('<div class="coastal-card"><div class="icon-wrap">🏖️</div><h4>Beach Stations</h4><p>Goa, Puri, Vizag</p></div>', unsafe_allow_html=True)
-        with c5:
-            st.markdown('<div class="coastal-card"><div class="icon-wrap">⚓</div><h4>Port Connectivity</h4><p>Major ports linked</p></div>', unsafe_allow_html=True)
+            with tab2:
+                st.markdown("### Live Train Status")
+                train_no = st.text_input("Enter Train Number (3-5 digits)", key="rail_train")
+                date_options = [f"{get_date_label(i)} ({get_date_for_offset(i)})" for i in range(5)]
+                date_choice = st.selectbox("Select Date", date_options, index=0, key="rail_date")
+                offset = 0
+                for i in range(5):
+                    if get_date_label(i) in date_choice: offset = i; break
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Get Live Status", key="train_live", use_container_width=True):
+                        if not train_no or not train_no.isdigit() or not (3 <= len(train_no) <= 5):
+                            st.error("Please enter a valid train number (3-5 digits).")
+                        else:
+                            with st.spinner("Fetching live status..."):
+                                date_str = get_date_for_offset(offset)
+                                data = get_live_train_status(train_no, date_str)
+                                if data and isinstance(data, dict) and data.get('error'):
+                                    st.error(f"❌ {data['error']}: {data.get('message', '')}")
+                                elif data:
+                                    st.session_state.train_result = data
+                                    st.rerun()
+                                else: st.error("❌ No data available.")
+                with c2:
+                    if st.button("🔄 Refresh Live Status", key="refresh_live", use_container_width=True):
+                        if train_no and train_no.isdigit() and (3 <= len(train_no) <= 5):
+                            with st.spinner("Refreshing live status..."):
+                                date_str = get_date_for_offset(offset)
+                                data = get_live_train_status(train_no, date_str)
+                                if data and isinstance(data, dict) and data.get('error'):
+                                    st.error(f"❌ {data['error']}: {data.get('message', '')}")
+                                elif data:
+                                    st.session_state.train_result = data
+                                    st.rerun()
+                                else: st.error("❌ No data available.")
+                        else: st.warning("Please enter a valid train number first.")
 
-        st.markdown("<div style='height:25px;'></div>", unsafe_allow_html=True)
-        st.markdown("""
-        <div style="position:relative; z-index:10; text-align:center; padding:24px; background:rgba(0,50,90,0.2); backdrop-filter:blur(16px); border-radius:20px; border:1px solid rgba(255,255,255,0.1); max-width:850px; margin:0 auto;">
-            <div style="color:#ffffff; font-size:1.15rem; font-weight:700; text-shadow:0 1px 5px rgba(0,0,0,0.7); margin-bottom:10px;">🌊 Did You Know?</div>
-            <div style="color:rgba(255,255,255,0.85); font-size:0.9rem; text-shadow:0 1px 4px rgba(0,0,0,0.5); line-height:1.6;">
-                The Indian Railways operates some of the most scenic coastal routes in the world, including the 
-                Konkan Railway which runs parallel to the Arabian Sea for over 700 kilometers, offering 
-                breathtaking views of beaches, estuaries, and mangroves!
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    elif view == "🌤️ Weather":
+                if st.session_state.train_result:
+                    with st.container():
+                        st.markdown('<div class="result-box">', unsafe_allow_html=True)
+                        msg, _ = format_live_train_result(st.session_state.train_result)
+                        st.markdown(msg)
+                        st.markdown('</div>', unsafe_allow_html=True)
+
+            with tab3:
+                st.markdown("### Train Schedule / Route")
+                train_no_sch = st.text_input("Enter Train Number (3-5 digits)", key="rail_sch")
+                if 'sch_start' not in st.session_state: st.session_state.sch_start = 0
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Get Schedule", key="train_sch", use_container_width=True):
+                        if not train_no_sch or not train_no_sch.isdigit() or not (3 <= len(train_no_sch) <= 5):
+                            st.error("Please enter a valid train number.")
+                        else:
+                            with st.spinner("Fetching schedule..."):
+                                data = get_train_schedule(train_no_sch)
+                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
+                                elif data:
+                                    st.session_state.sch_data = data
+                                    st.session_state.sch_start = 0
+                                    st.rerun()
+                                else: st.error("❌ Schedule not found.")
+                with c2:
+                    if st.button("🔄 Refresh Schedule", key="refresh_sch", use_container_width=True):
+                        if train_no_sch and train_no_sch.isdigit() and (3 <= len(train_no_sch) <= 5):
+                            with st.spinner("Refreshing schedule..."):
+                                data = get_train_schedule(train_no_sch)
+                                if data and isinstance(data, dict) and data.get('error'): st.error(f"❌ {data['error']}")
+                                elif data:
+                                    st.session_state.sch_data = data
+                                    st.session_state.sch_start = 0
+                                    st.rerun()
+                                else: st.error("❌ Schedule not found.")
+                        else: st.warning("Please enter a valid train number first.")
+
+                if st.session_state.sch_data:
+                    data = st.session_state.sch_data
+                    if isinstance(data, dict):
+                        msg, pagination = format_schedule_result(data, st.session_state.sch_start)
+                        with st.container():
+                            st.markdown('<div class="result-box">', unsafe_allow_html=True)
+                            st.markdown(msg)
+                            st.markdown('</div>', unsafe_allow_html=True)
+                        if pagination:
+                            start, end, total = pagination
+                            chunk = 20
+                            if total > 0:
+                                col1, col2, col3 = st.columns([1,2,1])
+                                with col1:
+                                    if start > 0:
+                                        if st.button("◀ Previous", key="sch_prev"):
+                                            st.session_state.sch_start = max(0, start - chunk)
+                                            st.rerun()
+                                with col2: st.write(f"Showing {start+1}-{end} of {total}")
+                                with col3:
+                                    if end < total:
+                                        if st.button("Next ▶", key="sch_next"):
+                                            st.session_state.sch_start = end
+                                            st.rerun()
+                    else: st.info("No schedule data available.")
+
+            with tab4:
+                st.markdown("### 📸 Passport Photo Maker")
+                st.caption("Upload any photo → Auto remove background → Add black border → 35x45mm standard size")
+                api_key = str(st.secrets.get("REMOVE_BG_API_KEY", "")).strip()
+                if not api_key: api_key = str(os.environ.get("REMOVE_BG_API_KEY", "")).strip()
+                if not api_key and "remove_bg_key" in st.session_state: api_key = str(st.session_state.remove_bg_key).strip()
+                if not api_key:
+                    st.error("❌ REMOVE_BG_API_KEY not found.")
+                    st.info("Add to secrets.toml or .env")
+                    manual_key = st.text_input("Or paste key here", type="password", key="manual_bg_key_input")
+                    if manual_key and manual_key.strip():
+                        st.session_state.remove_bg_key = manual_key.strip()
+                        st.success("Key saved. Refreshing...")
+                        st.rerun()
+                    st.stop()
+                else: st.success(f"✅ API Key ready: {api_key[:4]}...{api_key[-4:]}")
+
+                photo_file = st.file_uploader("Upload Photo", type=["png", "jpg", "jpeg"], key="passport_photo_uploader")
+                if photo_file:
+                    st.image(photo_file, caption="Original Photo", width=250)
+                    if st.button("✨ Process Passport Photo", type="primary", use_container_width=True, key="process_passport_btn"):
+                        with st.spinner("Processing... (10-30 seconds)"):
+                            try:
+                                image_data = photo_file.read()
+                                result = process_passport_image(image_data)
+                                if result:
+                                    st.success("✅ Passport Photo Ready!")
+                                    st.image(result, caption="Background removed | Black border | 35x45mm", width=300)
+                                    st.download_button("📥 Download Passport Photo", data=result,
+                                        file_name=f"passport_{now_ist().strftime('%Y%m%d_%H%M%S')}.png",
+                                        mime="image/png", use_container_width=True)
+                                else: st.error("❌ Failed to process photo.")
+                            except Exception as e: st.error(f"❌ Error: {str(e)[:200]}")
+
+    # =====================================================================
+    # VIEW: 🌤️ WEATHER
+    # =====================================================================elif view == "🌤️ Weather":
         st.subheader("🌤️ Weather Information")
 
         qp_lat = st.query_params.get('__lat')
@@ -5069,9 +5147,9 @@ def main():
             loc_full = data['city'] + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
             day_night_icon = "🌙" if time_of_day in ['night', 'dusk'] else "☀️" if time_of_day == 'day' else "🌅"
             st.markdown(f'''<div style="text-align:center; margin-bottom:15px;">
-                <div style="display:inline-block; background: linear-gradient(135deg, rgba(255,153,51,0.2), rgba(255,255,255,0.1), rgba(19,136,8,0.2)); 
-                    border: 1px solid rgba(0,0,0,0.15); border-radius: 50px; padding: 10px 30px; 
-                    backdrop-filter: blur(12px); color: #000000 !important; text-shadow: none !important; font-weight: 700; font-size: 1.1rem;">
+                <div style="display:inline-block; background: rgba(173, 216, 230, 0.25); 
+                    border: 1px solid rgba(255,255,255,0.25); border-radius: 50px; padding: 10px 30px; 
+                    backdrop-filter: blur(12px); color: #ffffff !important; text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important; font-weight: 700; font-size: 1.1rem;">
                     {day_night_icon} {loc_full} • {time_of_day.title()}
                 </div>
             </div>''', unsafe_allow_html=True)
@@ -5310,28 +5388,22 @@ def main():
                                 50% {{ transform: translateY(-5px); }}
                             }}
                             .forecast-card-{idx} {{
-                                background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18);
-                                border-radius: 20px; padding: 18px; text-align: center;
+                                background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+                                border-radius: 20px; padding: 18px; text-align: center; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6);
                                 box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
                                 animation: forecast-bounce 3s ease-in-out infinite;
                                 animation-delay: {idx * 0.3}s;
-                                backdrop-filter: blur(12px);
-                            }}
-                            .forecast-card-{idx} * {{
-                                color: #ffffff !important;
-                                -webkit-text-fill-color: #ffffff !important;
-                                text-shadow: 0 1px 4px rgba(0,0,0,0.8) !important;
                             }}
                             </style>
                             <div class="forecast-card-{idx}">
-                                <div style="font-size: 0.9rem; font-weight: 700; margin-bottom: 8px;">{day_name}</div>
-                                <img src="{icon_url}" style="width: 60px; height: 60px; margin: 5px 0; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));">
-                                <div style="font-size: 1.8rem; font-weight: 800;">{day['temp']}°C</div>
-                                <div style="font-size: 0.8rem; margin: 4px 0; font-weight: 600;">{day['description']}</div>
-                                <div style="font-size: 0.8rem; margin-top: 8px; font-weight: 600;">
+                                <div style="font-size: 0.9rem; font-weight: 600; margin-bottom: 8px;">{day_name}</div>
+                                <img src="{icon_url}" style="width: 60px; height: 60px; margin: 5px 0;">
+                                <div style="font-size: 1.8rem; font-weight: 700;">{day['temp']}°C</div>
+                                <div style="font-size: 0.75rem; margin: 4px 0;">{day['description']}</div>
+                                <div style="font-size: 0.8rem; margin-top: 8px; opacity: 0.9;">
                                     🔺 {day['max_temp']}° / 🔻 {day['min_temp']}°
                                 </div>
-                                <div style="font-size: 0.78rem; margin-top: 6px; font-weight: 600;">
+                                <div style="font-size: 0.75rem; margin-top: 6px; opacity: 0.85;">
                                     💧 {day['humidity']}% | 🌬️ {day['wind']} m/s
                                 </div>
                             </div>
@@ -5433,6 +5505,14 @@ def main():
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
     }
+    /* Weather labels - WHITE for dark bg */
+    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label p,
+    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label span {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        font-weight: 700 !important;
+    }
     /* === DATA TABLE HEADERS === */
     div[data-testid="stMain"] .stDataFrame th,
     div[data-testid="stMain"] .stDataEditor th {
@@ -5447,25 +5527,6 @@ def main():
         color: #1e293b !important;
         -webkit-text-fill-color: #1e293b !important;
         text-shadow: none !important;
-    }
-    /* === WEATHER LABELS - WHITE (highest priority override) === */
-    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label p,
-    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label span,
-    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
-    div[data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label p,
-    div[data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label span,
-    div[data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 4px rgba(0,0,0,0.9) !important;
-        font-weight: 800 !important;
-    }
-    /* === WEATHER STAMP - LIGHT BLUE TRANSPARENT === */
-    div[data-testid="stMain"] .weather-input-wrapper {
-        background: rgba(173, 216, 230, 0.22) !important;
-        border: 1px solid rgba(173, 216, 230, 0.4) !important;
-        backdrop-filter: blur(16px) saturate(150%) !important;
-        -webkit-backdrop-filter: blur(16px) saturate(150%) !important;
     }
     </style>
     """, unsafe_allow_html=True)
