@@ -3284,6 +3284,73 @@ def main():
 
         weather_bg_html = f"""<style>@keyframes rainFall{{from{{transform:translateY(-20px);opacity:0;}}10%{{opacity:0.8;}}90%{{opacity:0.8;}}to{{transform:translateY(110vh);opacity:0;}}}}@keyframes snowFall{{from{{transform:translateY(-20px) rotate(0deg);opacity:0;}}10%{{opacity:1;}}90%{{opacity:1;}}to{{transform:translateY(110vh) rotate(360deg);opacity:0;}}}}@keyframes cloudDrift{{from{{transform:translateX(-300px);}}to{{transform:translateX(calc(100vw + 300px));}}}}@keyframes sunPulse{{0%,100%{{transform:scale(1);opacity:0.9;}}50%{{transform:scale(1.15);opacity:1;}}}}@keyframes raySpin{{from{{transform:translate(-50%,-50%) rotate(0deg);}}to{{transform:translate(-50%,-50%) rotate(360deg);}}}}@keyframes moonGlow{{0%,100%{{box-shadow:0 0 60px 20px rgba(245,245,220,0.3);}}50%{{box-shadow:0 0 80px 30px rgba(245,245,220,0.5);}}}}@keyframes twinkle{{0%,100%{{opacity:0.3;}}50%{{opacity:1;}}}}@keyframes treeSway{{0%,100%{{transform:rotate(-3deg);}}50%{{transform:rotate(3deg);}}}}@keyframes waterShimmer{{0%,100%{{opacity:0.3;transform:scaleX(1);}}50%{{opacity:0.7;transform:scaleX(1.2);}}}}@keyframes lightning{{0%,90%,100%{{opacity:0;}}91%{{opacity:0.3;}}92%{{opacity:0;}}93%{{opacity:0.6;}}94%{{opacity:0;}}}}@keyframes windowLight{{0%,100%{{opacity:0.6;}}50%{{opacity:1;}}}}@keyframes birdFly{{from{{transform:translateX(-50px);}}to{{transform:translateX(calc(100vw + 50px));}}}}@keyframes fogDrift{{from{{transform:translateX(-50%);}}to{{transform:translateX(0%);}}}}</style><div style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;overflow:hidden;{bg_style}">{elements}{info_html}</div>"""
 
+    # Weather text color: Day=Black, Night=White
+    weather_text_color = "#000000" if weather_mode == "day" else "#ffffff"
+    weather_text_shadow = "0 1px 3px rgba(255,255,255,0.6)" if weather_mode == "day" else "0 1px 3px rgba(0,0,0,0.8)"
+    weather_card_bg = "rgba(255,255,255,0.25)" if weather_mode == "day" else "rgba(0,0,0,0.25)"
+    weather_card_border = "rgba(0,0,0,0.15)" if weather_mode == "day" else "rgba(255,255,255,0.15)"
+
+    weather_text_css = f"""
+    <style>
+    /* Weather tab text colors - Day=Black, Night=White */
+    [data-testid="stMain"] .weather-main-card,
+    [data-testid="stMain"] .weather-main-card * {{
+        color: {weather_text_color} !important;
+        -webkit-text-fill-color: {weather_text_color} !important;
+        text-shadow: {weather_text_shadow} !important;
+    }}
+    [data-testid="stMain"] .weather-detail-item,
+    [data-testid="stMain"] .weather-detail-item * {{
+        color: {weather_text_color} !important;
+        -webkit-text-fill-color: {weather_text_color} !important;
+        text-shadow: {weather_text_shadow} !important;
+    }}
+    [data-testid="stMain"] .sunrise-sunset,
+    [data-testid="stMain"] .sunrise-sunset * {{
+        color: {weather_text_color} !important;
+        -webkit-text-fill-color: {weather_text_color} !important;
+        text-shadow: {weather_text_shadow} !important;
+    }}
+    [data-testid="stMain"] .forecast-card-0, [data-testid="stMain"] .forecast-card-0 *,
+    [data-testid="stMain"] .forecast-card-1, [data-testid="stMain"] .forecast-card-1 *,
+    [data-testid="stMain"] .forecast-card-2, [data-testid="stMain"] .forecast-card-2 *,
+    [data-testid="stMain"] .forecast-card-3, [data-testid="stMain"] .forecast-card-3 *,
+    [data-testid="stMain"] .forecast-card-4, [data-testid="stMain"] .forecast-card-4 * {{
+        color: {weather_text_color} !important;
+        -webkit-text-fill-color: {weather_text_color} !important;
+        text-shadow: {weather_text_shadow} !important;
+    }}
+    /* Weather tab ALL text override */
+    [data-testid="stMain"] h1, [data-testid="stMain"] h2, [data-testid="stMain"] h3,
+    [data-testid="stMain"] h4, [data-testid="stMain"] h5, [data-testid="stMain"] h6,
+    [data-testid="stMain"] p, [data-testid="stMain"] span, [data-testid="stMain"] div,
+    [data-testid="stMain"] label, [data-testid="stMain"] .stMarkdown {{
+        color: {weather_text_color} !important;
+        -webkit-text-fill-color: {weather_text_color} !important;
+        text-shadow: {weather_text_shadow} !important;
+    }}
+    /* Weather input fields */
+    [data-testid="stMain"] .stTextInput input {{
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+        background: rgba(255,255,255,0.9) !important;
+    }}
+    [data-testid="stMain"] .stButton > button {{
+        color: {weather_text_color} !important;
+        -webkit-text-fill-color: {weather_text_color} !important;
+        text-shadow: {weather_text_shadow} !important;
+        background: {weather_card_bg} !important;
+        border: 1px solid {weather_card_border} !important;
+        backdrop-filter: blur(10px) !important;
+    }}
+    [data-testid="stMain"] .stButton > button:hover {{
+        background: {weather_card_bg.replace("0.25", "0.4")} !important;
+    }}
+    </style>
+    """
+    st.markdown(weather_text_css, unsafe_allow_html=True)
+
     if weather_bg_html:
         st.markdown(weather_bg_html, unsafe_allow_html=True)
 
@@ -4746,14 +4813,88 @@ def main():
         .chat-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #60a5fa; animation: chat-typing 1.4s ease-in-out infinite; }
         .chat-dot:nth-child(2) { animation-delay: 0.2s; }
         .chat-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        /* CHAT TAB: All text BLACK + BOLD */
+        [data-testid="stMain"] .stChatMessage,
+        [data-testid="stMain"] .stChatMessage * {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+            font-weight: 600 !important;
+        }
+        [data-testid="stMain"] .stChatMessage [data-testid="stChatMessageContent"] {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            font-weight: 600 !important;
+            font-size: 1.05rem !important;
+        }
+        [data-testid="stMain"] .stChatMessage [data-testid="stChatMessageAvatar"] {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            font-weight: 700 !important;
+        }
+        [data-testid="stMain"] h1, [data-testid="stMain"] h2, [data-testid="stMain"] h3,
+        [data-testid="stMain"] h4, [data-testid="stMain"] h5, [data-testid="stMain"] h6 {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+            font-weight: 700 !important;
+        }
+        [data-testid="stMain"] p, [data-testid="stMain"] span, [data-testid="stMain"] div,
+        [data-testid="stMain"] label, [data-testid="stMain"] .stMarkdown {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+            font-weight: 600 !important;
+        }
+
+        /* CHAT INPUT: Transparent background */
+        [data-testid="stMain"] .stChatInput {
+            background: transparent !important;
+        }
+        [data-testid="stMain"] .stChatInput > div {
+            background: rgba(255,255,255,0.15) !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
+            border: 1px solid rgba(0,0,0,0.2) !important;
+            border-radius: 12px !important;
+        }
+        [data-testid="stMain"] .stChatInput input,
+        [data-testid="stMain"] .stChatInput textarea {
+            background: transparent !important;
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+            border: none !important;
+            box-shadow: none !important;
+            font-weight: 600 !important;
+            font-size: 1.05rem !important;
+        }
+        [data-testid="stMain"] .stChatInput input::placeholder,
+        [data-testid="stMain"] .stChatInput textarea::placeholder {
+            color: rgba(0,0,0,0.5) !important;
+            -webkit-text-fill-color: rgba(0,0,0,0.5) !important;
+        }
+        /* Chat buttons and suggestions */
+        [data-testid="stMain"] .stButton > button {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            background: rgba(255,255,255,0.3) !important;
+            border: 1px solid rgba(0,0,0,0.2) !important;
+            font-weight: 600 !important;
+            font-size: 0.95rem !important;
+        }
+        [data-testid="stMain"] .stButton > button:hover {
+            background: rgba(255,255,255,0.5) !important;
+        }
         </style>
         <video class="chat-bg-video" autoplay muted loop playsinline>
             <source src="https://videos.pexels.com/video-files/3571264/3571264-uhd_2560_1440_30fps.mp4" type="video/mp4">
         </video>
         <div style="text-align: center; padding: 10px 0;">
             <span class="chat-train-icon">🚂</span>
-            <div style="font-size: 1.5rem; font-weight: 700; margin-top: 8px; color: #ffffff; text-shadow: 0 2px 10px rgba(0,0,0,0.8);">TSKEQ Bot</div>
-            <div style="color: #e2e8f0; font-size: 0.9rem; text-shadow: 0 1px 5px rgba(0,0,0,0.6);">Ask about EQ data, trains, quota, PNR or anything</div>
+            <div style="font-size: 1.5rem; font-weight: 700; margin-top: 8px; color: #000000; text-shadow: none;">TSKEQ Bot</div>
+            <div style="color: #000000; font-size: 0.9rem; text-shadow: none;">Ask about EQ data, trains, quota, PNR or anything</div>
         </div>
         """, unsafe_allow_html=True)
         st.subheader("💬 Chat with TSKEQ Bot")
@@ -5198,106 +5339,7 @@ def main():
             # Animated Weather Scene
             weather_condition = str(data.get('weather', '')).lower()
 
-            weather_scene_html = """
-            <style>
-            .w-scene-wrap { position: relative; width: 100%; height: 220px; border-radius: 20px; overflow: hidden; margin: 15px 0; box-shadow: 0 8px 32px rgba(0,0,0,0.25); }
-            .w-sky { position: absolute; width: 100%; height: 100%; top: 0; left: 0; }
-            .w-sunny { background: linear-gradient(180deg, #4facfe 0%, #00f2fe 100%); }
-            .w-rainy { background: linear-gradient(180deg, #2c3e50 0%, #4a5568 100%); }
-            .w-cloudy { background: linear-gradient(180deg, #7f8c8d 0%, #95a5a6 100%); }
-            .w-thunder { background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%); }
-            .w-snowy { background: linear-gradient(180deg, #e0e7ff 0%, #c7d2fe 100%); }
-            .w-foggy { background: linear-gradient(180deg, #d5d8dc 0%, #aab7b8 100%); }
 
-            @keyframes w-sun-pulse { 0%,100%{transform:scale(1);opacity:0.9;} 50%{transform:scale(1.2);opacity:1;} }
-            .w-sun { position: absolute; top: 15px; right: 30px; width: 70px; height: 70px; background: radial-gradient(circle, #FFD700 0%, #FFA500 60%, transparent 100%); border-radius: 50%; animation: w-sun-pulse 3s ease-in-out infinite; box-shadow: 0 0 50px 15px rgba(255,215,0,0.4); }
-
-            @keyframes w-ray-spin { from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(360deg);} }
-            .w-ray { position: absolute; top: 50%; left: 50%; width: 100px; height: 3px; background: linear-gradient(90deg, transparent, #FFD700, transparent); transform-origin: center; animation: w-ray-spin 10s linear infinite; }
-
-            @keyframes w-cloud-move { from{transform:translateX(-120px);} to{transform:translateX(calc(100% + 120px));} }
-            .w-cloud { position: absolute; background: rgba(255,255,255,0.85); border-radius: 40px; animation: w-cloud-move linear infinite; }
-            .w-cloud::before { content: ''; position: absolute; background: rgba(255,255,255,0.85); border-radius: 50%; }
-            .w-cloud::after { content: ''; position: absolute; background: rgba(255,255,255,0.85); border-radius: 50%; }
-
-            @keyframes w-rain-fall { from{transform:translateY(-20px);opacity:0;} 10%{opacity:0.8;} 90%{opacity:0.8;} to{transform:translateY(240px);opacity:0;} }
-            .w-rain { position: absolute; width: 2px; height: 14px; background: linear-gradient(180deg, transparent, #64b5f6); border-radius: 0 0 2px 2px; animation: w-rain-fall linear infinite; }
-
-            @keyframes w-lightning { 0%,90%,100%{background:rgba(255,255,255,0);} 91%{background:rgba(255,255,255,0.25);} 92%{background:rgba(255,255,255,0);} 93%{background:rgba(255,255,255,0.4);} 94%{background:rgba(255,255,255,0);} }
-            .w-lightning { position: absolute; top: 0; left: 0; width: 100%; height: 100%; animation: w-lightning 4s ease-in-out infinite; }
-
-            @keyframes w-snow-fall { from{transform:translateY(-20px) rotate(0deg);opacity:0;} 10%{opacity:1;} 90%{opacity:1;} to{transform:translateY(240px) rotate(360deg);opacity:0;} }
-            .w-snow { position: absolute; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6); font-size: 13px; animation: w-snow-fall linear infinite; text-shadow: 0 0 4px rgba(255,255,255,0.8); }
-
-            @keyframes w-fog-drift { from{transform:translateX(-50%);} to{transform:translateX(0%);} }
-            .w-fog { position: absolute; width: 200%; height: 50px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent); animation: w-fog-drift linear infinite; }
-
-            .w-ground { position: absolute; bottom: 0; left: 0; width: 100%; height: 35px; background: linear-gradient(180deg, #2d5016 0%, #1a3009 100%); border-radius: 50% 50% 0 0 / 15px 15px 0 0; }
-            @keyframes w-tree-sway { 0%,100%{transform:rotate(-4deg);} 50%{transform:rotate(4deg);} }
-            .w-tree { position: absolute; bottom: 28px; font-size: 22px; animation: w-tree-sway 3s ease-in-out infinite; }
-            </style>
-            <div class="w-scene-wrap">
-            """
-
-            if 'rain' in weather_condition or 'drizz' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-rainy">'
-                weather_scene_html += '<div class="w-lightning"></div>'
-                for i in range(25):
-                    weather_scene_html += f'<div class="w-rain" style="left:{(i*4)%100}%;animation-duration:{0.4+(i%3)*0.15}s;animation-delay:{(i*0.1)%1.5}s;"></div>'
-                weather_scene_html += '<div class="w-cloud" style="top:12px;left:-100px;width:90px;height:32px;animation-duration:22s;"><div style="position:absolute;top:-14px;left:12px;width:32px;height:32px;"></div><div style="position:absolute;top:-10px;left:38px;width:24px;height:24px;"></div></div>'
-                weather_scene_html += '<div class="w-cloud" style="top:22px;left:-100px;width:110px;height:38px;animation-duration:28s;animation-delay:6s;"><div style="position:absolute;top:-16px;left:18px;width:38px;height:38px;"></div><div style="position:absolute;top:-12px;left:48px;width:28px;height:28px;"></div></div>'
-
-            elif 'cloud' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-cloudy">'
-                weather_scene_html += '<div class="w-sun" style="opacity:0.35;"></div>'
-                for i in range(4):
-                    weather_scene_html += f'<div class="w-cloud" style="top:{12+(i%2)*18}px;left:-100px;width:{70+(i%2)*30}px;height:{28+(i%2)*10}px;animation-duration:{20+i*6}s;animation-delay:{i*4}s;"><div style="position:absolute;top:-{12+(i%2)*6}px;left:{14+(i%2)*6}px;width:{30+(i%2)*12}px;height:{30+(i%2)*12}px;"></div><div style="position:absolute;top:-{8+(i%2)*4}px;left:{36+(i%2)*10}px;width:{22+(i%2)*8}px;height:{22+(i%2)*8}px;"></div></div>'
-
-            elif 'clear' in weather_condition or 'sun' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-sunny">'
-                weather_scene_html += '<div class="w-sun">'
-                for angle in range(0, 360, 45):
-                    weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
-                weather_scene_html += '</div>'
-                for i in range(3):
-                    weather_scene_html += f'<div class="w-cloud" style="top:{18+i*14}px;left:-100px;width:65px;height:24px;animation-duration:{24+i*6}s;animation-delay:{i*5}s;opacity:0.6;"><div style="position:absolute;top:-10px;left:10px;width:26px;height:26px;"></div></div>'
-
-            elif 'thunder' in weather_condition or 'storm' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-thunder">'
-                weather_scene_html += '<div class="w-lightning" style="animation-duration:2.5s;"></div>'
-                for i in range(20):
-                    weather_scene_html += f'<div class="w-rain" style="left:{(i*5)%100}%;animation-duration:{0.3+(i%3)*0.12}s;animation-delay:{(i*0.08)%1.2}s;background:linear-gradient(180deg,transparent,#90caf9);"></div>'
-                weather_scene_html += '<div class="w-cloud" style="top:8px;left:-100px;width:100px;height:38px;background:#546e7a;animation-duration:32s;"><div style="position:absolute;top:-16px;left:16px;width:40px;height:40px;background:#546e7a;"></div><div style="position:absolute;top:-12px;left:46px;width:32px;height:32px;background:#546e7a;"></div></div>'
-
-            elif 'snow' in weather_condition or 'frost' in weather_condition or 'freez' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-snowy">'
-                snowflakes = ['&#10052;', '&#10053;', '&#10054;', '&#10042;', '&#10043;']
-                for i in range(35):
-                    weather_scene_html += f'<div class="w-snow" style="left:{(i*3)%100}%;font-size:{10+(i%4)*3}px;animation-duration:{2+(i%4)*1.2}s;animation-delay:{(i*0.15)%3}s;">{snowflakes[i%5]}</div>'
-                weather_scene_html += '<div class="w-cloud" style="top:8px;left:-100px;width:80px;height:30px;background:rgba(255,255,255,0.8);animation-duration:26s;"><div style="position:absolute;top:-12px;left:12px;width:34px;height:34px;background:rgba(255,255,255,0.8);"></div></div>'
-
-            elif 'mist' in weather_condition or 'fog' in weather_condition or 'haz' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-foggy">'
-                for i in range(5):
-                    weather_scene_html += f'<div class="w-fog" style="top:{15+i*30}px;animation-duration:{12+i*4}s;animation-delay:{i*2}s;opacity:{0.25+(i%3)*0.15};"></div>'
-
-            else:
-                weather_scene_html += '<div class="w-sky w-sunny">'
-                weather_scene_html += '<div class="w-sun">'
-                for angle in range(0, 360, 45):
-                    weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
-                weather_scene_html += '</div>'
-                for i in range(2):
-                    weather_scene_html += f'<div class="w-cloud" style="top:{20+i*12}px;left:-100px;width:55px;height:20px;animation-duration:{22+i*5}s;animation-delay:{i*6}s;opacity:0.5;"><div style="position:absolute;top:-8px;left:8px;width:22px;height:22px;"></div></div>'
-
-            weather_scene_html += '<div class="w-ground"></div>'
-            weather_scene_html += '<div class="w-tree" style="left:8%;">🌲</div>'
-            weather_scene_html += '<div class="w-tree" style="left:22%;animation-delay:0.6s;">🌳</div>'
-            weather_scene_html += '<div class="w-tree" style="left:68%;animation-delay:1.2s;">🌲</div>'
-            weather_scene_html += '<div class="w-tree" style="left:82%;animation-delay:1.8s;">🌳</div>'
-            weather_scene_html += '</div></div>'
-
-            st.markdown(weather_scene_html, unsafe_allow_html=True)
 
             if data.get('icon'):
                 icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
@@ -5384,11 +5426,18 @@ def main():
     st.markdown("""
     <style>
     /* ===== FINAL TEXT VISIBILITY OVERRIDE ===== */
-    /* All main content text - white with shadow */
-    [data-testid="stMain"] * {
+    /* All main content text - white with shadow (EXCEPT CHAT TAB) */
+    [data-testid="stMain"] *:not(.stChatMessage *):not(.stChatInput *) {
         color: #ffffff !important;
         -webkit-text-fill-color: #ffffff !important;
         text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+    }
+    /* Chat tab text stays black - handled in chat section above */
+    [data-testid="stMain"] .stChatMessage *,
+    [data-testid="stMain"] .stChatInput * {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
     }
     /* Form inputs - black text */
     [data-testid="stMain"] .stTextInput input,
