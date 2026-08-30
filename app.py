@@ -1,3 +1,5 @@
+
+
 # =====================================================================
 # AI EQMS Hub Pro - Complete Streamlit Application
 # =====================================================================
@@ -73,24 +75,6 @@ def format_date(dt=None):
 def format_datetime(dt=None):
     if dt is None: dt = now_ist()
     return dt.strftime("%d-%m-%Y %H:%M:%S")
-def get_smart_theme():
-    """Returns 'day' or 'night' based on IST time and weather sunrise/sunset if available."""
-    now = now_ist()
-    now_ts = int(now.timestamp())
-    # Priority 1: Weather data sunrise/sunset
-    wd = st.session_state.get('weather_data')
-    if wd and 'sunrise' in wd and 'sunset' in wd:
-        try:
-            sr = int(wd['sunrise'])
-            ss = int(wd['sunset'])
-            if sr and ss:
-                return 'night' if (now_ts < sr or now_ts > ss) else 'day'
-        except Exception:
-            pass
-    # Priority 2: Hour based (6 AM to 7 PM = day)
-    h = now.hour
-    return 'night' if h < 6 or h >= 19 else 'day'
-
 
 # =====================================================================
 # Secrets & Configuration
@@ -767,46 +751,51 @@ Previous conversation:
 # Weather Functions
 # =====================================================================
 def get_weather(city_name):
-    if not city_name or not str(city_name).strip(): 
-        return {'error': 'Please enter a city name'}
-    city_name = str(city_name).strip()
+    if not city_name or not str(city_name).strip(): return {'error': 'Please enter a city name'}
+    city_name = " ".join(str(city_name).strip().split())  # collapse extra/stray spaces
     try:
-        # Step 1: Geocode with up to 5 results for better small-town coverage
-        geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=5&appid={WEATHER_API_KEY}"
-        geo_resp = requests.get(geo_url, timeout=12)
-
-        # Step 2: Try each geocode result until weather succeeds
-        if geo_resp.status_code == 200:
-            geo_data = geo_resp.json()
+        # Step 1: Geocode to get lat, lon, name, state, country
+        # Try the name as typed first, then fall back to Title Case so any
+        # capitalization the user types (all caps, all lowercase, mixed) works.
+        geo_data = None
+        for attempt in (city_name, city_name.title()):
+            geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={urllib.parse.quote(attempt)}&limit=1&appid={WEATHER_API_KEY}"
+            geo_resp = requests.get(geo_url, timeout=10)
+            if geo_resp.status_code == 200:
+                data_try = geo_resp.json()
+                if data_try and len(data_try) > 0:
+                    geo_data = data_try
+                    break
+        lat, lon, found_name, country, state = None, None, city_name, '', ''
+        if geo_data:
             if geo_data and len(geo_data) > 0:
-                for g in geo_data:
-                    lat = g.get('lat')
-                    lon = g.get('lon')
-                    found_name = g.get('name', city_name)
-                    country = g.get('country', '')
-                    state = g.get('state', '')
-                    if lat and lon:
-                        coord_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
-                        coord_resp = requests.get(coord_url, timeout=12)
-                        if coord_resp.status_code == 200:
-                            data = coord_resp.json()
-                            return {'city': found_name, 'country': country, 'state': state,
-                                'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
-                                'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
-                                'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
-                                'icon': data.get('weather', [{}])[0].get('icon', ''),
-                                'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
-                                'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
-                                'lat': lat, 'lon': lon}
-                        elif coord_resp.status_code == 401:
-                            return {'error': 'Weather API key invalid or expired.'}
+                lat = geo_data[0].get('lat')
+                lon = geo_data[0].get('lon')
+                found_name = geo_data[0].get('name', city_name)
+                country = geo_data[0].get('country', '')
+                state = geo_data[0].get('state', '')
 
-        # Fallback: direct city name API
-        url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
-        response = requests.get(url, timeout=12)
+        # Step 2: Get weather by coordinates (most accurate)
+        if lat and lon:
+            coord_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
+            coord_resp = requests.get(coord_url, timeout=10)
+            if coord_resp.status_code == 200:
+                data = coord_resp.json()
+                return {'city': found_name, 'country': country, 'state': state,
+                    'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
+                    'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
+                    'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
+                    'icon': data.get('weather', [{}])[0].get('icon', ''),
+                    'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
+                    'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
+                    'lat': lat, 'lon': lon}
+
+        # Fallback: direct city name API (no state available)
+        url = f"https://api.openweathermap.org/data/2.5/weather?q={urllib.parse.quote(city_name)}&appid={WEATHER_API_KEY}&units=metric"
+        response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            return {'city': data.get('name', city_name), 'country': data.get('sys', {}).get('country', ''), 'state': '',
+            return {'city': data.get('name', city_name), 'country': data.get('sys', {}).get('country', ''), 'state': state,
                 'temp': data.get('main', {}).get('temp', 'N/A'), 'feels_like': data.get('main', {}).get('feels_like', 'N/A'),
                 'humidity': data.get('main', {}).get('humidity', 'N/A'), 'pressure': data.get('main', {}).get('pressure', 'N/A'),
                 'weather': data.get('weather', [{}])[0].get('description', 'N/A'),
@@ -814,84 +803,68 @@ def get_weather(city_name):
                 'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
                 'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
                 'lat': data.get('coord', {}).get('lat'), 'lon': data.get('coord', {}).get('lon')}
-        elif response.status_code == 404:
-            return {'error': f'City "{city_name}" not found. Try a different spelling or nearby major city.'}
-        elif response.status_code == 401:
-            return {'error': 'Weather API key invalid or expired.'}
-        else:
-            return {'error': f'Weather API error (HTTP {response.status_code}). Please try again.'}
 
-    except requests.exceptions.Timeout:
-        return {'error': 'Weather request timed out. Please try again.'}
-    except requests.exceptions.ConnectionError:
-        return {'error': 'Network error. Check your internet connection.'}
-    except Exception as e: 
-        return {'error': f'Error fetching weather: {str(e)}'}
+        return {'error': 'City not found. Try a nearby major city.'}
+    except Exception as e: return {'error': f'Error fetching weather: {str(e)}'}
 
 def get_weather_forecast(city_name):
-    if not city_name or not str(city_name).strip(): 
-        return {'error': 'Please enter a city name'}
-    city_name = str(city_name).strip()
+    if not city_name: return {'error': 'Please enter a city name'}
     try:
-        # Try direct city first
         url = f"https://api.openweathermap.org/data/2.5/forecast?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
-        response = requests.get(url, timeout=12)
+        response = requests.get(url, timeout=10)
         if response.status_code == 200:
             data = response.json()
-            return _parse_forecast(data, data.get('city', {}).get('name', city_name), data.get('city', {}).get('country', ''))
-
-        # Fallback: geocode then forecast by coords (try up to 5 results)
-        geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=5&appid={WEATHER_API_KEY}"
-        geo_resp = requests.get(geo_url, timeout=12)
+            forecast_list = data.get('list', [])
+            daily_forecast = {}
+            for item in forecast_list:
+                date = item.get('dt_txt', '')[:10]
+                if date not in daily_forecast:
+                    daily_forecast[date] = {'temps': [], 'weather': item['weather'][0]['main'] if item.get('weather') else 'N/A',
+                        'icon': item['weather'][0]['icon'] if item.get('weather') else '', 'humidity': item['main']['humidity'],
+                        'wind': item['wind']['speed'], 'pressure': item['main']['pressure'],
+                        'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'}
+                daily_forecast[date]['temps'].append(item['main']['temp'])
+            result = []
+            for date, info in list(daily_forecast.items())[:5]:
+                result.append({'date': date, 'temp': round(sum(info['temps'])/len(info['temps']), 1),
+                    'min_temp': round(min(info['temps']), 1), 'max_temp': round(max(info['temps']), 1),
+                    'weather': info['weather'], 'description': info['description'].title(),
+                    'icon': info['icon'], 'humidity': info['humidity'], 'wind': info['wind'], 'pressure': info['pressure']})
+            return {'forecast': result, 'city': data.get('city', {}).get('name', city_name), 'country': data.get('city', {}).get('country', '')}
+        # Fallback: geocoding then forecast by coords
+        geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=1&appid={WEATHER_API_KEY}"
+        geo_resp = requests.get(geo_url, timeout=10)
         if geo_resp.status_code == 200:
             geo_data = geo_resp.json()
             if geo_data and len(geo_data) > 0:
-                for g in geo_data:
-                    lat = g.get('lat')
-                    lon = g.get('lon')
-                    found_name = g.get('name', city_name)
-                    country = g.get('country', '')
-                    if lat and lon:
-                        coord_url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
-                        coord_resp = requests.get(coord_url, timeout=12)
-                        if coord_resp.status_code == 200:
-                            data = coord_resp.json()
-                            return _parse_forecast(data, found_name, country)
-                        elif coord_resp.status_code == 401:
-                            return {'error': 'Weather API key invalid or expired.'}
-
-        if response.status_code == 404:
-            return {'error': f'City "{city_name}" not found. Try a different spelling or nearby major city.'}
-        elif response.status_code == 401:
-            return {'error': 'Weather API key invalid or expired.'}
-        else:
-            return {'error': f'Forecast API error (HTTP {response.status_code}). Please try again.'}
-
-    except requests.exceptions.Timeout:
-        return {'error': 'Forecast request timed out. Please try again.'}
-    except requests.exceptions.ConnectionError:
-        return {'error': 'Network error. Check your internet connection.'}
-    except Exception as e: 
-        return {'error': f'Error fetching forecast: {str(e)}'}
-
-def _parse_forecast(data, city_name, country):
-    forecast_list = data.get('list', [])
-    daily_forecast = {}
-    for item in forecast_list:
-        date = item.get('dt_txt', '')[:10]
-        if date not in daily_forecast:
-            daily_forecast[date] = {'temps': [], 'weather': item['weather'][0]['main'] if item.get('weather') else 'N/A',
-                'icon': item['weather'][0]['icon'] if item.get('weather') else '', 'humidity': item['main']['humidity'],
-                'wind': item['wind']['speed'], 'pressure': item['main']['pressure'],
-                'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'}
-        daily_forecast[date]['temps'].append(item['main']['temp'])
-    result = []
-    for date, info in list(daily_forecast.items())[:5]:
-        result.append({'date': date, 'temp': round(sum(info['temps'])/len(info['temps']), 1),
-            'min_temp': round(min(info['temps']), 1), 'max_temp': round(max(info['temps']), 1),
-            'weather': info['weather'], 'description': info['description'].title(),
-            'icon': info['icon'], 'humidity': info['humidity'], 'wind': info['wind'], 'pressure': info['pressure']})
-    return {'forecast': result, 'city': city_name, 'country': country}
+                lat = geo_data[0].get('lat')
+                lon = geo_data[0].get('lon')
+                found_name = geo_data[0].get('name', city_name)
+                country = geo_data[0].get('country', '')
+                if lat and lon:
+                    coord_url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
+                    coord_resp = requests.get(coord_url, timeout=10)
+                    if coord_resp.status_code == 200:
+                        data = coord_resp.json()
+                        forecast_list = data.get('list', [])
+                        daily_forecast = {}
+                        for item in forecast_list:
+                            date = item.get('dt_txt', '')[:10]
+                            if date not in daily_forecast:
+                                daily_forecast[date] = {'temps': [], 'weather': item['weather'][0]['main'] if item.get('weather') else 'N/A',
+                                    'icon': item['weather'][0]['icon'] if item.get('weather') else '', 'humidity': item['main']['humidity'],
+                                    'wind': item['wind']['speed'], 'pressure': item['main']['pressure'],
+                                    'description': item['weather'][0]['description'] if item.get('weather') else 'N/A'}
+                            daily_forecast[date]['temps'].append(item['main']['temp'])
+                        result = []
+                        for date, info in list(daily_forecast.items())[:5]:
+                            result.append({'date': date, 'temp': round(sum(info['temps'])/len(info['temps']), 1),
+                                'min_temp': round(min(info['temps']), 1), 'max_temp': round(max(info['temps']), 1),
+                                'weather': info['weather'], 'description': info['description'].title(),
+                                'icon': info['icon'], 'humidity': info['humidity'], 'wind': info['wind'], 'pressure': info['pressure']})
+                        return {'forecast': result, 'city': found_name, 'country': country}
+        return {'error': 'City not found. Try a nearby major city.'}
+    except Exception as e: return {'error': f'Error fetching forecast: {str(e)}'}
 
 def get_weather_by_coords(lat, lon):
     try:
@@ -1435,9 +1408,7 @@ def process_passport_image(data):
 # =====================================================================
 # Apply Theme
 # =====================================================================
-@st.cache_data(ttl=300, show_spinner=False)
-def _generate_theme_css(theme, custom_bg, custom_text):
-    """Generate theme CSS once and cache it."""
+def apply_theme(theme, custom_bg=None, custom_text=None):
     if theme == 'Day':
         bg = "transparent"; card_bg = "rgba(248, 250, 252, 0.15)"; text_color = "#1e293b"; text_secondary = "#475569"
         border = "rgba(148, 163, 184, 0.25)"; input_bg = "rgba(255, 255, 255, 0.12)"; accent = "#2563eb"; accent_hover = "#1d4ed8"
@@ -1583,9 +1554,9 @@ def _generate_theme_css(theme, custom_bg, custom_text):
             text-shadow: none !important;
         }}
         /* === WEATHER SECTION - ALL TEXT BLACK === */
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
-        [data-testid="stMain"] input[key="weather_city_input"] {{
+        [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) label,
+        [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) input,
+        [data-testid="stMain"] input[aria-label="🏙️ Enter City Name"] {{
             color: #000000 !important;
             -webkit-text-fill-color: #000000 !important;
             text-shadow: none !important;
@@ -1690,8 +1661,9 @@ def _generate_theme_css(theme, custom_bg, custom_text):
 
         .action-box {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 18px; margin-bottom: 16px; backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%); }}
         .glass-card {{ background: {card_bg} !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; border: 1px solid {border} !important; border-radius: 16px !important; box-shadow: 0 8px 32px rgba(0,0,0,0.15) !important; }}
-        .glow-border {{ position: relative; border: 2px solid rgba(255,153,51,0.5); border-radius: 16px; }}
-        .glow-border:hover {{ border-color: rgba(255,153,51,0.9); box-shadow: 0 0 20px rgba(255,153,51,0.3); transition: all 0.3s ease; }}
+        .glow-border {{ position: relative; }}
+        .glow-border::before {{ content: ''; position: absolute; inset: -2px; border-radius: 18px; background: linear-gradient(45deg, #FF9933, #FFFFFF, #138808, #FF9933); background-size: 400% 400%; animation: glow-rotate 4s linear infinite; z-index: -1; opacity: 0.6; }}
+        @keyframes glow-rotate {{ 0%{{background-position:0% 50%;}} 50%{{background-position:100% 50%;}} 100%{{background-position:0% 50%;}} }}
         .file-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 14px; margin: 10px 0; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
         .file-card-title {{ color: {text_color}; font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }}
         .file-card-meta {{ color: {text_secondary}; font-size: 0.8rem; margin-bottom: 10px; }}
@@ -1783,8 +1755,8 @@ def _generate_theme_css(theme, custom_bg, custom_text):
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
 
         /* Weather Input Stamp Style - BLACK TEXT */
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
-        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input {{
+        [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) input,
+        [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ City"]) input {{
             background-color: rgba(255, 255, 255, 0.95) !important;
             color: #000000 !important;
             -webkit-text-fill-color: #000000 !important;
@@ -1798,23 +1770,26 @@ def _generate_theme_css(theme, custom_bg, custom_text):
             font-size: 0.95rem !important;
             min-height: 36px !important;
         }}
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
-        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
+        [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) label,
+        [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ City"]) label {{
             color: #000000 !important;
             font-weight: 700 !important;
             text-shadow: none !important;
             -webkit-text-fill-color: #000000 !important;
             font-size: 0.95rem !important;
         }}
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) > div > div,
-        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) > div > div {{
+        [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) > div > div,
+        [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ City"]) > div > div {{
             background: transparent !important;
         }}
 
-        [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.4s ease, opacity 0.3s ease !important; margin-left: 0 !important; overflow: hidden !important; }}
+        [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important; margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important; }}
+        body.sidebar-collapsed [data-testid="stSidebar"] {{ margin-left: -340px !important; opacity: 0 !important; pointer-events: none !important; }}
+        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important; }}
         [data-testid="stSidebarCollapseButton"] {{ display: none !important; }}
         [data-testid="collapsedControl"] {{ display: none !important; }}
         button[kind="header"] {{ display: none !important; }}
+        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; }}
         .sidebar-toggle-btn {{
             position: fixed !important;
             top: 12px !important;
@@ -1858,10 +1833,10 @@ def _generate_theme_css(theme, custom_bg, custom_text):
             border: 1px solid {border} !important; border-radius: 8px !important;
         }}
         /* Weather Section Input Visibility - Day/Night Adaptive */
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) input,
-        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) input,
-        [data-testid="stMain"] input[key="weather_city_input"],
-        [data-testid="stMain"] input[key="sidebar_weather_city"] {{
+        [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) input,
+        [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ City"]) input,
+        [data-testid="stMain"] input[aria-label="🏙️ Enter City Name"],
+        [data-testid="stMain"] input[aria-label="🏙️ City"] {{
             background-color: rgba(255, 255, 255, 0.95) !important;
             color: #000000 !important;
             -webkit-text-fill-color: #000000 !important;
@@ -1873,8 +1848,8 @@ def _generate_theme_css(theme, custom_bg, custom_text):
             border-radius: 12px !important;
             padding: 10px 16px !important;
         }}
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label,
-        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) label {{
+        [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) label,
+        [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ City"]) label {{
             color: #ffffff !important;
             font-weight: 800 !important;
             text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
@@ -1882,8 +1857,8 @@ def _generate_theme_css(theme, custom_bg, custom_text):
             font-size: 1.05rem !important;
             letter-spacing: 0.5px !important;
         }}
-        [data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) > div > div,
-        [data-testid="stMain"] .stTextInput:has(input[key="sidebar_weather_city"]) > div > div {{
+        [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) > div > div,
+        [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ City"]) > div > div {{
             background: transparent !important;
         }}
         .weather-input-wrapper {{
@@ -1895,10 +1870,6 @@ def _generate_theme_css(theme, custom_bg, custom_text):
         }}
     </style>
     """
-    return css
-
-def apply_theme(theme, custom_bg=None, custom_text=None):
-    css = _generate_theme_css(theme, custom_bg, custom_text)
     st.markdown(css, unsafe_allow_html=True)
 
 # =====================================================================
@@ -2484,19 +2455,24 @@ EARTH_BG_HTML = """
     display: flex; align-items: center; justify-content: center;
 }
 .earth-wrap {
-    position: relative; width: 400px; height: 400px;
+    position: relative; width: 520px; height: 520px;
+    animation: earth-float 6s ease-in-out infinite;
+}
+@keyframes earth-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-15px); }
 }
 .earth-globe {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     border-radius: 50%;
     background: url('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg');
-    background-size: 800px 100%;
+    background-size: 1050px 100%;
     box-shadow: 
-        inset -40px -40px 100px rgba(0,0,0,0.9), 
-        inset 10px 10px 30px rgba(255,255,255,0.1), 
-        0 0 60px rgba(80,120,220,0.2);
-    animation: earth-spin 50s linear infinite;
-    pointer-events: none;
+        inset -50px -50px 120px rgba(0,0,0,0.95), 
+        inset 15px 15px 40px rgba(255,255,255,0.15), 
+        0 0 80px rgba(80,120,220,0.25),
+        0 0 160px rgba(80,120,220,0.1);
+    animation: earth-spin 40s linear infinite;
 }
 .earth-globe::after {
     content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -2505,53 +2481,70 @@ EARTH_BG_HTML = """
     pointer-events: none;
 }
 .earth-atmos {
-    position: absolute; top: -20px; left: -20px; right: -20px; bottom: -20px;
+    position: absolute; top: -25px; left: -25px; right: -25px; bottom: -25px;
     border-radius: 50%;
-    background: radial-gradient(circle at 35% 35%, rgba(100,160,255,0.1) 0%, transparent 55%);
+    background: radial-gradient(circle at 35% 35%, rgba(100,160,255,0.12) 0%, transparent 55%);
+    box-shadow: 0 0 100px 30px rgba(100,160,255,0.08);
     pointer-events: none;
+    animation: atmos-pulse 4s ease-in-out infinite;
 }
 @keyframes earth-spin {
     from { background-position: 0 center; }
-    to { background-position: 800px center; }
+    to { background-position: 1050px center; }
+}
+@keyframes atmos-pulse {
+    0%, 100% { opacity: 0.7; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.02); }
 }
 .earth-stars {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     background-image: 
-        radial-gradient(2px 2px at 10% 20%, #eee, transparent),
-        radial-gradient(2px 2px at 30% 60%, #fff, transparent),
-        radial-gradient(2px 2px at 50% 30%, #ddd, transparent),
-        radial-gradient(2px 2px at 70% 70%, #fff, transparent),
-        radial-gradient(2px 2px at 90% 40%, #fff, transparent);
-    background-size: 100% 100%;
-    opacity: 0.5;
-    pointer-events: none;
+        radial-gradient(2px 2px at 20px 30px, #eee, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 40px 70px, #fff, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 50px 160px, #ddd, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 90px 40px, #fff, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 130px 80px, #fff, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 160px 120px, #ddd, rgba(0,0,0,0));
+    background-repeat: repeat;
+    background-size: 200px 200px;
+    animation: twinkle 5s ease-in-out infinite alternate;
+    opacity: 0.6;
+}
+@keyframes twinkle {
+    from { opacity: 0.3; }
+    to { opacity: 0.8; }
 }
 .earth-label {
     position: absolute; bottom: 8%; left: 50%; transform: translateX(-50%);
-    color: rgba(255,255,255,0.5); font-size: 0.85rem; letter-spacing: 3px;
+    color: rgba(255,255,255,0.6); font-size: 0.9rem; letter-spacing: 4px;
     text-transform: uppercase; font-weight: 600;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.8);
     pointer-events: none;
 }
-.moon-orbit {
-    position: absolute; top: 50%; left: 50%;
-    width: 500px; height: 500px;
-    transform: translate(-50%, -50%);
-    animation: moon-spin 25s linear infinite;
-    pointer-events: none;
-}
-@keyframes moon-spin {
-    from { transform: translate(-50%, -50%) rotate(0deg); }
-    to { transform: translate(-50%, -50%) rotate(360deg); }
-}
-.moon {
-    position: absolute; top: -14px; left: 50%;
-    transform: translateX(-50%);
-    width: 28px; height: 28px;
-    background: radial-gradient(circle at 35% 35%, #fff9c4, #ffd700);
-    border-radius: 50%;
-    box-shadow: 0 0 25px 8px rgba(255, 215, 0, 0.4);
-    pointer-events: none;
-}
+    .moon-orbit {
+        position: absolute; top: 50%; left: 50%;
+        width: 640px; height: 640px;
+        transform: translate(-50%, -50%);
+        animation: moon-spin 18s linear infinite;
+        pointer-events: none;
+    }
+    @keyframes moon-spin {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .moon {
+        position: absolute; top: -16px; left: 50%;
+        transform: translateX(-50%);
+        width: 32px; height: 32px;
+        background: radial-gradient(circle at 35% 35%, #fff9c4, #ffd700, #ff8c00);
+        border-radius: 50%;
+        box-shadow: 0 0 30px 10px rgba(255, 215, 0, 0.5), 0 0 60px 20px rgba(255, 165, 0, 0.25), inset -4px -4px 8px rgba(0,0,0,0.3);
+        animation: moon-glow-pulse 3s ease-in-out infinite alternate;
+    }
+    @keyframes moon-glow-pulse {
+        0% { box-shadow: 0 0 30px 10px rgba(255, 215, 0, 0.4), 0 0 60px 20px rgba(255, 165, 0, 0.2), inset -4px -4px 8px rgba(0,0,0,0.3); }
+        100% { box-shadow: 0 0 40px 15px rgba(255, 215, 0, 0.7), 0 0 80px 30px rgba(255, 165, 0, 0.4), inset -4px -4px 8px rgba(0,0,0,0.3); }
+    }
 </style>
 <div class="earth-bg-scene">
     <div class="earth-stars"></div>
@@ -2577,15 +2570,13 @@ def main():
     if 'current_page' not in st.session_state or not isinstance(st.session_state.get('current_page'), int) or st.session_state.get('current_page') <= 0:
         st.session_state.current_page = 1
 
-    # Splash Screen (shows once per session only)
-    if 'splash_shown' not in st.session_state:
-        st.session_state.splash_shown = True
-        components.html("""
-        <script>
-        (function(){
-            var P = window.parent;
-            var doc = P.document;
-            if (doc.getElementById('eqms-splash')) return;
+    # Splash Screen (shows once per page load)
+    components.html("""
+    <script>
+    (function(){
+        var P = window.parent;
+        var doc = P.document;
+        if (doc.getElementById('eqms-splash')) return;
 
         var style = doc.createElement('style');
         style.textContent = `
@@ -2647,7 +2638,7 @@ def main():
         }, 2800);
     })();
     </script>
-        """, height=0)
+    """, height=0)
 
     # Solar System Background
     bg_html = """
@@ -2658,37 +2649,68 @@ def main():
         background: radial-gradient(ellipse at center, #0a0a1a 0%, #000000 70%);
     }
     .stars {
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-        background-image:
-            radial-gradient(2px 2px at 10% 10%, #fff, transparent),
-            radial-gradient(2px 2px at 20% 30%, #fff, transparent),
-            radial-gradient(2px 2px at 30% 15%, #fff, transparent),
-            radial-gradient(2px 2px at 40% 50%, #fff, transparent),
-            radial-gradient(2px 2px at 50% 25%, #fff, transparent),
-            radial-gradient(2px 2px at 60% 60%, #fff, transparent),
-            radial-gradient(2px 2px at 70% 20%, #fff, transparent),
-            radial-gradient(2px 2px at 80% 45%, #fff, transparent),
-            radial-gradient(2px 2px at 90% 10%, #fff, transparent),
-            radial-gradient(2px 2px at 15% 70%, #fff, transparent),
-            radial-gradient(2px 2px at 35% 80%, #fff, transparent),
-            radial-gradient(2px 2px at 55% 75%, #fff, transparent),
-            radial-gradient(2px 2px at 75% 85%, #fff, transparent),
-            radial-gradient(2px 2px at 85% 65%, #fff, transparent),
-            radial-gradient(2px 2px at 25% 40%, #fff, transparent),
-            radial-gradient(2px 2px at 45% 35%, #fff, transparent),
-            radial-gradient(2px 2px at 65% 40%, #fff, transparent),
-            radial-gradient(2px 2px at 95% 55%, #fff, transparent),
-            radial-gradient(1px 1px at 5% 50%, #fff, transparent),
-            radial-gradient(1px 1px at 95% 90%, #fff, transparent);
-        background-size: 100% 100%;
-        background-repeat: no-repeat;
-        opacity: 0.7;
-        animation: twinkle-stars 4s ease-in-out infinite alternate;
-        pointer-events: none;
+        position: absolute; top: 0; left: 0; width: 2px; height: 2px;
+        background: transparent;
+        box-shadow:
+            /* Row 1 - evenly spread */
+            3vw 5vh #fff, 8vw 8vh #fff, 13vw 3vh #fff, 18vw 12vh #fff,
+            23vw 6vh #fff, 28vw 15vh #fff, 33vw 4vh #fff, 38vw 10vh #fff,
+            43vw 7vh #fff, 48vw 14vh #fff, 53vw 5vh #fff, 58vw 9vh #fff,
+            63vw 11vh #fff, 68vw 6vh #fff, 73vw 13vh #fff, 78vw 4vh #fff,
+            83vw 8vh #fff, 88vw 15vh #fff, 93vw 7vh #fff, 97vw 11vh #fff,
+            /* Row 2 */
+            5vw 18vh #fff, 10vw 22vh #fff, 15vw 16vh #fff, 20vw 25vh #fff,
+            25vw 19vh #fff, 30vw 24vh #fff, 35vw 17vh #fff, 40vw 21vh #fff,
+            45vw 26vh #fff, 50vw 18vh #fff, 55vw 23vh #fff, 60vw 16vh #fff,
+            65vw 20vh #fff, 70vw 25vh #fff, 75vw 17vh #fff, 80vw 22vh #fff,
+            85vw 19vh #fff, 90vw 24vh #fff, 95vw 16vh #fff, 98vw 21vh #fff,
+            /* Row 3 */
+            2vw 30vh #fff, 7vw 35vh #fff, 12vw 28vh #fff, 17vw 33vh #fff,
+            22vw 29vh #fff, 27vw 34vh #fff, 32vw 31vh #fff, 37vw 36vh #fff,
+            42vw 28vh #fff, 47vw 32vh #fff, 52vw 35vh #fff, 57vw 30vh #fff,
+            62vw 34vh #fff, 67vw 29vh #fff, 72vw 33vh #fff, 77vw 31vh #fff,
+            82vw 35vh #fff, 87vw 28vh #fff, 92vw 32vh #fff, 96vw 30vh #fff,
+            /* Row 4 */
+            4vw 40vh #fff, 9vw 45vh #fff, 14vw 38vh #fff, 19vw 42vh #fff,
+            24vw 46vh #fff, 29vw 39vh #fff, 34vw 44vh #fff, 39vw 37vh #fff,
+            44vw 41vh #fff, 49vw 45vh #fff, 54vw 38vh #fff, 59vw 43vh #fff,
+            64vw 40vh #fff, 69vw 44vh #fff, 74vw 39vh #fff, 79vw 42vh #fff,
+            84vw 46vh #fff, 89vw 38vh #fff, 94vw 41vh #fff, 99vw 45vh #fff,
+            /* Row 5 */
+            6vw 50vh #fff, 11vw 55vh #fff, 16vw 48vh #fff, 21vw 52vh #fff,
+            26vw 56vh #fff, 31vw 49vh #fff, 36vw 54vh #fff, 41vw 47vh #fff,
+            46vw 51vh #fff, 51vw 55vh #fff, 56vw 48vh #fff, 61vw 53vh #fff,
+            66vw 50vh #fff, 71vw 54vh #fff, 76vw 49vh #fff, 81vw 52vh #fff,
+            86vw 56vh #fff, 91vw 48vh #fff, 95vw 51vh #fff, 98vw 55vh #fff,
+            /* Row 6 */
+            1vw 60vh #fff, 6vw 65vh #fff, 11vw 58vh #fff, 16vw 63vh #fff,
+            21vw 59vh #fff, 26vw 64vh #fff, 31vw 61vh #fff, 36vw 66vh #fff,
+            41vw 58vh #fff, 46vw 62vh #fff, 51vw 65vh #fff, 56vw 60vh #fff,
+            61vw 64vh #fff, 66vw 59vh #fff, 71vw 63vh #fff, 76vw 61vh #fff,
+            81vw 65vh #fff, 86vw 58vh #fff, 91vw 62vh #fff, 96vw 60vh #fff,
+            /* Row 7 */
+            3vw 70vh #fff, 8vw 75vh #fff, 13vw 68vh #fff, 18vw 73vh #fff,
+            23vw 77vh #fff, 28vw 69vh #fff, 33vw 74vh #fff, 38vw 71vh #fff,
+            43vw 76vh #fff, 48vw 68vh #fff, 53vw 72vh #fff, 58vw 75vh #fff,
+            63vw 70vh #fff, 68vw 74vh #fff, 73vw 69vh #fff, 78vw 73vh #fff,
+            83vw 77vh #fff, 88vw 70vh #fff, 93vw 74vh #fff, 97vw 71vh #fff,
+            /* Row 8 */
+            5vw 80vh #fff, 10vw 85vh #fff, 15vw 78vh #fff, 20vw 83vh #fff,
+            25vw 87vh #fff, 30vw 79vh #fff, 35vw 84vh #fff, 40vw 81vh #fff,
+            45vw 86vh #fff, 50vw 78vh #fff, 55vw 82vh #fff, 60vw 85vh #fff,
+            65vw 80vh #fff, 70vw 84vh #fff, 75vw 79vh #fff, 80vw 83vh #fff,
+            85vw 87vh #fff, 90vw 80vh #fff, 95vw 84vh #fff, 98vw 81vh #fff,
+            /* Row 9 */
+            2vw 90vh #fff, 7vw 95vh #fff, 12vw 88vh #fff, 17vw 93vh #fff,
+            22vw 89vh #fff, 27vw 94vh #fff, 32vw 91vh #fff, 37vw 96vh #fff,
+            42vw 88vh #fff, 47vw 92vh #fff, 52vw 95vh #fff, 57vw 90vh #fff,
+            62vw 94vh #fff, 67vw 89vh #fff, 72vw 93vh #fff, 77vw 91vh #fff,
+            82vw 95vh #fff, 87vw 88vh #fff, 92vw 92vh #fff, 96vw 90vh #fff;
+        animation: twinkle-stars 3s ease-in-out infinite alternate;
     }
     @keyframes twinkle-stars {
-        0% { opacity: 0.4; }
-        100% { opacity: 0.9; }
+        0% { opacity: 0.3; }
+        100% { opacity: 1; }
     }
     .sun-wrap {
         position: absolute; top: 50%; left: 50%;
@@ -2759,50 +2781,127 @@ def main():
         0%, 100% { border-color: rgba(180,140,100,0.1); }
         50% { border-color: rgba(180,140,100,0.35); }
     }
-    .orbit-1, .orbit-2, .orbit-3, .orbit-4 {
+    .orbit-1 {
         position: absolute; top: 50%; left: 50%;
+        width: 260px; height: 260px;
         transform: translate(-50%, -50%);
-        pointer-events: none;
+        animation: spin-1 22s linear infinite;
     }
-    .orbit-1 { width: 220px; height: 220px; animation: spin-1 25s linear infinite; }
-    .orbit-2 { width: 340px; height: 340px; animation: spin-2 35s linear infinite reverse; }
-    .orbit-3 { width: 460px; height: 460px; animation: spin-3 50s linear infinite; }
-    .orbit-4 { width: 580px; height: 580px; animation: spin-4 70s linear infinite reverse; }
-    @keyframes spin-1 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-    @keyframes spin-2 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-    @keyframes spin-3 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-    @keyframes spin-4 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-    .t1, .t2 { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 24px; pointer-events: none; }
-    .t1 { filter: drop-shadow(0 0 8px rgba(255,153,51,0.7)); }
-    .t2 { filter: drop-shadow(0 0 8px rgba(19,136,8,0.7)); }
+    @keyframes spin-1 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .t1 { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 28px; filter: drop-shadow(0 0 10px rgba(255,153,51,0.9)); animation: bob-1 0.9s ease-in-out infinite alternate; }
+    .t1-b1 { transform: translateX(-50%) translateX(-36px); animation-delay: 0.04s; }
+    .t1-b2 { transform: translateX(-50%) translateX(-68px); animation-delay: 0.08s; }
+    .t1-b3 { transform: translateX(-50%) translateX(-96px); animation-delay: 0.12s; }
+    @keyframes bob-1 {
+        from { transform: translateX(-50%) translateY(0) scale(1); }
+        to { transform: translateX(-50%) translateY(-5px) scale(1.07); }
+    }
+    .orbit-2 {
+        position: absolute; top: 50%; left: 50%;
+        width: 400px; height: 400px;
+        transform: translate(-50%, -50%);
+        animation: spin-2 32s linear infinite reverse;
+    }
+    @keyframes spin-2 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .t2 { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 26px; filter: drop-shadow(0 0 10px rgba(19,136,8,0.9)); animation: bob-2 1s ease-in-out infinite alternate; }
+    .t2-b1 { transform: translateX(-50%) translateX(-34px); animation-delay: 0.04s; }
+    .t2-b2 { transform: translateX(-50%) translateX(-64px); animation-delay: 0.08s; }
+    .t2-b3 { transform: translateX(-50%) translateX(-90px); animation-delay: 0.12s; }
+    @keyframes bob-2 {
+        from { transform: translateX(-50%) translateY(0) scale(1); }
+        to { transform: translateX(-50%) translateY(-4px) scale(1.05); }
+    }
+    .orbit-3 {
+        position: absolute; top: 50%; left: 50%;
+        width: 540px; height: 540px;
+        transform: translate(-50%, -50%);
+        animation: spin-3 48s linear infinite;
+    }
+    @keyframes spin-3 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
     .planet-saturn {
-        position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
-        font-size: 30px; filter: drop-shadow(0 0 12px rgba(210,180,140,0.5));
-        pointer-events: none;
+        position: absolute; top: -24px; left: 50%; transform: translateX(-50%);
+        font-size: 34px; filter: drop-shadow(0 0 18px rgba(210,180,140,0.6));
+        animation: planet-bob 3.5s ease-in-out infinite;
+    }
+    @keyframes planet-bob {
+        0%, 100% { transform: translateX(-50%) translateY(0); }
+        50% { transform: translateX(-50%) translateY(-6px); }
+    }
+    .orbit-4 {
+        position: absolute; top: 50%; left: 50%;
+        width: 680px; height: 680px;
+        transform: translate(-50%, -50%);
+        animation: spin-4 65s linear infinite reverse;
+    }
+    @keyframes spin-4 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
     }
     .planet-jupiter {
-        position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
-        width: 28px; height: 28px;
-        background: radial-gradient(circle at 30% 30%, #e8b89d, #c07848);
+        position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+        width: 32px; height: 32px;
+        background: radial-gradient(circle at 30% 30%, #e8b89d, #c07848, #8b4513);
         border-radius: 50%;
-        box-shadow: 0 0 18px rgba(192,120,72,0.4);
-        pointer-events: none;
+        box-shadow: 0 0 22px rgba(192,120,72,0.5), inset -5px -5px 10px rgba(0,0,0,0.35);
+        animation: planet-bob 4.5s ease-in-out infinite;
     }
-    .planet-1, .planet-2, .planet-3 {
-        position: absolute; border-radius: 50%; pointer-events: none;
+    .planet-jupiter::before {
+        content: ''; position: absolute; top: 40%; left: 10%; width: 80%; height: 3px;
+        background: rgba(139,69,19,0.4); border-radius: 2px;
     }
-    .planet-1 { top: 12%; right: 18%; width: 14px; height: 14px; background: radial-gradient(circle, #ff6b6b, #c92a2a); }
-    .planet-2 { bottom: 22%; left: 10%; width: 10px; height: 10px; background: radial-gradient(circle, #4ecdc4, #087f5b); }
-    .planet-3 { top: 68%; right: 12%; width: 16px; height: 16px; background: radial-gradient(circle, #ffe66d, #f59f00); }
+    .planet-jupiter::after {
+        content: ''; position: absolute; top: 60%; left: 15%; width: 70%; height: 2px;
+        background: rgba(160,82,45,0.35); border-radius: 2px;
+    }
+    .planet-1 {
+        position: absolute; top: 12%; right: 18%;
+        width: 16px; height: 16px;
+        background: radial-gradient(circle, #ff6b6b, #c92a2a);
+        border-radius: 50%;
+        box-shadow: 0 0 15px rgba(255,107,107,0.4);
+        animation: float-1 7s ease-in-out infinite;
+    }
+    .planet-2 {
+        position: absolute; bottom: 22%; left: 10%;
+        width: 12px; height: 12px;
+        background: radial-gradient(circle, #4ecdc4, #087f5b);
+        border-radius: 50%;
+        box-shadow: 0 0 12px rgba(78,205,196,0.4);
+        animation: float-2 7s ease-in-out infinite;
+        animation-delay: -3s;
+    }
+    .planet-3 {
+        position: absolute; top: 68%; right: 12%;
+        width: 20px; height: 20px;
+        background: radial-gradient(circle, #ffe66d, #f59f00);
+        border-radius: 50%;
+        box-shadow: 0 0 20px rgba(255,230,109,0.4);
+        animation: float-3 7s ease-in-out infinite;
+        animation-delay: -6s;
+    }
+    @keyframes float-1 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+    @keyframes float-2 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    @keyframes float-3 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
     .shooting {
-        position: absolute; top: 10%; left: 10%; width: 80px; height: 2px;
-        background: linear-gradient(90deg, rgba(255,255,255,0.8), transparent);
-        transform: rotate(-45deg); opacity: 0; animation: shoot 6s linear infinite;
-        pointer-events: none;
+        position: absolute; top: 10%; left: 10%;
+        width: 100px; height: 2px;
+        background: linear-gradient(90deg, rgba(255,255,255,1), transparent);
+        transform: rotate(-45deg);
+        opacity: 0;
+        animation: shoot 5s linear infinite;
     }
     @keyframes shoot {
-        0% { transform: translateX(0) translateY(0) rotate(-45deg); opacity: 0.8; }
-        100% { transform: translateX(400px) translateY(400px) rotate(-45deg); opacity: 0; }
+        0% { transform: translateX(0) translateY(0) rotate(-45deg); opacity: 1; }
+        100% { transform: translateX(500px) translateY(500px) rotate(-45deg); opacity: 0; }
     }
     </style>
     <div class="eqms-bg">
@@ -2851,26 +2950,35 @@ def main():
     # =====================================================================
     # WEATHER ANIMATED BACKGROUND (Replaces Solar when Weather is active)
     # =====================================================================
-    # Force black text for all weather elements to override global white text
-    st.markdown("""
+    # Smart day/night text detection for the weather tab.
+    # (Main card / detail items / sunrise-sunset already compute their own
+    # correct day-or-night color further down, so they are left alone here.
+    # Only the forecast cards read CSS variables that were never defined
+    # anywhere, so they always fell back to plain black — this defines
+    # those variables from the real sunrise/sunset so forecast text is
+    # readable in both day and night scenes.)
+    _wx_is_night = False
+    if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
+        try:
+            _wx_now = int(time.time())
+            _wx_sunrise = st.session_state.weather_data.get('sunrise')
+            _wx_sunset = st.session_state.weather_data.get('sunset')
+            if _wx_sunrise and _wx_sunset and str(_wx_sunrise) not in ['', 'N/A', 'None']:
+                _wx_is_night = _wx_now < int(_wx_sunrise) or _wx_now > int(_wx_sunset)
+        except Exception:
+            pass
+    _wx_text_color = "#ffffff" if _wx_is_night else "#000000"
+    _wx_text_shadow = "0 1px 3px rgba(0,0,0,0.6)" if _wx_is_night else "0 1px 3px rgba(255,255,255,0.7)"
+    _wx_forecast_bg = "rgba(255,255,255,0.08)" if _wx_is_night else "rgba(255,255,255,0.4)"
+    _wx_forecast_border = "rgba(255,255,255,0.15)" if _wx_is_night else "rgba(0,0,0,0.08)"
+    st.markdown(f"""
     <style>
-    /* Weather section text override - force black */
-    .weather-main-card, .weather-main-card *,
-    .weather-detail-item, .weather-detail-item *,
-    .sunrise-sunset, .sunrise-sunset *,
-    .forecast-card-0, .forecast-card-0 *,
-    .forecast-card-1, .forecast-card-1 *,
-    .forecast-card-2, .forecast-card-2 *,
-    .forecast-card-3, .forecast-card-3 *,
-    .forecast-card-4, .forecast-card-4 *,
-    div[data-testid="stMain"] .weather-main-card,
-    div[data-testid="stMain"] .weather-main-card *,
-    div[data-testid="stMain"] .forecast-card-0,
-    div[data-testid="stMain"] .forecast-card-0 * {
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-        text-shadow: none !important;
-    }
+    :root {{
+        --weather-input-color: {_wx_text_color};
+        --weather-text-shadow: {_wx_text_shadow};
+        --forecast-bg: {_wx_forecast_bg};
+        --forecast-border: {_wx_forecast_border};
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -3133,9 +3241,9 @@ def main():
                 if (!doc.getElementById('eqms-sidebar-toggle')) {
                     var toggleBtn = doc.createElement('button');
                     toggleBtn.id = 'eqms-sidebar-toggle';
-                    toggleBtn.title = 'Toggle Sidebar';
+                    toggleBtn.title = 'Toggle Sidebar (Click to Open/Close)';
                     toggleBtn.innerHTML = '☰';
-                    toggleBtn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:2147483647;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;pointer-events:auto !important;user-select:none;-webkit-user-select:none;touch-action:manipulation;';
+                    toggleBtn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:9999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;';
 
                     toggleBtn.onmouseenter = function(){ 
                         toggleBtn.style.transform = 'scale(1.15) rotate(90deg)'; 
@@ -3146,62 +3254,35 @@ def main():
                         toggleBtn.style.boxShadow = '0 4px 15px rgba(255,107,53,0.5)'; 
                     };
 
-                    // Direct sidebar manipulation - works across all tabs
-                    function toggleSidebar() {
-                        var sb = doc.querySelector('[data-testid="stSidebar"]');
-                        if (!sb) { console.warn('Sidebar not found'); return; }
-                        var isCollapsed = sb.style.marginLeft === '-340px' || sb.style.opacity === '0';
+                    toggleBtn.onclick = function() {
+                        var body = doc.body;
+                        var isCollapsed = body.classList.contains('sidebar-collapsed');
                         if (isCollapsed) {
-                            // OPEN
-                            sb.style.transition = 'margin-left 0.4s ease, opacity 0.3s ease';
-                            sb.style.marginLeft = '0px';
-                            sb.style.opacity = '1';
-                            sb.style.pointerEvents = 'auto';
-                            sb.style.display = 'flex';
+                            body.classList.remove('sidebar-collapsed');
                             toggleBtn.innerHTML = '✕';
                             toggleBtn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                            var sb = doc.querySelector('[data-testid="stSidebar"]');
+                            if (sb) { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
                             try { localStorage.setItem('eqms_sidebar', 'open'); } catch(e) {}
                         } else {
-                            // CLOSE
-                            sb.style.transition = 'margin-left 0.4s ease, opacity 0.3s ease';
-                            sb.style.marginLeft = '-340px';
-                            sb.style.opacity = '0';
-                            sb.style.pointerEvents = 'none';
+                            body.classList.add('sidebar-collapsed');
                             toggleBtn.innerHTML = '☰';
                             toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                            var sb = doc.querySelector('[data-testid="stSidebar"]');
+                            if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
                             try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
                         }
-                    }
-
-                    toggleBtn.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        toggleSidebar();
-                    });
-                    toggleBtn.addEventListener('touchstart', function(e) {
-                        e.preventDefault();
-                        toggleSidebar();
-                    }, {passive: false});
-
-                    // Restore saved state on load
+                    };
                     try {
                         var saved = localStorage.getItem('eqms_sidebar');
                         if (saved === 'closed') {
-                            setTimeout(function() {
-                                var sb = doc.querySelector('[data-testid="stSidebar"]');
-                                if (sb) {
-                                    sb.style.marginLeft = '-340px';
-                                    sb.style.opacity = '0';
-                                    sb.style.pointerEvents = 'none';
-                                    toggleBtn.innerHTML = '☰';
-                                    toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
-                                }
-                            }, 500);
+                            doc.body.classList.add('sidebar-collapsed');
+                            toggleBtn.innerHTML = '☰';
+                            toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
                         }
                     } catch(e) {}
-
+                    // Sidebar state managed by CSS + class toggle only — no polling
                     doc.body.appendChild(toggleBtn);
-                }                    doc.body.appendChild(toggleBtn);
                 }
 
                 if (!doc.getElementById('eqms-top-btn')) {
@@ -3256,7 +3337,8 @@ def main():
 
     effective_theme = theme_choice
     if theme_choice == 'Auto (System)':
-        effective_theme = get_smart_theme().title()
+        h = now_ist().hour
+        effective_theme = 'Day' if 6 <= h < 19 else 'Dark'
 
     if effective_theme == 'Custom':
         custom_bg = st.sidebar.color_picker("Background Color", value=st.session_state.custom_bg, key="custom_bg_picker")
@@ -3755,8 +3837,10 @@ def main():
             with nc:
                 if st.button(icon, key=f"nav_btn_{name}", help=name, use_container_width=True,
                              type="primary" if st.session_state.view_mode == name else "secondary"):
-                    st.session_state.view_mode = name
-                    st.rerun()
+                    if st.session_state.view_mode != name:  # Only rerun if actually switching
+                        st.session_state.view_mode = name
+                        st.query_params['__view'] = name  # Persist choice in URL so refresh keeps the tab
+                        st.rerun()
     with top_c2:
         st.markdown(f"<div style='padding-top:6px; text-align:right;'><span class='status-pill status-live'>● Live</span> &nbsp; <span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span></div>", unsafe_allow_html=True)
 
@@ -4577,53 +4661,18 @@ def main():
         st.markdown("""
         <style>
         @keyframes chat-bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        @keyframes chat-glow { 0%,100% { box-shadow: 0 0 15px rgba(96,165,250,0.2); } 50% { box-shadow: 0 0 30px rgba(96,165,250,0.5); } }
+        @keyframes chat-typing { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
         .chat-train-icon { font-size: 3rem; animation: chat-bounce 2s ease-in-out infinite; display: inline-block; filter: drop-shadow(0 0 10px rgba(96,165,250,0.5)); }
-        /* === CHAT VIEW: FORCE ALL TEXT WHITE === */
-        [data-testid="stMain"] .stMarkdown h1,
-        [data-testid="stMain"] .stMarkdown h2,
-        [data-testid="stMain"] .stMarkdown h3,
-        [data-testid="stMain"] .stMarkdown h4,
-        [data-testid="stMain"] .stMarkdown h5,
-        [data-testid="stMain"] .stMarkdown h6,
-        [data-testid="stMain"] .stMarkdown p,
-        [data-testid="stMain"] .stMarkdown span,
-        [data-testid="stMain"] .stMarkdown div,
-        [data-testid="stMain"] .stCaption,
-        [data-testid="stMain"] .stSubheader,
-        [data-testid="stMain"] [data-testid="stCaption"] {
-            color: #f1f5f9 !important;
-            -webkit-text-fill-color: #f1f5f9 !important;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
-        }
-        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] p,
-        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] span,
-        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] div {
-            color: #f1f5f9 !important;
-            -webkit-text-fill-color: #f1f5f9 !important;
-        }
-        [data-testid="stMain"] .stButton > button {
-            color: #f1f5f9 !important;
-            border-color: rgba(148,163,184,0.4) !important;
-        }
-        [data-testid="stMain"] .stChatInput input {
-            color: #f1f5f9 !important;
-            -webkit-text-fill-color: #f1f5f9 !important;
-        }
-        .chat-title-white {
-            font-size: 1.5rem; font-weight: 700; margin-top: 8px;
-            color: #f1f5f9 !important;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.8) !important;
-        }
-        .chat-subtitle-white {
-            color: #cbd5e1 !important;
-            font-size: 0.9rem;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.6) !important;
-        }
+        .chat-welcome { animation: chat-glow 3s ease-in-out infinite; border-radius: 16px; padding: 20px; }
+        .chat-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #60a5fa; animation: chat-typing 1.4s ease-in-out infinite; }
+        .chat-dot:nth-child(2) { animation-delay: 0.2s; }
+        .chat-dot:nth-child(3) { animation-delay: 0.4s; }
         </style>
         <div style="text-align: center; padding: 10px 0;">
             <span class="chat-train-icon">🚂</span>
-            <div class="chat-title-white">TSKEQ Bot</div>
-            <div class="chat-subtitle-white">Ask about EQ data, trains, quota, PNR or anything</div>
+            <div style="font-size: 1.5rem; font-weight: 700; margin-top: 8px;" class="dash-gradient-text">TSKEQ Bot</div>
+            <div style="color: #94a3b8; font-size: 0.9rem;">Ask about EQ data, trains, quota, PNR or anything</div>
         </div>
         """, unsafe_allow_html=True)
         st.subheader("💬 Chat with TSKEQ Bot")
@@ -5062,7 +5111,6 @@ def main():
 
             # Animated Weather Scene
             weather_condition = str(data.get('weather', '')).lower()
-            is_night = time_of_day in ['night', 'dusk']
 
             weather_scene_html = """
             <style>
@@ -5070,20 +5118,19 @@ def main():
             .w-sky { position: absolute; width: 100%; height: 100%; top: 0; left: 0; }
             .w-sunny { background: linear-gradient(180deg, #4facfe 0%, #00f2fe 100%); }
             .w-rainy { background: linear-gradient(180deg, #2c3e50 0%, #4a5568 100%); }
-            .w-rainy-night { background: linear-gradient(180deg, #050510 0%, #0d0d1a 50%, #1a0a2e 100%); }
             .w-cloudy { background: linear-gradient(180deg, #7f8c8d 0%, #95a5a6 100%); }
-            .w-cloudy-night { background: linear-gradient(180deg, #1a1a2e 0%, #2d2d44 100%); }
+            .w-night { background: linear-gradient(180deg, #050510 0%, #10101f 45%, #1a1a35 100%); }
             .w-thunder { background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%); }
-            .w-snowy { background: linear-gradient(180deg, #e3f2fd 0%, #bbdefb 100%); }
-            .w-snowy-night { background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 100%); }
-            .w-foggy { background: linear-gradient(180deg, #cfd8dc 0%, #b0bec5 100%); }
-            .w-foggy-night { background: linear-gradient(180deg, #1a1a2e 0%, #2d2d44 100%); }
-            .w-night-clear { background: linear-gradient(180deg, #000000 0%, #0a0a1a 40%, #1a1a3e 80%, #2d1b4e 100%); }
+            .w-snowy { background: linear-gradient(180deg, #e0e7ff 0%, #c7d2fe 100%); }
+            .w-foggy { background: linear-gradient(180deg, #d5d8dc 0%, #aab7b8 100%); }
 
             @keyframes w-sun-pulse { 0%,100%{transform:scale(1);opacity:0.9;} 50%{transform:scale(1.2);opacity:1;} }
-            .w-sun { position: absolute; top: 8px; right: 25px; width: 80px; height: 80px; background: radial-gradient(circle at 40% 40%, #fff9c4 0%, #FFD700 30%, #FF8C00 70%, transparent 100%); border-radius: 50%; animation: w-sun-pulse 3s ease-in-out infinite; box-shadow: 0 0 60px 20px rgba(255,215,0,0.5), 0 0 100px 40px rgba(255,193,7,0.25); z-index: 5; }
-            .w-moon { position: absolute; top: 15px; right: 30px; width: 60px; height: 60px; background: radial-gradient(circle at 35% 35%, #fff9c4, #f5f5dc, #e0e0e0); border-radius: 50%; animation: w-moon-pulse 4s ease-in-out infinite; box-shadow: 0 0 40px 15px rgba(245,245,220,0.3); }
-            @keyframes w-moon-pulse { 0%,100%{box-shadow:0 0 40px 15px rgba(245,245,220,0.3);} 50%{box-shadow:0 0 60px 25px rgba(245,245,220,0.5);} }
+            .w-sun { position: absolute; top: 15px; right: 30px; width: 70px; height: 70px; background: radial-gradient(circle, #FFD700 0%, #FFA500 60%, transparent 100%); border-radius: 50%; animation: w-sun-pulse 3s ease-in-out infinite; box-shadow: 0 0 50px 15px rgba(255,215,0,0.4); }
+
+            @keyframes w-moon-glow { 0%,100%{box-shadow:0 0 30px 10px rgba(245,245,220,0.3);} 50%{box-shadow:0 0 45px 18px rgba(245,245,220,0.5);} }
+            .w-moon { position: absolute; top: 15px; right: 30px; width: 60px; height: 60px; background: radial-gradient(circle at 35% 35%, #fff9c4, #f5f5dc, #e0e0e0); border-radius: 50%; animation: w-moon-glow 4s ease-in-out infinite; }
+            @keyframes w-twinkle { 0%,100%{opacity:0.2;} 50%{opacity:1;} }
+            .w-star { position: absolute; background: #fff; border-radius: 50%; animation: w-twinkle 2s ease-in-out infinite; }
 
             @keyframes w-ray-spin { from{transform:translate(-50%,-50%) rotate(0deg);} to{transform:translate(-50%,-50%) rotate(360deg);} }
             .w-ray { position: absolute; top: 50%; left: 50%; width: 100px; height: 3px; background: linear-gradient(90deg, transparent, #FFD700, transparent); transform-origin: center; animation: w-ray-spin 10s linear infinite; }
@@ -5092,124 +5139,102 @@ def main():
             .w-cloud { position: absolute; background: rgba(255,255,255,0.85); border-radius: 40px; animation: w-cloud-move linear infinite; }
             .w-cloud::before { content: ''; position: absolute; background: rgba(255,255,255,0.85); border-radius: 50%; }
             .w-cloud::after { content: ''; position: absolute; background: rgba(255,255,255,0.85); border-radius: 50%; }
-            .w-cloud-dark { position: absolute; background: rgba(100,100,120,0.7); border-radius: 40px; animation: w-cloud-move linear infinite; }
-            .w-cloud-dark::before { content: ''; position: absolute; background: rgba(100,100,120,0.7); border-radius: 50%; }
-            .w-cloud-dark::after { content: ''; position: absolute; background: rgba(100,100,120,0.7); border-radius: 50%; }
+            .w-cloud-dim { background: rgba(200,200,220,0.35); }
+            .w-cloud-dim::before, .w-cloud-dim::after { background: rgba(200,200,220,0.35); }
 
             @keyframes w-rain-fall { from{transform:translateY(-20px);opacity:0;} 10%{opacity:0.8;} 90%{opacity:0.8;} to{transform:translateY(240px);opacity:0;} }
             .w-rain { position: absolute; width: 2px; height: 14px; background: linear-gradient(180deg, transparent, #64b5f6); border-radius: 0 0 2px 2px; animation: w-rain-fall linear infinite; }
-            .w-rain-bright { background: linear-gradient(180deg, transparent, #90caf9); }
 
             @keyframes w-lightning { 0%,90%,100%{background:rgba(255,255,255,0);} 91%{background:rgba(255,255,255,0.25);} 92%{background:rgba(255,255,255,0);} 93%{background:rgba(255,255,255,0.4);} 94%{background:rgba(255,255,255,0);} }
             .w-lightning { position: absolute; top: 0; left: 0; width: 100%; height: 100%; animation: w-lightning 4s ease-in-out infinite; }
 
             @keyframes w-snow-fall { from{transform:translateY(-20px) rotate(0deg);opacity:0;} 10%{opacity:1;} 90%{opacity:1;} to{transform:translateY(240px) rotate(360deg);opacity:0;} }
-            .w-snow { position: absolute; color: #fff; font-size: 13px; animation: w-snow-fall linear infinite; text-shadow: 0 0 4px rgba(255,255,255,0.8); }
-            .w-snow-dark { color: #e3f2fd; text-shadow: 0 0 4px rgba(227,242,253,0.8); }
+            .w-snow { position: absolute; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6); font-size: 13px; animation: w-snow-fall linear infinite; text-shadow: 0 0 4px rgba(255,255,255,0.8); }
 
             @keyframes w-fog-drift { from{transform:translateX(-50%);} to{transform:translateX(0%);} }
             .w-fog { position: absolute; width: 200%; height: 50px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent); animation: w-fog-drift linear infinite; }
-            .w-fog-dark { background: linear-gradient(90deg, transparent, rgba(200,200,220,0.2), transparent); }
 
             .w-ground { position: absolute; bottom: 0; left: 0; width: 100%; height: 35px; background: linear-gradient(180deg, #2d5016 0%, #1a3009 100%); border-radius: 50% 50% 0 0 / 15px 15px 0 0; }
-            .w-ground-night { background: linear-gradient(180deg, #0d1b2a 0%, #050510 100%); }
             @keyframes w-tree-sway { 0%,100%{transform:rotate(-4deg);} 50%{transform:rotate(4deg);} }
             .w-tree { position: absolute; bottom: 28px; font-size: 22px; animation: w-tree-sway 3s ease-in-out infinite; }
-            .w-star { position: absolute; background: #fff; border-radius: 50%; animation: twinkle 2s ease-in-out infinite; }
-            @keyframes twinkle { 0%,100%{opacity:0.3;} 50%{opacity:1;} }
             </style>
             <div class="w-scene-wrap">
             """
 
+            _scene_is_night = weather_mode == "night"
+
             if 'rain' in weather_condition or 'drizz' in weather_condition:
-                if is_night:
-                    weather_scene_html += '<div class="w-sky w-rainy-night">'
-                    weather_scene_html += '<div class="w-lightning"></div>'
-                else:
-                    weather_scene_html += '<div class="w-sky w-rainy">'
+                weather_scene_html += '<div class="w-sky w-rainy">'
+                weather_scene_html += '<div class="w-lightning"></div>'
                 for i in range(25):
-                    weather_scene_html += f'<div class="w-rain {'w-rain-bright' if is_night else ''}" style="left:{(i*4)%100}%;animation-duration:{0.4+(i%3)*0.15}s;animation-delay:{(i*0.1)%1.5}s;"></div>'
-                if is_night:
-                    weather_scene_html += '<div class="w-cloud-dark" style="top:12px;left:-100px;width:90px;height:32px;animation-duration:22s;"><div style="position:absolute;top:-14px;left:12px;width:32px;height:32px;"></div><div style="position:absolute;top:-10px;left:38px;width:24px;height:24px;"></div></div>'
-                else:
-                    weather_scene_html += '<div class="w-cloud" style="top:12px;left:-100px;width:90px;height:32px;animation-duration:22s;"><div style="position:absolute;top:-14px;left:12px;width:32px;height:32px;"></div><div style="position:absolute;top:-10px;left:38px;width:24px;height:24px;"></div></div>'
+                    weather_scene_html += f'<div class="w-rain" style="left:{(i*4)%100}%;animation-duration:{0.4+(i%3)*0.15}s;animation-delay:{(i*0.1)%1.5}s;"></div>'
+                weather_scene_html += '<div class="w-cloud" style="top:12px;left:-100px;width:90px;height:32px;animation-duration:22s;"><div style="position:absolute;top:-14px;left:12px;width:32px;height:32px;"></div><div style="position:absolute;top:-10px;left:38px;width:24px;height:24px;"></div></div>'
+                weather_scene_html += '<div class="w-cloud" style="top:22px;left:-100px;width:110px;height:38px;animation-duration:28s;animation-delay:6s;"><div style="position:absolute;top:-16px;left:18px;width:38px;height:38px;"></div><div style="position:absolute;top:-12px;left:48px;width:28px;height:28px;"></div></div>'
 
             elif 'cloud' in weather_condition:
-                if is_night:
-                    weather_scene_html += '<div class="w-sky w-cloudy-night">'
-                    weather_scene_html += '<div class="w-moon" style="opacity:0.8;"></div>'
-                    for i in range(30):
-                        weather_scene_html += f'<div class="w-star" style="left:{(i*7)%100}%;top:{(i*5)%60}%;width:{1+(i%3)}px;height:{1+(i%3)}px;opacity:{0.3+(i%5)*0.15};animation-delay:{(i*0.2)%3}s;"></div>'
+                if _scene_is_night:
+                    weather_scene_html += '<div class="w-sky w-night">'
+                    for i in range(20):
+                        weather_scene_html += f'<div class="w-star" style="left:{(i*4.7)%100}%;top:{(i*3.1)%55}%;width:{1+(i%3)}px;height:{1+(i%3)}px;animation-delay:{(i*0.2)%3}s;"></div>'
+                    weather_scene_html += '<div class="w-moon" style="opacity:0.55;"></div>'
+                    cloud_cls = "w-cloud w-cloud-dim"
                 else:
                     weather_scene_html += '<div class="w-sky w-cloudy">'
                     weather_scene_html += '<div class="w-sun" style="opacity:0.35;"></div>'
+                    cloud_cls = "w-cloud"
                 for i in range(4):
-                    cloud_class = 'w-cloud-dark' if is_night else 'w-cloud'
-                    weather_scene_html += f'<div class="{cloud_class}" style="top:{12+(i%2)*18}px;left:-100px;width:{70+(i%2)*30}px;height:{28+(i%2)*10}px;animation-duration:{20+i*6}s;animation-delay:{i*4}s;"><div style="position:absolute;top:-{12+(i%2)*6}px;left:{14+(i%2)*6}px;width:{30+(i%2)*12}px;height:{30+(i%2)*12}px;"></div><div style="position:absolute;top:-{8+(i%2)*4}px;left:{36+(i%2)*10}px;width:{22+(i%2)*8}px;height:{22+(i%2)*8}px;"></div></div>'
+                    weather_scene_html += f'<div class="{cloud_cls}" style="top:{12+(i%2)*18}px;left:-100px;width:{70+(i%2)*30}px;height:{28+(i%2)*10}px;animation-duration:{20+i*6}s;animation-delay:{i*4}s;"><div style="position:absolute;top:-{12+(i%2)*6}px;left:{14+(i%2)*6}px;width:{30+(i%2)*12}px;height:{30+(i%2)*12}px;"></div><div style="position:absolute;top:-{8+(i%2)*4}px;left:{36+(i%2)*10}px;width:{22+(i%2)*8}px;height:{22+(i%2)*8}px;"></div></div>'
 
             elif 'clear' in weather_condition or 'sun' in weather_condition:
-                if is_night:
-                    weather_scene_html += '<div class="w-sky w-night-clear">'
+                if _scene_is_night:
+                    weather_scene_html += '<div class="w-sky w-night">'
+                    for i in range(25):
+                        weather_scene_html += f'<div class="w-star" style="left:{(i*3.9)%100}%;top:{(i*2.6)%60}%;width:{1+(i%3)}px;height:{1+(i%3)}px;animation-delay:{(i*0.15)%3}s;"></div>'
                     weather_scene_html += '<div class="w-moon"></div>'
-                    for i in range(40):
-                        weather_scene_html += f'<div class="w-star" style="left:{(i*7)%100}%;top:{(i*5)%60}%;width:{1+(i%3)}px;height:{1+(i%3)}px;opacity:{0.3+(i%5)*0.15};animation-delay:{(i*0.2)%3}s;"></div>'
-                else:
-                    weather_scene_html += '<div class="w-sky w-sunny">'
-                    # SUN AT TOP - prominent
-                    weather_scene_html += '<div class="w-sun">'
-                    for angle in range(0, 360, 30):
-                        weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);width:120px;"></div>'
-                    weather_scene_html += '</div>'
-                    # Small fluffy clouds below sun
-                    for i in range(3):
-                        weather_scene_html += f'<div class="w-cloud" style="top:{35+i*18}px;left:-100px;width:70px;height:26px;animation-duration:{28+i*6}s;animation-delay:{i*5}s;opacity:0.5;"><div style="position:absolute;top:-12px;left:12px;width:28px;height:28px;"></div></div>'
-
-            elif 'thunder' in weather_condition or 'storm' in weather_condition:
-                weather_scene_html += '<div class="w-sky w-thunder">'
-                weather_scene_html += '<div class="w-lightning" style="animation-duration:2.5s;"></div>'
-                for i in range(20):
-                    weather_scene_html += f'<div class="w-rain w-rain-bright" style="left:{(i*5)%100}%;animation-duration:{0.3+(i%3)*0.12}s;animation-delay:{(i*0.08)%1.2}s;"></div>'
-                weather_scene_html += '<div class="w-cloud-dark" style="top:8px;left:-100px;width:100px;height:38px;animation-duration:32s;"><div style="position:absolute;top:-16px;left:16px;width:40px;height:40px;"></div><div style="position:absolute;top:-12px;left:46px;width:32px;height:32px;"></div></div>'
-
-            elif 'snow' in weather_condition or 'frost' in weather_condition or 'freez' in weather_condition:
-                if is_night:
-                    weather_scene_html += '<div class="w-sky w-snowy-night">'
-                else:
-                    weather_scene_html += '<div class="w-sky w-snowy">'
-                snowflakes = ['&#10052;', '&#10053;', '&#10054;', '&#10042;', '&#10043;']
-                snow_class = 'w-snow-dark' if is_night else 'w-snow'
-                for i in range(35):
-                    weather_scene_html += f'<div class="{snow_class}" style="left:{(i*3)%100}%;font-size:{10+(i%4)*3}px;animation-duration:{2+(i%4)*1.2}s;animation-delay:{(i*0.15)%3}s;">{snowflakes[i%5]}</div>'
-                cloud_class = 'w-cloud-dark' if is_night else 'w-cloud'
-                weather_scene_html += f'<div class="{cloud_class}" style="top:8px;left:-100px;width:80px;height:30px;animation-duration:26s;"><div style="position:absolute;top:-12px;left:12px;width:34px;height:34px;"></div></div>'
-
-            elif 'mist' in weather_condition or 'fog' in weather_condition or 'haz' in weather_condition:
-                if is_night:
-                    weather_scene_html += '<div class="w-sky w-foggy-night">'
-                else:
-                    weather_scene_html += '<div class="w-sky w-foggy">'
-                fog_class = 'w-fog-dark' if is_night else 'w-fog'
-                for i in range(5):
-                    weather_scene_html += f'<div class="{fog_class}" style="top:{15+i*30}px;animation-duration:{12+i*4}s;animation-delay:{i*2}s;opacity:{0.25+(i%3)*0.15};"></div>'
-
-            else:
-                if is_night:
-                    weather_scene_html += '<div class="w-sky w-night-clear">'
-                    weather_scene_html += '<div class="w-moon"></div>'
-                    for i in range(40):
-                        weather_scene_html += f'<div class="w-star" style="left:{(i*7)%100}%;top:{(i*5)%60}%;width:{1+(i%3)}px;height:{1+(i%3)}px;opacity:{0.3+(i%5)*0.15};animation-delay:{(i*0.2)%3}s;"></div>'
                 else:
                     weather_scene_html += '<div class="w-sky w-sunny">'
                     weather_scene_html += '<div class="w-sun">'
                     for angle in range(0, 360, 45):
                         weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
                     weather_scene_html += '</div>'
-                if not is_night:
-                    for i in range(2):
-                        weather_scene_html += f'<div class="w-cloud" style="top:{20+i*12}px;left:-100px;width:55px;height:20px;animation-duration:{22+i*5}s;animation-delay:{i*6}s;opacity:0.5;"><div style="position:absolute;top:-8px;left:8px;width:22px;height:22px;"></div></div>'
+                for i in range(3):
+                    weather_scene_html += f'<div class="w-cloud" style="top:{18+i*14}px;left:-100px;width:65px;height:24px;animation-duration:{24+i*6}s;animation-delay:{i*5}s;opacity:0.6;"><div style="position:absolute;top:-10px;left:10px;width:26px;height:26px;"></div></div>'
 
-            ground_class = 'w-ground-night' if is_night else 'w-ground'
-            weather_scene_html += f'<div class="{ground_class}"></div>'
+            elif 'thunder' in weather_condition or 'storm' in weather_condition:
+                weather_scene_html += '<div class="w-sky w-thunder">'
+                weather_scene_html += '<div class="w-lightning" style="animation-duration:2.5s;"></div>'
+                for i in range(20):
+                    weather_scene_html += f'<div class="w-rain" style="left:{(i*5)%100}%;animation-duration:{0.3+(i%3)*0.12}s;animation-delay:{(i*0.08)%1.2}s;background:linear-gradient(180deg,transparent,#90caf9);"></div>'
+                weather_scene_html += '<div class="w-cloud" style="top:8px;left:-100px;width:100px;height:38px;background:#546e7a;animation-duration:32s;"><div style="position:absolute;top:-16px;left:16px;width:40px;height:40px;background:#546e7a;"></div><div style="position:absolute;top:-12px;left:46px;width:32px;height:32px;background:#546e7a;"></div></div>'
+
+            elif 'snow' in weather_condition or 'frost' in weather_condition or 'freez' in weather_condition:
+                weather_scene_html += '<div class="w-sky w-snowy">'
+                snowflakes = ['&#10052;', '&#10053;', '&#10054;', '&#10042;', '&#10043;']
+                for i in range(35):
+                    weather_scene_html += f'<div class="w-snow" style="left:{(i*3)%100}%;font-size:{10+(i%4)*3}px;animation-duration:{2+(i%4)*1.2}s;animation-delay:{(i*0.15)%3}s;">{snowflakes[i%5]}</div>'
+                weather_scene_html += '<div class="w-cloud" style="top:8px;left:-100px;width:80px;height:30px;background:rgba(255,255,255,0.8);animation-duration:26s;"><div style="position:absolute;top:-12px;left:12px;width:34px;height:34px;background:rgba(255,255,255,0.8);"></div></div>'
+
+            elif 'mist' in weather_condition or 'fog' in weather_condition or 'haz' in weather_condition:
+                weather_scene_html += '<div class="w-sky w-foggy">'
+                for i in range(5):
+                    weather_scene_html += f'<div class="w-fog" style="top:{15+i*30}px;animation-duration:{12+i*4}s;animation-delay:{i*2}s;opacity:{0.25+(i%3)*0.15};"></div>'
+
+            else:
+                if _scene_is_night:
+                    weather_scene_html += '<div class="w-sky w-night">'
+                    for i in range(20):
+                        weather_scene_html += f'<div class="w-star" style="left:{(i*4.3)%100}%;top:{(i*2.9)%55}%;width:{1+(i%3)}px;height:{1+(i%3)}px;animation-delay:{(i*0.18)%3}s;"></div>'
+                    weather_scene_html += '<div class="w-moon"></div>'
+                else:
+                    weather_scene_html += '<div class="w-sky w-sunny">'
+                    weather_scene_html += '<div class="w-sun">'
+                    for angle in range(0, 360, 45):
+                        weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
+                    weather_scene_html += '</div>'
+                for i in range(2):
+                    weather_scene_html += f'<div class="w-cloud" style="top:{20+i*12}px;left:-100px;width:55px;height:20px;animation-duration:{22+i*5}s;animation-delay:{i*6}s;opacity:0.5;"><div style="position:absolute;top:-8px;left:8px;width:22px;height:22px;"></div></div>'
+
+            weather_scene_html += '<div class="w-ground"></div>'
             weather_scene_html += '<div class="w-tree" style="left:8%;">🌲</div>'
             weather_scene_html += '<div class="w-tree" style="left:22%;animation-delay:0.6s;">🌳</div>'
             weather_scene_html += '<div class="w-tree" style="left:68%;animation-delay:1.2s;">🌲</div>'
@@ -5217,12 +5242,6 @@ def main():
             weather_scene_html += '</div></div>'
 
             st.markdown(weather_scene_html, unsafe_allow_html=True)
-
-            if data.get('icon'):
-                icon_url = f"https://openweathermap.org/img/wn/{data['icon']}@4x.png"
-                c1, c2, c3 = st.columns([1,1,1])
-                with c2:
-                    st.image(icon_url, caption=data['weather'].title(), width=120)
 
             # 5-Day Forecast
             if st.session_state.weather_forecast and 'error' not in st.session_state.weather_forecast:
@@ -5299,33 +5318,10 @@ def main():
         else:
             st.info("Enter a city name and click 'Get Weather' to see detailed weather information.")
 
-    # === SMART THEME CSS VARIABLES ===
-    smart_now = get_smart_theme()
-    text_primary = '#f1f5f9' if smart_now == 'night' else '#1e293b'
-    text_secondary = '#94a3b8' if smart_now == 'night' else '#475569'
-    bg_glass = 'rgba(15,23,42,0.25)' if smart_now == 'night' else 'rgba(255,255,255,0.15)'
-
-    st.markdown(f"""
+    # === COMPREHENSIVE TEXT VISIBILITY FIX ===
+    # This CSS block is rendered LAST and overrides all previous styles
+    st.markdown("""
     <style>
-    :root {{
-        --eqms-text-primary: {text_primary};
-        --eqms-text-secondary: {text_secondary};
-        --eqms-bg-glass: {bg_glass};
-        --eqms-is-night: {'1' if smart_now == 'night' else '0'};
-    }}
-    /* === NAV BUTTONS LOOK LIKE TABS === */
-    div[data-testid="stMain"] .stButton > button[key^="nav_btn_"] {{
-        border-radius: 10px 10px 0 0 !important;
-        border-bottom: 3px solid transparent !important;
-        margin-bottom: -2px !important;
-        position: relative !important;
-        z-index: 10 !important;
-        transition: all 0.2s ease !important;
-    }}
-    div[data-testid="stMain"] .stButton > button[key^="nav_btn_"][kind="primary"] {{
-        border-bottom: 3px solid #FF9933 !important;
-        background: linear-gradient(180deg, rgba(37,99,235,0.15), rgba(37,99,235,0.05)) !important;
-    }}
     /* === FORCE ALL FORM LABELS BLACK === */
     div[data-testid="stMain"] .stTextInput label p,
     div[data-testid="stMain"] .stTextInput label span,
@@ -5343,74 +5339,74 @@ def main():
     div[data-testid="stMain"] .stCheckbox label span,
     div[data-testid="stMain"] [data-testid="stWidgetLabel"] p,
     div[data-testid="stMain"] [data-testid="stWidgetLabel"] span,
-    div[data-testid="stMain"] [data-testid="stWidgetLabel"] {{
+    div[data-testid="stMain"] [data-testid="stWidgetLabel"] {
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
         font-weight: 600 !important;
-    }}
+    }
     /* === FORCE ALL FORM INPUT VALUES BLACK === */
     div[data-testid="stMain"] .stTextInput input,
     div[data-testid="stMain"] .stSelectbox div[data-baseweb="select"] div,
     div[data-testid="stMain"] .stDateInput input,
-    div[data-testid="stMain"] .stNumberInput input {{
+    div[data-testid="stMain"] .stNumberInput input {
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
-    }}
+    }
     /* === EXPANDER HEADERS BLACK === */
     div[data-testid="stMain"] .streamlit-expanderHeader,
     div[data-testid="stMain"] .streamlit-expanderHeader p,
-    div[data-testid="stMain"] .streamlit-expanderHeader span {{
+    div[data-testid="stMain"] .streamlit-expanderHeader span {
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
         font-weight: 700 !important;
-    }}
+    }
     /* === CAPTIONS BLACK === */
     div[data-testid="stMain"] .stCaption,
-    div[data-testid="stMain"] [data-testid="stCaption"] {{
+    div[data-testid="stMain"] [data-testid="stCaption"] {
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
-    }}
+    }
     /* === SUBHEADERS & SMALL TEXT BLACK === */
     div[data-testid="stMain"] .stMarkdown p[data-testid="stMarkdownContainer"] p,
     div[data-testid="stMain"] .stMarkdown small,
-    div[data-testid="stMain"] .stMarkdown strong {{
+    div[data-testid="stMain"] .stMarkdown strong {
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
-    }}
+    }
     /* === WEATHER SECTION SPECIFIC === */
-    div[data-testid="stMain"] input[key="weather_city_input"] {{
+    div[data-testid="stMain"] input[aria-label="🏙️ Enter City Name"] {
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
-    }}
+    }
     /* Weather labels - WHITE for dark bg */
-    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label p,
-    div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label span {{
+    div[data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) label p,
+    div[data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) label span {
         color: #ffffff !important;
         -webkit-text-fill-color: #ffffff !important;
         text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
         font-weight: 700 !important;
-    }}
+    }
     /* === DATA TABLE HEADERS === */
     div[data-testid="stMain"] .stDataFrame th,
-    div[data-testid="stMain"] .stDataEditor th {{
+    div[data-testid="stMain"] .stDataEditor th {
         color: #ffffff !important;
         -webkit-text-fill-color: #ffffff !important;
         text-shadow: none !important;
         font-weight: 700 !important;
-    }}
+    }
     /* === DATA TABLE CELLS === */
     div[data-testid="stMain"] .stDataFrame td,
-    div[data-testid="stMain"] .stDataEditor td {{
+    div[data-testid="stMain"] .stDataEditor td {
         color: #1e293b !important;
         -webkit-text-fill-color: #1e293b !important;
         text-shadow: none !important;
-    }}
+    }
     </style>
     """, unsafe_allow_html=True)
 
