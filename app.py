@@ -2435,16 +2435,34 @@ def render_audio_controls(current_scene):
         slider.value = savedVol;
         if (savedVol > 0) {{
             status.textContent = 'Scene: {scene} | Vol: ' + savedVol + '%';
+            engine.init();
             engine.setVolume(savedVol);
+            if (engine.ctx && engine.ctx.state === 'suspended') {{
+                engine.ctx.resume().then(() => {{
+                    engine.setScene('{scene}');
+                }}).catch(e => console.log('Init resume:', e));
+            }} else {{
+                engine.setScene('{scene}');
+            }}
         }}
 
         slider.addEventListener('input', function() {{
             var v = parseInt(this.value);
             P.eqmsVolume = v;
-            engine.setVolume(v);
             status.textContent = 'Scene: {scene} | Vol: ' + v + '%';
             if (v > 0) {{
-                engine.setScene('{scene}');
+                if (!engine.ctx) engine.init();
+                if (engine.ctx && engine.ctx.state === 'suspended') {{
+                    engine.ctx.resume().then(() => {{
+                        engine.setVolume(v);
+                        engine.stopAll();
+                        engine.setScene('{scene}');
+                    }}).catch(e => console.log('Resume error:', e));
+                }} else {{
+                    engine.setVolume(v);
+                    engine.stopAll();
+                    engine.setScene('{scene}');
+                }}
             }} else {{
                 engine.stopAll();
                 status.textContent = 'Move slider to enable sound';
@@ -4687,8 +4705,8 @@ def main():
             <div style="color: #e2e8f0; font-size: 0.95rem; font-weight: 500;" class="chat-desc">Ask about EQ data, trains, quota, PNR or anything</div>
         </div>
         """, unsafe_allow_html=True)
-        st.subheader("💬 Chat with TSKEQ Bot")
-        st.caption("Ask about EQ data, trains, quota, PNR or anything else.")
+        st.subheader("💬 Chat with TSKEQ Bot", divider=False)
+        st.markdown('<div style="color: #e2e8f0; font-size: 0.95rem;">Ask about EQ data, trains, quota, PNR or anything else.</div>', unsafe_allow_html=True)
         if prompt := st.chat_input("Type your question...", key="chat_input"):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"): st.markdown(prompt)
@@ -4699,7 +4717,7 @@ def main():
             st.session_state.messages.append({"role": "assistant", "content": response})
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]): st.markdown(msg["content"])
-        st.markdown("**Quick Questions**")
+        st.markdown('<div style="color: #e2e8f0; font-weight: 600; margin-top: 16px; font-size: 1rem;">**Quick Questions**</div>', unsafe_allow_html=True)
         sugg_cols = st.columns(3)
         for i, suggestion in enumerate(st.session_state.chat_suggestions):
             with sugg_cols[i % 3]:
@@ -5131,7 +5149,7 @@ def main():
             .w-sunny { background: linear-gradient(180deg, #4facfe 0%, #00f2fe 100%); }
             .w-rainy { background: linear-gradient(180deg, #2c3e50 0%, #4a5568 100%); }
             .w-cloudy { background: linear-gradient(180deg, #7f8c8d 0%, #95a5a6 100%); }
-            .w-night { background: linear-gradient(180deg, #050510 0%, #10101f 45%, #1a1a35 100%); }
+            .w-night { background: linear-gradient(180deg, #000000 0%, #0a0a1a 45%, #000010 100%); }
             .w-thunder { background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%); }
             .w-snowy { background: linear-gradient(180deg, #e0e7ff 0%, #c7d2fe 100%); }
             .w-foggy { background: linear-gradient(180deg, #d5d8dc 0%, #aab7b8 100%); }
