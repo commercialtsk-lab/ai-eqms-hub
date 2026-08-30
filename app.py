@@ -1,4 +1,3 @@
-
 # =====================================================================
 # AI EQMS Hub Pro - Complete Streamlit Application
 # =====================================================================
@@ -74,11 +73,11 @@ def format_date(dt=None):
 def format_datetime(dt=None):
     if dt is None: dt = now_ist()
     return dt.strftime("%d-%m-%Y %H:%M:%S")
-
 def get_smart_theme():
     """Returns 'day' or 'night' based on IST time and weather sunrise/sunset if available."""
     now = now_ist()
     now_ts = int(now.timestamp())
+    # Priority 1: Weather data sunrise/sunset
     wd = st.session_state.get('weather_data')
     if wd and 'sunrise' in wd and 'sunset' in wd:
         try:
@@ -88,8 +87,10 @@ def get_smart_theme():
                 return 'night' if (now_ts < sr or now_ts > ss) else 'day'
         except Exception:
             pass
+    # Priority 2: Hour based (6 AM to 7 PM = day)
     h = now.hour
     return 'night' if h < 6 or h >= 19 else 'day'
+
 
 # =====================================================================
 # Secrets & Configuration
@@ -281,6 +282,7 @@ def sanitize_latin(text):
     return text.encode('latin-1', 'ignore').decode('latin-1')
 
 def find_column(df, keywords):
+    """Find column name in df matching any keyword (case-insensitive, stripped, fuzzy)."""
     for col in df.columns:
         col_clean = str(col).strip().upper().replace(' ', '').replace('_', '').replace('/', '').replace('-', '')
         for kw in keywords:
@@ -290,6 +292,7 @@ def find_column(df, keywords):
     return None
 
 def column_has_data(df, col):
+    """Check if a column exists and has at least one non-empty value."""
     if col is None or col not in df.columns:
         return False
     return df[col].astype(str).str.strip().ne('').any()
@@ -304,10 +307,19 @@ EQ_HEADINGS = ['S/N', 'PNR', 'FROM', 'TO', 'BOARDING', 'T/N', 'CLASS', 'DOJ',
     'APPLICATION DATE', 'RAILWAY/ZONE/DIVISION', 'PREFERENCE']
 
 SHEET_CONFIG = {
+    # EQ & DATA: same layout — data rows start at row 5 (EQ) / row 4 (DATA)
+    # Cols: A=S/N, B=PNR, C=FROM, D=TO, E=BOARDING, F=T/N, G=CLASS, H=DOJ, I=PASS_NAME, J=PASS_PH,
+    #       K=T/BERTHS, L=PURPOSE, M=ADDRESS, N=DIARY_NO, O=RECOMMENDATION, P=DESIGNATION, Q=PHONE,
+    #       R=VIP_STATUS, S=WARRANT, T=PROC_DATE, U=APP_DATE, V=ZONE, W=PREFERENCE
     "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "class_col": 6, "from_col": 2, "to_col": 3, "berth_col": 10, "doj_col": 7, "headings": EQ_HEADINGS},
     "DATA": {"start_row": 4, "pnr_col": 1, "train_col": 5, "class_col": 6, "from_col": 2, "to_col": 3, "berth_col": 10, "doj_col": 7, "headings": EQ_HEADINGS},
+
+    # FINAL & DATA2: same layout — data rows start at row 6
+    # Cols: A=T/N, B=CLASS, C=FROM, D=TO, E=BOARDING, F=T/BERTHS, G=PASS_NAME, H=PASS_PH, I=PURPOSE,
+    #       J=ADDRESS, K=FROM_STN, L=TO_STN, M=DOJ, N=RECOMMENDATION ...
     "FINAL": {"start_row": 6, "pnr_col": 7, "train_col": 1, "class_col": 2, "from_col": 10, "to_col": 11, "berth_col": 5, "doj_col": 12, "headings": EQ_HEADINGS},
     "DATA2": {"start_row": 6, "pnr_col": 7, "train_col": 1, "class_col": 2, "from_col": 10, "to_col": 11, "berth_col": 5, "doj_col": 12, "headings": EQ_HEADINGS},
+
     "EMAIL_DATA": {"start_row": 2, "pnr_col": 6, "train_col": 8, "class_col": 12, "from_col": 9, "to_col": 10, "berth_col": 15, "doj_col": 11, "headings": EQ_HEADINGS},
     "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": []}
 }
@@ -759,8 +771,11 @@ def get_weather(city_name):
         return {'error': 'Please enter a city name'}
     city_name = str(city_name).strip()
     try:
+        # Step 1: Geocode with up to 5 results for better small-town coverage
         geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=5&appid={WEATHER_API_KEY}"
         geo_resp = requests.get(geo_url, timeout=12)
+
+        # Step 2: Try each geocode result until weather succeeds
         if geo_resp.status_code == 200:
             geo_data = geo_resp.json()
             if geo_data and len(geo_data) > 0:
@@ -785,6 +800,8 @@ def get_weather(city_name):
                                 'lat': lat, 'lon': lon}
                         elif coord_resp.status_code == 401:
                             return {'error': 'Weather API key invalid or expired.'}
+
+        # Fallback: direct city name API
         url = f"https://api.openweathermap.org/data/2.5/weather?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
         response = requests.get(url, timeout=12)
         if response.status_code == 200:
@@ -803,6 +820,7 @@ def get_weather(city_name):
             return {'error': 'Weather API key invalid or expired.'}
         else:
             return {'error': f'Weather API error (HTTP {response.status_code}). Please try again.'}
+
     except requests.exceptions.Timeout:
         return {'error': 'Weather request timed out. Please try again.'}
     except requests.exceptions.ConnectionError:
@@ -815,11 +833,14 @@ def get_weather_forecast(city_name):
         return {'error': 'Please enter a city name'}
     city_name = str(city_name).strip()
     try:
+        # Try direct city first
         url = f"https://api.openweathermap.org/data/2.5/forecast?q={city_name}&appid={WEATHER_API_KEY}&units=metric"
         response = requests.get(url, timeout=12)
         if response.status_code == 200:
             data = response.json()
             return _parse_forecast(data, data.get('city', {}).get('name', city_name), data.get('city', {}).get('country', ''))
+
+        # Fallback: geocode then forecast by coords (try up to 5 results)
         geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=5&appid={WEATHER_API_KEY}"
         geo_resp = requests.get(geo_url, timeout=12)
         if geo_resp.status_code == 200:
@@ -838,12 +859,14 @@ def get_weather_forecast(city_name):
                             return _parse_forecast(data, found_name, country)
                         elif coord_resp.status_code == 401:
                             return {'error': 'Weather API key invalid or expired.'}
+
         if response.status_code == 404:
             return {'error': f'City "{city_name}" not found. Try a different spelling or nearby major city.'}
         elif response.status_code == 401:
             return {'error': 'Weather API key invalid or expired.'}
         else:
             return {'error': f'Forecast API error (HTTP {response.status_code}). Please try again.'}
+
     except requests.exceptions.Timeout:
         return {'error': 'Forecast request timed out. Please try again.'}
     except requests.exceptions.ConnectionError:
@@ -1414,6 +1437,7 @@ def process_passport_image(data):
 # =====================================================================
 @st.cache_data(ttl=300, show_spinner=False)
 def _generate_theme_css(theme, custom_bg, custom_text):
+    """Generate theme CSS once and cache it."""
     if theme == 'Day':
         bg = "transparent"; card_bg = "rgba(248, 250, 252, 0.15)"; text_color = "#1e293b"; text_secondary = "#475569"
         border = "rgba(148, 163, 184, 0.25)"; input_bg = "rgba(255, 255, 255, 0.12)"; accent = "#2563eb"; accent_hover = "#1d4ed8"
@@ -1787,13 +1811,10 @@ def _generate_theme_css(theme, custom_bg, custom_text):
             background: transparent !important;
         }}
 
-        [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important; margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important; }}
-        body.sidebar-collapsed [data-testid="stSidebar"] {{ margin-left: -340px !important; opacity: 0 !important; pointer-events: none !important; }}
-        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important; }}
+        [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.4s ease, opacity 0.3s ease !important; margin-left: 0 !important; overflow: hidden !important; }}
         [data-testid="stSidebarCollapseButton"] {{ display: none !important; }}
         [data-testid="collapsedControl"] {{ display: none !important; }}
         button[kind="header"] {{ display: none !important; }}
-        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; }}
         .sidebar-toggle-btn {{
             position: fixed !important;
             top: 12px !important;
@@ -2079,6 +2100,11 @@ def get_pnr_status_url(pnr):
 # =====================================================================
 # MAIN FUNCTION
 # =====================================================================
+
+# =====================================================================
+# Audio Engine & Earth Background
+# =====================================================================
+
 def render_audio_controls(current_scene):
     """Render sidebar audio volume + Web Audio engine."""
     scene_map = {
@@ -2448,6 +2474,7 @@ def render_audio_controls(current_scene):
     </script>
     """, height=120)
 
+
 EARTH_BG_HTML = """
 <style>
 .earth-bg-scene {
@@ -2539,13 +2566,18 @@ EARTH_BG_HTML = """
 </div>
 """
 
+
 def main():
+    # Always update last_refresh to current time on page load so sync time matches live time
     st.session_state.last_refresh = time.time()
+
+    # BULLETPROOF: Initialize all pagination/session vars at top of main()
     if 'rows_per_page' not in st.session_state or not isinstance(st.session_state.get('rows_per_page'), int) or st.session_state.get('rows_per_page') <= 0:
         st.session_state.rows_per_page = 25
     if 'current_page' not in st.session_state or not isinstance(st.session_state.get('current_page'), int) or st.session_state.get('current_page') <= 0:
         st.session_state.current_page = 1
 
+    # Splash Screen (shows once per session only)
     if 'splash_shown' not in st.session_state:
         st.session_state.splash_shown = True
         components.html("""
@@ -2554,66 +2586,70 @@ def main():
             var P = window.parent;
             var doc = P.document;
             if (doc.getElementById('eqms-splash')) return;
-            var style = doc.createElement('style');
-            style.textContent = `
-                #eqms-splash {
-                    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
-                    z-index: 99999999; display: flex; flex-direction: column;
-                    align-items: center; justify-content: center;
-                    font-family: 'Segoe UI', Arial, sans-serif;
-                }
-                .splash-train {
-                    font-size: 7rem; filter: drop-shadow(0 0 40px rgba(255,153,51,0.7));
-                    animation: splash-train-bob 1.5s ease-in-out infinite;
-                }
-                @keyframes splash-train-bob {
-                    0%, 100% { transform: translateY(0) scale(1); }
-                    50% { transform: translateY(-15px) scale(1.1); }
-                }
-                .splash-title {
-                    color: #fff; font-size: 2.2rem; font-weight: 800; margin-top: 24px;
-                    letter-spacing: 3px; text-shadow: 0 4px 20px rgba(0,0,0,0.6);
-                }
-                .splash-sub {
-                    color: #94a3b8; font-size: 0.95rem; margin-top: 8px;
-                    letter-spacing: 5px; text-transform: uppercase;
-                }
-                .splash-bar-wrap {
-                    width: 220px; height: 4px; background: #334155;
-                    border-radius: 2px; margin-top: 32px; overflow: hidden;
-                }
-                .splash-bar {
-                    width: 0%; height: 100%;
-                    background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808);
-                    animation: splash-load 2s ease-in-out forwards;
-                }
-                @keyframes splash-load { to { width: 100%; } }
-                .splash-fade-out {
-                    animation: splash-fade 0.6s ease-in-out 2.4s forwards;
-                }
-                @keyframes splash-fade {
-                    to { opacity: 0; visibility: hidden; pointer-events: none; }
-                }
-            `;
-            doc.head.appendChild(style);
-            var div = doc.createElement('div');
-            div.id = 'eqms-splash';
-            div.className = 'splash-fade-out';
-            div.innerHTML = '<div class="splash-train">🚂</div><div class="splash-title">AI EQMS Hub Pro</div><div class="splash-sub">Indian Railways</div><div class="splash-bar-wrap"><div class="splash-bar"></div></div>';
-            doc.body.appendChild(div);
-            setTimeout(function(){
-                var el = doc.getElementById('eqms-splash');
-                if(el) {
-                    el.style.transition = 'opacity 0.5s ease';
-                    el.style.opacity = '0';
-                    setTimeout(function(){ if(el) el.remove(); }, 600);
-                }
-            }, 2800);
-        })();
-        </script>
+
+        var style = doc.createElement('style');
+        style.textContent = `
+            #eqms-splash {
+                position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+                z-index: 99999999; display: flex; flex-direction: column;
+                align-items: center; justify-content: center;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            .splash-train {
+                font-size: 7rem; filter: drop-shadow(0 0 40px rgba(255,153,51,0.7));
+                animation: splash-train-bob 1.5s ease-in-out infinite;
+            }
+            @keyframes splash-train-bob {
+                0%, 100% { transform: translateY(0) scale(1); }
+                50% { transform: translateY(-15px) scale(1.1); }
+            }
+            .splash-title {
+                color: #fff; font-size: 2.2rem; font-weight: 800; margin-top: 24px;
+                letter-spacing: 3px; text-shadow: 0 4px 20px rgba(0,0,0,0.6);
+            }
+            .splash-sub {
+                color: #94a3b8; font-size: 0.95rem; margin-top: 8px;
+                letter-spacing: 5px; text-transform: uppercase;
+            }
+            .splash-bar-wrap {
+                width: 220px; height: 4px; background: #334155;
+                border-radius: 2px; margin-top: 32px; overflow: hidden;
+            }
+            .splash-bar {
+                width: 0%; height: 100%;
+                background: linear-gradient(90deg, #FF9933, #FFFFFF, #138808);
+                animation: splash-load 2s ease-in-out forwards;
+            }
+            @keyframes splash-load { to { width: 100%; } }
+            .splash-fade-out {
+                animation: splash-fade 0.6s ease-in-out 2.4s forwards;
+            }
+            @keyframes splash-fade {
+                to { opacity: 0; visibility: hidden; pointer-events: none; }
+            }
+        `;
+        doc.head.appendChild(style);
+
+        var div = doc.createElement('div');
+        div.id = 'eqms-splash';
+        div.className = 'splash-fade-out';
+        div.innerHTML = '<div class="splash-train">🚂</div><div class="splash-title">AI EQMS Hub Pro</div><div class="splash-sub">Indian Railways</div><div class="splash-bar-wrap"><div class="splash-bar"></div></div>';
+        doc.body.appendChild(div);
+
+        setTimeout(function(){
+            var el = doc.getElementById('eqms-splash');
+            if(el) {
+                el.style.transition = 'opacity 0.5s ease';
+                el.style.opacity = '0';
+                setTimeout(function(){ if(el) el.remove(); }, 600);
+            }
+        }, 2800);
+    })();
+    </script>
         """, height=0)
 
+    # Solar System Background
     bg_html = """
     <style>
     .eqms-bg {
@@ -2806,14 +2842,19 @@ def main():
     if view_bg == "📊 Dashboard":
         st.markdown(EARTH_BG_HTML, unsafe_allow_html=True)
     elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
-        pass
+        pass  # Weather bg rendered later
     elif view_bg == "💬 Chat":
-        pass
+        pass  # Clean chat view — no heavy animation
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
+    # =====================================================================
+    # WEATHER ANIMATED BACKGROUND (Replaces Solar when Weather is active)
+    # =====================================================================
+    # Force black text for all weather elements to override global white text
     st.markdown("""
     <style>
+    /* Weather section text override - force black */
     .weather-main-card, .weather-main-card *,
     .weather-detail-item, .weather-detail-item *,
     .sunrise-sunset, .sunrise-sunset *,
@@ -2840,8 +2881,9 @@ def main():
         temp = st.session_state.weather_data.get('temp', '--')
         desc = st.session_state.weather_data.get('weather', '').title()
 
+        # ---- DAY / NIGHT DETECTION ----
         time_of_day = 'day'
-        weather_mode = 'day'
+        weather_mode = 'day'  # <-- FIXED: Define weather_mode
         try:
             now_ts = int(time.time())
             sunrise = st.session_state.weather_data.get('sunrise')
@@ -2867,6 +2909,7 @@ def main():
         except Exception:
             pass
 
+        # ---- WEATHER TYPE (respects day/night) ----
         if 'rain' in weather_cond or 'drizz' in weather_cond:
             scene = 'rain' if time_of_day in ['day', 'dawn', 'dusk'] else 'night-rain'
         elif 'thunder' in weather_cond or 'storm' in weather_cond:
@@ -2880,9 +2923,10 @@ def main():
         else:
             scene = 'night' if time_of_day in ['night', 'dusk'] else 'sunny'
 
+        # ---- CSS & HTML ----
         bg_style = ""
         elements = ""
-        info_html = ""
+        info_html = ""  # Initialize to prevent UnboundLocalError
 
         if scene in ('rain', 'night-rain'):
             bg_style = "background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 35%, #2d3a4a 70%, #1a2332 100%);"
@@ -3032,7 +3076,7 @@ def main():
             elements += '<div style="position:absolute;bottom:115px;left:92%;font-size:58px;z-index:7;animation:treeSway 5s ease-in-out 3s infinite;">🌳</div>'
             elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#e0e0e0;z-index:8;"></div>'
 
-        else:
+        else:  # fog
             bg_style = "background: linear-gradient(180deg, #cfd8dc 0%, #b0bec5 50%, #90a4ae 100%);"
             for i in range(6):
                 top = 10 + i * 14
@@ -3060,7 +3104,9 @@ def main():
     if weather_bg_html:
         st.markdown(weather_bg_html, unsafe_allow_html=True)
 
-    # Sidebar Toggle
+
+
+    # Sidebar Toggle + Back-to-Top Button
     components.html("""
     <script>
     (function() {
@@ -3069,8 +3115,10 @@ def main():
             var doc = P.document;
             if (!P.__eqmsProInit) {
                 P.__eqmsProInit = true;
+                // Ensure sidebar starts open
                 var body = doc.body;
                 body.classList.remove('sidebar-collapsed');
+
                 doc.addEventListener('keydown', function(e) {
                     var t = (e.target.tagName || '').toLowerCase();
                     if (t === 'input' || t === 'textarea' || t === 'select' || e.target.isContentEditable) return;
@@ -3081,43 +3129,81 @@ def main():
                         P.location.href = u.toString();
                     }
                 });
+
                 if (!doc.getElementById('eqms-sidebar-toggle')) {
                     var toggleBtn = doc.createElement('button');
                     toggleBtn.id = 'eqms-sidebar-toggle';
                     toggleBtn.title = 'Toggle Sidebar';
                     toggleBtn.innerHTML = '☰';
-                    toggleBtn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:9999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;';
-                    toggleBtn.onmouseenter = function(){ toggleBtn.style.transform = 'scale(1.15) rotate(90deg)'; toggleBtn.style.boxShadow = '0 6px 25px rgba(255,107,53,0.7)'; };
-                    toggleBtn.onmouseleave = function(){ toggleBtn.style.transform = 'scale(1) rotate(0deg)'; toggleBtn.style.boxShadow = '0 4px 15px rgba(255,107,53,0.5)'; };
-                    toggleBtn.onclick = function() {
-                        var body = doc.body;
-                        var isCollapsed = body.classList.contains('sidebar-collapsed');
+                    toggleBtn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:2147483647;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;pointer-events:auto !important;user-select:none;-webkit-user-select:none;touch-action:manipulation;';
+
+                    toggleBtn.onmouseenter = function(){ 
+                        toggleBtn.style.transform = 'scale(1.15) rotate(90deg)'; 
+                        toggleBtn.style.boxShadow = '0 6px 25px rgba(255,107,53,0.7)'; 
+                    };
+                    toggleBtn.onmouseleave = function(){ 
+                        toggleBtn.style.transform = 'scale(1) rotate(0deg)'; 
+                        toggleBtn.style.boxShadow = '0 4px 15px rgba(255,107,53,0.5)'; 
+                    };
+
+                    // Direct sidebar manipulation - works across all tabs
+                    function toggleSidebar() {
+                        var sb = doc.querySelector('[data-testid="stSidebar"]');
+                        if (!sb) { console.warn('Sidebar not found'); return; }
+                        var isCollapsed = sb.style.marginLeft === '-340px' || sb.style.opacity === '0';
                         if (isCollapsed) {
-                            body.classList.remove('sidebar-collapsed');
+                            // OPEN
+                            sb.style.transition = 'margin-left 0.4s ease, opacity 0.3s ease';
+                            sb.style.marginLeft = '0px';
+                            sb.style.opacity = '1';
+                            sb.style.pointerEvents = 'auto';
+                            sb.style.display = 'flex';
                             toggleBtn.innerHTML = '✕';
                             toggleBtn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
-                            var sb = doc.querySelector('[data-testid="stSidebar"]');
-                            if (sb) { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
                             try { localStorage.setItem('eqms_sidebar', 'open'); } catch(e) {}
                         } else {
-                            body.classList.add('sidebar-collapsed');
+                            // CLOSE
+                            sb.style.transition = 'margin-left 0.4s ease, opacity 0.3s ease';
+                            sb.style.marginLeft = '-340px';
+                            sb.style.opacity = '0';
+                            sb.style.pointerEvents = 'none';
                             toggleBtn.innerHTML = '☰';
                             toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
-                            var sb = doc.querySelector('[data-testid="stSidebar"]');
-                            if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
                             try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
                         }
-                    };
+                    }
+
+                    toggleBtn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        toggleSidebar();
+                    });
+                    toggleBtn.addEventListener('touchstart', function(e) {
+                        e.preventDefault();
+                        toggleSidebar();
+                    }, {passive: false});
+
+                    // Restore saved state on load
                     try {
                         var saved = localStorage.getItem('eqms_sidebar');
                         if (saved === 'closed') {
-                            doc.body.classList.add('sidebar-collapsed');
-                            toggleBtn.innerHTML = '☰';
-                            toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                            setTimeout(function() {
+                                var sb = doc.querySelector('[data-testid="stSidebar"]');
+                                if (sb) {
+                                    sb.style.marginLeft = '-340px';
+                                    sb.style.opacity = '0';
+                                    sb.style.pointerEvents = 'none';
+                                    toggleBtn.innerHTML = '☰';
+                                    toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                                }
+                            }, 500);
                         }
                     } catch(e) {}
+
                     doc.body.appendChild(toggleBtn);
+                }                    doc.body.appendChild(toggleBtn);
                 }
+
                 if (!doc.getElementById('eqms-top-btn')) {
                     var b = doc.createElement('button');
                     b.id = 'eqms-top-btn';
@@ -3148,6 +3234,7 @@ def main():
     qp_view = st.query_params.get('__view')
     if qp_view in view_options and st.session_state.view_mode != qp_view: st.session_state.view_mode = qp_view
 
+    # Time-based greeting
     hour = now_ist().hour
     if 5 <= hour < 12:
         greeting = "☀️ Good Morning"
@@ -3186,7 +3273,9 @@ def main():
 
     apply_theme(effective_theme, custom_bg, custom_text)
 
-    # Sidebar Content
+    # =====================================================================
+    # SIDEBAR
+    # =====================================================================
     with st.sidebar:
         st.markdown("""
         <style>
@@ -3202,52 +3291,96 @@ def main():
             border: 2px solid rgba(255,255,255,0.15);
             display: flex;
         }
-        .welcome-saffron { background: linear-gradient(135deg, #FF9933, #FF8C00); padding: 16px 8px; text-align: center; flex: 1; display: flex; align-items: center; justify-content: center; }
-        .welcome-white { background: #FFFFFF; padding: 16px 8px; text-align: center; position: relative; flex: 1; display: flex; align-items: center; justify-content: center; }
-        .welcome-green { background: linear-gradient(135deg, #138808, #0d6e05); padding: 16px 8px; text-align: center; flex: 1; display: flex; align-items: center; justify-content: center; }
-        .welcome-text-saffron { font-size: 1.3em; font-weight: 700; color: #000000 !important; font-family: 'Segoe UI', Arial, sans-serif; }
-        .welcome-text-white { font-size: 1.3em; font-weight: 700; color: #000000 !important; position: relative; z-index: 2; font-family: 'Segoe UI', Arial, sans-serif; }
-        .welcome-text-green { font-size: 1.3em; font-weight: 700; color: #000000 !important; font-family: 'Segoe UI', Arial, sans-serif; }
-        .chakra-emblem { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; z-index: 1; opacity: 0.3; }
+        .welcome-saffron {
+            background: linear-gradient(135deg, #FF9933, #FF8C00);
+            padding: 16px 8px; text-align: center;
+            flex: 1; display: flex; align-items: center; justify-content: center;
+        }
+        .welcome-white {
+            background: #FFFFFF; padding: 16px 8px; text-align: center; position: relative;
+            flex: 1; display: flex; align-items: center; justify-content: center;
+        }
+        .welcome-green {
+            background: linear-gradient(135deg, #138808, #0d6e05);
+            padding: 16px 8px; text-align: center;
+            flex: 1; display: flex; align-items: center; justify-content: center;
+        }
+        .welcome-text-saffron {
+            font-size: 1.3em; font-weight: 700; color: #000000 !important;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+        .welcome-text-white {
+            font-size: 1.3em; font-weight: 700; color: #000000 !important;
+            position: relative; z-index: 2;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+        .welcome-text-green {
+            font-size: 1.3em; font-weight: 700; color: #000000 !important;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+        .chakra-emblem {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 44px; height: 44px; z-index: 1;
+            opacity: 0.3;
+        }
         .chakra-emblem svg { width: 100%; height: 100%; }
         </style>
         <div class="welcome-flag-card">
-            <div class="welcome-saffron"><div class="welcome-text-saffron">🙏</div></div>
+            <div class="welcome-saffron">
+                <div class="welcome-text-saffron">🙏</div>
+            </div>
             <div class="welcome-white">
                 <div class="chakra-emblem">
                     <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
                         <circle cx="50" cy="50" r="45" fill="none" stroke="#000080" stroke-width="2.5"/>
                         <circle cx="50" cy="50" r="10" fill="none" stroke="#000080" stroke-width="2"/>
                         <g stroke="#000080" stroke-width="2">
-                            <line x1="50" y1="5" x2="50" y2="22"/><line x1="50" y1="78" x2="50" y2="95"/>
-                            <line x1="5" y1="50" x2="22" y2="50"/><line x1="78" y1="50" x2="95" y2="50"/>
-                            <line x1="18" y1="18" x2="30" y2="30"/><line x1="70" y1="70" x2="82" y2="82"/>
-                            <line x1="82" y1="18" x2="70" y2="30"/><line x1="30" y1="70" x2="18" y2="82"/>
+                            <line x1="50" y1="5" x2="50" y2="22"/>
+                            <line x1="50" y1="78" x2="50" y2="95"/>
+                            <line x1="5" y1="50" x2="22" y2="50"/>
+                            <line x1="78" y1="50" x2="95" y2="50"/>
+                            <line x1="18" y1="18" x2="30" y2="30"/>
+                            <line x1="70" y1="70" x2="82" y2="82"/>
+                            <line x1="82" y1="18" x2="70" y2="30"/>
+                            <line x1="30" y1="70" x2="18" y2="82"/>
                         </g>
                         <g stroke="#000080" stroke-width="1.5" transform="rotate(22.5 50 50)">
-                            <line x1="50" y1="5" x2="50" y2="22"/><line x1="50" y1="78" x2="50" y2="95"/>
-                            <line x1="5" y1="50" x2="22" y2="50"/><line x1="78" y1="50" x2="95" y2="50"/>
-                            <line x1="18" y1="18" x2="30" y2="30"/><line x1="70" y1="70" x2="82" y2="82"/>
-                            <line x1="82" y1="18" x2="70" y2="30"/><line x1="30" y1="70" x2="18" y2="82"/>
+                            <line x1="50" y1="5" x2="50" y2="22"/>
+                            <line x1="50" y1="78" x2="50" y2="95"/>
+                            <line x1="5" y1="50" x2="22" y2="50"/>
+                            <line x1="78" y1="50" x2="95" y2="50"/>
+                            <line x1="18" y1="18" x2="30" y2="30"/>
+                            <line x1="70" y1="70" x2="82" y2="82"/>
+                            <line x1="82" y1="18" x2="70" y2="30"/>
+                            <line x1="30" y1="70" x2="18" y2="82"/>
                         </g>
                         <g stroke="#000080" stroke-width="1.2" transform="rotate(45 50 50)">
-                            <line x1="50" y1="5" x2="50" y2="22"/><line x1="50" y1="78" x2="50" y2="95"/>
-                            <line x1="5" y1="50" x2="22" y2="50"/><line x1="78" y1="50" x2="95" y2="50"/>
+                            <line x1="50" y1="5" x2="50" y2="22"/>
+                            <line x1="50" y1="78" x2="50" y2="95"/>
+                            <line x1="5" y1="50" x2="22" y2="50"/>
+                            <line x1="78" y1="50" x2="95" y2="50"/>
                         </g>
                         <g stroke="#000080" stroke-width="1.2" transform="rotate(67.5 50 50)">
-                            <line x1="50" y1="5" x2="50" y2="22"/><line x1="50" y1="78" x2="50" y2="95"/>
-                            <line x1="5" y1="50" x2="22" y2="50"/><line x1="78" y1="50" x2="95" y2="50"/>
+                            <line x1="50" y1="5" x2="50" y2="22"/>
+                            <line x1="50" y1="78" x2="50" y2="95"/>
+                            <line x1="5" y1="50" x2="22" y2="50"/>
+                            <line x1="78" y1="50" x2="95" y2="50"/>
                         </g>
                     </svg>
                 </div>
                 <div class="welcome-text-white">🇮🇳</div>
             </div>
-            <div class="welcome-green"><div class="welcome-text-green">🫡</div></div>
+            <div class="welcome-green">
+                <div class="welcome-text-green">🫡</div>
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
+
+        # Audio Volume Control
         render_audio_controls(st.session_state.view_mode)
 
         with st.expander("🌤️ Quick Weather", expanded=True):
@@ -3533,10 +3666,11 @@ def main():
                 st.session_state.current_page = 1
                 st.rerun()
 
-    # Load and filter data
+    # Load data for selected sheet
     df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
     filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
 
+    # Apply filters (skip for NOTE sheet)
     if not filtered_df.empty and sheet_choice != "NOTE":
         config = SHEET_CONFIG[sheet_choice]
         pnr_col_idx = config.get("pnr_col")
@@ -3569,7 +3703,7 @@ def main():
 
     view = st.session_state.view_mode
 
-    # Top bar
+    # Top bar with marquee
     st.markdown("""
     <style>
     .eqms-marquee-box { 
@@ -3635,6 +3769,7 @@ def main():
     if view == "📋 Data Table":
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
 
+        # Global Search
         if not filtered_df.empty and sheet_choice != "NOTE":
             search_col1, search_col2 = st.columns([4, 1])
             with search_col1:
@@ -3660,6 +3795,7 @@ def main():
                         mask = mask | filtered_df[col].astype(str).str.lower().str.contains(search_term, na=False)
                 filtered_df = filtered_df[mask]
 
+        # Advanced Filters
         if not filtered_df.empty and sheet_choice != "NOTE":
             with st.expander("🔍 Advanced Filters & Column Search", expanded=False):
                 st.markdown(f"**📊 Monitoring: {sheet_choice} Sheet**")
@@ -3701,9 +3837,13 @@ def main():
                 if st.button("🚀 Apply Filters", use_container_width=True, key="adv_apply"):
                     st.rerun()
 
+        # ================================================================
+        # Train count summary cards — ALL sheets except NOTE
+        # ================================================================
         train_col_metric = None
         doj_col = None
         try:
+            # PRIMARY: Use SHEET_CONFIG index (most reliable)
             if sheet_choice in SHEET_CONFIG and sheet_choice != "NOTE":
                 cfg = SHEET_CONFIG[sheet_choice]
                 src = filtered_df if not filtered_df.empty else df_raw
@@ -3714,6 +3854,7 @@ def main():
                     d_idx = cfg.get('doj_col')
                     if d_idx is not None and d_idx < len(src.columns):
                         doj_col = src.columns[d_idx]
+            # FALLBACK: fuzzy header search if config index didn't work
             if train_col_metric is None:
                 search_src = filtered_df if not filtered_df.empty else df_raw
                 if search_src is not None and not search_src.empty:
@@ -3723,6 +3864,7 @@ def main():
             train_col_metric = None
             doj_col = None
 
+        # Show train count cards for ALL sheets except NOTE
         if sheet_choice != "NOTE":
             if not filtered_df.empty and train_col_metric and train_col_metric in filtered_df.columns:
                 try:
@@ -3742,6 +3884,7 @@ def main():
                 except Exception:
                     pass
             elif not filtered_df.empty:
+                # Column found but no valid train data — still show Total EQ
                 st.markdown("**🚆 Train-wise Count**")
                 cards_html = '<div class="train-count-container">'
                 cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {len(filtered_df)}</div></div>'
@@ -3767,6 +3910,7 @@ def main():
             else:
                 st.caption("Sheet has headers but no data rows yet.")
         else:
+            # Sorting
             sort_col = st.session_state.sort_column
             sort_asc = st.session_state.sort_ascending
             if sort_col and sort_col in filtered_df.columns:
@@ -3774,6 +3918,7 @@ def main():
                     filtered_df = filtered_df.sort_values(by=sort_col, ascending=sort_asc, key=lambda col: col.astype(str))
                 except: pass
 
+            # Pagination - bulletproof with safe defaults
             page_size = st.session_state.get('rows_per_page', 25)
             if page_size not in [15, 25, 50, 100, 200]:
                 page_size = 25
@@ -3791,6 +3936,7 @@ def main():
                 st.rerun()
             page_size = selected_page_size
 
+            # Safe pagination calc without math.ceil
             try:
                 df_len = len(filtered_df)
                 if df_len > 0 and page_size > 0:
@@ -3824,6 +3970,7 @@ def main():
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
 
+            # Sorting controls
             if not display_df.empty:
                 sort_cols = st.columns(4)
                 with sort_cols[0]:
@@ -3842,6 +3989,7 @@ def main():
                             st.session_state.sort_ascending = new_asc
                             st.rerun()
 
+            # Print-only table
             print_export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
             if not print_export_df.empty:
                 print_html_table = print_export_df.to_html(index=False, border=1, classes='print-table', escape=False)
@@ -3863,6 +4011,7 @@ def main():
                 key=f"editor_{sheet_choice}_{st.session_state.current_page}_{page_size}")
             st.markdown('</div>', unsafe_allow_html=True)
 
+            # Select All
             selected_mask = edited_page["Select"] if "Select" in edited_page.columns else pd.Series([False] * len(edited_page))
             if 'select_all_state' not in st.session_state:
                 st.session_state.select_all_state = False
@@ -3887,6 +4036,7 @@ def main():
             pnr_col = next((c for c in edited_page.columns if 'PNR' in str(c).upper()), None)
             selected_pnrs = edited_page.loc[selected_indices, pnr_col].tolist() if pnr_col and selected_indices else []
 
+            # Quick Actions
             st.markdown('<div class="action-box no-print">', unsafe_allow_html=True)
             st.markdown("**⚡ Quick Actions**")
             a1, a2, a3, a4, a5 = st.columns(5)
@@ -4002,6 +4152,7 @@ def main():
                 """, height=45)
             st.markdown('</div>', unsafe_allow_html=True)
 
+            # WhatsApp Image Share
             st.markdown('<div class="no-print">', unsafe_allow_html=True)
             st.markdown("**📱 WhatsApp Image Share**")
             wa_col1, wa_col2, wa_col3 = st.columns(3)
@@ -4029,6 +4180,7 @@ def main():
                         components.html(copy_js, height=50)
             st.markdown('</div>', unsafe_allow_html=True)
 
+            # Export
             st.markdown('<div class="no-print">', unsafe_allow_html=True)
             st.markdown("**📄 Export**")
             e1, e2, e3, e4 = st.columns(4)
@@ -4063,6 +4215,7 @@ def main():
                     mime="text/csv", use_container_width=True, key="copy_csv_download")
             st.markdown('</div>', unsafe_allow_html=True)
 
+            # Extra Features
             st.markdown('<div class="no-print">', unsafe_allow_html=True)
             with st.expander("🔧 Extra Features", expanded=False):
                 feat1, feat2 = st.columns(2)
@@ -4136,6 +4289,7 @@ def main():
             st.session_state.last_refresh = time.time()
             st.rerun()
 
+        # Apply filters
         if not dash_df.empty and dash_sheet != "NOTE":
             config = SHEET_CONFIG[dash_sheet]
             pnr_col_idx = config.get("pnr_col")
@@ -4171,6 +4325,7 @@ def main():
         with kcol1: 
             st.markdown(f'<div class="metric-card"><h3>{total_records}</h3><p>Total Records</p></div>', unsafe_allow_html=True)
 
+        # Use SHEET_CONFIG for reliable column indices per sheet
         dash_cfg = SHEET_CONFIG.get(dash_sheet, {})
         def cfg_col(name):
             idx = dash_cfg.get(name)
@@ -4181,6 +4336,7 @@ def main():
         to_col_dash = cfg_col('to_col')
         berth_col_dash = cfg_col('berth_col')
         doj_col_dash = cfg_col('doj_col')
+        # VIP column is always the same header across sheets — find by header name
         vip_col_dash = next((c for c in dash_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper() or 'MINISTER' in c.upper()), None)
         if train_col_dash and column_has_data(dash_df, train_col_dash):
             unique_trains = dash_df[train_col_dash].dropna().astype(str).str.strip().ne('').nunique()
@@ -4190,6 +4346,7 @@ def main():
             with kcol2: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Unique Trains</p></div>', unsafe_allow_html=True)
 
+        # vip_col_dash already detected above via find_column()
         if vip_col_dash and column_has_data(dash_df, vip_col_dash):
             vip_count = dash_df[vip_col_dash].astype(str).str.strip().ne('').sum()
             with kcol3: 
@@ -4198,6 +4355,7 @@ def main():
             with kcol3: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>VIP Records</p></div>', unsafe_allow_html=True)
 
+        # class_col_dash already detected above via find_column()
         if class_col_dash and column_has_data(dash_df, class_col_dash):
             class_counts = dash_df[class_col_dash].dropna().astype(str).str.strip()
             class_counts = class_counts[class_counts != ''].value_counts()
@@ -4208,6 +4366,7 @@ def main():
             with kcol4: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Top Class</p></div>', unsafe_allow_html=True)
 
+        # doj_col_dash already detected above via find_column()
         if doj_col_dash and column_has_data(dash_df, doj_col_dash):
             upcoming = sum(1 for _, r in dash_df.iterrows() if not is_expired(r.get(doj_col_dash, '')))
             with kcol5: 
@@ -4221,11 +4380,12 @@ def main():
         if dash_df.empty:
             st.info("No data for charts. Adjust filters or choose another sheet.")
         else:
+            # Graph 1: Train-wise Distribution
+            st.markdown("### 1️⃣ Train-wise Distribution")
             if train_col_dash and column_has_data(dash_df, train_col_dash):
                 tc = dash_df[train_col_dash].dropna().astype(str).str.strip()
                 tc = tc[tc != '']
                 if len(tc) > 0:
-                    st.markdown("### 1️⃣ Train-wise Distribution")
                     train_counts = tc.value_counts().head(15).reset_index()
                     train_counts.columns = ['Train', 'Count']
                     fig1 = px.bar(train_counts, x='Train', y='Count', title="Train-wise Request Count",
@@ -4236,12 +4396,17 @@ def main():
                         paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                         font=dict(size=12), title_font_size=16)
                     st.plotly_chart(fig1, use_container_width=True)
+                else:
+                    st.info("ℹ️ No train data available for chart.")
+            else:
+                st.info("ℹ️ Train column not found or empty in this sheet.")
 
+            # Graph 2: Class-wise Distribution
+            st.markdown("### 2️⃣ Class-wise Distribution")
             if class_col_dash and column_has_data(dash_df, class_col_dash):
                 cc = dash_df[class_col_dash].dropna().astype(str).str.strip()
                 cc = cc[cc != '']
                 if len(cc) > 0:
-                    st.markdown("### 2️⃣ Class-wise Distribution")
                     class_counts = cc.value_counts().reset_index()
                     class_counts.columns = ['Class', 'Count']
                     fig2 = px.pie(class_counts, names='Class', values='Count', title="Class-wise Breakdown",
@@ -4251,9 +4416,15 @@ def main():
                     fig2.update_layout(height=400, showlegend=True, margin=dict(l=20,r=20,t=50,b=20),
                         paper_bgcolor='rgba(0,0,0,0)', font=dict(size=12), title_font_size=16)
                     st.plotly_chart(fig2, use_container_width=True)
+                else:
+                    st.info("ℹ️ No class data available for chart.")
+            else:
+                st.info("ℹ️ Class column not found or empty in this sheet.")
 
+            # Graph 3: Route-wise Distribution
+            st.markdown("### 3️⃣ Route-wise Distribution")
+            # from_col_dash & to_col_dash set via cfg_col above
             if from_col_dash and to_col_dash and column_has_data(dash_df, from_col_dash) and column_has_data(dash_df, to_col_dash):
-                st.markdown("### 3️⃣ Route-wise Distribution")
                 dash_df['ROUTE'] = dash_df[from_col_dash].astype(str) + " → " + dash_df[to_col_dash].astype(str)
                 route_counts = dash_df['ROUTE'].value_counts().head(12).reset_index()
                 route_counts.columns = ['Route', 'Count']
@@ -4266,20 +4437,24 @@ def main():
                     font=dict(size=11), title_font_size=16)
                 st.plotly_chart(fig3, use_container_width=True)
 
+            # Graph 4: Train × Class Heatmap
+            st.markdown("### 4️⃣ Train × Class Heatmap")
             if train_col_dash and class_col_dash and column_has_data(dash_df, train_col_dash) and column_has_data(dash_df, class_col_dash):
                 try:
-                    st.markdown("### 4️⃣ Train × Class Heatmap")
                     pivot_data = pd.crosstab(
                         dash_df[train_col_dash].fillna('Unknown').astype(str),
                         dash_df[class_col_dash].fillna('Unknown').astype(str),
                         margins=False
                     )
+                    
                     if not pivot_data.empty:
                         pivot_data = pivot_data.loc[(pivot_data.sum(axis=1) > 0), (pivot_data.sum(axis=0) > 0)]
+                        
                         if not pivot_data.empty:
                             if len(pivot_data) > 15:
                                 top_trains = pivot_data.sum(axis=1).nlargest(15).index
                                 pivot_data = pivot_data.loc[top_trains]
+                            
                             fig4 = px.imshow(
                                 pivot_data,
                                 text_auto=True,
@@ -4296,12 +4471,18 @@ def main():
                                 title_font_size=16
                             )
                             st.plotly_chart(fig4, use_container_width=True)
+                        else:
+                            st.info("ℹ️ No valid data for heatmap after filtering.")
+                    else:
+                        st.info("ℹ️ No data available for Train × Class heatmap.")
                 except Exception as e:
                     st.warning(f"⚠️ Could not generate heatmap: {str(e)[:100]}")
+                    st.info("Try selecting different filters or check if the data has both Train and Class columns.")
 
+            # Graph 5: Train × Route Grouped Bar
+            st.markdown("### 5️⃣ Train × Route Analysis")
             if train_col_dash and from_col_dash and to_col_dash and column_has_data(dash_df, train_col_dash):
                 try:
-                    st.markdown("### 5️⃣ Train × Route Analysis")
                     tr_df = dash_df.groupby([train_col_dash, 'ROUTE']).size().reset_index(name='Count')
                     if not tr_df.empty:
                         top_routes = dash_df['ROUTE'].value_counts().head(6).index.tolist()
@@ -4315,12 +4496,18 @@ def main():
                                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                                 font=dict(size=11), title_font_size=16, legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1))
                             st.plotly_chart(fig5, use_container_width=True)
+                        else:
+                            st.info("ℹ️ No data for Train × Route chart.")
+                    else:
+                        st.info("ℹ️ No data available for Train × Route analysis.")
                 except Exception as e:
-                    pass
+                    st.info("ℹ️ Could not generate route analysis chart.")
 
+            # Graph 6: Rush Comparison
+            st.markdown("### 6️⃣ Rush Comparison — High Demand vs Low Demand")
             if train_col_dash and column_has_data(dash_df, train_col_dash):
                 try:
-                    st.markdown("### 6️⃣ Rush Comparison")
+                    # Use berth/seat count for real demand if available, else fallback to record count
                     if berth_col_dash and column_has_data(dash_df, berth_col_dash):
                         train_demand = dash_df.groupby(train_col_dash)[berth_col_dash].apply(
                             lambda x: pd.to_numeric(x, errors='coerce').fillna(1).sum()
@@ -4360,12 +4547,15 @@ def main():
                             with c2:
                                 st.markdown("**❄️ Low Demand Trains**")
                                 st.dataframe(low_demand[['Train', 'Count']].rename(columns={'Count': 'Requests'}), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("ℹ️ Not enough data for rush comparison.")
                 except Exception as e:
-                    pass
+                    st.info("ℹ️ Could not generate rush comparison chart.")
 
+            # DOJ Timeline
+            st.markdown("### 📅 DOJ Timeline")
             if doj_col_dash and column_has_data(dash_df, doj_col_dash):
                 try:
-                    st.markdown("### 📅 DOJ Timeline")
                     dash_df['_date'] = pd.to_datetime(dash_df[doj_col_dash], format='%d-%m-%Y', errors='coerce')
                     if dash_df['_date'].isna().all(): dash_df['_date'] = pd.to_datetime(dash_df[doj_col_dash], errors='coerce')
                     daily = dash_df.groupby('_date').size().reset_index(name='count')
@@ -4388,6 +4578,7 @@ def main():
         <style>
         @keyframes chat-bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
         .chat-train-icon { font-size: 3rem; animation: chat-bounce 2s ease-in-out infinite; display: inline-block; filter: drop-shadow(0 0 10px rgba(96,165,250,0.5)); }
+        /* === CHAT VIEW: FORCE ALL TEXT WHITE === */
         [data-testid="stMain"] .stMarkdown h1,
         [data-testid="stMain"] .stMarkdown h2,
         [data-testid="stMain"] .stMarkdown h3,
@@ -4695,6 +4886,7 @@ def main():
                             placeholder="Any city, town or village...", key="weather_city_input")
         if city != st.session_state.weather_city: st.session_state.weather_city = city
 
+        # Auto-fetch on Enter (value committed)
         if city and city != st.session_state.get('_last_weather_fetch', ''):
             st.session_state._last_weather_fetch = city
             with st.spinner(f"Fetching weather for {city}..."):
@@ -4740,8 +4932,9 @@ def main():
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
 
+            # Day/Night detection for styling
             time_of_day = 'day'
-            weather_mode = 'day'
+            weather_mode = 'day'  # <-- FIXED: Define weather_mode
             try:
                 now_ts = int(time.time())
                 sunrise = data.get('sunrise')
@@ -4766,6 +4959,7 @@ def main():
                         weather_mode = 'night'
             except: pass
 
+            # Location banner
             loc_state = data.get('state', '')
             loc_country = data.get('country', '')
             loc_full = data['city'] + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
@@ -4961,10 +5155,12 @@ def main():
                         weather_scene_html += f'<div class="w-star" style="left:{(i*7)%100}%;top:{(i*5)%60}%;width:{1+(i%3)}px;height:{1+(i%3)}px;opacity:{0.3+(i%5)*0.15};animation-delay:{(i*0.2)%3}s;"></div>'
                 else:
                     weather_scene_html += '<div class="w-sky w-sunny">'
+                    # SUN AT TOP - prominent
                     weather_scene_html += '<div class="w-sun">'
                     for angle in range(0, 360, 30):
                         weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);width:120px;"></div>'
                     weather_scene_html += '</div>'
+                    # Small fluffy clouds below sun
                     for i in range(3):
                         weather_scene_html += f'<div class="w-cloud" style="top:{35+i*18}px;left:-100px;width:70px;height:26px;animation-duration:{28+i*6}s;animation-delay:{i*5}s;opacity:0.5;"><div style="position:absolute;top:-12px;left:12px;width:28px;height:28px;"></div></div>'
 
@@ -5028,6 +5224,7 @@ def main():
                 with c2:
                     st.image(icon_url, caption=data['weather'].title(), width=120)
 
+            # 5-Day Forecast
             if st.session_state.weather_forecast and 'error' not in st.session_state.weather_forecast:
                 forecast = st.session_state.weather_forecast
                 st.markdown("---")
@@ -5072,6 +5269,7 @@ def main():
                             </div>
                             """, unsafe_allow_html=True)
 
+                    # Forecast trend chart
                     fig_forecast = go.Figure()
                     dates = [datetime.strptime(d['date'], '%Y-%m-%d').strftime('%d %b') for d in forecast_data]
                     fig_forecast.add_trace(go.Scatter(x=dates, y=[d['max_temp'] for d in forecast_data],
@@ -5115,6 +5313,7 @@ def main():
         --eqms-bg-glass: {bg_glass};
         --eqms-is-night: {'1' if smart_now == 'night' else '0'};
     }}
+    /* === NAV BUTTONS LOOK LIKE TABS === */
     div[data-testid="stMain"] .stButton > button[key^="nav_btn_"] {{
         border-radius: 10px 10px 0 0 !important;
         border-bottom: 3px solid transparent !important;
@@ -5127,6 +5326,7 @@ def main():
         border-bottom: 3px solid #FF9933 !important;
         background: linear-gradient(180deg, rgba(37,99,235,0.15), rgba(37,99,235,0.05)) !important;
     }}
+    /* === FORCE ALL FORM LABELS BLACK === */
     div[data-testid="stMain"] .stTextInput label p,
     div[data-testid="stMain"] .stTextInput label span,
     div[data-testid="stMain"] .stSelectbox label p,
@@ -5149,6 +5349,7 @@ def main():
         text-shadow: none !important;
         font-weight: 600 !important;
     }}
+    /* === FORCE ALL FORM INPUT VALUES BLACK === */
     div[data-testid="stMain"] .stTextInput input,
     div[data-testid="stMain"] .stSelectbox div[data-baseweb="select"] div,
     div[data-testid="stMain"] .stDateInput input,
@@ -5157,6 +5358,7 @@ def main():
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
     }}
+    /* === EXPANDER HEADERS BLACK === */
     div[data-testid="stMain"] .streamlit-expanderHeader,
     div[data-testid="stMain"] .streamlit-expanderHeader p,
     div[data-testid="stMain"] .streamlit-expanderHeader span {{
@@ -5165,12 +5367,14 @@ def main():
         text-shadow: none !important;
         font-weight: 700 !important;
     }}
+    /* === CAPTIONS BLACK === */
     div[data-testid="stMain"] .stCaption,
     div[data-testid="stMain"] [data-testid="stCaption"] {{
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
     }}
+    /* === SUBHEADERS & SMALL TEXT BLACK === */
     div[data-testid="stMain"] .stMarkdown p[data-testid="stMarkdownContainer"] p,
     div[data-testid="stMain"] .stMarkdown small,
     div[data-testid="stMain"] .stMarkdown strong {{
@@ -5178,11 +5382,13 @@ def main():
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
     }}
+    /* === WEATHER SECTION SPECIFIC === */
     div[data-testid="stMain"] input[key="weather_city_input"] {{
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
     }}
+    /* Weather labels - WHITE for dark bg */
     div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label p,
     div[data-testid="stMain"] .stTextInput:has(input[key="weather_city_input"]) label span {{
         color: #ffffff !important;
@@ -5190,6 +5396,7 @@ def main():
         text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
         font-weight: 700 !important;
     }}
+    /* === DATA TABLE HEADERS === */
     div[data-testid="stMain"] .stDataFrame th,
     div[data-testid="stMain"] .stDataEditor th {{
         color: #ffffff !important;
@@ -5197,6 +5404,7 @@ def main():
         text-shadow: none !important;
         font-weight: 700 !important;
     }}
+    /* === DATA TABLE CELLS === */
     div[data-testid="stMain"] .stDataFrame td,
     div[data-testid="stMain"] .stDataEditor td {{
         color: #1e293b !important;
@@ -5206,6 +5414,7 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
+    # Footer
     st.markdown("""
     <div class='pro-footer no-print'>
         🚂 AI EQMS Hub Pro • Created by Sharique<br>
@@ -5213,5 +5422,8 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
+# =====================================================================
+# Run the app
+# =====================================================================
 if __name__ == "__main__":
     main()
