@@ -2664,7 +2664,6 @@ AQUARIUM_BG_HTML = """
 <div class="aqua-scene">
     <div class="aqua-surface"></div>
     <div class="aqua-rays"></div>
-    <!-- Bubbles -->
     <div class="aqua-bubble" style="left:5%;width:8px;height:8px;animation-duration:7s;animation-delay:0s;"></div>
     <div class="aqua-bubble" style="left:12%;width:5px;height:5px;animation-duration:5s;animation-delay:1s;"></div>
     <div class="aqua-bubble" style="left:20%;width:10px;height:10px;animation-duration:9s;animation-delay:2s;"></div>
@@ -2678,18 +2677,15 @@ AQUARIUM_BG_HTML = """
     <div class="aqua-bubble" style="left:80%;width:6px;height:6px;animation-duration:7s;animation-delay:4s;"></div>
     <div class="aqua-bubble" style="left:88%;width:8px;height:8px;animation-duration:9s;animation-delay:2.2s;"></div>
     <div class="aqua-bubble" style="left:95%;width:5px;height:5px;animation-duration:6s;animation-delay:0.3s;"></div>
-    <!-- Fish -->
     <div class="aqua-fish" style="top:20%;animation-duration:18s;animation-delay:0s;">🐠</div>
     <div class="aqua-fish aqua-fish-reverse" style="top:35%;animation-duration:22s;animation-delay:3s;">🐟</div>
     <div class="aqua-fish" style="top:50%;animation-duration:20s;animation-delay:6s;">🐡</div>
     <div class="aqua-fish aqua-fish-reverse" style="top:65%;animation-duration:25s;animation-delay:1s;">🦈</div>
     <div class="aqua-fish" style="top:30%;animation-duration:15s;animation-delay:8s;font-size:18px;">🐠</div>
     <div class="aqua-fish aqua-fish-reverse" style="top:55%;animation-duration:19s;animation-delay:4s;font-size:20px;">🐟</div>
-    <!-- Jellyfish -->
     <div class="aqua-jelly" style="left:15%;top:15%;animation-delay:0s;">🪼</div>
     <div class="aqua-jelly" style="left:70%;top:40%;animation-delay:3s;">🪼</div>
     <div class="aqua-jelly" style="left:40%;top:60%;animation-delay:1.5s;font-size:22px;">🪼</div>
-    <!-- Seaweed -->
     <div class="aqua-seaweed" style="left:8%;animation-delay:0s;">🌿</div>
     <div class="aqua-seaweed" style="left:18%;font-size:35px;animation-delay:0.5s;">🌱</div>
     <div class="aqua-seaweed" style="left:30%;animation-delay:1s;">🌿</div>
@@ -2697,13 +2693,11 @@ AQUARIUM_BG_HTML = """
     <div class="aqua-seaweed" style="left:60%;animation-delay:0.8s;">🌿</div>
     <div class="aqua-seaweed" style="left:75%;font-size:38px;animation-delay:1.2s;">🌱</div>
     <div class="aqua-seaweed" style="left:88%;animation-delay:0.3s;">🌿</div>
-    <!-- Coral -->
     <div class="aqua-coral" style="left:5%;">🪸</div>
     <div class="aqua-coral" style="left:25%;animation-delay:1s;">🐚</div>
     <div class="aqua-coral" style="left:50%;animation-delay:2s;">🪸</div>
     <div class="aqua-coral" style="left:78%;animation-delay:0.5s;">🐚</div>
     <div class="aqua-coral" style="left:92%;animation-delay:1.5s;">🪸</div>
-    <!-- Stars (distant light particles) -->
     <div class="aqua-star" style="left:10%;top:10%;animation-delay:0s;"></div>
     <div class="aqua-star" style="left:25%;top:25%;animation-delay:0.5s;"></div>
     <div class="aqua-star" style="left:40%;top:15%;animation-delay:1s;"></div>
@@ -2712,7 +2706,6 @@ AQUARIUM_BG_HTML = """
     <div class="aqua-star" style="left:85%;top:35%;animation-delay:0.8s;"></div>
     <div class="aqua-star" style="left:15%;top:45%;animation-delay:1.2s;"></div>
     <div class="aqua-star" style="left:90%;top:50%;animation-delay:0.6s;"></div>
-    <!-- Sand -->
     <div class="aqua-sand"></div>
 </div>
 """
@@ -3157,9 +3150,9 @@ def main():
         temp = st.session_state.weather_data.get('temp', '--')
         desc = st.session_state.weather_data.get('weather', '').title()
 
-        # ---- DAY / NIGHT DETECTION ----
+        # ---- DAY / NIGHT DETECTION (IST-based with API fallback) ----
         time_of_day = 'day'
-        weather_mode = 'day'  # <-- FIXED: Define weather_mode
+        weather_mode = 'day'
         try:
             now_ts = int(time.time())
             sunrise = st.session_state.weather_data.get('sunrise')
@@ -3182,8 +3175,21 @@ def main():
                 else:
                     time_of_day = 'night'
                     weather_mode = 'night'
+            else:
+                # Fallback: IST hour-based
+                ist_hour = now_ist().hour
+                if ist_hour < 6 or ist_hour >= 19:
+                    time_of_day = 'night'
+                    weather_mode = 'night'
         except Exception:
-            pass
+            # Fallback: IST hour-based
+            ist_hour = now_ist().hour
+            if ist_hour < 6 or ist_hour >= 19:
+                time_of_day = 'night'
+                weather_mode = 'night'
+
+        # Also update _wx_is_night for CSS consistency
+        _wx_is_night = (weather_mode == 'night')
 
         # ---- WEATHER TYPE (respects day/night) ----
         if 'rain' in weather_cond or 'drizz' in weather_cond:
@@ -3382,115 +3388,140 @@ def main():
 
 
 
-    # Sidebar Toggle + Back-to-Top Button
+    # =====================================================================
+    # SIDEBAR TOGGLE + BACK-TO-TOP (Parent-Window Persistent Injection)
+    # =====================================================================
+    # Streamlit components.html creates an iframe that gets destroyed on every
+    # rerun (e.g. clicking Chat tab). To survive reruns we inject a script
+    # DIRECTLY into the parent window's <head>. A sentinel ID prevents double
+    # injection, and setInterval inside the parent keeps recreating the buttons
+    # if they ever disappear.
+    # =====================================================================
     components.html("""
     <script>
     (function() {
         try {
             var P = window.parent;
             var doc = P.document;
-            var body = doc.body;
+            if (!P || !doc || !doc.body) return;
 
-            function ensureToggleButton() {
-                var btn = doc.getElementById('eqms-sidebar-toggle');
-                if (!btn) {
-                    btn = doc.createElement('button');
-                    btn.id = 'eqms-sidebar-toggle';
-                    btn.title = 'Toggle Sidebar';
-                    btn.innerHTML = '☰';
-                    btn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:9999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;';
+            // If our master script is already in parent's <head>, do NOTHING.
+            // The parent-side setInterval will keep buttons alive forever.
+            if (doc.getElementById('eqms-master-ui-script')) return;
 
-                    btn.onmouseenter = function(){ 
-                        btn.style.transform = 'scale(1.15) rotate(90deg)'; 
-                        btn.style.boxShadow = '0 6px 25px rgba(255,107,53,0.7)'; 
-                    };
-                    btn.onmouseleave = function(){ 
-                        btn.style.transform = 'scale(1) rotate(0deg)'; 
-                        btn.style.boxShadow = '0 4px 15px rgba(255,107,53,0.5)'; 
-                    };
+            var s = doc.createElement('script');
+            s.id = 'eqms-master-ui-script';
+            s.textContent = `
+                (function() {
+                    // Guard: init only once per real browser page load
+                    if (window.__EQMS_UI_INIT) return;
+                    window.__EQMS_UI_INIT = true;
 
-                    btn.onclick = function() {
+                    function ensureButtons() {
+                        var d = document;
+                        var body = d.body;
+                        if (!body) return;
+
+                        // --- 1. Sidebar Toggle Button ---
+                        var btn = d.getElementById('eqms-sidebar-toggle');
                         var isCollapsed = body.classList.contains('sidebar-collapsed');
-                        if (isCollapsed) {
-                            body.classList.remove('sidebar-collapsed');
-                            btn.innerHTML = '✕';
-                            btn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
-                            var sb = doc.querySelector('[data-testid="stSidebar"]');
-                            if (sb) { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
-                            try { localStorage.setItem('eqms_sidebar', 'open'); } catch(e) {}
+
+                        if (!btn) {
+                            btn = d.createElement('button');
+                            btn.id = 'eqms-sidebar-toggle';
+                            btn.title = 'Toggle Sidebar';
+                            btn.innerHTML = isCollapsed ? '☰' : '✕';
+                            btn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(0,0,0,0.3);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;';
+                            btn.style.background = isCollapsed
+                                ? 'linear-gradient(135deg,#138808,#0d6e05)'
+                                : 'linear-gradient(135deg,#FF9933,#FF6B35)';
+
+                            btn.onmouseenter = function(){
+                                btn.style.transform = 'scale(1.15) rotate(90deg)';
+                                btn.style.boxShadow = '0 6px 25px rgba(0,0,0,0.4)';
+                            };
+                            btn.onmouseleave = function(){
+                                btn.style.transform = 'scale(1) rotate(0deg)';
+                                btn.style.boxShadow = '0 4px 15px rgba(0,0,0,0.3)';
+                            };
+
+                            btn.onclick = function(){
+                                var collapsed = body.classList.toggle('sidebar-collapsed');
+                                btn.innerHTML = collapsed ? '☰' : '✕';
+                                btn.style.background = collapsed
+                                    ? 'linear-gradient(135deg,#138808,#0d6e05)'
+                                    : 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                                try { localStorage.setItem('eqms_sidebar', collapsed ? 'closed' : 'open'); } catch(e){}
+                            };
+
+                            body.appendChild(btn);
                         } else {
-                            body.classList.add('sidebar-collapsed');
-                            btn.innerHTML = '☰';
-                            btn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
-                            var sb = doc.querySelector('[data-testid="stSidebar"]');
-                            if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
-                            try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
+                            // Sync icon / colour if body class changed from elsewhere
+                            var currentCollapsed = body.classList.contains('sidebar-collapsed');
+                            var expectedIcon = currentCollapsed ? '☰' : '✕';
+                            var expectedBg = currentCollapsed
+                                ? 'linear-gradient(135deg,#138808,#0d6e05)'
+                                : 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                            if (btn.innerHTML !== expectedIcon) btn.innerHTML = expectedIcon;
+                            if (btn.style.background !== expectedBg) btn.style.background = expectedBg;
                         }
-                    };
-                    doc.body.appendChild(btn);
-                }
-                // Always sync button appearance from localStorage
-                try {
-                    var saved = localStorage.getItem('eqms_sidebar');
-                    if (saved === 'closed') {
-                        body.classList.add('sidebar-collapsed');
-                        btn.innerHTML = '☰';
-                        btn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
-                    } else {
-                        body.classList.remove('sidebar-collapsed');
-                        btn.innerHTML = '✕';
-                        btn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
+
+                        // --- 2. Back-to-Top Button ---
+                        var topBtn = d.getElementById('eqms-top-btn');
+                        if (!topBtn) {
+                            topBtn = d.createElement('button');
+                            topBtn.id = 'eqms-top-btn';
+                            topBtn.title = 'Back to top';
+                            topBtn.innerHTML = '⬆';
+                            topBtn.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:all 0.2s ease;';
+                            topBtn.onmouseenter = function(){
+                                topBtn.style.opacity = '1';
+                                topBtn.style.transform = 'scale(1.08)';
+                            };
+                            topBtn.onmouseleave = function(){
+                                topBtn.style.opacity = '0.85';
+                                topBtn.style.transform = 'scale(1)';
+                            };
+                            topBtn.onclick = function(){
+                                window.scrollTo({top:0, behavior:'smooth'});
+                            };
+                            body.appendChild(topBtn);
+                        }
                     }
-                } catch(e) {
-                    var isCollapsed = body.classList.contains('sidebar-collapsed');
-                    btn.innerHTML = isCollapsed ? '☰' : '✕';
-                    btn.style.background = isCollapsed ? 'linear-gradient(135deg,#138808,#0d6e05)' : 'linear-gradient(135deg,#FF9933,#FF6B35)';
-                }
-            }
 
-            function ensureTopButton() {
-                var b = doc.getElementById('eqms-top-btn');
-                if (!b) {
-                    b = doc.createElement('button');
-                    b.id = 'eqms-top-btn';
-                    b.title = 'Back to top';
-                    b.innerHTML = '⬆';
-                    b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
-                    b.onmouseenter = function(){ b.style.opacity = '1'; b.style.transform = 'scale(1.08)'; };
-                    b.onmouseleave = function(){ b.style.opacity = '0.85'; b.style.transform = 'scale(1)'; };
-                    b.onclick = function(){ window.scrollTo({top:0, behavior:'smooth'}); };
-                    doc.body.appendChild(b);
-                }
-            }
+                    // Run immediately, then keep alive with setInterval
+                    ensureButtons();
+                    setInterval(ensureButtons, 600);
 
-            // Keydown listener (only once)
-            if (!P.__eqmsKeydownInit) {
-                P.__eqmsKeydownInit = true;
-                doc.addEventListener('keydown', function(e) {
-                    var t = (e.target.tagName || '').toLowerCase();
-                    if (t === 'input' || t === 'textarea' || t === 'select' || e.target.isContentEditable) return;
-                    if (e.key === 'd' || e.key === 'D') {
-                        var u = new URL(P.location.href);
-                        var cur = u.searchParams.get('__theme') || 'Day';
-                        u.searchParams.set('__theme', cur === 'Dark' ? 'Day' : 'Dark');
-                        P.location.href = u.toString();
+                    // --- 3. Keyboard shortcut (D = toggle theme) ---
+                    if (!window.__EQMS_KEY_INIT) {
+                        window.__EQMS_KEY_INIT = true;
+                        document.addEventListener('keydown', function(e){
+                            var t = (e.target.tagName || '').toLowerCase();
+                            if (t === 'input' || t === 'textarea' || t === 'select' || e.target.isContentEditable) return;
+                            if (e.key === 'd' || e.key === 'D') {
+                                var u = new URL(window.location.href);
+                                var cur = u.searchParams.get('__theme') || 'Day';
+                                u.searchParams.set('__theme', cur === 'Dark' ? 'Day' : 'Dark');
+                                window.location.href = u.toString();
+                            }
+                        });
                     }
-                });
-            }
 
-            // Run immediately
-            ensureToggleButton();
-            ensureTopButton();
-
-            // Re-run after delays to handle race conditions with Streamlit DOM updates
-            setTimeout(function(){ ensureToggleButton(); ensureTopButton(); }, 100);
-            setTimeout(function(){ ensureToggleButton(); ensureTopButton(); }, 500);
-            setTimeout(function(){ ensureToggleButton(); ensureTopButton(); }, 1000);
-
-        } catch(e) { console.error('EQMS Toggle Error:', e); }
+                    // --- 4. Restore sidebar state from localStorage ---
+                    try {
+                        var saved = localStorage.getItem('eqms_sidebar');
+                        if (saved === 'closed' && !document.body.classList.contains('sidebar-collapsed')) {
+                            document.body.classList.add('sidebar-collapsed');
+                        }
+                    } catch(e) {}
+                })();
+            `;
+            doc.head.appendChild(s);
+        } catch(e) { console.error('EQMS UI Inject Error:', e); }
     })();
     </script>
-    """, height=10)
+    """, height=0)
 
     # Theme setup
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
@@ -5597,7 +5628,7 @@ def main():
         -webkit-text-fill-color: #1e293b !important;
         text-shadow: none !important;
     }
-    /* === WEATHER STAMP / INPUT / CARD — FORCE WHITE TEXT === */
+    /* === WEATHER STAMP / INPUT / CARD - FORCE WHITE TEXT === */
     div[data-testid="stMain"] .weather-input-wrapper,
     div[data-testid="stMain"] .weather-input-wrapper * {
         color: #ffffff !important;
