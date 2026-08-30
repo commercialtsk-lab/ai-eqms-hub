@@ -1691,8 +1691,9 @@ def _generate_theme_css(theme, custom_bg, custom_text):
 
         .action-box {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 18px; margin-bottom: 16px; backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%); }}
         .glass-card {{ background: {card_bg} !important; backdrop-filter: blur(16px) saturate(180%) !important; -webkit-backdrop-filter: blur(16px) saturate(180%) !important; border: 1px solid {border} !important; border-radius: 16px !important; box-shadow: 0 8px 32px rgba(0,0,0,0.15) !important; }}
-        .glow-border {{ position: relative; border: 2px solid rgba(255,153,51,0.5); border-radius: 16px; }}
-        .glow-border:hover {{ border-color: rgba(255,153,51,0.9); box-shadow: 0 0 20px rgba(255,153,51,0.3); transition: all 0.3s ease; }}
+        .glow-border {{ position: relative; }}
+        .glow-border::before {{ content: ''; position: absolute; inset: -2px; border-radius: 18px; background: linear-gradient(45deg, #FF9933, #FFFFFF, #138808, #FF9933); background-size: 400% 400%; animation: glow-rotate 4s linear infinite; z-index: -1; opacity: 0.6; }}
+        @keyframes glow-rotate {{ 0%{{background-position:0% 50%;}} 50%{{background-position:100% 50%;}} 100%{{background-position:0% 50%;}} }}
         .file-card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 12px; padding: 14px; margin: 10px 0; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
         .file-card-title {{ color: {text_color}; font-weight: 600; font-size: 0.95rem; margin-bottom: 2px; }}
         .file-card-meta {{ color: {text_secondary}; font-size: 0.8rem; margin-bottom: 10px; }}
@@ -1812,10 +1813,13 @@ def _generate_theme_css(theme, custom_bg, custom_text):
             background: transparent !important;
         }}
 
-        [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.4s ease, opacity 0.3s ease !important; margin-left: 0 !important; overflow: hidden !important; }}
+        [data-testid="stSidebar"] {{ display: flex !important; opacity: 1 !important; transform: none !important; min-width: 320px !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease !important; margin-left: 0 !important; will-change: margin-left, opacity !important; overflow: hidden !important; }}
+        body.sidebar-collapsed [data-testid="stSidebar"] {{ margin-left: -340px !important; opacity: 0 !important; pointer-events: none !important; }}
+        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; transition: margin-left 0.45s cubic-bezier(0.4, 0, 0.2, 1) !important; }}
         [data-testid="stSidebarCollapseButton"] {{ display: none !important; }}
         [data-testid="collapsedControl"] {{ display: none !important; }}
         button[kind="header"] {{ display: none !important; }}
+        body.sidebar-collapsed [data-testid="stMain"] {{ margin-left: 0 !important; max-width: 100% !important; }}
         .sidebar-toggle-btn {{
             position: fixed !important;
             top: 12px !important;
@@ -2485,19 +2489,24 @@ EARTH_BG_HTML = """
     display: flex; align-items: center; justify-content: center;
 }
 .earth-wrap {
-    position: relative; width: 400px; height: 400px;
+    position: relative; width: 520px; height: 520px;
+    animation: earth-float 6s ease-in-out infinite;
+}
+@keyframes earth-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-15px); }
 }
 .earth-globe {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     border-radius: 50%;
     background: url('https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg');
-    background-size: 800px 100%;
+    background-size: 1050px 100%;
     box-shadow: 
-        inset -40px -40px 100px rgba(0,0,0,0.9), 
-        inset 10px 10px 30px rgba(255,255,255,0.1), 
-        0 0 60px rgba(80,120,220,0.2);
-    animation: earth-spin 50s linear infinite;
-    pointer-events: none;
+        inset -50px -50px 120px rgba(0,0,0,0.95), 
+        inset 15px 15px 40px rgba(255,255,255,0.15), 
+        0 0 80px rgba(80,120,220,0.25),
+        0 0 160px rgba(80,120,220,0.1);
+    animation: earth-spin 40s linear infinite;
 }
 .earth-globe::after {
     content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -2506,53 +2515,70 @@ EARTH_BG_HTML = """
     pointer-events: none;
 }
 .earth-atmos {
-    position: absolute; top: -20px; left: -20px; right: -20px; bottom: -20px;
+    position: absolute; top: -25px; left: -25px; right: -25px; bottom: -25px;
     border-radius: 50%;
-    background: radial-gradient(circle at 35% 35%, rgba(100,160,255,0.1) 0%, transparent 55%);
+    background: radial-gradient(circle at 35% 35%, rgba(100,160,255,0.12) 0%, transparent 55%);
+    box-shadow: 0 0 100px 30px rgba(100,160,255,0.08);
     pointer-events: none;
+    animation: atmos-pulse 4s ease-in-out infinite;
 }
 @keyframes earth-spin {
     from { background-position: 0 center; }
-    to { background-position: 800px center; }
+    to { background-position: 1050px center; }
+}
+@keyframes atmos-pulse {
+    0%, 100% { opacity: 0.7; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.02); }
 }
 .earth-stars {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     background-image: 
-        radial-gradient(2px 2px at 10% 20%, #eee, transparent),
-        radial-gradient(2px 2px at 30% 60%, #fff, transparent),
-        radial-gradient(2px 2px at 50% 30%, #ddd, transparent),
-        radial-gradient(2px 2px at 70% 70%, #fff, transparent),
-        radial-gradient(2px 2px at 90% 40%, #fff, transparent);
-    background-size: 100% 100%;
-    opacity: 0.5;
-    pointer-events: none;
+        radial-gradient(2px 2px at 20px 30px, #eee, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 40px 70px, #fff, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 50px 160px, #ddd, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 90px 40px, #fff, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 130px 80px, #fff, rgba(0,0,0,0)),
+        radial-gradient(2px 2px at 160px 120px, #ddd, rgba(0,0,0,0));
+    background-repeat: repeat;
+    background-size: 200px 200px;
+    animation: twinkle 5s ease-in-out infinite alternate;
+    opacity: 0.6;
+}
+@keyframes twinkle {
+    from { opacity: 0.3; }
+    to { opacity: 0.8; }
 }
 .earth-label {
     position: absolute; bottom: 8%; left: 50%; transform: translateX(-50%);
-    color: rgba(255,255,255,0.5); font-size: 0.85rem; letter-spacing: 3px;
+    color: rgba(255,255,255,0.6); font-size: 0.9rem; letter-spacing: 4px;
     text-transform: uppercase; font-weight: 600;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.8);
     pointer-events: none;
 }
-.moon-orbit {
-    position: absolute; top: 50%; left: 50%;
-    width: 500px; height: 500px;
-    transform: translate(-50%, -50%);
-    animation: moon-spin 25s linear infinite;
-    pointer-events: none;
-}
-@keyframes moon-spin {
-    from { transform: translate(-50%, -50%) rotate(0deg); }
-    to { transform: translate(-50%, -50%) rotate(360deg); }
-}
-.moon {
-    position: absolute; top: -14px; left: 50%;
-    transform: translateX(-50%);
-    width: 28px; height: 28px;
-    background: radial-gradient(circle at 35% 35%, #fff9c4, #ffd700);
-    border-radius: 50%;
-    box-shadow: 0 0 25px 8px rgba(255, 215, 0, 0.4);
-    pointer-events: none;
-}
+    .moon-orbit {
+        position: absolute; top: 50%; left: 50%;
+        width: 640px; height: 640px;
+        transform: translate(-50%, -50%);
+        animation: moon-spin 18s linear infinite;
+        pointer-events: none;
+    }
+    @keyframes moon-spin {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .moon {
+        position: absolute; top: -16px; left: 50%;
+        transform: translateX(-50%);
+        width: 32px; height: 32px;
+        background: radial-gradient(circle at 35% 35%, #fff9c4, #ffd700, #ff8c00);
+        border-radius: 50%;
+        box-shadow: 0 0 30px 10px rgba(255, 215, 0, 0.5), 0 0 60px 20px rgba(255, 165, 0, 0.25), inset -4px -4px 8px rgba(0,0,0,0.3);
+        animation: moon-glow-pulse 3s ease-in-out infinite alternate;
+    }
+    @keyframes moon-glow-pulse {
+        0% { box-shadow: 0 0 30px 10px rgba(255, 215, 0, 0.4), 0 0 60px 20px rgba(255, 165, 0, 0.2), inset -4px -4px 8px rgba(0,0,0,0.3); }
+        100% { box-shadow: 0 0 40px 15px rgba(255, 215, 0, 0.7), 0 0 80px 30px rgba(255, 165, 0, 0.4), inset -4px -4px 8px rgba(0,0,0,0.3); }
+    }
 </style>
 <div class="earth-bg-scene">
     <div class="earth-stars"></div>
@@ -2659,37 +2685,68 @@ def main():
         background: radial-gradient(ellipse at center, #0a0a1a 0%, #000000 70%);
     }
     .stars {
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-        background-image:
-            radial-gradient(2px 2px at 10% 10%, #fff, transparent),
-            radial-gradient(2px 2px at 20% 30%, #fff, transparent),
-            radial-gradient(2px 2px at 30% 15%, #fff, transparent),
-            radial-gradient(2px 2px at 40% 50%, #fff, transparent),
-            radial-gradient(2px 2px at 50% 25%, #fff, transparent),
-            radial-gradient(2px 2px at 60% 60%, #fff, transparent),
-            radial-gradient(2px 2px at 70% 20%, #fff, transparent),
-            radial-gradient(2px 2px at 80% 45%, #fff, transparent),
-            radial-gradient(2px 2px at 90% 10%, #fff, transparent),
-            radial-gradient(2px 2px at 15% 70%, #fff, transparent),
-            radial-gradient(2px 2px at 35% 80%, #fff, transparent),
-            radial-gradient(2px 2px at 55% 75%, #fff, transparent),
-            radial-gradient(2px 2px at 75% 85%, #fff, transparent),
-            radial-gradient(2px 2px at 85% 65%, #fff, transparent),
-            radial-gradient(2px 2px at 25% 40%, #fff, transparent),
-            radial-gradient(2px 2px at 45% 35%, #fff, transparent),
-            radial-gradient(2px 2px at 65% 40%, #fff, transparent),
-            radial-gradient(2px 2px at 95% 55%, #fff, transparent),
-            radial-gradient(1px 1px at 5% 50%, #fff, transparent),
-            radial-gradient(1px 1px at 95% 90%, #fff, transparent);
-        background-size: 100% 100%;
-        background-repeat: no-repeat;
-        opacity: 0.7;
-        animation: twinkle-stars 4s ease-in-out infinite alternate;
-        pointer-events: none;
+        position: absolute; top: 0; left: 0; width: 2px; height: 2px;
+        background: transparent;
+        box-shadow:
+            /* Row 1 - evenly spread */
+            3vw 5vh #fff, 8vw 8vh #fff, 13vw 3vh #fff, 18vw 12vh #fff,
+            23vw 6vh #fff, 28vw 15vh #fff, 33vw 4vh #fff, 38vw 10vh #fff,
+            43vw 7vh #fff, 48vw 14vh #fff, 53vw 5vh #fff, 58vw 9vh #fff,
+            63vw 11vh #fff, 68vw 6vh #fff, 73vw 13vh #fff, 78vw 4vh #fff,
+            83vw 8vh #fff, 88vw 15vh #fff, 93vw 7vh #fff, 97vw 11vh #fff,
+            /* Row 2 */
+            5vw 18vh #fff, 10vw 22vh #fff, 15vw 16vh #fff, 20vw 25vh #fff,
+            25vw 19vh #fff, 30vw 24vh #fff, 35vw 17vh #fff, 40vw 21vh #fff,
+            45vw 26vh #fff, 50vw 18vh #fff, 55vw 23vh #fff, 60vw 16vh #fff,
+            65vw 20vh #fff, 70vw 25vh #fff, 75vw 17vh #fff, 80vw 22vh #fff,
+            85vw 19vh #fff, 90vw 24vh #fff, 95vw 16vh #fff, 98vw 21vh #fff,
+            /* Row 3 */
+            2vw 30vh #fff, 7vw 35vh #fff, 12vw 28vh #fff, 17vw 33vh #fff,
+            22vw 29vh #fff, 27vw 34vh #fff, 32vw 31vh #fff, 37vw 36vh #fff,
+            42vw 28vh #fff, 47vw 32vh #fff, 52vw 35vh #fff, 57vw 30vh #fff,
+            62vw 34vh #fff, 67vw 29vh #fff, 72vw 33vh #fff, 77vw 31vh #fff,
+            82vw 35vh #fff, 87vw 28vh #fff, 92vw 32vh #fff, 96vw 30vh #fff,
+            /* Row 4 */
+            4vw 40vh #fff, 9vw 45vh #fff, 14vw 38vh #fff, 19vw 42vh #fff,
+            24vw 46vh #fff, 29vw 39vh #fff, 34vw 44vh #fff, 39vw 37vh #fff,
+            44vw 41vh #fff, 49vw 45vh #fff, 54vw 38vh #fff, 59vw 43vh #fff,
+            64vw 40vh #fff, 69vw 44vh #fff, 74vw 39vh #fff, 79vw 42vh #fff,
+            84vw 46vh #fff, 89vw 38vh #fff, 94vw 41vh #fff, 99vw 45vh #fff,
+            /* Row 5 */
+            6vw 50vh #fff, 11vw 55vh #fff, 16vw 48vh #fff, 21vw 52vh #fff,
+            26vw 56vh #fff, 31vw 49vh #fff, 36vw 54vh #fff, 41vw 47vh #fff,
+            46vw 51vh #fff, 51vw 55vh #fff, 56vw 48vh #fff, 61vw 53vh #fff,
+            66vw 50vh #fff, 71vw 54vh #fff, 76vw 49vh #fff, 81vw 52vh #fff,
+            86vw 56vh #fff, 91vw 48vh #fff, 95vw 51vh #fff, 98vw 55vh #fff,
+            /* Row 6 */
+            1vw 60vh #fff, 6vw 65vh #fff, 11vw 58vh #fff, 16vw 63vh #fff,
+            21vw 59vh #fff, 26vw 64vh #fff, 31vw 61vh #fff, 36vw 66vh #fff,
+            41vw 58vh #fff, 46vw 62vh #fff, 51vw 65vh #fff, 56vw 60vh #fff,
+            61vw 64vh #fff, 66vw 59vh #fff, 71vw 63vh #fff, 76vw 61vh #fff,
+            81vw 65vh #fff, 86vw 58vh #fff, 91vw 62vh #fff, 96vw 60vh #fff,
+            /* Row 7 */
+            3vw 70vh #fff, 8vw 75vh #fff, 13vw 68vh #fff, 18vw 73vh #fff,
+            23vw 77vh #fff, 28vw 69vh #fff, 33vw 74vh #fff, 38vw 71vh #fff,
+            43vw 76vh #fff, 48vw 68vh #fff, 53vw 72vh #fff, 58vw 75vh #fff,
+            63vw 70vh #fff, 68vw 74vh #fff, 73vw 69vh #fff, 78vw 73vh #fff,
+            83vw 77vh #fff, 88vw 70vh #fff, 93vw 74vh #fff, 97vw 71vh #fff,
+            /* Row 8 */
+            5vw 80vh #fff, 10vw 85vh #fff, 15vw 78vh #fff, 20vw 83vh #fff,
+            25vw 87vh #fff, 30vw 79vh #fff, 35vw 84vh #fff, 40vw 81vh #fff,
+            45vw 86vh #fff, 50vw 78vh #fff, 55vw 82vh #fff, 60vw 85vh #fff,
+            65vw 80vh #fff, 70vw 84vh #fff, 75vw 79vh #fff, 80vw 83vh #fff,
+            85vw 87vh #fff, 90vw 80vh #fff, 95vw 84vh #fff, 98vw 81vh #fff,
+            /* Row 9 */
+            2vw 90vh #fff, 7vw 95vh #fff, 12vw 88vh #fff, 17vw 93vh #fff,
+            22vw 89vh #fff, 27vw 94vh #fff, 32vw 91vh #fff, 37vw 96vh #fff,
+            42vw 88vh #fff, 47vw 92vh #fff, 52vw 95vh #fff, 57vw 90vh #fff,
+            62vw 94vh #fff, 67vw 89vh #fff, 72vw 93vh #fff, 77vw 91vh #fff,
+            82vw 95vh #fff, 87vw 88vh #fff, 92vw 92vh #fff, 96vw 90vh #fff;
+        animation: twinkle-stars 3s ease-in-out infinite alternate;
     }
     @keyframes twinkle-stars {
-        0% { opacity: 0.4; }
-        100% { opacity: 0.9; }
+        0% { opacity: 0.3; }
+        100% { opacity: 1; }
     }
     .sun-wrap {
         position: absolute; top: 50%; left: 50%;
@@ -2760,50 +2817,127 @@ def main():
         0%, 100% { border-color: rgba(180,140,100,0.1); }
         50% { border-color: rgba(180,140,100,0.35); }
     }
-    .orbit-1, .orbit-2, .orbit-3, .orbit-4 {
+    .orbit-1 {
         position: absolute; top: 50%; left: 50%;
+        width: 260px; height: 260px;
         transform: translate(-50%, -50%);
-        pointer-events: none;
+        animation: spin-1 22s linear infinite;
     }
-    .orbit-1 { width: 220px; height: 220px; animation: spin-1 25s linear infinite; }
-    .orbit-2 { width: 340px; height: 340px; animation: spin-2 35s linear infinite reverse; }
-    .orbit-3 { width: 460px; height: 460px; animation: spin-3 50s linear infinite; }
-    .orbit-4 { width: 580px; height: 580px; animation: spin-4 70s linear infinite reverse; }
-    @keyframes spin-1 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-    @keyframes spin-2 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-    @keyframes spin-3 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-    @keyframes spin-4 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-    .t1, .t2 { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 24px; pointer-events: none; }
-    .t1 { filter: drop-shadow(0 0 8px rgba(255,153,51,0.7)); }
-    .t2 { filter: drop-shadow(0 0 8px rgba(19,136,8,0.7)); }
+    @keyframes spin-1 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .t1 { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 28px; filter: drop-shadow(0 0 10px rgba(255,153,51,0.9)); animation: bob-1 0.9s ease-in-out infinite alternate; }
+    .t1-b1 { transform: translateX(-50%) translateX(-36px); animation-delay: 0.04s; }
+    .t1-b2 { transform: translateX(-50%) translateX(-68px); animation-delay: 0.08s; }
+    .t1-b3 { transform: translateX(-50%) translateX(-96px); animation-delay: 0.12s; }
+    @keyframes bob-1 {
+        from { transform: translateX(-50%) translateY(0) scale(1); }
+        to { transform: translateX(-50%) translateY(-5px) scale(1.07); }
+    }
+    .orbit-2 {
+        position: absolute; top: 50%; left: 50%;
+        width: 400px; height: 400px;
+        transform: translate(-50%, -50%);
+        animation: spin-2 32s linear infinite reverse;
+    }
+    @keyframes spin-2 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .t2 { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 26px; filter: drop-shadow(0 0 10px rgba(19,136,8,0.9)); animation: bob-2 1s ease-in-out infinite alternate; }
+    .t2-b1 { transform: translateX(-50%) translateX(-34px); animation-delay: 0.04s; }
+    .t2-b2 { transform: translateX(-50%) translateX(-64px); animation-delay: 0.08s; }
+    .t2-b3 { transform: translateX(-50%) translateX(-90px); animation-delay: 0.12s; }
+    @keyframes bob-2 {
+        from { transform: translateX(-50%) translateY(0) scale(1); }
+        to { transform: translateX(-50%) translateY(-4px) scale(1.05); }
+    }
+    .orbit-3 {
+        position: absolute; top: 50%; left: 50%;
+        width: 540px; height: 540px;
+        transform: translate(-50%, -50%);
+        animation: spin-3 48s linear infinite;
+    }
+    @keyframes spin-3 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
     .planet-saturn {
-        position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
-        font-size: 30px; filter: drop-shadow(0 0 12px rgba(210,180,140,0.5));
-        pointer-events: none;
+        position: absolute; top: -24px; left: 50%; transform: translateX(-50%);
+        font-size: 34px; filter: drop-shadow(0 0 18px rgba(210,180,140,0.6));
+        animation: planet-bob 3.5s ease-in-out infinite;
+    }
+    @keyframes planet-bob {
+        0%, 100% { transform: translateX(-50%) translateY(0); }
+        50% { transform: translateX(-50%) translateY(-6px); }
+    }
+    .orbit-4 {
+        position: absolute; top: 50%; left: 50%;
+        width: 680px; height: 680px;
+        transform: translate(-50%, -50%);
+        animation: spin-4 65s linear infinite reverse;
+    }
+    @keyframes spin-4 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
     }
     .planet-jupiter {
-        position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
-        width: 28px; height: 28px;
-        background: radial-gradient(circle at 30% 30%, #e8b89d, #c07848);
+        position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+        width: 32px; height: 32px;
+        background: radial-gradient(circle at 30% 30%, #e8b89d, #c07848, #8b4513);
         border-radius: 50%;
-        box-shadow: 0 0 18px rgba(192,120,72,0.4);
-        pointer-events: none;
+        box-shadow: 0 0 22px rgba(192,120,72,0.5), inset -5px -5px 10px rgba(0,0,0,0.35);
+        animation: planet-bob 4.5s ease-in-out infinite;
     }
-    .planet-1, .planet-2, .planet-3 {
-        position: absolute; border-radius: 50%; pointer-events: none;
+    .planet-jupiter::before {
+        content: ''; position: absolute; top: 40%; left: 10%; width: 80%; height: 3px;
+        background: rgba(139,69,19,0.4); border-radius: 2px;
     }
-    .planet-1 { top: 12%; right: 18%; width: 14px; height: 14px; background: radial-gradient(circle, #ff6b6b, #c92a2a); }
-    .planet-2 { bottom: 22%; left: 10%; width: 10px; height: 10px; background: radial-gradient(circle, #4ecdc4, #087f5b); }
-    .planet-3 { top: 68%; right: 12%; width: 16px; height: 16px; background: radial-gradient(circle, #ffe66d, #f59f00); }
+    .planet-jupiter::after {
+        content: ''; position: absolute; top: 60%; left: 15%; width: 70%; height: 2px;
+        background: rgba(160,82,45,0.35); border-radius: 2px;
+    }
+    .planet-1 {
+        position: absolute; top: 12%; right: 18%;
+        width: 16px; height: 16px;
+        background: radial-gradient(circle, #ff6b6b, #c92a2a);
+        border-radius: 50%;
+        box-shadow: 0 0 15px rgba(255,107,107,0.4);
+        animation: float-1 7s ease-in-out infinite;
+    }
+    .planet-2 {
+        position: absolute; bottom: 22%; left: 10%;
+        width: 12px; height: 12px;
+        background: radial-gradient(circle, #4ecdc4, #087f5b);
+        border-radius: 50%;
+        box-shadow: 0 0 12px rgba(78,205,196,0.4);
+        animation: float-2 7s ease-in-out infinite;
+        animation-delay: -3s;
+    }
+    .planet-3 {
+        position: absolute; top: 68%; right: 12%;
+        width: 20px; height: 20px;
+        background: radial-gradient(circle, #ffe66d, #f59f00);
+        border-radius: 50%;
+        box-shadow: 0 0 20px rgba(255,230,109,0.4);
+        animation: float-3 7s ease-in-out infinite;
+        animation-delay: -6s;
+    }
+    @keyframes float-1 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+    @keyframes float-2 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    @keyframes float-3 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
     .shooting {
-        position: absolute; top: 10%; left: 10%; width: 80px; height: 2px;
-        background: linear-gradient(90deg, rgba(255,255,255,0.8), transparent);
-        transform: rotate(-45deg); opacity: 0; animation: shoot 6s linear infinite;
-        pointer-events: none;
+        position: absolute; top: 10%; left: 10%;
+        width: 100px; height: 2px;
+        background: linear-gradient(90deg, rgba(255,255,255,1), transparent);
+        transform: rotate(-45deg);
+        opacity: 0;
+        animation: shoot 5s linear infinite;
     }
     @keyframes shoot {
-        0% { transform: translateX(0) translateY(0) rotate(-45deg); opacity: 0.8; }
-        100% { transform: translateX(400px) translateY(400px) rotate(-45deg); opacity: 0; }
+        0% { transform: translateX(0) translateY(0) rotate(-45deg); opacity: 1; }
+        100% { transform: translateX(500px) translateY(500px) rotate(-45deg); opacity: 0; }
     }
     </style>
     <div class="eqms-bg">
@@ -3134,9 +3268,9 @@ def main():
                 if (!doc.getElementById('eqms-sidebar-toggle')) {
                     var toggleBtn = doc.createElement('button');
                     toggleBtn.id = 'eqms-sidebar-toggle';
-                    toggleBtn.title = 'Toggle Sidebar';
+                    toggleBtn.title = 'Toggle Sidebar (Click to Open/Close)';
                     toggleBtn.innerHTML = '☰';
-                    toggleBtn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:2147483647;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;pointer-events:auto !important;user-select:none;-webkit-user-select:none;touch-action:manipulation;';
+                    toggleBtn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:9999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;';
 
                     toggleBtn.onmouseenter = function(){ 
                         toggleBtn.style.transform = 'scale(1.15) rotate(90deg)'; 
@@ -3147,62 +3281,35 @@ def main():
                         toggleBtn.style.boxShadow = '0 4px 15px rgba(255,107,53,0.5)'; 
                     };
 
-                    // Direct sidebar manipulation - works across all tabs
-                    function toggleSidebar() {
-                        var sb = doc.querySelector('[data-testid="stSidebar"]');
-                        if (!sb) { console.warn('Sidebar not found'); return; }
-                        var isCollapsed = sb.style.marginLeft === '-340px' || sb.style.opacity === '0';
+                    toggleBtn.onclick = function() {
+                        var body = doc.body;
+                        var isCollapsed = body.classList.contains('sidebar-collapsed');
                         if (isCollapsed) {
-                            // OPEN
-                            sb.style.transition = 'margin-left 0.4s ease, opacity 0.3s ease';
-                            sb.style.marginLeft = '0px';
-                            sb.style.opacity = '1';
-                            sb.style.pointerEvents = 'auto';
-                            sb.style.display = 'flex';
+                            body.classList.remove('sidebar-collapsed');
                             toggleBtn.innerHTML = '✕';
                             toggleBtn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                            var sb = doc.querySelector('[data-testid="stSidebar"]');
+                            if (sb) { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
                             try { localStorage.setItem('eqms_sidebar', 'open'); } catch(e) {}
                         } else {
-                            // CLOSE
-                            sb.style.transition = 'margin-left 0.4s ease, opacity 0.3s ease';
-                            sb.style.marginLeft = '-340px';
-                            sb.style.opacity = '0';
-                            sb.style.pointerEvents = 'none';
+                            body.classList.add('sidebar-collapsed');
                             toggleBtn.innerHTML = '☰';
                             toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                            var sb = doc.querySelector('[data-testid="stSidebar"]');
+                            if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
                             try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
                         }
-                    }
-
-                    toggleBtn.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        toggleSidebar();
-                    });
-                    toggleBtn.addEventListener('touchstart', function(e) {
-                        e.preventDefault();
-                        toggleSidebar();
-                    }, {passive: false});
-
-                    // Restore saved state on load
+                    };
                     try {
                         var saved = localStorage.getItem('eqms_sidebar');
                         if (saved === 'closed') {
-                            setTimeout(function() {
-                                var sb = doc.querySelector('[data-testid="stSidebar"]');
-                                if (sb) {
-                                    sb.style.marginLeft = '-340px';
-                                    sb.style.opacity = '0';
-                                    sb.style.pointerEvents = 'none';
-                                    toggleBtn.innerHTML = '☰';
-                                    toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
-                                }
-                            }, 500);
+                            doc.body.classList.add('sidebar-collapsed');
+                            toggleBtn.innerHTML = '☰';
+                            toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
                         }
                     } catch(e) {}
-
+                    // Sidebar state managed by CSS + class toggle only — no polling
                     doc.body.appendChild(toggleBtn);
-                }                    doc.body.appendChild(toggleBtn);
                 }
 
                 if (!doc.getElementById('eqms-top-btn')) {
@@ -4578,53 +4685,18 @@ def main():
         st.markdown("""
         <style>
         @keyframes chat-bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        @keyframes chat-glow { 0%,100% { box-shadow: 0 0 15px rgba(96,165,250,0.2); } 50% { box-shadow: 0 0 30px rgba(96,165,250,0.5); } }
+        @keyframes chat-typing { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
         .chat-train-icon { font-size: 3rem; animation: chat-bounce 2s ease-in-out infinite; display: inline-block; filter: drop-shadow(0 0 10px rgba(96,165,250,0.5)); }
-        /* === CHAT VIEW: FORCE ALL TEXT WHITE === */
-        [data-testid="stMain"] .stMarkdown h1,
-        [data-testid="stMain"] .stMarkdown h2,
-        [data-testid="stMain"] .stMarkdown h3,
-        [data-testid="stMain"] .stMarkdown h4,
-        [data-testid="stMain"] .stMarkdown h5,
-        [data-testid="stMain"] .stMarkdown h6,
-        [data-testid="stMain"] .stMarkdown p,
-        [data-testid="stMain"] .stMarkdown span,
-        [data-testid="stMain"] .stMarkdown div,
-        [data-testid="stMain"] .stCaption,
-        [data-testid="stMain"] .stSubheader,
-        [data-testid="stMain"] [data-testid="stCaption"] {
-            color: #f1f5f9 !important;
-            -webkit-text-fill-color: #f1f5f9 !important;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
-        }
-        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] p,
-        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] span,
-        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] div {
-            color: #f1f5f9 !important;
-            -webkit-text-fill-color: #f1f5f9 !important;
-        }
-        [data-testid="stMain"] .stButton > button {
-            color: #f1f5f9 !important;
-            border-color: rgba(148,163,184,0.4) !important;
-        }
-        [data-testid="stMain"] .stChatInput input {
-            color: #f1f5f9 !important;
-            -webkit-text-fill-color: #f1f5f9 !important;
-        }
-        .chat-title-white {
-            font-size: 1.5rem; font-weight: 700; margin-top: 8px;
-            color: #f1f5f9 !important;
-            text-shadow: 0 2px 8px rgba(0,0,0,0.8) !important;
-        }
-        .chat-subtitle-white {
-            color: #cbd5e1 !important;
-            font-size: 0.9rem;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.6) !important;
-        }
+        .chat-welcome { animation: chat-glow 3s ease-in-out infinite; border-radius: 16px; padding: 20px; }
+        .chat-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #60a5fa; animation: chat-typing 1.4s ease-in-out infinite; }
+        .chat-dot:nth-child(2) { animation-delay: 0.2s; }
+        .chat-dot:nth-child(3) { animation-delay: 0.4s; }
         </style>
         <div style="text-align: center; padding: 10px 0;">
             <span class="chat-train-icon">🚂</span>
-            <div class="chat-title-white">TSKEQ Bot</div>
-            <div class="chat-subtitle-white">Ask about EQ data, trains, quota, PNR or anything</div>
+            <div style="font-size: 1.5rem; font-weight: 700; margin-top: 8px;" class="dash-gradient-text">TSKEQ Bot</div>
+            <div style="color: #94a3b8; font-size: 0.9rem;">Ask about EQ data, trains, quota, PNR or anything</div>
         </div>
         """, unsafe_allow_html=True)
         st.subheader("💬 Chat with TSKEQ Bot")
@@ -5082,7 +5154,7 @@ def main():
             .w-night-clear { background: linear-gradient(180deg, #000000 0%, #0a0a1a 40%, #1a1a3e 80%, #2d1b4e 100%); }
 
             @keyframes w-sun-pulse { 0%,100%{transform:scale(1);opacity:0.9;} 50%{transform:scale(1.2);opacity:1;} }
-            .w-sun { position: absolute; top: 8px; right: 25px; width: 80px; height: 80px; background: radial-gradient(circle at 40% 40%, #fff9c4 0%, #FFD700 30%, #FF8C00 70%, transparent 100%); border-radius: 50%; animation: w-sun-pulse 3s ease-in-out infinite; box-shadow: 0 0 60px 20px rgba(255,215,0,0.5), 0 0 100px 40px rgba(255,193,7,0.25); z-index: 5; }
+            .w-sun { position: absolute; top: 15px; right: 30px; width: 70px; height: 70px; background: radial-gradient(circle, #FFD700 0%, #FFA500 60%, transparent 100%); border-radius: 50%; animation: w-sun-pulse 3s ease-in-out infinite; box-shadow: 0 0 50px 15px rgba(255,215,0,0.4); }
             .w-moon { position: absolute; top: 15px; right: 30px; width: 60px; height: 60px; background: radial-gradient(circle at 35% 35%, #fff9c4, #f5f5dc, #e0e0e0); border-radius: 50%; animation: w-moon-pulse 4s ease-in-out infinite; box-shadow: 0 0 40px 15px rgba(245,245,220,0.3); }
             @keyframes w-moon-pulse { 0%,100%{box-shadow:0 0 40px 15px rgba(245,245,220,0.3);} 50%{box-shadow:0 0 60px 25px rgba(245,245,220,0.5);} }
 
@@ -5156,14 +5228,13 @@ def main():
                         weather_scene_html += f'<div class="w-star" style="left:{(i*7)%100}%;top:{(i*5)%60}%;width:{1+(i%3)}px;height:{1+(i%3)}px;opacity:{0.3+(i%5)*0.15};animation-delay:{(i*0.2)%3}s;"></div>'
                 else:
                     weather_scene_html += '<div class="w-sky w-sunny">'
-                    # SUN AT TOP - prominent
                     weather_scene_html += '<div class="w-sun">'
-                    for angle in range(0, 360, 30):
-                        weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);width:120px;"></div>'
+                    for angle in range(0, 360, 45):
+                        weather_scene_html += f'<div class="w-ray" style="transform:translate(-50%,-50%) rotate({angle}deg);"></div>'
                     weather_scene_html += '</div>'
-                    # Small fluffy clouds below sun
+                if not is_night:
                     for i in range(3):
-                        weather_scene_html += f'<div class="w-cloud" style="top:{35+i*18}px;left:-100px;width:70px;height:26px;animation-duration:{28+i*6}s;animation-delay:{i*5}s;opacity:0.5;"><div style="position:absolute;top:-12px;left:12px;width:28px;height:28px;"></div></div>'
+                        weather_scene_html += f'<div class="w-cloud" style="top:{18+i*14}px;left:-100px;width:65px;height:24px;animation-duration:{24+i*6}s;animation-delay:{i*5}s;opacity:0.6;"><div style="position:absolute;top:-10px;left:10px;width:26px;height:26px;"></div></div>'
 
             elif 'thunder' in weather_condition or 'storm' in weather_condition:
                 weather_scene_html += '<div class="w-sky w-thunder">'
