@@ -83,6 +83,7 @@ GSPREAD_CREDENTIALS = st.secrets.get("GSPREAD_CREDENTIALS")
 WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", "7fff411d9ecb183d6053870fc40823c9")
 DRIVE_FOLDER_ID = "1H1gf8WqfoTYFT_pU9WfIDLrHg-NpuUSI"
 SHEET_ID = "1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI"
+TRAIN_VIDEO_URL = "https://videos.pexels.com/video-files/3121456/3121456-hd_1920_1080_25fps.mp4"
 
 if not GEMINI_API_KEY or not GSPREAD_CREDENTIALS:
     st.error("Missing credentials! Please check secrets.toml")
@@ -2078,10 +2079,10 @@ def get_pnr_status_url(pnr):
 def render_audio_controls(current_scene):
     """Render sidebar audio volume + Web Audio engine."""
     scene_map = {
-        "📋 Data Table": "solar",
+        "📋 Data Table": "rail-engine",
         "📊 Dashboard": "dashboard",
         "💬 Chat": "solar",
-        "🚂 Railway": "solar",
+        "🚂 Railway": "rail-engine",
         "🌤️ Weather": "weather-sunny"
     }
     scene = scene_map.get(current_scene, "solar")
@@ -2178,6 +2179,7 @@ def render_audio_controls(current_scene):
                 this.stopAll();
                 if (!this.ctx) this.init();
                 switch(scene) {{
+                    case 'rail-engine': this.playRailEngine(); break;
                     case 'solar': this.playSolar(); break;
                     case 'dashboard': this.playDashboard(); break;
                     case 'weather-rain': this.playRain(); break;
@@ -2210,6 +2212,62 @@ def render_audio_controls(current_scene):
                 var d = buf.getChannelData(0);
                 for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
                 return buf;
+            }}
+
+            playRailEngine() {{
+                var osc1 = this.ctx.createOscillator();
+                osc1.type = 'sawtooth';
+                osc1.frequency.value = 55;
+                var g1 = this.ctx.createGain();
+                g1.gain.value = 0.25;
+                var filter1 = this.ctx.createBiquadFilter();
+                filter1.type = 'lowpass';
+                filter1.frequency.value = 180;
+                osc1.connect(filter1);
+                filter1.connect(g1);
+                g1.connect(this.master);
+                osc1.start();
+                this.nodes.osc1 = osc1;
+                this.nodes.g1 = g1;
+
+                var osc2 = this.ctx.createOscillator();
+                osc2.type = 'square';
+                osc2.frequency.value = 28;
+                var g2 = this.ctx.createGain();
+                g2.gain.value = 0.18;
+                var filter2 = this.ctx.createBiquadFilter();
+                filter2.type = 'lowpass';
+                filter2.frequency.value = 120;
+                osc2.connect(filter2);
+                filter2.connect(g2);
+                g2.connect(this.master);
+                osc2.start();
+                this.nodes.osc2 = osc2;
+
+                var noise = this.ctx.createBufferSource();
+                noise.buffer = this.noiseBuffer();
+                noise.loop = true;
+                var noiseFilter = this.ctx.createBiquadFilter();
+                noiseFilter.type = 'bandpass';
+                noiseFilter.frequency.value = 350;
+                noiseFilter.Q.value = 0.8;
+                var noiseGain = this.ctx.createGain();
+                noiseGain.gain.value = 0.12;
+                noise.connect(noiseFilter);
+                noiseFilter.connect(noiseGain);
+                noiseGain.connect(this.master);
+                noise.start();
+                this.nodes.noise = noise;
+
+                var lfo = this.ctx.createOscillator();
+                lfo.type = 'square';
+                lfo.frequency.value = 2.5;
+                var lfoGain = this.ctx.createGain();
+                lfoGain.gain.value = 0.08;
+                lfo.connect(lfoGain);
+                lfoGain.connect(g1.gain);
+                lfo.start();
+                this.nodes.lfo = lfo;
             }}
 
             playSolar() {{
@@ -3606,6 +3664,25 @@ def main():
         # Audio Volume Control
         render_audio_controls(st.session_state.view_mode)
 
+        # Sidebar Train Video
+        st.markdown("""
+        <style>
+        .train-video-sidebar {
+            border-radius: 12px; overflow: hidden; margin-bottom: 14px;
+            border: 2px solid rgba(255,153,51,0.5);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+        .train-video-sidebar video {
+            width: 100%; display: block; border-radius: 10px;
+        }
+        </style>
+        <div class="train-video-sidebar">
+            <video autoplay muted loop playsinline poster="https://images.pexels.com/photos/3121456/pexels-photo-3121456.jpeg?auto=compress&cs=tinysrgb&w=640">
+                <source src="https://videos.pexels.com/video-files/3121456/3121456-hd_1920_1080_25fps.mp4" type="video/mp4">
+            </video>
+        </div>
+        """, unsafe_allow_html=True)
+
         with st.expander("🌤️ Quick Weather", expanded=True):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city", placeholder="Any city...")
             if city != st.session_state.weather_city: st.session_state.weather_city = city
@@ -4848,6 +4925,26 @@ def main():
     # =====================================================================
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real-time Info")
+
+        # Fullscreen Train Video
+        st.markdown("""
+        <style>
+        .train-video-fullscreen {
+            width: 100%; border-radius: 16px; overflow: hidden;
+            border: 3px solid rgba(255,153,51,0.6);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            margin-bottom: 20px;
+        }
+        .train-video-fullscreen video {
+            width: 100%; height: auto; display: block;
+        }
+        </style>
+        <div class="train-video-fullscreen">
+            <video autoplay muted loop playsinline controls style="width:100%; max-height:70vh;">
+                <source src="https://videos.pexels.com/video-files/3121456/3121456-hd_1920_1080_25fps.mp4" type="video/mp4">
+            </video>
+        </div>
+        """, unsafe_allow_html=True)
 
         if not NTES_AVAILABLE:
             st.error("❌ 'ntes-client' library not installed. Please run: `pip install ntes-client`")
