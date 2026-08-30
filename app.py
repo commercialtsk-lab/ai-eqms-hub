@@ -2559,46 +2559,161 @@ EARTH_BG_HTML = """
 </div>
 """
 
-CHAT_BG_HTML = """
+AQUARIUM_BG_HTML = """
 <style>
-.chat-bg-scene {
+.aqua-scene {
     position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
     z-index: -1; pointer-events: none; overflow: hidden;
-    background: linear-gradient(180deg, #030308 0%, #0a0a12 40%, #000000 100%);
+    background: linear-gradient(180deg, #001a33 0%, #003d66 25%, #004d7a 50%, #00334d 75%, #00111a 100%);
 }
-.chat-bg-grid {
+.aqua-surface {
+    position: absolute; top: 0; left: 0; width: 100%; height: 60px;
+    background: linear-gradient(180deg, rgba(0,200,255,0.15) 0%, transparent 100%);
+    animation: aqua-surface-shimmer 4s ease-in-out infinite;
+}
+@keyframes aqua-surface-shimmer {
+    0%,100% { opacity: 0.4; }
+    50% { opacity: 0.8; }
+}
+.aqua-rays {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background-image: 
-        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
-    background-size: 60px 60px;
+    background: linear-gradient(180deg, rgba(0,200,255,0.08) 0%, transparent 40%),
+                linear-gradient(90deg, transparent 30%, rgba(0,200,255,0.03) 50%, transparent 70%);
+    animation: aqua-rays-move 8s ease-in-out infinite;
 }
-.chat-bg-glow {
-    position: absolute; top: 40%; left: 50%;
-    transform: translate(-50%, -50%);
-    width: 500px; height: 500px;
-    background: radial-gradient(circle, rgba(37,99,235,0.06) 0%, transparent 65%);
-    animation: chat-pulse 7s ease-in-out infinite;
+@keyframes aqua-rays-move {
+    0%,100% { transform: translateX(-20px); }
+    50% { transform: translateX(20px); }
 }
-@keyframes chat-pulse {
-    0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.4; }
-    50% { transform: translate(-50%, -50%) scale(1.15); opacity: 0.7; }
+.aqua-bubble {
+    position: absolute; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.4), rgba(255,255,255,0.1));
+    animation: aqua-bubble-rise linear infinite;
 }
-.chat-bg-dots {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background-image: radial-gradient(1.5px 1.5px at 15% 25%, rgba(255,255,255,0.15), transparent),
-        radial-gradient(1.5px 1.5px at 65% 15%, rgba(255,255,255,0.12), transparent),
-        radial-gradient(1px 1px at 45% 65%, rgba(255,255,255,0.1), transparent),
-        radial-gradient(1.5px 1.5px at 85% 55%, rgba(255,255,255,0.13), transparent),
-        radial-gradient(1px 1px at 25% 85%, rgba(255,255,255,0.08), transparent);
-    background-repeat: repeat;
-    background-size: 250px 250px;
+@keyframes aqua-bubble-rise {
+    0% { transform: translateY(100vh) scale(1); opacity: 0; }
+    10% { opacity: 0.6; }
+    90% { opacity: 0.6; }
+    100% { transform: translateY(-50px) scale(0.5); opacity: 0; }
+}
+.aqua-fish {
+    position: absolute; font-size: 24px;
+    animation: aqua-fish-swim linear infinite;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+}
+@keyframes aqua-fish-swim {
+    0% { transform: translateX(-60px) scaleX(1); }
+    49% { transform: translateX(calc(100vw + 60px)) scaleX(1); }
+    50% { transform: translateX(calc(100vw + 60px)) scaleX(-1); }
+    99% { transform: translateX(-60px) scaleX(-1); }
+    100% { transform: translateX(-60px) scaleX(1); }
+}
+.aqua-fish-reverse {
+    animation: aqua-fish-swim-reverse linear infinite;
+}
+@keyframes aqua-fish-swim-reverse {
+    0% { transform: translateX(calc(100vw + 60px)) scaleX(-1); }
+    49% { transform: translateX(-60px) scaleX(-1); }
+    50% { transform: translateX(-60px) scaleX(1); }
+    99% { transform: translateX(calc(100vw + 60px)) scaleX(1); }
+    100% { transform: translateX(calc(100vw + 60px)) scaleX(-1); }
+}
+.aqua-seaweed {
+    position: absolute; bottom: 0; font-size: 40px;
+    animation: aqua-seaweed-sway 3s ease-in-out infinite;
+    transform-origin: bottom center;
+    filter: drop-shadow(0 0 8px rgba(0,255,128,0.3));
+}
+@keyframes aqua-seaweed-sway {
+    0%,100% { transform: rotate(-8deg); }
+    50% { transform: rotate(8deg); }
+}
+.aqua-jelly {
+    position: absolute; font-size: 28px;
+    animation: aqua-jelly-float 6s ease-in-out infinite;
+    filter: drop-shadow(0 0 10px rgba(200,100,255,0.4));
+}
+@keyframes aqua-jelly-float {
+    0%,100% { transform: translateY(0) translateX(0); }
+    25% { transform: translateY(-30px) translateX(15px); }
+    50% { transform: translateY(-10px) translateX(-10px); }
+    75% { transform: translateY(-40px) translateX(5px); }
+}
+.aqua-star {
+    position: absolute; width: 3px; height: 3px; background: rgba(255,255,200,0.3);
+    border-radius: 50%; animation: aqua-star-twinkle 2s ease-in-out infinite;
+}
+@keyframes aqua-star-twinkle {
+    0%,100% { opacity: 0.2; }
+    50% { opacity: 0.8; }
+}
+.aqua-sand {
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 40px;
+    background: linear-gradient(180deg, rgba(194,178,128,0.3) 0%, rgba(160,140,90,0.5) 100%);
+    border-radius: 50% 50% 0 0 / 20px 20px 0 0;
+}
+.aqua-coral {
+    position: absolute; bottom: 20px; font-size: 32px;
+    animation: aqua-coral-glow 4s ease-in-out infinite;
+}
+@keyframes aqua-coral-glow {
+    0%,100% { filter: drop-shadow(0 0 5px rgba(255,100,100,0.3)); }
+    50% { filter: drop-shadow(0 0 15px rgba(255,100,100,0.6)); }
 }
 </style>
-<div class="chat-bg-scene">
-    <div class="chat-bg-grid"></div>
-    <div class="chat-bg-dots"></div>
-    <div class="chat-bg-glow"></div>
+<div class="aqua-scene">
+    <div class="aqua-surface"></div>
+    <div class="aqua-rays"></div>
+    <!-- Bubbles -->
+    <div class="aqua-bubble" style="left:5%;width:8px;height:8px;animation-duration:7s;animation-delay:0s;"></div>
+    <div class="aqua-bubble" style="left:12%;width:5px;height:5px;animation-duration:5s;animation-delay:1s;"></div>
+    <div class="aqua-bubble" style="left:20%;width:10px;height:10px;animation-duration:9s;animation-delay:2s;"></div>
+    <div class="aqua-bubble" style="left:28%;width:6px;height:6px;animation-duration:6s;animation-delay:0.5s;"></div>
+    <div class="aqua-bubble" style="left:35%;width:4px;height:4px;animation-duration:8s;animation-delay:3s;"></div>
+    <div class="aqua-bubble" style="left:42%;width:9px;height:9px;animation-duration:7s;animation-delay:1.5s;"></div>
+    <div class="aqua-bubble" style="left:50%;width:5px;height:5px;animation-duration:5s;animation-delay:2.5s;"></div>
+    <div class="aqua-bubble" style="left:58%;width:7px;height:7px;animation-duration:8s;animation-delay:0.8s;"></div>
+    <div class="aqua-bubble" style="left:65%;width:4px;height:4px;animation-duration:6s;animation-delay:3.5s;"></div>
+    <div class="aqua-bubble" style="left:72%;width:11px;height:11px;animation-duration:10s;animation-delay:1.2s;"></div>
+    <div class="aqua-bubble" style="left:80%;width:6px;height:6px;animation-duration:7s;animation-delay:4s;"></div>
+    <div class="aqua-bubble" style="left:88%;width:8px;height:8px;animation-duration:9s;animation-delay:2.2s;"></div>
+    <div class="aqua-bubble" style="left:95%;width:5px;height:5px;animation-duration:6s;animation-delay:0.3s;"></div>
+    <!-- Fish -->
+    <div class="aqua-fish" style="top:20%;animation-duration:18s;animation-delay:0s;">🐠</div>
+    <div class="aqua-fish aqua-fish-reverse" style="top:35%;animation-duration:22s;animation-delay:3s;">🐟</div>
+    <div class="aqua-fish" style="top:50%;animation-duration:20s;animation-delay:6s;">🐡</div>
+    <div class="aqua-fish aqua-fish-reverse" style="top:65%;animation-duration:25s;animation-delay:1s;">🦈</div>
+    <div class="aqua-fish" style="top:30%;animation-duration:15s;animation-delay:8s;font-size:18px;">🐠</div>
+    <div class="aqua-fish aqua-fish-reverse" style="top:55%;animation-duration:19s;animation-delay:4s;font-size:20px;">🐟</div>
+    <!-- Jellyfish -->
+    <div class="aqua-jelly" style="left:15%;top:15%;animation-delay:0s;">🪼</div>
+    <div class="aqua-jelly" style="left:70%;top:40%;animation-delay:3s;">🪼</div>
+    <div class="aqua-jelly" style="left:40%;top:60%;animation-delay:1.5s;font-size:22px;">🪼</div>
+    <!-- Seaweed -->
+    <div class="aqua-seaweed" style="left:8%;animation-delay:0s;">🌿</div>
+    <div class="aqua-seaweed" style="left:18%;font-size:35px;animation-delay:0.5s;">🌱</div>
+    <div class="aqua-seaweed" style="left:30%;animation-delay:1s;">🌿</div>
+    <div class="aqua-seaweed" style="left:45%;font-size:45px;animation-delay:1.5s;">🌱</div>
+    <div class="aqua-seaweed" style="left:60%;animation-delay:0.8s;">🌿</div>
+    <div class="aqua-seaweed" style="left:75%;font-size:38px;animation-delay:1.2s;">🌱</div>
+    <div class="aqua-seaweed" style="left:88%;animation-delay:0.3s;">🌿</div>
+    <!-- Coral -->
+    <div class="aqua-coral" style="left:5%;">🪸</div>
+    <div class="aqua-coral" style="left:25%;animation-delay:1s;">🐚</div>
+    <div class="aqua-coral" style="left:50%;animation-delay:2s;">🪸</div>
+    <div class="aqua-coral" style="left:78%;animation-delay:0.5s;">🐚</div>
+    <div class="aqua-coral" style="left:92%;animation-delay:1.5s;">🪸</div>
+    <!-- Stars (distant light particles) -->
+    <div class="aqua-star" style="left:10%;top:10%;animation-delay:0s;"></div>
+    <div class="aqua-star" style="left:25%;top:25%;animation-delay:0.5s;"></div>
+    <div class="aqua-star" style="left:40%;top:15%;animation-delay:1s;"></div>
+    <div class="aqua-star" style="left:55%;top:30%;animation-delay:1.5s;"></div>
+    <div class="aqua-star" style="left:70%;top:20%;animation-delay:0.3s;"></div>
+    <div class="aqua-star" style="left:85%;top:35%;animation-delay:0.8s;"></div>
+    <div class="aqua-star" style="left:15%;top:45%;animation-delay:1.2s;"></div>
+    <div class="aqua-star" style="left:90%;top:50%;animation-delay:0.6s;"></div>
+    <!-- Sand -->
+    <div class="aqua-sand"></div>
 </div>
 """
 
@@ -2988,7 +3103,7 @@ def main():
     elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         pass  # Weather bg rendered later
     elif view_bg == "💬 Chat":
-        st.markdown(CHAT_BG_HTML, unsafe_allow_html=True)
+        st.markdown(AQUARIUM_BG_HTML, unsafe_allow_html=True)
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
@@ -3002,6 +3117,7 @@ def main():
     # anywhere, so they always fell back to plain black — this defines
     # those variables from the real sunrise/sunset so forecast text is
     # readable in both day and night scenes.)
+    # Compute day/night once for both CSS and background
     _wx_is_night = False
     if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         try:
@@ -3009,9 +3125,16 @@ def main():
             _wx_sunrise = st.session_state.weather_data.get('sunrise')
             _wx_sunset = st.session_state.weather_data.get('sunset')
             if _wx_sunrise and _wx_sunset and str(_wx_sunrise) not in ['', 'N/A', 'None']:
-                _wx_is_night = _wx_now < int(_wx_sunrise) or _wx_now > int(_wx_sunset)
+                _wx_sunrise = int(_wx_sunrise)
+                _wx_sunset = int(_wx_sunset)
+                _wx_is_night = (_wx_now < _wx_sunrise - 1800) or (_wx_now > _wx_sunset + 1800)
+            else:
+                # Fallback: IST hour
+                ist_h = now_ist().hour
+                _wx_is_night = ist_h < 6 or ist_h >= 19
         except Exception:
-            pass
+            ist_h = now_ist().hour
+            _wx_is_night = ist_h < 6 or ist_h >= 19
     _wx_text_color = "#ffffff" if _wx_is_night else "#000000"
     _wx_text_shadow = "0 1px 3px rgba(0,0,0,0.6)" if _wx_is_night else "0 1px 3px rgba(255,255,255,0.7)"
     _wx_forecast_bg = "rgba(255,255,255,0.08)" if _wx_is_night else "rgba(255,255,255,0.4)"
@@ -3268,10 +3391,76 @@ def main():
             var doc = P.document;
             var body = doc.body;
 
-            // Ensure sidebar starts open on first ever load
-            if (!P.__eqmsSidebarSet) {
-                P.__eqmsSidebarSet = true;
-                body.classList.remove('sidebar-collapsed');
+            function ensureToggleButton() {
+                var btn = doc.getElementById('eqms-sidebar-toggle');
+                if (!btn) {
+                    btn = doc.createElement('button');
+                    btn.id = 'eqms-sidebar-toggle';
+                    btn.title = 'Toggle Sidebar';
+                    btn.innerHTML = '☰';
+                    btn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:9999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;';
+
+                    btn.onmouseenter = function(){ 
+                        btn.style.transform = 'scale(1.15) rotate(90deg)'; 
+                        btn.style.boxShadow = '0 6px 25px rgba(255,107,53,0.7)'; 
+                    };
+                    btn.onmouseleave = function(){ 
+                        btn.style.transform = 'scale(1) rotate(0deg)'; 
+                        btn.style.boxShadow = '0 4px 15px rgba(255,107,53,0.5)'; 
+                    };
+
+                    btn.onclick = function() {
+                        var isCollapsed = body.classList.contains('sidebar-collapsed');
+                        if (isCollapsed) {
+                            body.classList.remove('sidebar-collapsed');
+                            btn.innerHTML = '✕';
+                            btn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                            var sb = doc.querySelector('[data-testid="stSidebar"]');
+                            if (sb) { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
+                            try { localStorage.setItem('eqms_sidebar', 'open'); } catch(e) {}
+                        } else {
+                            body.classList.add('sidebar-collapsed');
+                            btn.innerHTML = '☰';
+                            btn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                            var sb = doc.querySelector('[data-testid="stSidebar"]');
+                            if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
+                            try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
+                        }
+                    };
+                    doc.body.appendChild(btn);
+                }
+                // Always sync button appearance from localStorage
+                try {
+                    var saved = localStorage.getItem('eqms_sidebar');
+                    if (saved === 'closed') {
+                        body.classList.add('sidebar-collapsed');
+                        btn.innerHTML = '☰';
+                        btn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                    } else {
+                        body.classList.remove('sidebar-collapsed');
+                        btn.innerHTML = '✕';
+                        btn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                    }
+                } catch(e) {
+                    var isCollapsed = body.classList.contains('sidebar-collapsed');
+                    btn.innerHTML = isCollapsed ? '☰' : '✕';
+                    btn.style.background = isCollapsed ? 'linear-gradient(135deg,#138808,#0d6e05)' : 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                }
+            }
+
+            function ensureTopButton() {
+                var b = doc.getElementById('eqms-top-btn');
+                if (!b) {
+                    b = doc.createElement('button');
+                    b.id = 'eqms-top-btn';
+                    b.title = 'Back to top';
+                    b.innerHTML = '⬆';
+                    b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
+                    b.onmouseenter = function(){ b.style.opacity = '1'; b.style.transform = 'scale(1.08)'; };
+                    b.onmouseleave = function(){ b.style.opacity = '0.85'; b.style.transform = 'scale(1)'; };
+                    b.onclick = function(){ window.scrollTo({top:0, behavior:'smooth'}); };
+                    doc.body.appendChild(b);
+                }
             }
 
             // Keydown listener (only once)
@@ -3289,80 +3478,19 @@ def main():
                 });
             }
 
-            // Create toggle button if missing (idempotent)
-            var toggleBtn = doc.getElementById('eqms-sidebar-toggle');
-            if (!toggleBtn) {
-                toggleBtn = doc.createElement('button');
-                toggleBtn.id = 'eqms-sidebar-toggle';
-                toggleBtn.title = 'Toggle Sidebar (Click to Open/Close)';
-                toggleBtn.innerHTML = '☰';
-                toggleBtn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:9999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;';
+            // Run immediately
+            ensureToggleButton();
+            ensureTopButton();
 
-                toggleBtn.onmouseenter = function(){ 
-                    toggleBtn.style.transform = 'scale(1.15) rotate(90deg)'; 
-                    toggleBtn.style.boxShadow = '0 6px 25px rgba(255,107,53,0.7)'; 
-                };
-                toggleBtn.onmouseleave = function(){ 
-                    toggleBtn.style.transform = 'scale(1) rotate(0deg)'; 
-                    toggleBtn.style.boxShadow = '0 4px 15px rgba(255,107,53,0.5)'; 
-                };
+            // Re-run after delays to handle race conditions with Streamlit DOM updates
+            setTimeout(function(){ ensureToggleButton(); ensureTopButton(); }, 100);
+            setTimeout(function(){ ensureToggleButton(); ensureTopButton(); }, 500);
+            setTimeout(function(){ ensureToggleButton(); ensureTopButton(); }, 1000);
 
-                toggleBtn.onclick = function() {
-                    var isCollapsed = body.classList.contains('sidebar-collapsed');
-                    if (isCollapsed) {
-                        body.classList.remove('sidebar-collapsed');
-                        toggleBtn.innerHTML = '✕';
-                        toggleBtn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
-                        var sb = doc.querySelector('[data-testid="stSidebar"]');
-                        if (sb) { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
-                        try { localStorage.setItem('eqms_sidebar', 'open'); } catch(e) {}
-                    } else {
-                        body.classList.add('sidebar-collapsed');
-                        toggleBtn.innerHTML = '☰';
-                        toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
-                        var sb = doc.querySelector('[data-testid="stSidebar"]');
-                        if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
-                        try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
-                    }
-                };
-                doc.body.appendChild(toggleBtn);
-            }
-
-            // Always sync button appearance + sidebar state from localStorage
-            try {
-                var saved = localStorage.getItem('eqms_sidebar');
-                if (saved === 'closed') {
-                    body.classList.add('sidebar-collapsed');
-                    toggleBtn.innerHTML = '☰';
-                    toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
-                } else {
-                    body.classList.remove('sidebar-collapsed');
-                    toggleBtn.innerHTML = '✕';
-                    toggleBtn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
-                }
-            } catch(e) {
-                // Fallback: sync with current class state
-                var isCollapsed = body.classList.contains('sidebar-collapsed');
-                toggleBtn.innerHTML = isCollapsed ? '☰' : '✕';
-                toggleBtn.style.background = isCollapsed ? 'linear-gradient(135deg,#138808,#0d6e05)' : 'linear-gradient(135deg,#FF9933,#FF6B35)';
-            }
-
-            // Back to top button (idempotent)
-            if (!doc.getElementById('eqms-top-btn')) {
-                var b = doc.createElement('button');
-                b.id = 'eqms-top-btn';
-                b.title = 'Back to top';
-                b.innerHTML = '⬆';
-                b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
-                b.onmouseenter = function(){ b.style.opacity = '1'; b.style.transform = 'scale(1.08)'; };
-                b.onmouseleave = function(){ b.style.opacity = '0.85'; b.style.transform = 'scale(1)'; };
-                b.onclick = function(){ window.scrollTo({top:0, behavior:'smooth'}); };
-                doc.body.appendChild(b);
-            }
         } catch(e) { console.error('EQMS Toggle Error:', e); }
     })();
     </script>
-    """, height=0)
+    """, height=10)
 
     # Theme setup
     theme_options = ['Day', 'Dark', 'Custom', 'Auto (System)']
@@ -5503,7 +5631,6 @@ def main():
         -webkit-text-fill-color: #ffffff !important;
         text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
     }
-    /* Weather input labels & values inside main */
     div[data-testid="stMain"] input[aria-label*="City"],
     div[data-testid="stMain"] input[aria-label*="city"] {
         color: #000000 !important;
@@ -5518,7 +5645,6 @@ def main():
         text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
         font-weight: 700 !important;
     }
-    /* Sunrise-sunset white text */
     div[data-testid="stMain"] .sunrise-sunset,
     div[data-testid="stMain"] .sunrise-sunset * {
         color: #ffffff !important;
