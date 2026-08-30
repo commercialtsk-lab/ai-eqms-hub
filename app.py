@@ -2559,6 +2559,51 @@ EARTH_BG_HTML = """
 </div>
 """
 
+CHAT_BG_HTML = """
+<style>
+.chat-bg-scene {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    z-index: -1; pointer-events: none; overflow: hidden;
+    background: linear-gradient(180deg, #030308 0%, #0a0a12 40%, #000000 100%);
+}
+.chat-bg-grid {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background-image: 
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 60px 60px;
+}
+.chat-bg-glow {
+    position: absolute; top: 40%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(37,99,235,0.06) 0%, transparent 65%);
+    animation: chat-pulse 7s ease-in-out infinite;
+}
+@keyframes chat-pulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.4; }
+    50% { transform: translate(-50%, -50%) scale(1.15); opacity: 0.7; }
+}
+.chat-bg-dots {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background-image: radial-gradient(1.5px 1.5px at 15% 25%, rgba(255,255,255,0.15), transparent),
+        radial-gradient(1.5px 1.5px at 65% 15%, rgba(255,255,255,0.12), transparent),
+        radial-gradient(1px 1px at 45% 65%, rgba(255,255,255,0.1), transparent),
+        radial-gradient(1.5px 1.5px at 85% 55%, rgba(255,255,255,0.13), transparent),
+        radial-gradient(1px 1px at 25% 85%, rgba(255,255,255,0.08), transparent);
+    background-repeat: repeat;
+    background-size: 250px 250px;
+}
+</style>
+<div class="chat-bg-scene">
+    <div class="chat-bg-grid"></div>
+    <div class="chat-bg-dots"></div>
+    <div class="chat-bg-glow"></div>
+</div>
+"""
+
+
+
 
 def main():
     # Always update last_refresh to current time on page load so sync time matches live time
@@ -2943,7 +2988,7 @@ def main():
     elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         pass  # Weather bg rendered later
     elif view_bg == "💬 Chat":
-        pass  # Clean chat view — no heavy animation
+        st.markdown(CHAT_BG_HTML, unsafe_allow_html=True)
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
@@ -3221,12 +3266,17 @@ def main():
         try {
             var P = window.parent;
             var doc = P.document;
-            if (!P.__eqmsProInit) {
-                P.__eqmsProInit = true;
-                // Ensure sidebar starts open
-                var body = doc.body;
-                body.classList.remove('sidebar-collapsed');
+            var body = doc.body;
 
+            // Ensure sidebar starts open on first ever load
+            if (!P.__eqmsSidebarSet) {
+                P.__eqmsSidebarSet = true;
+                body.classList.remove('sidebar-collapsed');
+            }
+
+            // Keydown listener (only once)
+            if (!P.__eqmsKeydownInit) {
+                P.__eqmsKeydownInit = true;
                 doc.addEventListener('keydown', function(e) {
                     var t = (e.target.tagName || '').toLowerCase();
                     if (t === 'input' || t === 'textarea' || t === 'select' || e.target.isContentEditable) return;
@@ -3237,65 +3287,77 @@ def main():
                         P.location.href = u.toString();
                     }
                 });
+            }
 
-                if (!doc.getElementById('eqms-sidebar-toggle')) {
-                    var toggleBtn = doc.createElement('button');
-                    toggleBtn.id = 'eqms-sidebar-toggle';
-                    toggleBtn.title = 'Toggle Sidebar (Click to Open/Close)';
+            // Create toggle button if missing (idempotent)
+            var toggleBtn = doc.getElementById('eqms-sidebar-toggle');
+            if (!toggleBtn) {
+                toggleBtn = doc.createElement('button');
+                toggleBtn.id = 'eqms-sidebar-toggle';
+                toggleBtn.title = 'Toggle Sidebar (Click to Open/Close)';
+                toggleBtn.innerHTML = '☰';
+                toggleBtn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:9999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;';
+
+                toggleBtn.onmouseenter = function(){ 
+                    toggleBtn.style.transform = 'scale(1.15) rotate(90deg)'; 
+                    toggleBtn.style.boxShadow = '0 6px 25px rgba(255,107,53,0.7)'; 
+                };
+                toggleBtn.onmouseleave = function(){ 
+                    toggleBtn.style.transform = 'scale(1) rotate(0deg)'; 
+                    toggleBtn.style.boxShadow = '0 4px 15px rgba(255,107,53,0.5)'; 
+                };
+
+                toggleBtn.onclick = function() {
+                    var isCollapsed = body.classList.contains('sidebar-collapsed');
+                    if (isCollapsed) {
+                        body.classList.remove('sidebar-collapsed');
+                        toggleBtn.innerHTML = '✕';
+                        toggleBtn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                        var sb = doc.querySelector('[data-testid="stSidebar"]');
+                        if (sb) { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
+                        try { localStorage.setItem('eqms_sidebar', 'open'); } catch(e) {}
+                    } else {
+                        body.classList.add('sidebar-collapsed');
+                        toggleBtn.innerHTML = '☰';
+                        toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                        var sb = doc.querySelector('[data-testid="stSidebar"]');
+                        if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
+                        try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
+                    }
+                };
+                doc.body.appendChild(toggleBtn);
+            }
+
+            // Always sync button appearance + sidebar state from localStorage
+            try {
+                var saved = localStorage.getItem('eqms_sidebar');
+                if (saved === 'closed') {
+                    body.classList.add('sidebar-collapsed');
                     toggleBtn.innerHTML = '☰';
-                    toggleBtn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:9999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;';
-
-                    toggleBtn.onmouseenter = function(){ 
-                        toggleBtn.style.transform = 'scale(1.15) rotate(90deg)'; 
-                        toggleBtn.style.boxShadow = '0 6px 25px rgba(255,107,53,0.7)'; 
-                    };
-                    toggleBtn.onmouseleave = function(){ 
-                        toggleBtn.style.transform = 'scale(1) rotate(0deg)'; 
-                        toggleBtn.style.boxShadow = '0 4px 15px rgba(255,107,53,0.5)'; 
-                    };
-
-                    toggleBtn.onclick = function() {
-                        var body = doc.body;
-                        var isCollapsed = body.classList.contains('sidebar-collapsed');
-                        if (isCollapsed) {
-                            body.classList.remove('sidebar-collapsed');
-                            toggleBtn.innerHTML = '✕';
-                            toggleBtn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
-                            var sb = doc.querySelector('[data-testid="stSidebar"]');
-                            if (sb) { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
-                            try { localStorage.setItem('eqms_sidebar', 'open'); } catch(e) {}
-                        } else {
-                            body.classList.add('sidebar-collapsed');
-                            toggleBtn.innerHTML = '☰';
-                            toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
-                            var sb = doc.querySelector('[data-testid="stSidebar"]');
-                            if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
-                            try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
-                        }
-                    };
-                    try {
-                        var saved = localStorage.getItem('eqms_sidebar');
-                        if (saved === 'closed') {
-                            doc.body.classList.add('sidebar-collapsed');
-                            toggleBtn.innerHTML = '☰';
-                            toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
-                        }
-                    } catch(e) {}
-                    // Sidebar state managed by CSS + class toggle only — no polling
-                    doc.body.appendChild(toggleBtn);
+                    toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                } else {
+                    body.classList.remove('sidebar-collapsed');
+                    toggleBtn.innerHTML = '✕';
+                    toggleBtn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
                 }
+            } catch(e) {
+                // Fallback: sync with current class state
+                var isCollapsed = body.classList.contains('sidebar-collapsed');
+                toggleBtn.innerHTML = isCollapsed ? '☰' : '✕';
+                toggleBtn.style.background = isCollapsed ? 'linear-gradient(135deg,#138808,#0d6e05)' : 'linear-gradient(135deg,#FF9933,#FF6B35)';
+            }
 
-                if (!doc.getElementById('eqms-top-btn')) {
-                    var b = doc.createElement('button');
-                    b.id = 'eqms-top-btn';
-                    b.title = 'Back to top';
-                    b.innerHTML = '⬆';
-                    b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
-                    b.onmouseenter = function(){ b.style.opacity = '1'; b.style.transform = 'scale(1.08)'; };
-                    b.onmouseleave = function(){ b.style.opacity = '0.85'; b.style.transform = 'scale(1)'; };
-                    b.onclick = function(){ window.scrollTo({top:0, behavior:'smooth'}); };
-                    doc.body.appendChild(b);
-                }
+            // Back to top button (idempotent)
+            if (!doc.getElementById('eqms-top-btn')) {
+                var b = doc.createElement('button');
+                b.id = 'eqms-top-btn';
+                b.title = 'Back to top';
+                b.innerHTML = '⬆';
+                b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
+                b.onmouseenter = function(){ b.style.opacity = '1'; b.style.transform = 'scale(1.08)'; };
+                b.onmouseleave = function(){ b.style.opacity = '0.85'; b.style.transform = 'scale(1)'; };
+                b.onclick = function(){ window.scrollTo({top:0, behavior:'smooth'}); };
+                doc.body.appendChild(b);
             }
         } catch(e) { console.error('EQMS Toggle Error:', e); }
     })();
@@ -5406,6 +5468,62 @@ def main():
         color: #1e293b !important;
         -webkit-text-fill-color: #1e293b !important;
         text-shadow: none !important;
+    }
+    /* === WEATHER STAMP / INPUT / CARD — FORCE WHITE TEXT === */
+    div[data-testid="stMain"] .weather-input-wrapper,
+    div[data-testid="stMain"] .weather-input-wrapper * {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+    }
+    div[data-testid="stMain"] .weather-main-card,
+    div[data-testid="stMain"] .weather-main-card * {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+    }
+    div[data-testid="stMain"] .weather-detail-item,
+    div[data-testid="stMain"] .weather-detail-item * {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+    }
+    div[data-testid="stMain"] .forecast-card-0,
+    div[data-testid="stMain"] .forecast-card-1,
+    div[data-testid="stMain"] .forecast-card-2,
+    div[data-testid="stMain"] .forecast-card-3,
+    div[data-testid="stMain"] .forecast-card-4,
+    div[data-testid="stMain"] [class*="forecast-card-"] {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+    }
+    div[data-testid="stMain"] [class*="forecast-card-"] * {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+    }
+    /* Weather input labels & values inside main */
+    div[data-testid="stMain"] input[aria-label*="City"],
+    div[data-testid="stMain"] input[aria-label*="city"] {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+        background-color: rgba(255,255,255,0.95) !important;
+    }
+    div[data-testid="stMain"] .stTextInput:has(input[aria-label*="City"]) label p,
+    div[data-testid="stMain"] .stTextInput:has(input[aria-label*="city"]) label p {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        font-weight: 700 !important;
+    }
+    /* Sunrise-sunset white text */
+    div[data-testid="stMain"] .sunrise-sunset,
+    div[data-testid="stMain"] .sunrise-sunset * {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
     }
     </style>
     """, unsafe_allow_html=True)
