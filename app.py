@@ -2155,10 +2155,21 @@ def render_audio_controls(current_scene):
                 this.volume = v / 100;
                 if (!this.ctx) this.init();
                 if (this.master) {{
-                    this.master.gain.setTargetAtTime(this.volume * 0.35, this.ctx.currentTime, 0.1);
+                    this.master.gain.setTargetAtTime(this.volume * 0.35, this.ctx.currentTime, 0.05);
                 }}
-                if (this.volume > 0 && this.ctx && this.ctx.state === 'suspended') {{
-                    this.ctx.resume();
+                if (this.volume > 0 && this.ctx) {{
+                    if (this.ctx.state === 'suspended') {{
+                        this.ctx.resume().then(() => {{
+                            if (this.scene && this.volume > 0) {{
+                                this.setScene(this.scene);
+                            }}
+                        }}).catch(e => console.log('Audio resume:', e));
+                    }} else if (!this.started) {{
+                        this.started = true;
+                        if (this.scene && this.volume > 0) {{
+                            this.setScene(this.scene);
+                        }}
+                    }}
                 }}
             }}
 
@@ -4668,11 +4679,12 @@ def main():
         .chat-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #60a5fa; animation: chat-typing 1.4s ease-in-out infinite; }
         .chat-dot:nth-child(2) { animation-delay: 0.2s; }
         .chat-dot:nth-child(3) { animation-delay: 0.4s; }
+        .chat-desc { color: #e2e8f0 !important; font-weight: 500; }
         </style>
         <div style="text-align: center; padding: 10px 0;">
             <span class="chat-train-icon">🚂</span>
-            <div style="font-size: 1.5rem; font-weight: 700; margin-top: 8px;" class="dash-gradient-text">TSKEQ Bot</div>
-            <div style="color: #94a3b8; font-size: 0.9rem;">Ask about EQ data, trains, quota, PNR or anything</div>
+            <div style="font-size: 1.5rem; font-weight: 700; margin-top: 8px; color: #e0e7ff;" class="dash-gradient-text">TSKEQ Bot</div>
+            <div style="color: #e2e8f0; font-size: 0.95rem; font-weight: 500;" class="chat-desc">Ask about EQ data, trains, quota, PNR or anything</div>
         </div>
         """, unsafe_allow_html=True)
         st.subheader("💬 Chat with TSKEQ Bot")
@@ -4685,7 +4697,6 @@ def main():
                     response = chat_with_gemini(prompt, st.session_state.messages)
                     st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
-            st.rerun()
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"]): st.markdown(msg["content"])
         st.markdown("**Quick Questions**")
@@ -4697,10 +4708,8 @@ def main():
                     with st.spinner("Thinking..."):
                         response = chat_with_gemini(suggestion, st.session_state.messages)
                         st.session_state.messages.append({"role": "assistant", "content": response})
-                    st.rerun()
         if st.button("🗑️ Clear Chat", use_container_width=True, key="clear_chat_btn"):
             st.session_state.messages = []
-            st.rerun()
 
     # =====================================================================
     # VIEW: 🚂 RAILWAY
@@ -5038,6 +5047,8 @@ def main():
             .weather-temp-big {{ font-size: 4.5rem; font-weight: 800; line-height: 1; text-shadow: 0 4px 20px rgba(0,0,0,0.3); }}
             .weather-city {{ font-size: 1.8rem; font-weight: 700; margin-bottom: 4px; }}
             .weather-desc {{ font-size: 1.3rem; opacity: 0.95; }}
+            @keyframes sun-pulse-top {{ 0%,100%{{transform:scale(1);opacity:0.8;}} 50%{{transform:scale(1.15);opacity:1;}} }}
+            .weather-sun-top {{ font-size: 3rem; animation: sun-pulse-top 3s ease-in-out infinite; text-align: center; margin-bottom: 10px; }}
             .weather-detail-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 20px; }}
             .weather-detail-item {{
                 background: {"rgba(255,255,255,0.08)" if weather_mode == "night" else "rgba(255,255,255,0.4)"}; 
@@ -5060,6 +5071,7 @@ def main():
             .sun-label {{ font-size: 0.85rem; opacity: 0.8; }}
             </style>
             <div class="weather-main-card">
+                {"<div class='weather-sun-top'>☀️</div>" if weather_mode == "day" else ""}
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; position: relative; z-index: 1;">
                     <div>
                         <div class="weather-city">{data['city']}{', ' + data.get('state', '') if data.get('state') else ''}, {data['country']}</div>
@@ -5261,28 +5273,35 @@ def main():
                             date_obj = datetime.strptime(day['date'], '%Y-%m-%d')
                             day_name = date_obj.strftime('%a, %d %b')
                             icon_url = f"https://openweathermap.org/img/wn/{day['icon']}@2x.png" if day.get('icon') else ""
+                            
+                            # Determine night/day for forecast cards
+                            _fc_is_night = weather_mode == "night"
+                            _fc_text_color = "#ffffff" if _fc_is_night else "#000000"
+                            _fc_text_shadow = "0 1px 3px rgba(0,0,0,0.6)" if _fc_is_night else "0 1px 3px rgba(255,255,255,0.7)"
+                            _fc_bg = "rgba(255,255,255,0.08)" if _fc_is_night else "rgba(255,255,255,0.4)"
+                            _fc_border = "rgba(255,255,255,0.15)" if _fc_is_night else "rgba(0,0,0,0.08)"
 
                             st.markdown(f"""
                             <style>
                             .forecast-card-{idx} {{
-                                background: var(--forecast-bg, rgba(255,255,255,0.08)); 
-                                border: 1px solid var(--forecast-border, rgba(255,255,255,0.15));
+                                background: {_fc_bg};
+                                border: 1px solid {_fc_border};
                                 border-radius: 20px; padding: 18px; text-align: center; 
-                                color: var(--weather-input-color, #000000); 
-                                text-shadow: 0 1px 3px var(--weather-text-shadow, rgba(255,255,255,0.6));
+                                color: {_fc_text_color};
+                                text-shadow: {_fc_text_shadow};
                                 box-shadow: 0 6px 20px rgba(0,0,0,0.2);
                                 backdrop-filter: blur(10px);
                             }}
                             </style>
                             <div class="forecast-card-{idx}">
-                                <div style="font-size: 0.9rem; font-weight: 600; margin-bottom: 8px;">{day_name}</div>
+                                <div style="font-size: 0.9rem; font-weight: 600; margin-bottom: 8px; color: {_fc_text_color};">{day_name}</div>
                                 <img src="{icon_url}" style="width: 60px; height: 60px; margin: 5px 0;">
-                                <div style="font-size: 1.8rem; font-weight: 700;">{day['temp']}°C</div>
-                                <div style="font-size: 0.75rem; margin: 4px 0;">{day['description']}</div>
-                                <div style="font-size: 0.8rem; margin-top: 8px; opacity: 0.9;">
+                                <div style="font-size: 1.8rem; font-weight: 700; color: {_fc_text_color};">{day['temp']}°C</div>
+                                <div style="font-size: 0.75rem; margin: 4px 0; color: {_fc_text_color};">{day['description']}</div>
+                                <div style="font-size: 0.8rem; margin-top: 8px; opacity: 0.9; color: {_fc_text_color};">
                                     🔺 {day['max_temp']}° / 🔻 {day['min_temp']}°
                                 </div>
-                                <div style="font-size: 0.75rem; margin-top: 6px; opacity: 0.85;">
+                                <div style="font-size: 0.75rem; margin-top: 6px; opacity: 0.85; color: {_fc_text_color};">
                                     💧 {day['humidity']}% | 🌬️ {day['wind']} m/s
                                 </div>
                             </div>
