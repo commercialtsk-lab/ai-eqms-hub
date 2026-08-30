@@ -1472,22 +1472,40 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         ::-webkit-scrollbar-thumb:hover {{ background: {accent}; }}
 
         [data-testid="stSidebar"] > div:first-child {{ padding-top: 0 !important; }}
+        /* === SIDEBAR: FORCE ALL TEXT WHITE WITH HIGH CONTRAST === */
         [data-testid="stSidebar"] {{ background-color: rgba(15, 23, 42, 0.95) !important; border-right: 1px solid rgba(148, 163, 184, 0.3) !important; }}
+        [data-testid="stSidebar"] * {{
+            color: #f1f5f9 !important;
+            -webkit-text-fill-color: #f1f5f9 !important;
+        }}
         [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown div,
         [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
         [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] .stDateInput label,
         [data-testid="stSidebar"] .stNumberInput label, [data-testid="stSidebar"] .stTextArea label,
-        [data-testid="stSidebar"] .stRadio label, [data-testid="stSidebar"] .stCheckbox label {{
+        [data-testid="stSidebar"] .stRadio label, [data-testid="stSidebar"] .stCheckbox label,
+        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] span,
+        [data-testid="stSidebar"] .stCaption, [data-testid="stSidebar"] .stCaption p,
+        [data-testid="stSidebar"] .stMarkdown h1, [data-testid="stSidebar"] .stMarkdown h2,
+        [data-testid="stSidebar"] .stMarkdown h3, [data-testid="stSidebar"] .stMarkdown h4,
+        [data-testid="stSidebar"] .streamlit-expanderHeader p,
+        [data-testid="stSidebar"] .streamlit-expanderHeader span {{
             color: #f1f5f9 !important;
+            -webkit-text-fill-color: #f1f5f9 !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
         }}
         [data-testid="stSidebar"] .stTextInput input, [data-testid="stSidebar"] .stNumberInput input,
         [data-testid="stSidebar"] .stDateInput input, [data-testid="stSidebar"] .stTextArea textarea,
         [data-testid="stSidebar"] .stSelectbox > div > div > div {{
-            background-color: #1e293b !important; color: #f1f5f9 !important;
+            background-color: #1e293b !important; 
+            color: #f1f5f9 !important;
+            -webkit-text-fill-color: #f1f5f9 !important;
             border: 1px solid #475569 !important; border-radius: 8px !important;
         }}
         [data-testid="stSidebar"] .stButton > button {{
-            background-color: #334155 !important; color: #f1f5f9 !important;
+            background-color: #334155 !important; 
+            color: #f1f5f9 !important;
+            -webkit-text-fill-color: #f1f5f9 !important;
             border: 1px solid #475569 !important; border-radius: 8px !important;
         }}
         [data-testid="stSidebar"] .stButton > button:hover {{
@@ -1504,33 +1522,38 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
         [data-testid="stSidebar"] .stCaption {{
             color: #94a3b8 !important;
-        }}
-        [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown div,
-        [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
-        [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] .stDateInput label,
-        [data-testid="stSidebar"] .stNumberInput label, [data-testid="stSidebar"] .stTextArea label,
-        [data-testid="stSidebar"] .stRadio label, [data-testid="stSidebar"] .stCheckbox label {{
-            color: {text_color} !important;
-        }}
-        header[data-testid="stHeader"] {{ background-color: {card_bg} !important; border-bottom: 1px solid {border} !important; }}
+            -webkit-text-fill-color: #94a3b8 !important;
+        }}header[data-testid="stHeader"] {{ background-color: {card_bg} !important; border-bottom: 1px solid {border} !important; }}
         h1, h2, h3, h4, h5, h6, .stMarkdown p, .stMarkdown div, .stMarkdown span,
         .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"], .stCaption {{
             color: {text_color} !important;
         }}
-        /* === HEADINGS & MAIN TEXT (white) === */
+        /* === HEADINGS & MAIN TEXT (white with glow) === */
         [data-testid="stMain"] h1, [data-testid="stMain"] h2,
         [data-testid="stMain"] h3, [data-testid="stMain"] h4,
         [data-testid="stMain"] h5, [data-testid="stMain"] h6 {{
-            color: #f1f5f9 !important;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 20px rgba(0,0,0,0.5) !important;
         }}
-        /* Main markdown paragraphs - white */
+        /* Main markdown paragraphs - white with strong shadow */
         [data-testid="stMain"] .stMarkdown p {{
-            color: #f1f5f9 !important;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.9), 0 0 15px rgba(0,0,0,0.6) !important;
         }}
-        /* === FORM LABELS - ALWAYS BLACK === */
+        /* ALL text in main area defaults to white with shadow for readability over backgrounds */
+        [data-testid="stMain"] .stMarkdown div,
+        [data-testid="stMain"] .stMarkdown span,
+        [data-testid="stMain"] .stMarkdown li,
+        [data-testid="stMain"] .stMarkdown strong,
+        [data-testid="stMain"] .stMarkdown em {{
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.8) !important;
+        }}
+        /* === FORM LABELS - WHITE WITH DARK SHADOW (readable on any bg) === */
         [data-testid="stMain"] .stTextInput label,
         [data-testid="stMain"] .stSelectbox label,
         [data-testid="stMain"] .stDateInput label,
@@ -1539,19 +1562,21 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stMain"] .stRadio label,
         [data-testid="stMain"] .stCheckbox label,
         [data-testid="stMain"] [data-testid="stWidgetLabel"] {{
-            color: #000000 !important;
-            text-shadow: none !important;
-            -webkit-text-fill-color: #000000 !important;
-            font-weight: 600 !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.7) !important;
+            font-weight: 700 !important;
         }}
-        /* === FORM INPUT VALUES - BLACK === */
+        /* === FORM INPUT VALUES - DARK ON LIGHT BG === */
         [data-testid="stMain"] .stTextInput input,
         [data-testid="stMain"] .stSelectbox > div > div > div,
         [data-testid="stMain"] .stDateInput input,
         [data-testid="stMain"] .stNumberInput input {{
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
+            color: #1a1a2e !important;
+            -webkit-text-fill-color: #1a1a2e !important;
             text-shadow: none !important;
+            background-color: rgba(255,255,255,0.92) !important;
+            font-weight: 600 !important;
         }}
         /* === WEATHER SECTION - ALL TEXT BLACK === */
         [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) label,
@@ -2564,148 +2589,241 @@ AQUARIUM_BG_HTML = """
 .aqua-scene {
     position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
     z-index: -1; pointer-events: none; overflow: hidden;
-    background: linear-gradient(180deg, #001a33 0%, #003d66 25%, #004d7a 50%, #00334d 75%, #00111a 100%);
+    background: linear-gradient(180deg, #00152e 0%, #002b55 15%, #003d6b 35%, #004a7a 55%, #003352 75%, #00111f 100%);
 }
+/* Realistic water surface caustics */
 .aqua-surface {
-    position: absolute; top: 0; left: 0; width: 100%; height: 60px;
-    background: linear-gradient(180deg, rgba(0,200,255,0.15) 0%, transparent 100%);
-    animation: aqua-surface-shimmer 4s ease-in-out infinite;
+    position: absolute; top: 0; left: 0; width: 100%; height: 80px;
+    background: linear-gradient(180deg, rgba(0,180,220,0.25) 0%, rgba(0,150,200,0.1) 50%, transparent 100%);
+    animation: aqua-surface-shimmer 3s ease-in-out infinite;
 }
 @keyframes aqua-surface-shimmer {
-    0%,100% { opacity: 0.4; }
-    50% { opacity: 0.8; }
+    0%,100% { opacity: 0.3; }
+    50% { opacity: 0.7; }
 }
+/* Light rays penetrating water */
 .aqua-rays {
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background: linear-gradient(180deg, rgba(0,200,255,0.08) 0%, transparent 40%),
-                linear-gradient(90deg, transparent 30%, rgba(0,200,255,0.03) 50%, transparent 70%);
-    animation: aqua-rays-move 8s ease-in-out infinite;
+    background: 
+        linear-gradient(90deg, transparent 20%, rgba(0,200,255,0.04) 25%, transparent 30%),
+        linear-gradient(90deg, transparent 60%, rgba(0,200,255,0.05) 65%, transparent 70%),
+        linear-gradient(90deg, transparent 40%, rgba(0,200,255,0.03) 45%, transparent 55%);
+    animation: aqua-rays-move 10s ease-in-out infinite;
 }
 @keyframes aqua-rays-move {
-    0%,100% { transform: translateX(-20px); }
-    50% { transform: translateX(20px); }
+    0%,100% { transform: translateX(-30px); opacity: 0.6; }
+    50% { transform: translateX(30px); opacity: 1; }
 }
+/* Realistic bubbles with depth */
 .aqua-bubble {
     position: absolute; border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.4), rgba(255,255,255,0.1));
+    background: radial-gradient(circle at 35% 35%, rgba(255,255,255,0.7), rgba(255,255,255,0.2) 40%, rgba(255,255,255,0.05) 70%);
+    box-shadow: inset -2px -2px 4px rgba(0,100,150,0.2), 0 0 6px rgba(255,255,255,0.15);
     animation: aqua-bubble-rise linear infinite;
 }
 @keyframes aqua-bubble-rise {
     0% { transform: translateY(100vh) scale(1); opacity: 0; }
-    10% { opacity: 0.6; }
-    90% { opacity: 0.6; }
-    100% { transform: translateY(-50px) scale(0.5); opacity: 0; }
+    8% { opacity: 0.7; }
+    92% { opacity: 0.7; }
+    100% { transform: translateY(-60px) scale(0.6); opacity: 0; }
 }
-.aqua-fish {
-    position: absolute; font-size: 24px;
+/* Realistic fish shapes using CSS (not emojis) */
+.aqua-fish-body {
+    position: absolute;
+    width: 40px; height: 18px;
+    background: linear-gradient(90deg, #ff7e5f, #feb47b);
+    border-radius: 50% 20% 20% 50%;
     animation: aqua-fish-swim linear infinite;
-    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
+.aqua-fish-body::before {
+    content: ''; position: absolute; right: -8px; top: 50%; transform: translateY(-50%);
+    width: 0; height: 0; border-left: 12px solid #ff7e5f; border-top: 8px solid transparent; border-bottom: 8px solid transparent;
+}
+.aqua-fish-body::after {
+    content: ''; position: absolute; left: 8px; top: 4px;
+    width: 4px; height: 4px; background: #000; border-radius: 50%; box-shadow: 1px 0 0 #fff;
+}
+.aqua-fish-blue {
+    background: linear-gradient(90deg, #4facfe, #00f2fe);
+}
+.aqua-fish-blue::before { border-left-color: #4facfe; }
+.aqua-fish-gold {
+    background: linear-gradient(90deg, #f9d423, #ff4e50);
+    width: 35px; height: 16px;
+}
+.aqua-fish-gold::before { border-left-color: #f9d423; border-top-width: 7px; border-bottom-width: 7px; border-left-width: 10px; right: -6px; }
+.aqua-fish-gold::after { left: 6px; top: 3px; }
+.aqua-fish-purple {
+    background: linear-gradient(90deg, #a18cd1, #fbc2eb);
+    width: 30px; height: 14px;
+}
+.aqua-fish-purple::before { border-left-color: #a18cd1; border-top-width: 6px; border-bottom-width: 6px; border-left-width: 9px; right: -5px; }
+.aqua-fish-purple::after { left: 5px; top: 3px; width: 3px; height: 3px; }
 @keyframes aqua-fish-swim {
-    0% { transform: translateX(-60px) scaleX(1); }
-    49% { transform: translateX(calc(100vw + 60px)) scaleX(1); }
-    50% { transform: translateX(calc(100vw + 60px)) scaleX(-1); }
-    99% { transform: translateX(-60px) scaleX(-1); }
-    100% { transform: translateX(-60px) scaleX(1); }
+    0% { transform: translateX(-80px); }
+    100% { transform: translateX(calc(100vw + 80px)); }
 }
 .aqua-fish-reverse {
     animation: aqua-fish-swim-reverse linear infinite;
+    transform: scaleX(-1);
 }
+.aqua-fish-reverse::before {
+    right: auto; left: -8px;
+    border-left: none; border-right: 12px solid #ff7e5f;
+}
+.aqua-fish-reverse.aqua-fish-blue::before { border-right-color: #4facfe; }
+.aqua-fish-reverse.aqua-fish-gold::before { border-right-color: #f9d423; right: auto; left: -6px; }
+.aqua-fish-reverse.aqua-fish-purple::before { border-right-color: #a18cd1; right: auto; left: -5px; }
 @keyframes aqua-fish-swim-reverse {
-    0% { transform: translateX(calc(100vw + 60px)) scaleX(-1); }
-    49% { transform: translateX(-60px) scaleX(-1); }
-    50% { transform: translateX(-60px) scaleX(1); }
-    99% { transform: translateX(calc(100vw + 60px)) scaleX(1); }
-    100% { transform: translateX(calc(100vw + 60px)) scaleX(-1); }
+    0% { transform: translateX(calc(100vw + 80px)) scaleX(-1); }
+    100% { transform: translateX(-80px) scaleX(-1); }
 }
+/* Realistic seaweed using CSS shapes */
 .aqua-seaweed {
-    position: absolute; bottom: 0; font-size: 40px;
-    animation: aqua-seaweed-sway 3s ease-in-out infinite;
+    position: absolute; bottom: 0;
+    width: 8px;
+    background: linear-gradient(180deg, #2d8a4e 0%, #1a5c32 60%, #0d3d1f 100%);
+    border-radius: 4px 4px 0 0;
     transform-origin: bottom center;
-    filter: drop-shadow(0 0 8px rgba(0,255,128,0.3));
+    animation: aqua-seaweed-sway 4s ease-in-out infinite;
+    box-shadow: 0 0 10px rgba(0,200,100,0.2);
+}
+.aqua-seaweed::before {
+    content: ''; position: absolute; left: -6px; top: 20%;
+    width: 6px; height: 60%;
+    background: linear-gradient(180deg, #3a9e5c, #1e6b38);
+    border-radius: 3px;
+    transform-origin: bottom center;
+    animation: aqua-seaweed-sway 5s ease-in-out infinite reverse;
+}
+.aqua-seaweed::after {
+    content: ''; position: absolute; right: -5px; top: 30%;
+    width: 5px; height: 50%;
+    background: linear-gradient(180deg, #34a85c, #1a5c32);
+    border-radius: 3px;
+    transform-origin: bottom center;
+    animation: aqua-seaweed-sway 3.5s ease-in-out infinite;
 }
 @keyframes aqua-seaweed-sway {
-    0%,100% { transform: rotate(-8deg); }
-    50% { transform: rotate(8deg); }
+    0%,100% { transform: rotate(-6deg); }
+    50% { transform: rotate(6deg); }
 }
+/* Realistic jellyfish using CSS */
 .aqua-jelly {
-    position: absolute; font-size: 28px;
-    animation: aqua-jelly-float 6s ease-in-out infinite;
-    filter: drop-shadow(0 0 10px rgba(200,100,255,0.4));
+    position: absolute;
+    width: 30px; height: 22px;
+    background: radial-gradient(ellipse at 50% 30%, rgba(255,150,200,0.6), rgba(200,100,180,0.3) 60%, transparent 70%);
+    border-radius: 50% 50% 40% 40%;
+    animation: aqua-jelly-float 7s ease-in-out infinite;
+    box-shadow: 0 0 15px rgba(255,150,200,0.3);
+}
+.aqua-jelly::before {
+    content: ''; position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+    width: 2px; height: 16px;
+    background: linear-gradient(180deg, rgba(255,150,200,0.5), transparent);
+    border-radius: 1px;
+    box-shadow: 
+        -6px 0 0 rgba(255,150,200,0.4),
+        6px 0 0 rgba(255,150,200,0.4),
+        -3px -2px 0 rgba(255,150,200,0.3),
+        3px -2px 0 rgba(255,150,200,0.3);
 }
 @keyframes aqua-jelly-float {
     0%,100% { transform: translateY(0) translateX(0); }
-    25% { transform: translateY(-30px) translateX(15px); }
-    50% { transform: translateY(-10px) translateX(-10px); }
-    75% { transform: translateY(-40px) translateX(5px); }
+    25% { transform: translateY(-35px) translateX(12px); }
+    50% { transform: translateY(-15px) translateX(-8px); }
+    75% { transform: translateY(-45px) translateX(6px); }
 }
-.aqua-star {
-    position: absolute; width: 3px; height: 3px; background: rgba(255,255,200,0.3);
-    border-radius: 50%; animation: aqua-star-twinkle 2s ease-in-out infinite;
-}
-@keyframes aqua-star-twinkle {
-    0%,100% { opacity: 0.2; }
-    50% { opacity: 0.8; }
-}
+/* Realistic sand bottom */
 .aqua-sand {
-    position: absolute; bottom: 0; left: 0; width: 100%; height: 40px;
-    background: linear-gradient(180deg, rgba(194,178,128,0.3) 0%, rgba(160,140,90,0.5) 100%);
-    border-radius: 50% 50% 0 0 / 20px 20px 0 0;
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 50px;
+    background: linear-gradient(180deg, rgba(180,160,120,0.4) 0%, rgba(140,120,80,0.6) 50%, rgba(100,85,55,0.7) 100%);
+    border-radius: 50% 50% 0 0 / 25px 25px 0 0;
 }
-.aqua-coral {
-    position: absolute; bottom: 20px; font-size: 32px;
-    animation: aqua-coral-glow 4s ease-in-out infinite;
+.aqua-sand::before {
+    content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 8px;
+    background: linear-gradient(90deg, transparent, rgba(200,180,140,0.3), transparent);
 }
-@keyframes aqua-coral-glow {
-    0%,100% { filter: drop-shadow(0 0 5px rgba(255,100,100,0.3)); }
-    50% { filter: drop-shadow(0 0 15px rgba(255,100,100,0.6)); }
+/* Realistic coral/rocks using CSS shapes */
+.aqua-rock {
+    position: absolute; bottom: 15px;
+    background: linear-gradient(135deg, #8b4513, #654321, #4a3728);
+    border-radius: 40% 60% 30% 70%;
+    box-shadow: inset -3px -3px 8px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.3);
+}
+.aqua-rock::before {
+    content: ''; position: absolute; top: -10px; left: 30%;
+    width: 60%; height: 20px;
+    background: linear-gradient(135deg, #a0522d, #8b4513);
+    border-radius: 50% 50% 40% 60%;
+}
+/* Tiny particles in water */
+.aqua-particle {
+    position: absolute; width: 2px; height: 2px;
+    background: rgba(200,230,255,0.4);
+    border-radius: 50%;
+    animation: aqua-particle-drift 12s linear infinite;
+}
+@keyframes aqua-particle-drift {
+    0% { transform: translateY(0) translateX(0); opacity: 0; }
+    10% { opacity: 0.6; }
+    90% { opacity: 0.6; }
+    100% { transform: translateY(-30px) translateX(20px); opacity: 0; }
 }
 </style>
 <div class="aqua-scene">
     <div class="aqua-surface"></div>
     <div class="aqua-rays"></div>
-    <div class="aqua-bubble" style="left:5%;width:8px;height:8px;animation-duration:7s;animation-delay:0s;"></div>
-    <div class="aqua-bubble" style="left:12%;width:5px;height:5px;animation-duration:5s;animation-delay:1s;"></div>
-    <div class="aqua-bubble" style="left:20%;width:10px;height:10px;animation-duration:9s;animation-delay:2s;"></div>
-    <div class="aqua-bubble" style="left:28%;width:6px;height:6px;animation-duration:6s;animation-delay:0.5s;"></div>
-    <div class="aqua-bubble" style="left:35%;width:4px;height:4px;animation-duration:8s;animation-delay:3s;"></div>
-    <div class="aqua-bubble" style="left:42%;width:9px;height:9px;animation-duration:7s;animation-delay:1.5s;"></div>
-    <div class="aqua-bubble" style="left:50%;width:5px;height:5px;animation-duration:5s;animation-delay:2.5s;"></div>
-    <div class="aqua-bubble" style="left:58%;width:7px;height:7px;animation-duration:8s;animation-delay:0.8s;"></div>
-    <div class="aqua-bubble" style="left:65%;width:4px;height:4px;animation-duration:6s;animation-delay:3.5s;"></div>
-    <div class="aqua-bubble" style="left:72%;width:11px;height:11px;animation-duration:10s;animation-delay:1.2s;"></div>
-    <div class="aqua-bubble" style="left:80%;width:6px;height:6px;animation-duration:7s;animation-delay:4s;"></div>
-    <div class="aqua-bubble" style="left:88%;width:8px;height:8px;animation-duration:9s;animation-delay:2.2s;"></div>
-    <div class="aqua-bubble" style="left:95%;width:5px;height:5px;animation-duration:6s;animation-delay:0.3s;"></div>
-    <div class="aqua-fish" style="top:20%;animation-duration:18s;animation-delay:0s;">🐠</div>
-    <div class="aqua-fish aqua-fish-reverse" style="top:35%;animation-duration:22s;animation-delay:3s;">🐟</div>
-    <div class="aqua-fish" style="top:50%;animation-duration:20s;animation-delay:6s;">🐡</div>
-    <div class="aqua-fish aqua-fish-reverse" style="top:65%;animation-duration:25s;animation-delay:1s;">🦈</div>
-    <div class="aqua-fish" style="top:30%;animation-duration:15s;animation-delay:8s;font-size:18px;">🐠</div>
-    <div class="aqua-fish aqua-fish-reverse" style="top:55%;animation-duration:19s;animation-delay:4s;font-size:20px;">🐟</div>
-    <div class="aqua-jelly" style="left:15%;top:15%;animation-delay:0s;">🪼</div>
-    <div class="aqua-jelly" style="left:70%;top:40%;animation-delay:3s;">🪼</div>
-    <div class="aqua-jelly" style="left:40%;top:60%;animation-delay:1.5s;font-size:22px;">🪼</div>
-    <div class="aqua-seaweed" style="left:8%;animation-delay:0s;">🌿</div>
-    <div class="aqua-seaweed" style="left:18%;font-size:35px;animation-delay:0.5s;">🌱</div>
-    <div class="aqua-seaweed" style="left:30%;animation-delay:1s;">🌿</div>
-    <div class="aqua-seaweed" style="left:45%;font-size:45px;animation-delay:1.5s;">🌱</div>
-    <div class="aqua-seaweed" style="left:60%;animation-delay:0.8s;">🌿</div>
-    <div class="aqua-seaweed" style="left:75%;font-size:38px;animation-delay:1.2s;">🌱</div>
-    <div class="aqua-seaweed" style="left:88%;animation-delay:0.3s;">🌿</div>
-    <div class="aqua-coral" style="left:5%;">🪸</div>
-    <div class="aqua-coral" style="left:25%;animation-delay:1s;">🐚</div>
-    <div class="aqua-coral" style="left:50%;animation-delay:2s;">🪸</div>
-    <div class="aqua-coral" style="left:78%;animation-delay:0.5s;">🐚</div>
-    <div class="aqua-coral" style="left:92%;animation-delay:1.5s;">🪸</div>
-    <div class="aqua-star" style="left:10%;top:10%;animation-delay:0s;"></div>
-    <div class="aqua-star" style="left:25%;top:25%;animation-delay:0.5s;"></div>
-    <div class="aqua-star" style="left:40%;top:15%;animation-delay:1s;"></div>
-    <div class="aqua-star" style="left:55%;top:30%;animation-delay:1.5s;"></div>
-    <div class="aqua-star" style="left:70%;top:20%;animation-delay:0.3s;"></div>
-    <div class="aqua-star" style="left:85%;top:35%;animation-delay:0.8s;"></div>
-    <div class="aqua-star" style="left:15%;top:45%;animation-delay:1.2s;"></div>
-    <div class="aqua-star" style="left:90%;top:50%;animation-delay:0.6s;"></div>
+    <!-- Bubbles -->
+    <div class="aqua-bubble" style="left:5%;width:6px;height:6px;animation-duration:8s;animation-delay:0s;"></div>
+    <div class="aqua-bubble" style="left:12%;width:4px;height:4px;animation-duration:6s;animation-delay:1.5s;"></div>
+    <div class="aqua-bubble" style="left:20%;width:8px;height:8px;animation-duration:10s;animation-delay:3s;"></div>
+    <div class="aqua-bubble" style="left:28%;width:5px;height:5px;animation-duration:7s;animation-delay:0.8s;"></div>
+    <div class="aqua-bubble" style="left:35%;width:3px;height:3px;animation-duration:9s;animation-delay:4s;"></div>
+    <div class="aqua-bubble" style="left:42%;width:7px;height:7px;animation-duration:8s;animation-delay:2s;"></div>
+    <div class="aqua-bubble" style="left:50%;width:4px;height:4px;animation-duration:6s;animation-delay:3.5s;"></div>
+    <div class="aqua-bubble" style="left:58%;width:6px;height:6px;animation-duration:9s;animation-delay:1.2s;"></div>
+    <div class="aqua-bubble" style="left:65%;width:3px;height:3px;animation-duration:7s;animation-delay:5s;"></div>
+    <div class="aqua-bubble" style="left:72%;width:9px;height:9px;animation-duration:11s;animation-delay:2.5s;"></div>
+    <div class="aqua-bubble" style="left:80%;width:5px;height:5px;animation-duration:8s;animation-delay:4.5s;"></div>
+    <div class="aqua-bubble" style="left:88%;width:7px;height:7px;animation-duration:10s;animation-delay:1.8s;"></div>
+    <div class="aqua-bubble" style="left:95%;width:4px;height:4px;animation-duration:7s;animation-delay:0.5s;"></div>
+    <!-- Realistic fish -->
+    <div class="aqua-fish-body" style="top:18%;animation-duration:20s;animation-delay:0s;"></div>
+    <div class="aqua-fish-body aqua-fish-blue" style="top:32%;animation-duration:24s;animation-delay:4s;"></div>
+    <div class="aqua-fish-body aqua-fish-gold" style="top:48%;animation-duration:22s;animation-delay:8s;"></div>
+    <div class="aqua-fish-body aqua-fish-purple" style="top:62%;animation-duration:26s;animation-delay:2s;"></div>
+    <div class="aqua-fish-body aqua-fish-reverse aqua-fish-blue" style="top:25%;animation-duration:18s;animation-delay:6s;"></div>
+    <div class="aqua-fish-body aqua-fish-reverse aqua-fish-gold" style="top:55%;animation-duration:21s;animation-delay:10s;"></div>
+    <!-- Jellyfish -->
+    <div class="aqua-jelly" style="left:18%;top:12%;animation-delay:0s;"></div>
+    <div class="aqua-jelly" style="left:68%;top:38%;animation-delay:3s;transform:scale(0.8);"></div>
+    <div class="aqua-jelly" style="left:42%;top:58%;animation-delay:1.5s;transform:scale(1.1);"></div>
+    <!-- Seaweed -->
+    <div class="aqua-seaweed" style="left:6%;height:70px;animation-delay:0s;"></div>
+    <div class="aqua-seaweed" style="left:16%;height:55px;animation-delay:0.7s;"></div>
+    <div class="aqua-seaweed" style="left:28%;height:80px;animation-delay:1.2s;"></div>
+    <div class="aqua-seaweed" style="left:42%;height:60px;animation-delay:1.8s;"></div>
+    <div class="aqua-seaweed" style="left:58%;height:75px;animation-delay:0.5s;"></div>
+    <div class="aqua-seaweed" style="left:72%;height:50px;animation-delay:1.5s;"></div>
+    <div class="aqua-seaweed" style="left:86%;height:65px;animation-delay:0.3s;"></div>
+    <!-- Rocks/Coral -->
+    <div class="aqua-rock" style="left:4%;width:35px;height:25px;"></div>
+    <div class="aqua-rock" style="left:22%;width:28px;height:20px;border-radius:60% 40% 50% 50%;"></div>
+    <div class="aqua-rock" style="left:48%;width:40px;height:30px;border-radius:45% 55% 35% 65%;"></div>
+    <div class="aqua-rock" style="left:76%;width:32px;height:22px;border-radius:55% 45% 60% 40%;"></div>
+    <div class="aqua-rock" style="left:90%;width:38px;height:28px;border-radius:50% 50% 45% 55%;"></div>
+    <!-- Particles -->
+    <div class="aqua-particle" style="left:10%;top:20%;animation-delay:0s;"></div>
+    <div class="aqua-particle" style="left:30%;top:40%;animation-delay:3s;"></div>
+    <div class="aqua-particle" style="left:50%;top:60%;animation-delay:6s;"></div>
+    <div class="aqua-particle" style="left:70%;top:30%;animation-delay:9s;"></div>
+    <div class="aqua-particle" style="left:85%;top:50%;animation-delay:2s;"></div>
+    <div class="aqua-particle" style="left:15%;top:70%;animation-delay:5s;"></div>
+    <div class="aqua-particle" style="left:60%;top:15%;animation-delay:8s;"></div>
+    <div class="aqua-particle" style="left:40%;top:80%;animation-delay:1s;"></div>
+    <!-- Sand -->
     <div class="aqua-sand"></div>
 </div>
 """
@@ -3388,115 +3506,110 @@ def main():
 
 
 
-    # =====================================================================
-    # SIDEBAR TOGGLE + BACK-TO-TOP (Parent-Window Persistent Injection)
-    # =====================================================================
-    # Streamlit components.html creates an iframe that gets destroyed on every
-    # rerun (e.g. clicking Chat tab). To survive reruns we inject a script
-    # DIRECTLY into the parent window's <head>. A sentinel ID prevents double
-    # injection, and setInterval inside the parent keeps recreating the buttons
-    # if they ever disappear.
-    # =====================================================================
+    # Sidebar Toggle + Back-to-Top Button
+    # BULLETPROOF: Inject script into parent window so it persists across reruns
     components.html("""
     <script>
     (function() {
         try {
             var P = window.parent;
             var doc = P.document;
-            if (!P || !doc || !doc.body) return;
 
-            // If our master script is already in parent's <head>, do NOTHING.
-            // The parent-side setInterval will keep buttons alive forever.
-            if (doc.getElementById('eqms-master-ui-script')) return;
+            // Inject persistent script into parent window
+            var scriptId = 'eqms-persistent-toggle-script';
+            var oldScript = doc.getElementById(scriptId);
+            if (oldScript) oldScript.remove();
 
             var s = doc.createElement('script');
-            s.id = 'eqms-master-ui-script';
+            s.id = scriptId;
             s.textContent = `
                 (function() {
-                    // Guard: init only once per real browser page load
-                    if (window.__EQMS_UI_INIT) return;
-                    window.__EQMS_UI_INIT = true;
+                    // Only initialize once per page lifecycle
+                    if (window.__eqmsToggleEngineActive) return;
+                    window.__eqmsToggleEngineActive = true;
 
-                    function ensureButtons() {
-                        var d = document;
-                        var body = d.body;
+                    function ensureToggleButton() {
+                        var doc = document;
+                        var body = doc.body;
                         if (!body) return;
 
-                        // --- 1. Sidebar Toggle Button ---
-                        var btn = d.getElementById('eqms-sidebar-toggle');
-                        var isCollapsed = body.classList.contains('sidebar-collapsed');
-
+                        var btn = doc.getElementById('eqms-sidebar-toggle');
                         if (!btn) {
-                            btn = d.createElement('button');
+                            btn = doc.createElement('button');
                             btn.id = 'eqms-sidebar-toggle';
                             btn.title = 'Toggle Sidebar';
-                            btn.innerHTML = isCollapsed ? '☰' : '✕';
-                            btn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(0,0,0,0.3);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;';
-                            btn.style.background = isCollapsed
-                                ? 'linear-gradient(135deg,#138808,#0d6e05)'
-                                : 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                            btn.innerHTML = '☰';
+                            btn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:9999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;';
 
-                            btn.onmouseenter = function(){
-                                btn.style.transform = 'scale(1.15) rotate(90deg)';
-                                btn.style.boxShadow = '0 6px 25px rgba(0,0,0,0.4)';
+                            btn.onmouseenter = function(){ 
+                                btn.style.transform = 'scale(1.15) rotate(90deg)'; 
+                                btn.style.boxShadow = '0 6px 25px rgba(255,107,53,0.7)'; 
                             };
-                            btn.onmouseleave = function(){
-                                btn.style.transform = 'scale(1) rotate(0deg)';
-                                btn.style.boxShadow = '0 4px 15px rgba(0,0,0,0.3)';
+                            btn.onmouseleave = function(){ 
+                                btn.style.transform = 'scale(1) rotate(0deg)'; 
+                                btn.style.boxShadow = '0 4px 15px rgba(255,107,53,0.5)'; 
                             };
 
-                            btn.onclick = function(){
-                                var collapsed = body.classList.toggle('sidebar-collapsed');
-                                btn.innerHTML = collapsed ? '☰' : '✕';
-                                btn.style.background = collapsed
-                                    ? 'linear-gradient(135deg,#138808,#0d6e05)'
-                                    : 'linear-gradient(135deg,#FF9933,#FF6B35)';
-                                try { localStorage.setItem('eqms_sidebar', collapsed ? 'closed' : 'open'); } catch(e){}
+                            btn.onclick = function() {
+                                var b = document.body;
+                                var isCollapsed = b.classList.contains('sidebar-collapsed');
+                                var sb = document.querySelector('[data-testid="stSidebar"]');
+                                if (isCollapsed) {
+                                    b.classList.remove('sidebar-collapsed');
+                                    btn.innerHTML = '✕';
+                                    btn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                                    if (sb) { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
+                                    try { localStorage.setItem('eqms_sidebar', 'open'); } catch(e) {}
+                                } else {
+                                    b.classList.add('sidebar-collapsed');
+                                    btn.innerHTML = '☰';
+                                    btn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                                    if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
+                                    try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
+                                }
                             };
-
                             body.appendChild(btn);
-                        } else {
-                            // Sync icon / colour if body class changed from elsewhere
-                            var currentCollapsed = body.classList.contains('sidebar-collapsed');
-                            var expectedIcon = currentCollapsed ? '☰' : '✕';
-                            var expectedBg = currentCollapsed
-                                ? 'linear-gradient(135deg,#138808,#0d6e05)'
-                                : 'linear-gradient(135deg,#FF9933,#FF6B35)';
-                            if (btn.innerHTML !== expectedIcon) btn.innerHTML = expectedIcon;
-                            if (btn.style.background !== expectedBg) btn.style.background = expectedBg;
                         }
 
-                        // --- 2. Back-to-Top Button ---
-                        var topBtn = d.getElementById('eqms-top-btn');
-                        if (!topBtn) {
-                            topBtn = d.createElement('button');
-                            topBtn.id = 'eqms-top-btn';
-                            topBtn.title = 'Back to top';
-                            topBtn.innerHTML = '⬆';
-                            topBtn.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:all 0.2s ease;';
-                            topBtn.onmouseenter = function(){
-                                topBtn.style.opacity = '1';
-                                topBtn.style.transform = 'scale(1.08)';
-                            };
-                            topBtn.onmouseleave = function(){
-                                topBtn.style.opacity = '0.85';
-                                topBtn.style.transform = 'scale(1)';
-                            };
-                            topBtn.onclick = function(){
-                                window.scrollTo({top:0, behavior:'smooth'});
-                            };
-                            body.appendChild(topBtn);
+                        // Always sync button appearance from localStorage
+                        try {
+                            var saved = localStorage.getItem('eqms_sidebar');
+                            if (saved === 'closed') {
+                                body.classList.add('sidebar-collapsed');
+                                btn.innerHTML = '☰';
+                                btn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                            } else {
+                                body.classList.remove('sidebar-collapsed');
+                                btn.innerHTML = '✕';
+                                btn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                            }
+                        } catch(e) {
+                            var isCollapsed = body.classList.contains('sidebar-collapsed');
+                            btn.innerHTML = isCollapsed ? '☰' : '✕';
+                            btn.style.background = isCollapsed ? 'linear-gradient(135deg,#138808,#0d6e05)' : 'linear-gradient(135deg,#FF9933,#FF6B35)';
                         }
                     }
 
-                    // Run immediately, then keep alive with setInterval
-                    ensureButtons();
-                    setInterval(ensureButtons, 600);
+                    function ensureTopButton() {
+                        var doc = document;
+                        var b = doc.getElementById('eqms-top-btn');
+                        if (!b) {
+                            b = doc.createElement('button');
+                            b.id = 'eqms-top-btn';
+                            b.title = 'Back to top';
+                            b.innerHTML = '⬆';
+                            b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
+                            b.onmouseenter = function(){ b.style.opacity = '1'; b.style.transform = 'scale(1.08)'; };
+                            b.onmouseleave = function(){ b.style.opacity = '0.85'; b.style.transform = 'scale(1)'; };
+                            b.onclick = function(){ window.scrollTo({top:0, behavior:'smooth'}); };
+                            doc.body.appendChild(b);
+                        }
+                    }
 
-                    // --- 3. Keyboard shortcut (D = toggle theme) ---
-                    if (!window.__EQMS_KEY_INIT) {
-                        window.__EQMS_KEY_INIT = true;
-                        document.addEventListener('keydown', function(e){
+                    // Keydown listener (only once)
+                    if (!window.__eqmsKeydownInit) {
+                        window.__eqmsKeydownInit = true;
+                        document.addEventListener('keydown', function(e) {
                             var t = (e.target.tagName || '').toLowerCase();
                             if (t === 'input' || t === 'textarea' || t === 'select' || e.target.isContentEditable) return;
                             if (e.key === 'd' || e.key === 'D') {
@@ -3508,17 +3621,20 @@ def main():
                         });
                     }
 
-                    // --- 4. Restore sidebar state from localStorage ---
-                    try {
-                        var saved = localStorage.getItem('eqms_sidebar');
-                        if (saved === 'closed' && !document.body.classList.contains('sidebar-collapsed')) {
-                            document.body.classList.add('sidebar-collapsed');
-                        }
-                    } catch(e) {}
+                    // Run immediately
+                    ensureToggleButton();
+                    ensureTopButton();
+
+                    // CRITICAL: Keep checking every 500ms to survive any DOM changes
+                    setInterval(function() {
+                        ensureToggleButton();
+                        ensureTopButton();
+                    }, 500);
                 })();
             `;
             doc.head.appendChild(s);
-        } catch(e) { console.error('EQMS UI Inject Error:', e); }
+
+        } catch(e) { console.error('EQMS Toggle Inject Error:', e); }
     })();
     </script>
     """, height=0)
@@ -4922,6 +5038,7 @@ def main():
         if st.button("🗑️ Clear Chat", use_container_width=True, key="clear_chat_btn"):
             st.session_state.messages = []
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # =====================================================================
     # VIEW: 🚂 RAILWAY
@@ -5169,7 +5286,7 @@ def main():
                 else:
                     st.error(data.get('error', 'Error fetching weather'))
 
-        st.markdown('<div class="weather-input-wrapper">', unsafe_allow_html=True)
+        st.markdown('<div class="weather-input-wrapper" style="background:linear-gradient(135deg,rgba(255,153,51,0.2),rgba(255,255,255,0.1),rgba(19,136,8,0.2)); border-radius:16px; padding:12px 16px; border:1px solid rgba(255,255,255,0.25); box-shadow:0 4px 15px rgba(0,0,0,0.3);">', unsafe_allow_html=True)
         col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("🌤️ Get Weather", key="weather_btn", use_container_width=True):
@@ -5539,148 +5656,86 @@ def main():
         else:
             st.info("Enter a city name and click 'Get Weather' to see detailed weather information.")
 
-    # === COMPREHENSIVE TEXT VISIBILITY FIX ===
-    # This CSS block is rendered LAST and overrides all previous styles
+    # === COMPREHENSIVE TEXT VISIBILITY FIX (RENDERED LAST = HIGHEST PRIORITY) ===
     st.markdown("""
     <style>
-    /* === FORCE ALL FORM LABELS BLACK === */
-    div[data-testid="stMain"] .stTextInput label p,
-    div[data-testid="stMain"] .stTextInput label span,
-    div[data-testid="stMain"] .stSelectbox label p,
-    div[data-testid="stMain"] .stSelectbox label span,
-    div[data-testid="stMain"] .stDateInput label p,
-    div[data-testid="stMain"] .stDateInput label span,
-    div[data-testid="stMain"] .stNumberInput label p,
-    div[data-testid="stMain"] .stNumberInput label span,
-    div[data-testid="stMain"] .stTextArea label p,
-    div[data-testid="stMain"] .stTextArea label span,
-    div[data-testid="stMain"] .stRadio label p,
-    div[data-testid="stMain"] .stRadio label span,
-    div[data-testid="stMain"] .stCheckbox label p,
-    div[data-testid="stMain"] .stCheckbox label span,
-    div[data-testid="stMain"] [data-testid="stWidgetLabel"] p,
-    div[data-testid="stMain"] [data-testid="stWidgetLabel"] span,
-    div[data-testid="stMain"] [data-testid="stWidgetLabel"] {
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
+    /* === UNIVERSAL: ALL MAIN AREA TEXT WHITE WITH STRONG SHADOW === */
+    [data-testid="stMain"] * {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 4px rgba(0,0,0,0.85) !important;
+    }
+    /* === EXCEPTION: Form inputs stay dark on light bg === */
+    [data-testid="stMain"] .stTextInput input,
+    [data-testid="stMain"] .stSelectbox div[data-baseweb="select"] div,
+    [data-testid="stMain"] .stDateInput input,
+    [data-testid="stMain"] .stNumberInput input,
+    [data-testid="stMain"] .stTextArea textarea {
+        color: #1a1a2e !important;
+        -webkit-text-fill-color: #1a1a2e !important;
         text-shadow: none !important;
+        background-color: rgba(255,255,255,0.95) !important;
         font-weight: 600 !important;
     }
-    /* === FORCE ALL FORM INPUT VALUES BLACK === */
-    div[data-testid="stMain"] .stTextInput input,
-    div[data-testid="stMain"] .stSelectbox div[data-baseweb="select"] div,
-    div[data-testid="stMain"] .stDateInput input,
-    div[data-testid="stMain"] .stNumberInput input {
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-        text-shadow: none !important;
-    }
-    /* === EXPANDER HEADERS BLACK === */
-    div[data-testid="stMain"] .streamlit-expanderHeader,
-    div[data-testid="stMain"] .streamlit-expanderHeader p,
-    div[data-testid="stMain"] .streamlit-expanderHeader span {
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-        text-shadow: none !important;
-        font-weight: 700 !important;
-    }
-    /* === CAPTIONS BLACK === */
-    div[data-testid="stMain"] .stCaption,
-    div[data-testid="stMain"] [data-testid="stCaption"] {
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-        text-shadow: none !important;
-    }
-    /* === SUBHEADERS & SMALL TEXT BLACK === */
-    div[data-testid="stMain"] .stMarkdown p[data-testid="stMarkdownContainer"] p,
-    div[data-testid="stMain"] .stMarkdown small,
-    div[data-testid="stMain"] .stMarkdown strong {
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-        text-shadow: none !important;
-    }
-    /* === WEATHER SECTION SPECIFIC === */
-    div[data-testid="stMain"] input[aria-label="🏙️ Enter City Name"] {
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-        text-shadow: none !important;
-    }
-    /* Weather labels - WHITE for dark bg */
-    div[data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) label p,
-    div[data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) label span {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
-        font-weight: 700 !important;
-    }
-    /* === DATA TABLE HEADERS === */
-    div[data-testid="stMain"] .stDataFrame th,
-    div[data-testid="stMain"] .stDataEditor th {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-        text-shadow: none !important;
-        font-weight: 700 !important;
-    }
-    /* === DATA TABLE CELLS === */
-    div[data-testid="stMain"] .stDataFrame td,
-    div[data-testid="stMain"] .stDataEditor td {
+    /* === EXCEPTION: Data table cells dark on light bg === */
+    [data-testid="stMain"] .stDataFrame td,
+    [data-testid="stMain"] .stDataEditor td {
         color: #1e293b !important;
         -webkit-text-fill-color: #1e293b !important;
         text-shadow: none !important;
     }
-    /* === WEATHER STAMP / INPUT / CARD - FORCE WHITE TEXT === */
-    div[data-testid="stMain"] .weather-input-wrapper,
-    div[data-testid="stMain"] .weather-input-wrapper * {
+    /* === EXCEPTION: Table headers stay white === */
+    [data-testid="stMain"] .stDataFrame th,
+    [data-testid="stMain"] .stDataEditor th {
         color: #ffffff !important;
         -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
-    }
-    div[data-testid="stMain"] .weather-main-card,
-    div[data-testid="stMain"] .weather-main-card * {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
-    }
-    div[data-testid="stMain"] .weather-detail-item,
-    div[data-testid="stMain"] .weather-detail-item * {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
-    }
-    div[data-testid="stMain"] .forecast-card-0,
-    div[data-testid="stMain"] .forecast-card-1,
-    div[data-testid="stMain"] .forecast-card-2,
-    div[data-testid="stMain"] .forecast-card-3,
-    div[data-testid="stMain"] .forecast-card-4,
-    div[data-testid="stMain"] [class*="forecast-card-"] {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
-    }
-    div[data-testid="stMain"] [class*="forecast-card-"] * {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
-    }
-    div[data-testid="stMain"] input[aria-label*="City"],
-    div[data-testid="stMain"] input[aria-label*="city"] {
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
-        background-color: rgba(255,255,255,0.95) !important;
-    }
-    div[data-testid="stMain"] .stTextInput:has(input[aria-label*="City"]) label p,
-    div[data-testid="stMain"] .stTextInput:has(input[aria-label*="city"]) label p {
-        color: #ffffff !important;
-        -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
         font-weight: 700 !important;
     }
-    div[data-testid="stMain"] .sunrise-sunset,
-    div[data-testid="stMain"] .sunrise-sunset * {
+    /* === HIGHLIGHT BOX for important text === */
+    .highlight-box {
+        background: linear-gradient(135deg, rgba(255,153,51,0.25), rgba(19,136,8,0.25)) !important;
+        border: 2px solid rgba(255,255,255,0.4) !important;
+        border-radius: 12px !important;
+        padding: 12px 16px !important;
         color: #ffffff !important;
         -webkit-text-fill-color: #ffffff !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        text-shadow: 0 2px 6px rgba(0,0,0,0.9) !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.4), inset 0 0 20px rgba(255,255,255,0.05) !important;
+        backdrop-filter: blur(8px) !important;
+    }
+    /* === WEATHER INPUT HIGHLIGHT === */
+    [data-testid="stMain"] .stTextInput:has(input[aria-label*="City"]) > div {
+        background: linear-gradient(135deg, rgba(255,153,51,0.2), rgba(255,255,255,0.1), rgba(19,136,8,0.2)) !important;
+        border-radius: 16px !important;
+        padding: 8px 12px !important;
+        border: 1px solid rgba(255,255,255,0.25) !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.3) !important;
+    }
+    [data-testid="stMain"] .stTextInput:has(input[aria-label*="City"]) label p {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 2px 6px rgba(0,0,0,0.9) !important;
+        font-weight: 800 !important;
+        font-size: 1.05rem !important;
+    }
+    /* === CHAT PANEL SOLID BACKGROUND === */
+    .chat-panel {
+        background: rgba(8, 16, 32, 0.95) !important;
+        border: 1px solid rgba(100, 180, 255, 0.3) !important;
+        border-radius: 20px !important;
+        padding: 24px !important;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.6) !important;
+    }
+    .chat-panel * {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 4px rgba(0,0,0,0.8) !important;
+    }
+    /* === WEATHER CARDS GLOW === */
+    .weather-main-card, .weather-detail-item, [class*="forecast-card-"] {
+        border: 1px solid rgba(255,255,255,0.2) !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.4), inset 0 0 30px rgba(255,255,255,0.03) !important;
     }
     </style>
     """, unsafe_allow_html=True)
