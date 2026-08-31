@@ -1,9 +1,8 @@
-
 # =====================================================================
 # AI EQMS Hub Pro - Complete Streamlit Application
 # =====================================================================
 # Created by: Sharique
-# Version: 3.0 (Full)
+# Version: 3.4 Fixed
 # Description: Emergency Quota Management System for Indian Railways
 # =====================================================================
 
@@ -3919,21 +3918,18 @@ def main():
             pnr_input = st.text_input("PNR (Partial)", value=st.session_state.pnr_val, key="pnr_filter_input")
             if pnr_input != st.session_state.pnr_val:
                 st.session_state.pnr_val = pnr_input
-                st.session_state.current_page = 1
-                st.rerun()
+                st.session_state.current_page = 1; st.rerun()
 
             train_input = st.text_input("Train (Partial)", value=st.session_state.train_val, key="train_filter_input")
             if train_input != st.session_state.train_val:
                 st.session_state.train_val = train_input
-                st.session_state.current_page = 1
-                st.rerun()
+                st.session_state.current_page = 1; st.rerun()
 
             if class_col_idx is not None:
                 class_input = st.text_input("Class (Partial)", value=st.session_state.get('class_val', ''), key="class_filter_input")
                 if class_input != st.session_state.get('class_val', ''):
                     st.session_state.class_val = class_input
-                    st.session_state.current_page = 1
-                    st.rerun()
+                    st.session_state.current_page = 1; st.rerun()
 
             c1, c2 = st.columns(2)
             with c1:
@@ -3944,12 +3940,10 @@ def main():
                     key="to_date_input", format="DD-MM-YYYY")
             if from_input != st.session_state.from_val:
                 st.session_state.from_val = from_input
-                st.session_state.current_page = 1
-                st.rerun()
+                st.session_state.current_page = 1; st.rerun()
             if to_input != st.session_state.to_val:
                 st.session_state.to_val = to_input
-                st.session_state.current_page = 1
-                st.rerun()
+                st.session_state.current_page = 1; st.rerun()
 
             if st.button("🧹 Clear All Filters", use_container_width=True, key="clear_filters_btn"):
                 st.session_state.pnr_val = ''
@@ -3957,8 +3951,7 @@ def main():
                 st.session_state.class_val = ''
                 st.session_state.from_val = None
                 st.session_state.to_val = None
-                st.session_state.current_page = 1
-                st.rerun()
+                st.session_state.current_page = 1; st.rerun()
 
     # Load data for selected sheet
     df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
@@ -4075,12 +4068,11 @@ def main():
                     key="global_search_input")
                 if global_search != st.session_state.global_search:
                     st.session_state.global_search = global_search
-                    st.session_state.current_page = 1                    st.rerun()
+                    st.session_state.current_page = 1; st.rerun()
             with search_col2:
                 if st.button("🧹 Clear Search", use_container_width=True, key="clear_global_search"):
                     st.session_state.global_search = ''
-                    st.session_state.current_page = 1
-                    st.rerun()
+                    st.session_state.current_page = 1; st.rerun()
 
             if st.session_state.global_search:
                 search_term = st.session_state.global_search.lower()
@@ -4227,8 +4219,7 @@ def main():
                 selected_page_size = 25
             if selected_page_size != page_size:
                 st.session_state.rows_per_page = selected_page_size
-                st.session_state.current_page = 1
-                st.rerun()
+                st.session_state.current_page = 1; st.rerun()
             page_size = selected_page_size
 
             # Safe pagination calc without math.ceil
