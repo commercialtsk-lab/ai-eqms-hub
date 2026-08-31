@@ -19,7 +19,7 @@ import time
 import math
 import requests
 import urllib.parse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import google.generativeai as genai
 import gspread
@@ -83,6 +83,7 @@ GSPREAD_CREDENTIALS = st.secrets.get("GSPREAD_CREDENTIALS")
 WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", "7fff411d9ecb183d6053870fc40823c9")
 DRIVE_FOLDER_ID = "1H1gf8WqfoTYFT_pU9WfIDLrHg-NpuUSI"
 SHEET_ID = "1QcS3ZF3YYxSEykG0KiOUuXbTdBh0DMHdMgoqa9t8yrI"
+TRAIN_GIF_URL = "https://upload.wikimedia.org/wikipedia/commons/2/2f/Steam_locomotive_work.gif"
 
 if not GEMINI_API_KEY or not GSPREAD_CREDENTIALS:
     st.error("Missing credentials! Please check secrets.toml")
@@ -787,7 +788,7 @@ def get_weather(city_name):
                     'icon': data.get('weather', [{}])[0].get('icon', ''),
                     'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
                     'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
-                    'lat': lat, 'lon': lon}
+                    'lat': lat, 'lon': lon, 'timezone': data.get('timezone', 0)}
 
         # Fallback: direct city name API (no state available)
         url = f"https://api.openweathermap.org/data/2.5/weather?q={urllib.parse.quote(city_name)}&appid={WEATHER_API_KEY}&units=metric"
@@ -878,7 +879,7 @@ def get_weather_by_coords(lat, lon):
                 'icon': data.get('weather', [{}])[0].get('icon', ''),
                 'wind_speed': data.get('wind', {}).get('speed', 'N/A'), 'wind_deg': data.get('wind', {}).get('deg', 'N/A'),
                 'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
-                'lat': lat, 'lon': lon}
+                'lat': lat, 'lon': lon, 'timezone': data.get('timezone', 0)}
         else: return {'error': 'Location not found'}
     except Exception as e: return {'error': f'Error: {str(e)}'}
 
@@ -2078,10 +2079,10 @@ def get_pnr_status_url(pnr):
 def render_audio_controls(current_scene):
     """Render sidebar audio volume + Web Audio engine."""
     scene_map = {
-        "📋 Data Table": "solar",
+        "📋 Data Table": "rail-engine",
         "📊 Dashboard": "dashboard",
         "💬 Chat": "solar",
-        "🚂 Railway": "solar",
+        "🚂 Railway": "rail-engine",
         "🌤️ Weather": "weather-sunny"
     }
     scene = scene_map.get(current_scene, "solar")
@@ -2178,6 +2179,7 @@ def render_audio_controls(current_scene):
                 this.stopAll();
                 if (!this.ctx) this.init();
                 switch(scene) {{
+                    case 'rail-engine': this.playRailEngine(); break;
                     case 'solar': this.playSolar(); break;
                     case 'dashboard': this.playDashboard(); break;
                     case 'weather-rain': this.playRain(); break;
@@ -2210,6 +2212,70 @@ def render_audio_controls(current_scene):
                 var d = buf.getChannelData(0);
                 for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
                 return buf;
+            }}
+
+            playRailEngine() {{
+                var osc1 = this.ctx.createOscillator();
+                osc1.type = 'sawtooth';
+                osc1.frequency.value = 200;
+                var g1 = this.ctx.createGain();
+                g1.gain.value = 0.35;
+                var filter1 = this.ctx.createBiquadFilter();
+                filter1.type = 'lowpass';
+                filter1.frequency.value = 450;
+                osc1.connect(filter1);
+                filter1.connect(g1);
+                g1.connect(this.master);
+                osc1.start();
+                this.nodes.osc1 = osc1;
+
+                var osc2 = this.ctx.createOscillator();
+                osc2.type = 'square';
+                osc2.frequency.value = 350;
+                var g2 = this.ctx.createGain();
+                g2.gain.value = 0.20;
+                var filter2 = this.ctx.createBiquadFilter();
+                filter2.type = 'lowpass';
+                filter2.frequency.value = 600;
+                osc2.connect(filter2);
+                filter2.connect(g2);
+                g2.connect(this.master);
+                osc2.start();
+                this.nodes.osc2 = osc2;
+
+                var noise = this.ctx.createBufferSource();
+                noise.buffer = this.whiteNoiseBuffer();
+                noise.loop = true;
+                var noiseFilter = this.ctx.createBiquadFilter();
+                noiseFilter.type = 'highpass';
+                noiseFilter.frequency.value = 1200;
+                var noiseGain = this.ctx.createGain();
+                noiseGain.gain.value = 0.10;
+                noise.connect(noiseFilter);
+                noiseFilter.connect(noiseGain);
+                noiseGain.connect(this.master);
+                noise.start();
+                this.nodes.noise = noise;
+
+                var lfo = this.ctx.createOscillator();
+                lfo.type = 'square';
+                lfo.frequency.value = 2.0;
+                var lfoGain = this.ctx.createGain();
+                lfoGain.gain.value = 0.15;
+                lfo.connect(lfoGain);
+                lfoGain.connect(g1.gain);
+                lfo.start();
+                this.nodes.lfo = lfo;
+
+                var lfo2 = this.ctx.createOscillator();
+                lfo2.type = 'sine';
+                lfo2.frequency.value = 1.0;
+                var lfo2Gain = this.ctx.createGain();
+                lfo2Gain.gain.value = 0.08;
+                lfo2.connect(lfo2Gain);
+                lfo2Gain.connect(g2.gain);
+                lfo2.start();
+                this.nodes.lfo2 = lfo2;
             }}
 
             playSolar() {{
@@ -2555,6 +2621,32 @@ EARTH_BG_HTML = """
     <div class="moon-orbit">
         <div class="moon"></div>
     </div>
+</div>
+"""
+
+AQUARIUM_BG_HTML = """
+<style>
+.ocean-video-bg {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    z-index: -1; pointer-events: none; overflow: hidden;
+}
+.ocean-video-bg video {
+    position: absolute; top: 50%; left: 50%;
+    min-width: 100%; min-height: 100%; width: auto; height: auto;
+    transform: translate(-50%, -50%); object-fit: cover;
+}
+.ocean-video-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(180deg, rgba(0,30,60,0.35) 0%, rgba(0,15,35,0.55) 100%);
+    pointer-events: none;
+}
+</style>
+<div class="ocean-video-bg">
+    <video autoplay muted loop playsinline poster="https://images.unsplash.com/photo-1582967788606-a171f1080ca8?w=1920&q=80">
+        <source src="https://videos.pexels.com/video-files/3571264/3571264-hd_1920_1080_30fps.mp4" type="video/mp4">
+        <source src="https://assets.mixkit.co/videos/preview/mixkit-underwater-sun-rays-in-the-ocean-4297-large.mp4" type="video/mp4">
+    </video>
+    <div class="ocean-video-overlay"></div>
 </div>
 """
 
@@ -2942,7 +3034,59 @@ def main():
     elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         pass  # Weather bg rendered later
     elif view_bg == "💬 Chat":
-        pass  # Clean chat view — no heavy animation
+        st.markdown(AQUARIUM_BG_HTML, unsafe_allow_html=True)
+        # Force white text visibility for chat view
+        st.markdown("""
+        <style>
+        [data-testid="stMain"] h1, [data-testid="stMain"] h2, [data-testid="stMain"] h3,
+        [data-testid="stMain"] h4, [data-testid="stMain"] h5, [data-testid="stMain"] h6,
+        [data-testid="stMain"] .stMarkdown p, [data-testid="stMain"] .stMarkdown div,
+        [data-testid="stMain"] .stCaption, [data-testid="stMain"] .stCaption p,
+        [data-testid="stMain"] label, [data-testid="stMain"] .stWidgetLabel,
+        [data-testid="stMain"] .stRadio label, [data-testid="stMain"] .stCheckbox label,
+        [data-testid="stMain"] .streamlit-expanderHeader,
+        [data-testid="stMain"] .streamlit-expanderHeader p,
+        [data-testid="stMain"] .streamlit-expanderHeader span {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.5) !important;
+            font-weight: 600 !important;
+        }
+        [data-testid="stMain"] .stButton > button {
+            background: rgba(255,255,255,0.12) !important;
+            border: 1px solid rgba(255,255,255,0.25) !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        }
+        [data-testid="stMain"] .stButton > button:hover {
+            background: rgba(255,255,255,0.25) !important;
+            border-color: rgba(255,255,255,0.5) !important;
+        }
+        [data-testid="stMain"] .stChatMessage {
+            background: rgba(0,20,40,0.6) !important;
+            border: 1px solid rgba(255,255,255,0.15) !important;
+            backdrop-filter: blur(12px) !important;
+        }
+        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] p,
+        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] div {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        }
+        [data-testid="stMain"] .stChatInput {
+            background: rgba(0,20,40,0.5) !important;
+            border: 1px solid rgba(255,255,255,0.2) !important;
+        }
+        [data-testid="stMain"] .stChatInput input {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+        }
+        [data-testid="stMain"] .stChatInput input::placeholder {
+            color: rgba(255,255,255,0.6) !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
@@ -2956,6 +3100,7 @@ def main():
     # anywhere, so they always fell back to plain black — this defines
     # those variables from the real sunrise/sunset so forecast text is
     # readable in both day and night scenes.)
+    # Compute day/night once for both CSS and background
     _wx_is_night = False
     if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         try:
@@ -2963,9 +3108,16 @@ def main():
             _wx_sunrise = st.session_state.weather_data.get('sunrise')
             _wx_sunset = st.session_state.weather_data.get('sunset')
             if _wx_sunrise and _wx_sunset and str(_wx_sunrise) not in ['', 'N/A', 'None']:
-                _wx_is_night = _wx_now < int(_wx_sunrise) or _wx_now > int(_wx_sunset)
+                _wx_sunrise = int(_wx_sunrise)
+                _wx_sunset = int(_wx_sunset)
+                _wx_is_night = (_wx_now < _wx_sunrise - 1800) or (_wx_now > _wx_sunset + 1800)
+            else:
+                # Fallback: IST hour
+                ist_h = now_ist().hour
+                _wx_is_night = ist_h < 6 or ist_h >= 19
         except Exception:
-            pass
+            ist_h = now_ist().hour
+            _wx_is_night = ist_h < 6 or ist_h >= 19
     _wx_text_color = "#ffffff" if _wx_is_night else "#000000"
     _wx_text_shadow = "0 1px 3px rgba(0,0,0,0.6)" if _wx_is_night else "0 1px 3px rgba(255,255,255,0.7)"
     _wx_forecast_bg = "rgba(255,255,255,0.08)" if _wx_is_night else "rgba(255,255,255,0.4)"
@@ -2988,9 +3140,9 @@ def main():
         temp = st.session_state.weather_data.get('temp', '--')
         desc = st.session_state.weather_data.get('weather', '').title()
 
-        # ---- DAY / NIGHT DETECTION ----
+        # ---- DAY / NIGHT DETECTION (IST-based with API fallback) ----
         time_of_day = 'day'
-        weather_mode = 'day'  # <-- FIXED: Define weather_mode
+        weather_mode = 'day'
         try:
             now_ts = int(time.time())
             sunrise = st.session_state.weather_data.get('sunrise')
@@ -3013,8 +3165,21 @@ def main():
                 else:
                     time_of_day = 'night'
                     weather_mode = 'night'
+            else:
+                # Fallback: IST hour-based
+                ist_hour = now_ist().hour
+                if ist_hour < 6 or ist_hour >= 19:
+                    time_of_day = 'night'
+                    weather_mode = 'night'
         except Exception:
-            pass
+            # Fallback: IST hour-based
+            ist_hour = now_ist().hour
+            if ist_hour < 6 or ist_hour >= 19:
+                time_of_day = 'night'
+                weather_mode = 'night'
+
+        # Also update _wx_is_night for CSS consistency
+        _wx_is_night = (weather_mode == 'night')
 
         # ---- WEATHER TYPE (respects day/night) ----
         if 'rain' in weather_cond or 'drizz' in weather_cond:
@@ -3211,92 +3376,135 @@ def main():
     if weather_bg_html:
         st.markdown(weather_bg_html, unsafe_allow_html=True)
 
-
-
     # Sidebar Toggle + Back-to-Top Button
+    # BULLETPROOF: Inject script into parent window so it persists across reruns
     components.html("""
     <script>
     (function() {
         try {
             var P = window.parent;
             var doc = P.document;
-            if (!P.__eqmsProInit) {
-                P.__eqmsProInit = true;
-                // Ensure sidebar starts open
-                var body = doc.body;
-                body.classList.remove('sidebar-collapsed');
 
-                doc.addEventListener('keydown', function(e) {
-                    var t = (e.target.tagName || '').toLowerCase();
-                    if (t === 'input' || t === 'textarea' || t === 'select' || e.target.isContentEditable) return;
-                    if (e.key === 'd' || e.key === 'D') {
-                        var u = new URL(P.location.href);
-                        var cur = u.searchParams.get('__theme') || 'Day';
-                        u.searchParams.set('__theme', cur === 'Dark' ? 'Day' : 'Dark');
-                        P.location.href = u.toString();
-                    }
-                });
+            // Inject persistent script into parent window
+            var scriptId = 'eqms-persistent-toggle-script';
+            var oldScript = doc.getElementById(scriptId);
+            if (oldScript) oldScript.remove();
 
-                if (!doc.getElementById('eqms-sidebar-toggle')) {
-                    var toggleBtn = doc.createElement('button');
-                    toggleBtn.id = 'eqms-sidebar-toggle';
-                    toggleBtn.title = 'Toggle Sidebar (Click to Open/Close)';
-                    toggleBtn.innerHTML = '☰';
-                    toggleBtn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:9999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;';
+            var s = doc.createElement('script');
+            s.id = scriptId;
+            s.textContent = `
+                (function() {
+                    // Only initialize once per page lifecycle
+                    if (window.__eqmsToggleEngineActive) return;
+                    window.__eqmsToggleEngineActive = true;
 
-                    toggleBtn.onmouseenter = function(){ 
-                        toggleBtn.style.transform = 'scale(1.15) rotate(90deg)'; 
-                        toggleBtn.style.boxShadow = '0 6px 25px rgba(255,107,53,0.7)'; 
-                    };
-                    toggleBtn.onmouseleave = function(){ 
-                        toggleBtn.style.transform = 'scale(1) rotate(0deg)'; 
-                        toggleBtn.style.boxShadow = '0 4px 15px rgba(255,107,53,0.5)'; 
-                    };
-
-                    toggleBtn.onclick = function() {
+                    function ensureToggleButton() {
+                        var doc = document;
                         var body = doc.body;
-                        var isCollapsed = body.classList.contains('sidebar-collapsed');
-                        if (isCollapsed) {
-                            body.classList.remove('sidebar-collapsed');
-                            toggleBtn.innerHTML = '✕';
-                            toggleBtn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
-                            var sb = doc.querySelector('[data-testid="stSidebar"]');
-                            if (sb) { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
-                            try { localStorage.setItem('eqms_sidebar', 'open'); } catch(e) {}
-                        } else {
-                            body.classList.add('sidebar-collapsed');
-                            toggleBtn.innerHTML = '☰';
-                            toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
-                            var sb = doc.querySelector('[data-testid="stSidebar"]');
-                            if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
-                            try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
-                        }
-                    };
-                    try {
-                        var saved = localStorage.getItem('eqms_sidebar');
-                        if (saved === 'closed') {
-                            doc.body.classList.add('sidebar-collapsed');
-                            toggleBtn.innerHTML = '☰';
-                            toggleBtn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
-                        }
-                    } catch(e) {}
-                    // Sidebar state managed by CSS + class toggle only — no polling
-                    doc.body.appendChild(toggleBtn);
-                }
+                        if (!body) return;
 
-                if (!doc.getElementById('eqms-top-btn')) {
-                    var b = doc.createElement('button');
-                    b.id = 'eqms-top-btn';
-                    b.title = 'Back to top';
-                    b.innerHTML = '⬆';
-                    b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
-                    b.onmouseenter = function(){ b.style.opacity = '1'; b.style.transform = 'scale(1.08)'; };
-                    b.onmouseleave = function(){ b.style.opacity = '0.85'; b.style.transform = 'scale(1)'; };
-                    b.onclick = function(){ window.scrollTo({top:0, behavior:'smooth'}); };
-                    doc.body.appendChild(b);
-                }
-            }
-        } catch(e) { console.error('EQMS Toggle Error:', e); }
+                        var btn = doc.getElementById('eqms-sidebar-toggle');
+                        if (!btn) {
+                            btn = doc.createElement('button');
+                            btn.id = 'eqms-sidebar-toggle';
+                            btn.title = 'Toggle Sidebar';
+                            btn.innerHTML = '☰';
+                            btn.style.cssText = 'position:fixed;top:12px;left:12px;z-index:9999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#FF9933,#FF6B35);color:white;font-size:20px;cursor:pointer;box-shadow:0 4px 15px rgba(255,107,53,0.5);transition:all 0.3s ease;display:flex;align-items:center;justify-content:center;font-weight:bold;';
+
+                            btn.onmouseenter = function(){ 
+                                btn.style.transform = 'scale(1.15) rotate(90deg)'; 
+                                btn.style.boxShadow = '0 6px 25px rgba(255,107,53,0.7)'; 
+                            };
+                            btn.onmouseleave = function(){ 
+                                btn.style.transform = 'scale(1) rotate(0deg)'; 
+                                btn.style.boxShadow = '0 4px 15px rgba(255,107,53,0.5)'; 
+                            };
+
+                            btn.onclick = function() {
+                                var b = document.body;
+                                var isCollapsed = b.classList.contains('sidebar-collapsed');
+                                var sb = document.querySelector('[data-testid="stSidebar"]');
+                                if (isCollapsed) {
+                                    b.classList.remove('sidebar-collapsed');
+                                    btn.innerHTML = '✕';
+                                    btn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                                    if (sb) { sb.style.marginLeft = '0px'; sb.style.opacity = '1'; sb.style.pointerEvents = 'auto'; }
+                                    try { localStorage.setItem('eqms_sidebar', 'open'); } catch(e) {}
+                                } else {
+                                    b.classList.add('sidebar-collapsed');
+                                    btn.innerHTML = '☰';
+                                    btn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                                    if (sb) { sb.style.marginLeft = '-340px'; sb.style.opacity = '0'; sb.style.pointerEvents = 'none'; }
+                                    try { localStorage.setItem('eqms_sidebar', 'closed'); } catch(e) {}
+                                }
+                            };
+                            body.appendChild(btn);
+                        }
+
+                        // Always sync button appearance from localStorage
+                        try {
+                            var saved = localStorage.getItem('eqms_sidebar');
+                            if (saved === 'closed') {
+                                body.classList.add('sidebar-collapsed');
+                                btn.innerHTML = '☰';
+                                btn.style.background = 'linear-gradient(135deg,#138808,#0d6e05)';
+                            } else {
+                                body.classList.remove('sidebar-collapsed');
+                                btn.innerHTML = '✕';
+                                btn.style.background = 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                            }
+                        } catch(e) {
+                            var isCollapsed = body.classList.contains('sidebar-collapsed');
+                            btn.innerHTML = isCollapsed ? '☰' : '✕';
+                            btn.style.background = isCollapsed ? 'linear-gradient(135deg,#138808,#0d6e05)' : 'linear-gradient(135deg,#FF9933,#FF6B35)';
+                        }
+                    }
+
+                    function ensureTopButton() {
+                        var doc = document;
+                        var b = doc.getElementById('eqms-top-btn');
+                        if (!b) {
+                            b = doc.createElement('button');
+                            b.id = 'eqms-top-btn';
+                            b.title = 'Back to top';
+                            b.innerHTML = '⬆';
+                            b.style.cssText = 'position:fixed;bottom:26px;right:26px;z-index:999999;width:44px;height:44px;border-radius:50%;border:none;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-size:18px;cursor:pointer;opacity:0.85;box-shadow:0 4px 14px rgba(0,0,0,0.25);transition:opacity .2s, transform .2s;';
+                            b.onmouseenter = function(){ b.style.opacity = '1'; b.style.transform = 'scale(1.08)'; };
+                            b.onmouseleave = function(){ b.style.opacity = '0.85'; b.style.transform = 'scale(1)'; };
+                            b.onclick = function(){ window.scrollTo({top:0, behavior:'smooth'}); };
+                            doc.body.appendChild(b);
+                        }
+                    }
+
+                    // Keydown listener (only once)
+                    if (!window.__eqmsKeydownInit) {
+                        window.__eqmsKeydownInit = true;
+                        document.addEventListener('keydown', function(e) {
+                            var t = (e.target.tagName || '').toLowerCase();
+                            if (t === 'input' || t === 'textarea' || t === 'select' || e.target.isContentEditable) return;
+                            if (e.key === 'd' || e.key === 'D') {
+                                var u = new URL(window.location.href);
+                                var cur = u.searchParams.get('__theme') || 'Day';
+                                u.searchParams.set('__theme', cur === 'Dark' ? 'Day' : 'Dark');
+                                window.location.href = u.toString();
+                            }
+                        });
+                    }
+
+                    // Run immediately
+                    ensureToggleButton();
+                    ensureTopButton();
+
+                    // CRITICAL: Keep checking every 500ms to survive any DOM changes
+                    setInterval(function() {
+                        ensureToggleButton();
+                        ensureTopButton();
+                    }, 500);
+                })();
+            `;
+            doc.head.appendChild(s);
+
+        } catch(e) { console.error('EQMS Toggle Inject Error:', e); }
     })();
     </script>
     """, height=0)
@@ -3464,6 +3672,10 @@ def main():
         # Audio Volume Control
         render_audio_controls(st.session_state.view_mode)
 
+        # Sidebar Train Engine GIF
+        st.markdown("<div style='text-align:center; color:#FF9933; font-size:0.75rem; font-weight:600; letter-spacing:1px; margin-bottom:6px;'>🚂 STEAM LOCOMOTIVE</div>", unsafe_allow_html=True)
+        st.image(TRAIN_GIF_URL, use_container_width=True, caption="")
+
         with st.expander("🌤️ Quick Weather", expanded=True):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city", placeholder="Any city...")
             if city != st.session_state.weather_city: st.session_state.weather_city = city
@@ -3481,9 +3693,9 @@ def main():
                 st.markdown(f"""
                 <div style="text-align:center; padding: 5px 0;">
                     <div style="font-size:0.85rem; font-weight:600; color:#f1f5f9; margin-bottom:4px;">{loc_display}</div>
-                    <div style="font-size:1.5rem; font-weight:700;">{data['temp']}°C</div>
-                    <div>{data['weather'].title()}</div>
-                    <div style="font-size:0.8rem; color:#64748b;">💧 {data['humidity']}%  🌬️ {data['wind_speed']} m/s</div>
+                    <div style="font-size:1.5rem; font-weight:700;">{data.get('temp', '--')}°C</div>
+                    <div>{data.get('weather', 'N/A').title()}</div>
+                    <div style="font-size:0.8rem; color:#64748b;">💧 {data.get('humidity', '--')}%  🌬️ {data.get('wind_speed', '--')} m/s</div>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -3719,8 +3931,7 @@ def main():
                 class_input = st.text_input("Class (Partial)", value=st.session_state.get('class_val', ''), key="class_filter_input")
                 if class_input != st.session_state.get('class_val', ''):
                     st.session_state.class_val = class_input
-                    st.session_state.current_page = 1
-                    st.rerun()
+                    st.session_state.current_page = 1; st.rerun()
 
             c1, c2 = st.columns(2)
             with c1:
@@ -3862,13 +4073,11 @@ def main():
                     key="global_search_input")
                 if global_search != st.session_state.global_search:
                     st.session_state.global_search = global_search
-                    st.session_state.current_page = 1
-                    st.rerun()
+                    st.session_state.current_page = 1; st.rerun()
             with search_col2:
                 if st.button("🧹 Clear Search", use_container_width=True, key="clear_global_search"):
                     st.session_state.global_search = ''
-                    st.session_state.current_page = 1
-                    st.rerun()
+                    st.session_state.current_page = 1; st.rerun()
 
             if st.session_state.global_search:
                 search_term = st.session_state.global_search.lower()
@@ -4707,6 +4916,11 @@ def main():
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real-time Info")
 
+        # Fullscreen Train Engine GIF
+        st.markdown("<div style='text-align:center; color:#FF9933; font-size:1.1rem; font-weight:700; letter-spacing:2px; margin-bottom:10px; text-shadow:0 2px 4px rgba(0,0,0,0.5);'>🚂 ORIGINAL STEAM LOCOMOTIVE ENGINE</div>", unsafe_allow_html=True)
+        st.image(TRAIN_GIF_URL, use_container_width=True, caption="")
+        st.markdown("<hr style='border-color:rgba(255,153,51,0.3); margin:20px 0;'>", unsafe_allow_html=True)
+
         if not NTES_AVAILABLE:
             st.error("❌ 'ntes-client' library not installed. Please run: `pip install ntes-client`")
             st.info("💡 Using alternative web-based PNR and train status services...")
@@ -4934,18 +5148,7 @@ def main():
                             placeholder="Any city, town or village...", key="weather_city_input")
         if city != st.session_state.weather_city: st.session_state.weather_city = city
 
-        # Auto-fetch on Enter (value committed)
-        if city and city != st.session_state.get('_last_weather_fetch', ''):
-            st.session_state._last_weather_fetch = city
-            with st.spinner(f"Fetching weather for {city}..."):
-                data = get_weather(city)
-                forecast = get_weather_forecast(city)
-                if data and 'error' not in data:
-                    st.session_state.weather_data = data
-                    if forecast and 'error' not in forecast: st.session_state.weather_forecast = forecast
-                    st.rerun()
-                else:
-                    st.error(data.get('error', 'Error fetching weather'))
+        # Note: Weather fetched via "Get Weather" button to avoid API spam
 
         st.markdown('<div class="weather-input-wrapper">', unsafe_allow_html=True)
         col1, col2, col3 = st.columns(3)
@@ -5007,18 +5210,31 @@ def main():
                         weather_mode = 'night'
             except: pass
 
-            # Location banner
+            # Location banner with LOCAL TIME
             loc_state = data.get('state', '')
             loc_country = data.get('country', '')
-            loc_full = data['city'] + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
+            loc_full = data.get('city', 'Unknown') + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
             day_night_icon = "🌙" if time_of_day in ['night', 'dusk'] else "☀️" if time_of_day == 'day' else "🌅"
             banner_text = "#ffffff" if weather_mode == "night" else "#000000"
             banner_shadow = "0 1px 3px rgba(0,0,0,0.5)" if weather_mode == "night" else "0 1px 3px rgba(255,255,255,0.6)"
+
+            # Calculate local time from timezone offset
+            tz_offset = data.get('timezone', 0)
+            try:
+                utc_now = datetime.now(timezone.utc)
+                local_dt = utc_now + timedelta(seconds=tz_offset)
+                local_time_str = local_dt.strftime('%I:%M %p')
+                local_date_str = local_dt.strftime('%d %b %Y')
+                time_display = f"🕐 {local_time_str} • {local_date_str}"
+            except Exception:
+                time_display = ""
+
             st.markdown(f'''<div style="text-align:center; margin-bottom:15px;">
                 <div style="display:inline-block; background: rgba(255,255,255,0.08); 
                     border: 1px solid rgba(255,255,255,0.15); border-radius: 50px; padding: 10px 30px; 
                     backdrop-filter: blur(12px); color: {banner_text} !important; text-shadow: {banner_shadow} !important; font-weight: 700; font-size: 1.1rem;">
-                    {day_night_icon} {loc_full} • {time_of_day.title()}
+                    {day_night_icon} {loc_full} • {time_of_day.title()}<br>
+                    <span style="font-size:0.95rem; opacity:0.9;">{time_display}</span>
                 </div>
             </div>''', unsafe_allow_html=True)
 
@@ -5061,43 +5277,43 @@ def main():
             <div class="weather-main-card">
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; position: relative; z-index: 1;">
                     <div>
-                        <div class="weather-city">{data['city']}{', ' + data.get('state', '') if data.get('state') else ''}, {data['country']}</div>
-                        <div class="weather-desc">{data['weather'].title()}</div>
+                        <div class="weather-city">{data.get('city', 'Unknown')}{', ' + data.get('state', '') if data.get('state') else ''}{', ' + data.get('country', '') if data.get('country') else ''}</div>
+                        <div class="weather-desc">{data.get('weather', 'N/A').title()}</div>
                         <div style="font-size: 0.9rem; opacity: 0.7; margin-top: 6px;">Updated: {format_datetime()}</div>
                     </div>
                     <div style="text-align: center;">
-                        <div class="weather-temp-big">{data['temp']}°C</div>
-                        <div style="font-size: 1rem; opacity: 0.9;">Feels like {data['feels_like']}°C</div>
+                        <div class="weather-temp-big">{data.get('temp', '--')}°C</div>
+                        <div style="font-size: 1rem; opacity: 0.9;">Feels like {data.get('feels_like', '--')}°C</div>
                     </div>
                 </div>
                 <div class="weather-detail-row">
                     <div class="weather-detail-item">
                         <div class="weather-detail-icon">💧</div>
                         <div class="weather-detail-label">Humidity</div>
-                        <div class="weather-detail-value">{data['humidity']}%</div>
+                        <div class="weather-detail-value">{data.get('humidity', '--')}%</div>
                     </div>
                     <div class="weather-detail-item">
                         <div class="weather-detail-icon">🌬️</div>
                         <div class="weather-detail-label">Wind</div>
-                        <div class="weather-detail-value">{data['wind_speed']} m/s</div>
+                        <div class="weather-detail-value">{data.get('wind_speed', '--')} m/s</div>
                     </div>
                     <div class="weather-detail-item">
                         <div class="weather-detail-icon">📊</div>
                         <div class="weather-detail-label">Pressure</div>
-                        <div class="weather-detail-value">{data['pressure']} hPa</div>
+                        <div class="weather-detail-value">{data.get('pressure', '--')} hPa</div>
                     </div>
                     <div class="weather-detail-item">
                         <div class="weather-detail-icon">🌡️</div>
                         <div class="weather-detail-label">Feels Like</div>
-                        <div class="weather-detail-value">{data['feels_like']}°C</div>
+                        <div class="weather-detail-value">{data.get('feels_like', '--')}°C</div>
                     </div>
                 </div>
             """
 
             if data.get('sunrise') and data.get('sunrise') != 'N/A':
                 try:
-                    from datetime import timezone as tz_utc
-                    UTC = tz_utc.utc
+                    # timezone imported at top level
+                    UTC = timezone.utc
                     sunrise_dt = datetime.fromtimestamp(data['sunrise'], tz=UTC).astimezone(IST)
                     sunset_dt = datetime.fromtimestamp(data['sunset'], tz=UTC).astimezone(IST)
                     sunrise = sunrise_dt.strftime('%I:%M %p')
@@ -5405,6 +5621,60 @@ def main():
         color: #1e293b !important;
         -webkit-text-fill-color: #1e293b !important;
         text-shadow: none !important;
+    }
+    /* === WEATHER STAMP / INPUT / CARD - FORCE WHITE TEXT === */
+    div[data-testid="stMain"] .weather-input-wrapper,
+    div[data-testid="stMain"] .weather-input-wrapper * {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+    }
+    div[data-testid="stMain"] .weather-main-card,
+    div[data-testid="stMain"] .weather-main-card * {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+    }
+    div[data-testid="stMain"] .weather-detail-item,
+    div[data-testid="stMain"] .weather-detail-item * {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+    }
+    div[data-testid="stMain"] .forecast-card-0,
+    div[data-testid="stMain"] .forecast-card-1,
+    div[data-testid="stMain"] .forecast-card-2,
+    div[data-testid="stMain"] .forecast-card-3,
+    div[data-testid="stMain"] .forecast-card-4,
+    div[data-testid="stMain"] [class*="forecast-card-"] {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+    }
+    div[data-testid="stMain"] [class*="forecast-card-"] * {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+    }
+    div[data-testid="stMain"] input[aria-label*="City"],
+    div[data-testid="stMain"] input[aria-label*="city"] {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+        background-color: rgba(255,255,255,0.95) !important;
+    }
+    div[data-testid="stMain"] .stTextInput:has(input[aria-label*="City"]) label p,
+    div[data-testid="stMain"] .stTextInput:has(input[aria-label*="city"]) label p {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        font-weight: 700 !important;
+    }
+    div[data-testid="stMain"] .sunrise-sunset,
+    div[data-testid="stMain"] .sunrise-sunset * {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
     }
     </style>
     """, unsafe_allow_html=True)
