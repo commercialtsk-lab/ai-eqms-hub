@@ -1,3 +1,4 @@
+
 # =====================================================================
 # AI EQMS Hub Pro - Complete Streamlit Application
 # =====================================================================
@@ -1217,7 +1218,7 @@ def get_live_train_status(train_number, date_str=None):
                                 if ms.get('SC','').upper() == next_code:
                                     upcoming = merged_stations[i:i+8]
                                     break
-                            if not upcoming: upcoming = all_live[live_idx+1:live_idx+9}
+                            if not upcoming: upcoming = all_live[live_idx+1:live_idx+9]
                     if not upcoming: return {"error": "NO_DATA", "message": "Train position unclear for this date"}
             elif all_live:
                 curr_idx, _ = find_station_index(all_live, current_code, current_name, pos_str)
