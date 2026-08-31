@@ -1,4 +1,3 @@
-
 # =====================================================================
 # AI EQMS Hub Pro - Complete Streamlit Application
 # =====================================================================
@@ -1218,7 +1217,7 @@ def get_live_train_status(train_number, date_str=None):
                                 if ms.get('SC','').upper() == next_code:
                                     upcoming = merged_stations[i:i+8]
                                     break
-                            if not upcoming: upcoming = all_live[live_idx+1:live_idx+9]
+                            if not upcoming: upcoming = all_live[live_idx+1:live_idx+9}
                     if not upcoming: return {"error": "NO_DATA", "message": "Train position unclear for this date"}
             elif all_live:
                 curr_idx, _ = find_station_index(all_live, current_code, current_name, pos_str)
@@ -1477,14 +1476,27 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
         [data-testid="stSidebar"] .stSelectbox label, [data-testid="stSidebar"] .stDateInput label,
         [data-testid="stSidebar"] .stNumberInput label, [data-testid="stSidebar"] .stTextArea label,
-        [data-testid="stSidebar"] .stRadio label, [data-testid="stSidebar"] .stCheckbox label {{
-            color: #f1f5f9 !important;
+        [data-testid="stSidebar"] .stRadio label, [data-testid="stSidebar"] .stCheckbox label,
+        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] span,
+        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] {{
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+            font-weight: 600 !important;
         }}
         [data-testid="stSidebar"] .stTextInput input, [data-testid="stSidebar"] .stNumberInput input,
         [data-testid="stSidebar"] .stDateInput input, [data-testid="stSidebar"] .stTextArea textarea,
         [data-testid="stSidebar"] .stSelectbox > div > div > div {{
-            background-color: #1e293b !important; color: #f1f5f9 !important;
-            border: 1px solid #475569 !important; border-radius: 8px !important;
+            background-color: #1e293b !important; color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            border: 1px solid #64748b !important; border-radius: 8px !important;
+            text-shadow: none !important; font-weight: 500 !important;
+        }}
+        [data-testid="stSidebar"] .stTextInput input::placeholder,
+        [data-testid="stSidebar"] .stDateInput input::placeholder {{
+            color: #94a3b8 !important;
+            -webkit-text-fill-color: #94a3b8 !important;
         }}
         [data-testid="stSidebar"] .stButton > button {{
             background-color: #334155 !important; color: #f1f5f9 !important;
@@ -1502,8 +1514,12 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             background-color: rgba(30, 41, 59, 0.85) !important;
             border: 2px dashed rgba(148, 163, 184, 0.4) !important;
         }}
-        [data-testid="stSidebar"] .stCaption {{
-            color: #94a3b8 !important;
+        [data-testid="stSidebar"] .stCaption,
+        [data-testid="stSidebar"] [data-testid="stCaption"] {{
+            color: #e2e8f0 !important;
+            -webkit-text-fill-color: #e2e8f0 !important;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.7) !important;
+            font-weight: 500 !important;
         }}
         [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown div,
         [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stTextInput label,
@@ -1603,6 +1619,15 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             background-color: {button_hover_bg} !important; color: {button_hover_text} !important;
             border-color: {button_hover_border} !important;
         }}
+        /* Chat tab buttons - always white text for aquarium bg */
+        [data-testid="stMain"] .element-container:has(.stChatMessage) ~ .element-container .stButton > button,
+        [data-testid="stMain"] .stChatMessage ~ .element-container .stButton > button {{
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.9) !important;
+            background: rgba(255,255,255,0.12) !important;
+            border: 1px solid rgba(255,255,255,0.3) !important;
+        }}
         .stButton > button:disabled {{ opacity: 0.45 !important; cursor: not-allowed !important; }}
         .stButton > button[kind="primary"] {{
             background-color: {accent} !important; color: white !important; border-color: {accent} !important;
@@ -1644,11 +1669,13 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .streamlit-expanderHeader {{ color: #000000 !important; font-weight: 700 !important; text-shadow: none !important; -webkit-text-fill-color: #000000 !important; }}
         .stCaption {{ color: #000000 !important; text-shadow: none !important; -webkit-text-fill-color: #000000 !important; }}
         [data-testid="stMain"] .stCaption {{ color: #000000 !important; text-shadow: none !important; }}
-        .stChatMessage {{ background-color: {card_bg} !important; border: 1px solid {border} !important;
+        .stChatMessage {{ background-color: rgba(0,20,40,0.65) !important; border: 1px solid rgba(255,255,255,0.2) !important;
             border-radius: 12px !important; padding: 12px !important; margin-bottom: 8px !important;
             backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
-        .stChatInput {{ background-color: {input_bg} !important; border: 1px solid {border} !important; border-radius: 12px !important; }}
-        .stChatInput input {{ color: {text_color} !important; }}
+        .stChatMessage * {{ color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; text-shadow: 0 1px 4px rgba(0,0,0,0.9) !important; }}
+        .stChatInput {{ background-color: rgba(0,20,40,0.5) !important; border: 1px solid rgba(255,255,255,0.25) !important; border-radius: 12px !important; }}
+        .stChatInput input {{ color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important; }}
+        .stChatInput input::placeholder {{ color: rgba(255,255,255,0.7) !important; }}
         [data-testid="stMetric"] {{ background-color: {card_bg} !important; border: 1px solid {border} !important;
             border-radius: 10px !important; padding: 14px !important;
             backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }}
@@ -1867,6 +1894,13 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             padding: 12px 16px !important;
             border: 1px solid rgba(255,255,255,0.2) !important;
             backdrop-filter: blur(12px) !important;
+        }}
+        .weather-input-wrapper label,
+        .weather-input-wrapper .stWidgetLabel {{
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.9) !important;
+            font-weight: 700 !important;
         }}
     </style>
     """
@@ -3672,9 +3706,35 @@ def main():
         # Audio Volume Control
         render_audio_controls(st.session_state.view_mode)
 
-        # Sidebar Train Engine GIF
-        st.markdown("<div style='text-align:center; color:#FF9933; font-size:0.75rem; font-weight:600; letter-spacing:1px; margin-bottom:6px;'>🚂 STEAM LOCOMOTIVE</div>", unsafe_allow_html=True)
-        st.image(TRAIN_GIF_URL, use_container_width=True, caption="")
+        # Sidebar Train Engine Background
+        st.markdown(f"""
+        <style>
+        [data-testid="stSidebar"] > div:first-child {{
+            background-image: url('{TRAIN_GIF_URL}') !important;
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+            background-attachment: fixed !important;
+        }}
+        [data-testid="stSidebar"] > div:first-child::before {{
+            content: '' !important;
+            position: absolute !important;
+            inset: 0 !important;
+            background: rgba(15, 23, 42, 0.82) !important;
+            z-index: 0 !important;
+            pointer-events: none !important;
+        }}
+        [data-testid="stSidebar"] .stMarkdown,
+        [data-testid="stSidebar"] .stTextInput,
+        [data-testid="stSidebar"] .stSelectbox,
+        [data-testid="stSidebar"] .stButton,
+        [data-testid="stSidebar"] .stExpander,
+        [data-testid="stSidebar"] .stFileUploader {{
+            position: relative !important;
+            z-index: 1 !important;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
 
         with st.expander("🌤️ Quick Weather", expanded=True):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city", placeholder="Any city...")
@@ -4916,10 +4976,28 @@ def main():
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real-time Info")
 
-        # Fullscreen Train Engine GIF
-        st.markdown("<div style='text-align:center; color:#FF9933; font-size:1.1rem; font-weight:700; letter-spacing:2px; margin-bottom:10px; text-shadow:0 2px 4px rgba(0,0,0,0.5);'>🚂 ORIGINAL STEAM LOCOMOTIVE ENGINE</div>", unsafe_allow_html=True)
-        st.image(TRAIN_GIF_URL, use_container_width=True, caption="")
-        st.markdown("<hr style='border-color:rgba(255,153,51,0.3); margin:20px 0;'>", unsafe_allow_html=True)
+        # Fullscreen Train Engine Background (like Dashboard Earth)
+        st.markdown(f"""
+        <style>
+        .railway-bg {{
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            z-index: -1; pointer-events: none; overflow: hidden;
+            background: url('{TRAIN_GIF_URL}') center center / cover no-repeat;
+        }}
+        .railway-bg::before {{
+            content: ''; position: absolute; inset: 0;
+            background: rgba(0,0,0,0.55);
+            pointer-events: none;
+        }}
+        .railway-bg img {{
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: cover; opacity: 0.45;
+        }}
+        </style>
+        <div class="railway-bg">
+            <img src="{TRAIN_GIF_URL}" onerror="this.style.display='none'" alt="">
+        </div>
+        """, unsafe_allow_html=True)
 
         if not NTES_AVAILABLE:
             st.error("❌ 'ntes-client' library not installed. Please run: `pip install ntes-client`")
@@ -5215,8 +5293,8 @@ def main():
             loc_country = data.get('country', '')
             loc_full = data.get('city', 'Unknown') + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
             day_night_icon = "🌙" if time_of_day in ['night', 'dusk'] else "☀️" if time_of_day == 'day' else "🌅"
-            banner_text = "#ffffff" if weather_mode == "night" else "#000000"
-            banner_shadow = "0 1px 3px rgba(0,0,0,0.5)" if weather_mode == "night" else "0 1px 3px rgba(255,255,255,0.6)"
+            banner_text = "#ffffff"
+            banner_shadow = "0 2px 8px rgba(0,0,0,0.9)"
 
             # Calculate local time from timezone offset
             tz_offset = data.get('timezone', 0)
@@ -5241,38 +5319,48 @@ def main():
             weather_html = f"""
             <style>
             .weather-main-card {{
-                background: {"rgba(0,0,0,0.25)" if weather_mode == "night" else "rgba(255,255,255,0.15)"}; 
-                border: 1px solid {"rgba(255,255,255,0.2)" if weather_mode == "night" else "rgba(0,0,0,0.1)"};
+                background: rgba(0,0,0,0.35); 
+                border: 1px solid rgba(255,255,255,0.25);
                 border-radius: 24px; padding: 30px; 
-                color: {"#ffffff" if weather_mode == "night" else "#000000"};
-                text-shadow: 0 1px 3px {"rgba(0,0,0,0.5)" if weather_mode == "night" else "rgba(255,255,255,0.6)"};
-                box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+                color: #ffffff !important;
+                text-shadow: 0 2px 8px rgba(0,0,0,0.9) !important;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
                 backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
                 position: relative; overflow: hidden;
             }}
-            .weather-temp-big {{ font-size: 4.5rem; font-weight: 800; line-height: 1; text-shadow: 0 4px 20px rgba(0,0,0,0.3); }}
+            .weather-main-card * {{
+                color: #ffffff !important;
+                -webkit-text-fill-color: #ffffff !important;
+                text-shadow: 0 2px 8px rgba(0,0,0,0.9) !important;
+            }}
+            .weather-temp-big {{ font-size: 4.5rem; font-weight: 800; line-height: 1; text-shadow: 0 4px 20px rgba(0,0,0,0.6) !important; }}
             .weather-city {{ font-size: 1.8rem; font-weight: 700; margin-bottom: 4px; }}
             .weather-desc {{ font-size: 1.3rem; opacity: 0.95; }}
             .weather-detail-row {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 20px; }}
             .weather-detail-item {{
-                background: {"rgba(255,255,255,0.08)" if weather_mode == "night" else "rgba(255,255,255,0.4)"}; 
+                background: rgba(0,0,0,0.25); 
                 border-radius: 12px; padding: 12px; 
-                border: 1px solid {"rgba(255,255,255,0.15)" if weather_mode == "night" else "rgba(0,0,0,0.08)"};
+                border: 1px solid rgba(255,255,255,0.2);
                 text-align: center; backdrop-filter: blur(10px);
-                color: {"#ffffff" if weather_mode == "night" else "#000000"};
-                text-shadow: 0 1px 3px {"rgba(0,0,0,0.5)" if weather_mode == "night" else "rgba(255,255,255,0.6)"};
+                color: #ffffff !important;
+                text-shadow: 0 2px 6px rgba(0,0,0,0.9) !important;
+            }}
+            .weather-detail-item * {{
+                color: #ffffff !important;
+                -webkit-text-fill-color: #ffffff !important;
+                text-shadow: 0 2px 6px rgba(0,0,0,0.9) !important;
             }}
             .weather-detail-icon {{ font-size: 1.5rem; margin-bottom: 4px; }}
-            .weather-detail-label {{ font-size: 0.8rem; opacity: 0.8; }}
+            .weather-detail-label {{ font-size: 0.8rem; opacity: 0.9; }}
             .weather-detail-value {{ font-size: 1.1rem; font-weight: 700; }}
             .sunrise-sunset {{
                 display: flex; justify-content: center; gap: 40px; margin-top: 16px;
-                padding-top: 16px; border-top: 1px solid {"rgba(255,255,255,0.2)" if weather_mode == "night" else "rgba(0,0,0,0.15)"};
+                padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.25);
             }}
             .sun-item {{ text-align: center; }}
             .sun-icon {{ font-size: 2rem; }}
             .sun-time {{ font-size: 1.2rem; font-weight: 700; }}
-            .sun-label {{ font-size: 0.85rem; opacity: 0.8; }}
+            .sun-label {{ font-size: 0.85rem; opacity: 0.9; }}
             </style>
             <div class="weather-main-card">
                 <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; position: relative; z-index: 1;">
@@ -5480,13 +5568,18 @@ def main():
                             st.markdown(f"""
                             <style>
                             .forecast-card-{idx} {{
-                                background: var(--forecast-bg, rgba(255,255,255,0.08)); 
-                                border: 1px solid var(--forecast-border, rgba(255,255,255,0.15));
+                                background: rgba(0,0,0,0.35) !important; 
+                                border: 1px solid rgba(255,255,255,0.25) !important;
                                 border-radius: 20px; padding: 18px; text-align: center; 
-                                color: var(--weather-input-color, #000000); 
-                                text-shadow: 0 1px 3px var(--weather-text-shadow, rgba(255,255,255,0.6));
-                                box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+                                color: #ffffff !important; 
+                                text-shadow: 0 2px 6px rgba(0,0,0,0.9) !important;
+                                box-shadow: 0 6px 20px rgba(0,0,0,0.3);
                                 backdrop-filter: blur(10px);
+                            }}
+                            .forecast-card-{idx} * {{
+                                color: #ffffff !important;
+                                -webkit-text-fill-color: #ffffff !important;
+                                text-shadow: 0 2px 6px rgba(0,0,0,0.9) !important;
                             }}
                             </style>
                             <div class="forecast-card-{idx}">
