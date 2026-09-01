@@ -3,7 +3,7 @@
 # AI EQMS Hub Pro - Complete Streamlit Application
 # =====================================================================
 # Created by: Sharique
-# Version: 3.0 (Full) + User Registration
+# Version: 4.0 (Final)
 # Description: Emergency Quota Management System for Indian Railways
 # =====================================================================
 
@@ -120,9 +120,7 @@ defaults = {
     # Auth & Audit
     'authenticated': False, 'username': '', 'user_role': 'viewer',
     'audit_log': [], 'last_data_count': 0, 'data_alert_muted': False,
-    # User Registration
-    'pending_registrations': [], 'registration_submitted': False,
-    'show_registration': False, 'app_share_url': '',
+    'reg_name': '',
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -139,6 +137,119 @@ def get_date_label(offset):
 
 def get_date_for_offset(offset):
     return (datetime.now() - timedelta(days=offset)).strftime("%d-%b-%Y")
+
+# =====================================================================
+# User Management (Sheet-backed Registration & Approval)
+# =====================================================================
+def load_users():
+    """Load all users from USERS sheet."""
+    try:
+        gc = init_sheets()
+        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
+        data = sheet.get_all_values()
+        if len(data) < 2:
+            return pd.DataFrame(columns=['TIMESTAMP', 'NAME', 'PHONE', 'ROLE', 'STATUS', 'REGISTERED_BY'])
+        headers = data[0]
+        rows = data[1:]
+        df = pd.DataFrame(rows, columns=headers)
+        return df
+    except Exception as e:
+        try:
+            gc = init_sheets()
+            sh = gc.open_by_key(SHEET_ID)
+            sh.add_worksheet(title="USERS", rows=1000, cols=10)
+            sheet = sh.worksheet("USERS")
+            sheet.append_row(['TIMESTAMP', 'NAME', 'PHONE', 'ROLE', 'STATUS', 'REGISTERED_BY'])
+            return pd.DataFrame(columns=['TIMESTAMP', 'NAME', 'PHONE', 'ROLE', 'STATUS', 'REGISTERED_BY'])
+        except:
+            return pd.DataFrame(columns=['TIMESTAMP', 'NAME', 'PHONE', 'ROLE', 'STATUS', 'REGISTERED_BY'])
+
+def get_user(name):
+    """Get single user record by name (case-insensitive)."""
+    df = load_users()
+    if df.empty or 'NAME' not in df.columns:
+        return None
+    match = df[df['NAME'].astype(str).str.strip().str.lower() == str(name).strip().lower()]
+    if not match.empty:
+        return match.iloc[0].to_dict()
+    return None
+
+def register_user(name, phone="", registered_by="Self"):
+    """Register a new user with pending status."""
+    try:
+        gc = init_sheets()
+        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
+        df = load_users()
+        if not df.empty and 'NAME' in df.columns:
+            existing = df[df['NAME'].astype(str).str.strip().str.lower() == str(name).strip().lower()]
+            if not existing.empty:
+                return {'success': False, 'error': 'Name already registered. Please wait for approval or enter the same name to check status.'}
+        timestamp = format_datetime()
+        sheet.append_row([timestamp, str(name).strip(), str(phone).strip(), 'viewer', 'pending', registered_by])
+        return {'success': True}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+def approve_user(name, role='editor'):
+    """Approve a pending user and assign role."""
+    try:
+        gc = init_sheets()
+        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
+        data = sheet.get_all_values()
+        for i, row in enumerate(data[1:], start=2):
+            if len(row) > 1 and str(row[1]).strip().lower() == str(name).strip().lower():
+                sheet.update_cell(i, 4, role)
+                sheet.update_cell(i, 5, 'approved')
+                return {'success': True}
+        return {'success': False, 'error': 'User not found'}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+def reject_user(name):
+    """Reject a pending user."""
+    try:
+        gc = init_sheets()
+        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
+        data = sheet.get_all_values()
+        for i, row in enumerate(data[1:], start=2):
+            if len(row) > 1 and str(row[1]).strip().lower() == str(name).strip().lower():
+                sheet.update_cell(i, 5, 'rejected')
+                return {'success': True}
+        return {'success': False, 'error': 'User not found'}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+def remove_user(name):
+    """Permanently remove a user from USERS sheet."""
+    try:
+        gc = init_sheets()
+        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
+        data = sheet.get_all_values()
+        for i, row in enumerate(data[1:], start=2):
+            if len(row) > 1 and str(row[1]).strip().lower() == str(name).strip().lower():
+                sheet.delete_rows(i)
+                return {'success': True}
+        return {'success': False, 'error': 'User not found'}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+def update_user_role(name, new_role):
+    """Change role of an existing approved user."""
+    try:
+        gc = init_sheets()
+        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
+        data = sheet.get_all_values()
+        for i, row in enumerate(data[1:], start=2):
+            if len(row) > 1 and str(row[1]).strip().lower() == str(name).strip().lower():
+                sheet.update_cell(i, 4, new_role)
+                return {'success': True}
+        return {'success': False, 'error': 'User not found'}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+def is_master_admin(name):
+    """Master admin override — always full access."""
+    return str(name).strip().lower() in ['sharique', 'admin']
 
 # =====================================================================
 # Station Map
@@ -213,224 +324,6 @@ def init_drive():
     return build('drive', 'v3', credentials=creds)
 
 # =====================================================================
-# User Registration Functions
-# =====================================================================
-def get_users_sheet():
-    """Get or create USERS sheet for registration management"""
-    try:
-        gc = init_sheets()
-        spreadsheet = gc.open_by_key(SHEET_ID)
-        try:
-            sheet = spreadsheet.worksheet("USERS")
-        except gspread.WorksheetNotFound:
-            sheet = spreadsheet.add_worksheet(title="USERS", rows="100", cols="10")
-            # Add headers
-            headers = ['TIMESTAMP', 'NAME', 'EMAIL', 'PHONE', 'DEPARTMENT', 'DESIGNATION', 
-                      'STATUS', 'ROLE', 'APPROVED_BY', 'INSTALL_ID']
-            sheet.append_row(headers)
-        return sheet
-    except Exception as e:
-        st.error(f"Error accessing USERS sheet: {e}")
-        return None
-
-def load_pending_registrations():
-    """Load all pending user registrations from sheet"""
-    try:
-        sheet = get_users_sheet()
-        if not sheet: return []
-        all_data = sheet.get_all_values()
-        if len(all_data) < 2: return []
-        pending = []
-        for row in all_data[1:]:
-            if len(row) >= 8 and row[6].lower() == 'pending':
-                pending.append({
-                    'timestamp': row[0] if len(row) > 0 else '',
-                    'name': row[1] if len(row) > 1 else '',
-                    'email': row[2] if len(row) > 2 else '',
-                    'phone': row[3] if len(row) > 3 else '',
-                    'department': row[4] if len(row) > 4 else '',
-                    'designation': row[5] if len(row) > 5 else '',
-                    'status': row[6] if len(row) > 6 else 'pending',
-                    'role': row[7] if len(row) > 7 else 'viewer',
-                    'approved_by': row[8] if len(row) > 8 else '',
-                    'install_id': row[9] if len(row) > 9 else '',
-                })
-        return pending
-    except Exception as e:
-        return []
-
-def load_approved_users():
-    """Load all approved users from sheet"""
-    try:
-        sheet = get_users_sheet()
-        if not sheet: return []
-        all_data = sheet.get_all_values()
-        if len(all_data) < 2: return []
-        approved = []
-        for row in all_data[1:]:
-            if len(row) >= 8 and row[6].lower() == 'approved':
-                approved.append({
-                    'name': row[1] if len(row) > 1 else '',
-                    'email': row[2] if len(row) > 2 else '',
-                    'role': row[7] if len(row) > 7 else 'viewer',
-                })
-        return approved
-    except Exception as e:
-        return []
-
-def submit_registration(name, email, phone, department, designation):
-    """Submit a new user registration request"""
-    try:
-        sheet = get_users_sheet()
-        if not sheet: return False, "Could not access registration sheet"
-        
-        # Check if email already exists
-        all_data = sheet.get_all_values()
-        for row in all_data[1:]:
-            if len(row) > 2 and row[2].lower() == email.lower():
-                return False, "This email is already registered or pending approval."
-        
-        timestamp = format_datetime()
-        install_id = f"INST_{int(time.time())}_{name[:3].upper()}"
-        row = [timestamp, name, email, phone, department, designation, 'pending', 'viewer', '', install_id]
-        sheet.append_row(row)
-        return True, "Registration submitted successfully! Waiting for admin approval."
-    except Exception as e:
-        return False, f"Error submitting registration: {e}"
-
-def approve_user(email, role='editor'):
-    """Approve a pending user registration"""
-    try:
-        sheet = get_users_sheet()
-        if not sheet: return False, "Could not access registration sheet"
-        
-        all_data = sheet.get_all_values()
-        if len(all_data) < 2: return False, "No users found"
-        
-        for i, row in enumerate(all_data[1:], start=2):
-            if len(row) > 2 and row[2].lower() == email.lower():
-                if row[6].lower() == 'pending':
-                    # Update status to approved
-                    sheet.update_cell(i, 7, 'approved')  # Status
-                    sheet.update_cell(i, 8, role)        # Role
-                    sheet.update_cell(i, 9, st.session_state.username)  # Approved by
-                    return True, f"User {row[1]} approved as {role}!"
-        return False, "User not found or already approved"
-    except Exception as e:
-        return False, f"Error approving user: {e}"
-
-def reject_user(email):
-    """Reject a pending user registration"""
-    try:
-        sheet = get_users_sheet()
-        if not sheet: return False, "Could not access registration sheet"
-        
-        all_data = sheet.get_all_values()
-        if len(all_data) < 2: return False, "No users found"
-        
-        for i, row in enumerate(all_data[1:], start=2):
-            if len(row) > 2 and row[2].lower() == email.lower():
-                if row[6].lower() == 'pending':
-                    # Update status to rejected
-                    sheet.update_cell(i, 7, 'rejected')
-                    return True, f"User {row[1]} rejected."
-        return False, "User not found or already processed"
-    except Exception as e:
-        return False, f"Error rejecting user: {e}"
-
-def delete_user(email):
-    """Delete a user from the system (admin only)"""
-    try:
-        sheet = get_users_sheet()
-        if not sheet: return False, "Could not access registration sheet"
-        
-        all_data = sheet.get_all_values()
-        if len(all_data) < 2: return False, "No users found"
-        
-        for i, row in enumerate(all_data[1:], start=2):
-            if len(row) > 2 and row[2].lower() == email.lower():
-                sheet.delete_rows(i)
-                return True, f"User {row[1]} deleted from system."
-        return False, "User not found"
-    except Exception as e:
-        return False, f"Error deleting user: {e}"
-
-def check_user_approved(email):
-    """Check if a user is approved and get their role"""
-    try:
-        sheet = get_users_sheet()
-        if not sheet: return False, 'viewer'
-        
-        all_data = sheet.get_all_values()
-        if len(all_data) < 2: return False, 'viewer'
-        
-        for row in all_data[1:]:
-            if len(row) > 2 and row[2].lower() == email.lower():
-                if len(row) > 6 and row[6].lower() == 'approved':
-                    return True, row[7] if len(row) > 7 else 'viewer'
-                return False, 'viewer'
-        return False, 'viewer'
-    except Exception as e:
-        return False, 'viewer'
-
-# =====================================================================
-# App Sharing Functions
-# =====================================================================
-def generate_share_link():
-    """Generate a shareable link for the app"""
-    try:
-        # Get the base URL
-        base_url = st.get_option('server.baseUrlPath') or ''
-        if base_url:
-            base_url = base_url.rstrip('/')
-        else:
-            base_url = 'https://' + st.get_option('server.address') + ':' + str(st.get_option('server.port'))
-        
-        # Add tracking parameters
-        share_url = f"{base_url}?utm_source=share&utm_medium=whatsapp&timestamp={int(time.time())}"
-        return share_url
-    except:
-        return "https://ai-eqms-hub-pro.streamlit.app/"
-
-def generate_install_instructions():
-    """Generate install instructions for mobile"""
-    return """
-    📱 **How to Install as App on Mobile:**
-
-    1️⃣ Open this link in Chrome/Browser
-    2️⃣ Tap the **Share** icon (⋮ or ⇧)
-    3️⃣ Select **Add to Home Screen**
-    4️⃣ Choose a name and tap **Add**
-    5️⃣ 🎉 The app icon appears on your home screen!
-
-    **OR**
-
-    1️⃣ Open this link in Safari (iOS)
-    2️⃣ Tap the **Share** button (⬆)
-    3️⃣ Scroll down and tap **Add to Home Screen**
-    4️⃣ Tap **Add** - Done! ✅
-    """
-
-def get_install_stats():
-    """Get app installation statistics"""
-    try:
-        sheet = get_users_sheet()
-        if not sheet: return {'total': 0, 'approved': 0, 'pending': 0}
-        all_data = sheet.get_all_values()
-        if len(all_data) < 2: return {'total': 0, 'approved': 0, 'pending': 0}
-        
-        total = len(all_data) - 1
-        approved = 0
-        pending = 0
-        for row in all_data[1:]:
-            if len(row) > 6:
-                if row[6].lower() == 'approved': approved += 1
-                elif row[6].lower() == 'pending': pending += 1
-        return {'total': total, 'approved': approved, 'pending': pending}
-    except:
-        return {'total': 0, 'approved': 0, 'pending': 0}
-
-# =====================================================================
 # Data Cleaning Functions
 # =====================================================================
 def clean_pnr(pnr):
@@ -490,6 +383,7 @@ def sanitize_latin(text):
     return text.encode('latin-1', 'ignore').decode('latin-1')
 
 def find_column(df, keywords):
+    """Find column name in df matching any keyword (case-insensitive, stripped, fuzzy)."""
     for col in df.columns:
         col_clean = str(col).strip().upper().replace(' ', '').replace('_', '').replace('/', '').replace('-', '')
         for kw in keywords:
@@ -499,6 +393,7 @@ def find_column(df, keywords):
     return None
 
 def column_has_data(df, col):
+    """Check if a column exists and has at least one non-empty value."""
     if col is None or col not in df.columns:
         return False
     return df[col].astype(str).str.strip().ne('').any()
@@ -513,14 +408,23 @@ EQ_HEADINGS = ['S/N', 'PNR', 'FROM', 'TO', 'BOARDING', 'T/N', 'CLASS', 'DOJ',
     'APPLICATION DATE', 'RAILWAY/ZONE/DIVISION', 'PREFERENCE']
 
 SHEET_CONFIG = {
+    # EQ & DATA: same layout — data rows start at row 5 (EQ) / row 4 (DATA)
+    # Cols: A=S/N, B=PNR, C=FROM, D=TO, E=BOARDING, F=T/N, G=CLASS, H=DOJ, I=PASS_NAME, J=PASS_PH,
+    #       K=T/BERTHS, L=PURPOSE, M=ADDRESS, N=DIARY_NO, O=RECOMMENDATION, P=DESIGNATION, Q=PHONE,
+    #       R=VIP_STATUS, S=WARRANT, T=PROC_DATE, U=APP_DATE, V=ZONE, W=PREFERENCE
     "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "class_col": 6, "from_col": 2, "to_col": 3, "berth_col": 10, "doj_col": 7, "headings": EQ_HEADINGS},
     "DATA": {"start_row": 4, "pnr_col": 1, "train_col": 5, "class_col": 6, "from_col": 2, "to_col": 3, "berth_col": 10, "doj_col": 7, "headings": EQ_HEADINGS},
+
+    # FINAL & DATA2: same layout — data rows start at row 6
+    # Cols: A=T/N, B=CLASS, C=FROM, D=TO, E=BOARDING, F=T/BERTHS, G=PASS_NAME, H=PASS_PH, I=PURPOSE,
+    #       J=ADDRESS, K=FROM_STN, L=TO_STN, M=DOJ, N=RECOMMENDATION ...
     "FINAL": {"start_row": 6, "pnr_col": 7, "train_col": 1, "class_col": 2, "from_col": 10, "to_col": 11, "berth_col": 5, "doj_col": 12, "headings": EQ_HEADINGS},
     "DATA2": {"start_row": 6, "pnr_col": 7, "train_col": 1, "class_col": 2, "from_col": 10, "to_col": 11, "berth_col": 5, "doj_col": 12, "headings": EQ_HEADINGS},
+
     "EMAIL_DATA": {"start_row": 2, "pnr_col": 6, "train_col": 8, "class_col": 12, "from_col": 9, "to_col": 10, "berth_col": 15, "doj_col": 11, "headings": EQ_HEADINGS},
     "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": []},
     "CHAT": {"start_row": 2, "pnr_col": None, "train_col": None, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": ['TIMESTAMP', 'USERNAME', 'ROLE', 'MESSAGE', 'TYPE', 'META']},
-    "USERS": {"start_row": 2, "pnr_col": None, "train_col": None, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": ['TIMESTAMP', 'NAME', 'EMAIL', 'PHONE', 'DEPARTMENT', 'DESIGNATION', 'STATUS', 'ROLE', 'APPROVED_BY', 'INSTALL_ID']},
+    "USERS": {"start_row": 2, "pnr_col": None, "train_col": None, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": ['TIMESTAMP', 'NAME', 'PHONE', 'ROLE', 'STATUS', 'REGISTERED_BY']},
 }
 
 # =====================================================================
@@ -568,6 +472,7 @@ def load_sheet_data_cached(sheet_name, sheet_id):
 # Chat Persistence (Shared Group Chat via Sheet)
 # =====================================================================
 def load_chat_history(limit=200):
+    """Load chat messages from CHAT sheet — shared across all users."""
     try:
         gc = init_sheets()
         chat_sheet = gc.open_by_key(SHEET_ID).worksheet("CHAT")
@@ -590,6 +495,7 @@ def load_chat_history(limit=200):
         return []
 
 def save_chat_message(username, role, message, msg_type='user', meta=''):
+    """Save a message to CHAT sheet."""
     try:
         gc = init_sheets()
         chat_sheet = gc.open_by_key(SHEET_ID).worksheet("CHAT")
@@ -600,6 +506,7 @@ def save_chat_message(username, role, message, msg_type='user', meta=''):
         return False
 
 def get_online_users():
+    """Get recently active users from chat + activity log."""
     try:
         gc = init_sheets()
         chat_sheet = gc.open_by_key(SHEET_ID).worksheet("CHAT")
@@ -620,11 +527,14 @@ def get_online_users():
         return {}
 
 def post_system_alert(alert_text):
+    """Post a system alert to group chat."""
     return save_chat_message('TSKEQ Bot', 'admin', alert_text, 'alert', '')
 
 def parse_chat_command(text):
+    """Parse WhatsApp-style commands from chat."""
     text_lower = str(text).lower().strip()
 
+    # PDF commands
     pdf_train = re.search(r'(?:pdf|report)\s+(?:for\s+)?(\d{3,5})', text_lower)
     if pdf_train:
         return {'action': 'pdf_train', 'train': pdf_train.group(1)}
@@ -635,25 +545,31 @@ def parse_chat_command(text):
     if any(k in text_lower for k in ['full pdf', 'all pdf', 'complete pdf', 'sara pdf']):
         return {'action': 'pdf_full'}
 
+    # Sheet link
     if any(k in text_lower for k in ['sheet link', 'google sheet', 'spreadsheet link']):
         return {'action': 'sheet_link'}
 
+    # EQ List by train
     eq_match = re.search(r'(\d{3,5})\s*(?:eq|quota|list)', text_lower)
     if eq_match:
         return {'action': 'eq_list', 'train': eq_match.group(1)}
 
+    # Charting time
     chart_match = re.search(r'chart(?:ing)?\s+(?:time|status)\s+(?:for\s+)?(\d{3,5})', text_lower)
     if chart_match:
         return {'action': 'chart_time', 'train': chart_match.group(1)}
 
+    # PNR status
     pnr_match = re.search(r'pnr\s*(\d{10})', text_lower)
     if pnr_match:
         return {'action': 'pnr_status', 'pnr': pnr_match.group(1)}
 
+    # Live train
     live_match = re.search(r'live\s+(?:status\s+)?(\d{3,5})', text_lower)
     if live_match:
         return {'action': 'live_train', 'train': live_match.group(1)}
 
+    # Weather
     weather_match = re.search(r'weather\s+(?:of\s+)?(.+)', text_lower)
     if weather_match:
         return {'action': 'weather', 'city': weather_match.group(1).strip()}
@@ -661,6 +577,7 @@ def parse_chat_command(text):
     return {'action': 'chat', 'text': text}
 
 def generate_train_pdf(train_number, sheet_name="EQ"):
+    """Generate PDF for a specific train from EQ sheet."""
     try:
         df = load_sheet_data_cached(sheet_name, SHEET_ID)
         if df.empty: return None, "No data in sheet"
@@ -678,6 +595,7 @@ def generate_train_pdf(train_number, sheet_name="EQ"):
         return None, str(e)
 
 def generate_today_pdf(sheet_name="EQ"):
+    """Generate PDF for today's DOJ records."""
     try:
         df = load_sheet_data_cached(sheet_name, SHEET_ID)
         if df.empty: return None, "No data"
@@ -696,6 +614,7 @@ def generate_today_pdf(sheet_name="EQ"):
         return None, str(e)
 
 def check_sheet_alerts():
+    """Check for new data in EQ sheet and return alerts."""
     try:
         gc = init_sheets()
         eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
@@ -710,7 +629,6 @@ def check_sheet_alerts():
         return None
     except:
         return None
-
 def smart_detect_warrant(text):
     if not text: return {'warrant': '', 'found': False}
     text = str(text).upper()
@@ -1382,6 +1300,7 @@ def get_full_schedule(train_number):
 # Charting Time Calculator
 # =====================================================================
 def get_charting_time(train_number, doj_str):
+    """Calculate charting time (usually 4 hours before origin departure)"""
     if not train_number or not doj_str: return "—"
     try:
         schedule = get_full_schedule(train_number)
@@ -1928,16 +1847,19 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         [data-testid="stMetricLabel"], [data-testid="stMetricValue"], .stCaption {{
             color: {text_color} !important;
         }}
+        /* === HEADINGS & MAIN TEXT (white) === */
         [data-testid="stMain"] h1, [data-testid="stMain"] h2,
         [data-testid="stMain"] h3, [data-testid="stMain"] h4,
         [data-testid="stMain"] h5, [data-testid="stMain"] h6 {{
             color: #f1f5f9 !important;
             text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important;
         }}
+        /* Main markdown paragraphs - white */
         [data-testid="stMain"] .stMarkdown p {{
             color: #f1f5f9 !important;
             text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important;
         }}
+        /* === FORM LABELS - ALWAYS BLACK === */
         [data-testid="stMain"] .stTextInput label,
         [data-testid="stMain"] .stSelectbox label,
         [data-testid="stMain"] .stDateInput label,
@@ -1951,6 +1873,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             -webkit-text-fill-color: #000000 !important;
             font-weight: 600 !important;
         }}
+        /* === FORM INPUT VALUES - BLACK === */
         [data-testid="stMain"] .stTextInput input,
         [data-testid="stMain"] .stSelectbox > div > div > div,
         [data-testid="stMain"] .stDateInput input,
@@ -1959,6 +1882,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             -webkit-text-fill-color: #000000 !important;
             text-shadow: none !important;
         }}
+        /* === WEATHER SECTION - ALL TEXT BLACK === */
         [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) label,
         [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) input,
         [data-testid="stMain"] input[aria-label="🏙️ Enter City Name"] {{
@@ -1966,6 +1890,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             -webkit-text-fill-color: #000000 !important;
             text-shadow: none !important;
         }}
+        /* === DATA TABLE - HIGH CONTRAST === */
         .stDataFrame th, .stDataEditor th {{
             background-color: {table_header_bg} !important;
             color: {table_header_text} !important;
@@ -1979,6 +1904,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             border: 1px solid {border} !important;
             color: {text_color} !important;
         }}
+        /* === EXPANDER & CAPTION - BLACK === */
         .streamlit-expanderHeader {{
             color: #000000 !important;
             font-weight: 700 !important;
@@ -2006,6 +1932,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
             background-color: {button_hover_bg} !important; color: {button_hover_text} !important;
             border-color: {button_hover_border} !important;
         }}
+        /* Chat tab buttons - always white text for aquarium bg */
         [data-testid="stMain"] .element-container:has(.stChatMessage) ~ .element-container .stButton > button,
         [data-testid="stMain"] .stChatMessage ~ .element-container .stButton > button {{
             color: #ffffff !important;
@@ -2167,6 +2094,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stDataFrame td, .stDataEditor td {{ text-align: center !important; }}
         .stDataFrame th, .stDataEditor th {{ text-align: center !important; }}
 
+        /* Weather Input Stamp Style - BLACK TEXT */
         [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) input,
         [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ City"]) input {{
             background-color: rgba(255, 255, 255, 0.95) !important;
@@ -2244,6 +2172,7 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         .stDataFrame [data-testid="stDataFrameResizable"] {{
             border: 1px solid {border} !important; border-radius: 8px !important;
         }}
+        /* Weather Section Input Visibility - Day/Night Adaptive */
         [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) input,
         [data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ City"]) input,
         [data-testid="stMain"] input[aria-label="🏙️ Enter City Name"],
@@ -2639,152 +2568,170 @@ def main():
     st.session_state.last_refresh = time.time()
 
     # =====================================================================
-    # USER REGISTRATION SYSTEM
+    # AUTHENTICATION & REGISTRATION GATE
     # =====================================================================
-    # Check if user is authenticated via session
     if not st.session_state.authenticated:
-        st.set_page_config(page_title="AI EQMS Hub Pro — Register / Login", page_icon="🔒", layout="centered")
-        
-        # Show registration/login page
-        st.markdown("""
-        <style>
-        .register-wrap { max-width: 480px; margin: 30px auto; padding: 35px 30px;
-            background: linear-gradient(135deg, #0f172a, #1e1b4b);
-            border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center; }
-        .register-icon { font-size: 4rem; margin-bottom: 10px; }
-        .register-title { color: #f1f5f9; font-size: 1.6rem; font-weight: 800; margin-bottom: 4px; }
-        .register-sub { color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px; }
-        .register-input input { background: rgba(255,255,255,0.08) !important; color: #fff !important;
-            border: 1px solid rgba(255,255,255,0.2) !important; border-radius: 10px !important;
-            font-size: 1rem !important; }
-        .register-input input::placeholder { color: #64748b !important; }
-        .register-btn button { background: linear-gradient(135deg, #FF9933, #138808) !important;
-            color: #fff !important; font-weight: 700 !important; font-size: 1rem !important;
-            border: none !important; border-radius: 10px !important; padding: 10px 24px !important; }
-        .register-footer { color: #475569; font-size: 0.8rem; margin-top: 20px; }
-        .register-divider { border-top: 1px solid rgba(255,255,255,0.1); margin: 20px 0; }
-        </style>
-        """, unsafe_allow_html=True)
-        
-        # Check if user is trying to login or register
-        auth_mode = st.radio("", ["🔑 Login", "📝 New Registration"], horizontal=True, key="auth_mode")
-        
-        with st.container():
-            c1, c2, c3 = st.columns([1, 3, 1])
-            with c2:
-                if auth_mode == "🔑 Login":
-                    st.markdown("""
-                    <div class="register-wrap">
-                        <div class="register-icon">🔑</div>
-                        <div class="register-title">AI EQMS Hub Pro</div>
-                        <div class="register-sub">Login to your account</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    username = st.text_input("👤 Username", placeholder="Enter your username", key="login_user", help="Use your registered username")
-                    password = st.text_input("🔑 Password", type="password", placeholder="Enter password", key="login_pass", help="Contact admin if you forgot password")
-                    
-                    if st.button("🔓 Login", use_container_width=True, key="login_btn"):
-                        # Check if user is approved
-                        is_approved, role = check_user_approved(username)
-                        if is_approved:
-                            st.session_state.authenticated = True
-                            st.session_state.username = username
-                            st.session_state.user_role = role
-                            st.session_state.audit_log.append({
-                                "timestamp": format_datetime(),
-                                "user": username,
-                                "role": role,
-                                "action": "🔐 Login",
-                                "ip": "—"
-                            })
-                            st.success(f"✅ Welcome, {username}! (Role: {role})")
-                            time.sleep(0.8)
-                            st.rerun()
+        st.set_page_config(page_title="AI EQMS Hub Pro — Welcome", page_icon="🔒", layout="centered")
+        reg_name = st.session_state.get('reg_name', '').strip()
+        if not reg_name:
+            st.markdown("""
+            <style>
+            .login-wrap { max-width: 460px; margin: 50px auto; padding: 40px 30px;
+                background: linear-gradient(135deg, #0f172a, #1e1b4b);
+                border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
+                box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center; }
+            .login-icon { font-size: 4.5rem; margin-bottom: 10px; filter: drop-shadow(0 0 20px rgba(255,153,51,0.5)); }
+            .login-title { color: #f1f5f9; font-size: 1.7rem; font-weight: 800; margin-bottom: 4px; }
+            .login-sub { color: #94a3b8; font-size: 0.95rem; margin-bottom: 28px; }
+            .login-input input { background: rgba(255,255,255,0.08) !important; color: #fff !important;
+                border: 1px solid rgba(255,255,255,0.2) !important; border-radius: 10px !important;
+                text-align: center !important; font-size: 1.15rem !important; letter-spacing: 1px !important; }
+            .login-input input::placeholder { color: #64748b !important; }
+            .login-btn button { background: linear-gradient(135deg, #FF9933, #138808) !important;
+                color: #fff !important; font-weight: 700 !important; font-size: 1.05rem !important;
+                border: none !important; border-radius: 10px !important; padding: 12px 24px !important; }
+            .login-footer { color: #475569; font-size: 0.8rem; margin-top: 20px; }
+            .login-note { background: rgba(255,153,51,0.1); border: 1px solid rgba(255,153,51,0.3); 
+                border-radius: 10px; padding: 12px; color: #fbbf24; font-size: 0.9rem; margin: 16px 0; }
+            </style>
+            <div class="login-wrap">
+                <div class="login-icon">🚂</div>
+                <div class="login-title">AI EQMS Hub Pro</div>
+                <div class="login-sub">Indian Railways — Emergency Quota Management</div>
+                <div class="login-note">👋 Pehli baar aaye hain? Apna naam likhein.<br>Admin approve karega, phir aap use kar sakte hain.</div>
+            </div>
+            """, unsafe_allow_html=True)
+            with st.container():
+                c1, c2, c3 = st.columns([1, 3, 1])
+                with c2:
+                    name_input = st.text_input("📝 Apna Naam", placeholder="Aapka poora naam...", key="reg_name_input")
+                    phone_input = st.text_input("📱 Phone Number (optional)", placeholder="10 digit phone...", key="reg_phone_input")
+                    if st.button("🚀 Request Bhejein", use_container_width=True, key="submit_reg_btn"):
+                        if not name_input or not name_input.strip():
+                            st.error("❌ Kripya naam likhein. Bina naam ke entry nahi ho sakti.")
                         else:
-                            # Check if user has a pending registration
-                            pending = load_pending_registrations()
-                            user_pending = any(u['name'].lower() == username.lower() for u in pending)
-                            if user_pending:
-                                st.warning("⏳ Your registration is pending admin approval. Please wait.")
-                            else:
-                                # Check if user exists but is rejected
-                                sheet = get_users_sheet()
-                                if sheet:
-                                    all_data = sheet.get_all_values()
-                                    for row in all_data[1:]:
-                                        if len(row) > 2 and row[1].lower() == username.lower():
-                                            if len(row) > 6 and row[6].lower() == 'rejected':
-                                                st.error("❌ Your registration was rejected. Contact admin.")
-                                            else:
-                                                st.error("❌ Invalid username or password. Please register first.")
-                                            break
-                                    else:
-                                        st.error("❌ Username not found. Please register first.")
-                                else:
-                                    st.error("❌ System error. Please try again.")
-                    
-                    st.markdown('<div class="register-divider"></div>', unsafe_allow_html=True)
-                    st.caption("💡 New user? Click 'New Registration' above to sign up.")
-                    
-                else:  # New Registration
-                    st.markdown("""
-                    <div class="register-wrap">
-                        <div class="register-icon">📝</div>
-                        <div class="register-title">Register for AI EQMS Hub Pro</div>
-                        <div class="register-sub">Submit your details for admin approval</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    reg_name = st.text_input("👤 Full Name", placeholder="Your full name", key="reg_name")
-                    reg_email = st.text_input("📧 Email", placeholder="Your email address", key="reg_email")
-                    reg_phone = st.text_input("📱 Phone Number", placeholder="10-digit phone number", key="reg_phone")
-                    reg_dept = st.text_input("🏢 Department", placeholder="Your department/zone", key="reg_dept")
-                    reg_desig = st.text_input("🪪 Designation", placeholder="Your designation/role", key="reg_desig")
-                    
-                    st.caption("⚠️ You will receive an approval notification via chat once admin reviews your request.")
-                    
-                    if st.button("📤 Submit Registration", use_container_width=True, key="reg_submit_btn"):
-                        if not reg_name or not reg_email or not reg_phone:
-                            st.warning("Please fill in all required fields (Name, Email, Phone).")
-                        elif len(reg_phone) < 10 or not reg_phone.isdigit():
-                            st.warning("Please enter a valid 10-digit phone number.")
-                        else:
-                            success, msg = submit_registration(reg_name, reg_email, reg_phone, reg_dept, reg_desig)
-                            if success:
-                                st.success(msg)
-                                st.balloons()
-                                # Post to chat
-                                save_chat_message('System', 'admin', 
-                                    f"📝 New registration request from **{reg_name}** ({reg_email}). Please review in ADMIN panel.", 'admin')
-                                st.session_state.registration_submitted = True
-                                st.session_state.show_registration = False
-                                time.sleep(2)
+                            name_clean = name_input.strip()
+                            if is_master_admin(name_clean):
+                                reg_res = register_user(name_clean, phone_input, 'Master')
+                                approve_user(name_clean, 'admin')
+                                st.session_state.authenticated = True
+                                st.session_state.username = name_clean
+                                st.session_state.user_role = 'admin'
+                                st.session_state.audit_log.append({
+                                    "timestamp": format_datetime(),
+                                    "user": name_clean,
+                                    "role": "admin",
+                                    "action": "👑 Master Admin Login",
+                                    "ip": "—"
+                                })
+                                st.success(f"👑 Welcome Master Admin {name_clean}! Redirecting...")
+                                time.sleep(0.6)
                                 st.rerun()
                             else:
-                                st.error(msg)
-                    
-                    st.markdown('<div class="register-divider"></div>', unsafe_allow_html=True)
-                    st.caption("💡 Already registered? Click 'Login' above.")
-        
-        # Show pending registration message if submitted
-        if st.session_state.registration_submitted:
-            st.info("✅ Registration submitted! Please wait for admin approval. You will be notified via chat.")
-            if st.button("🔄 Check Status", key="check_reg_status"):
+                                user_rec = get_user(name_clean)
+                                if user_rec:
+                                    status = str(user_rec.get('STATUS', '')).strip().lower()
+                                    if status == 'approved':
+                                        role = str(user_rec.get('ROLE', 'viewer')).strip().lower()
+                                        st.session_state.authenticated = True
+                                        st.session_state.username = name_clean
+                                        st.session_state.user_role = role
+                                        st.session_state.audit_log.append({
+                                            "timestamp": format_datetime(),
+                                            "user": name_clean,
+                                            "role": role,
+                                            "action": "🔐 Auto Login",
+                                            "ip": "—"
+                                        })
+                                        st.success(f"✅ Welcome back, {name_clean}! Redirecting...")
+                                        time.sleep(0.6)
+                                        st.rerun()
+                                    elif status == 'pending':
+                                        st.session_state.reg_name = name_clean
+                                        st.info("⏳ Aapka request pehle se admin ke paas hai. Approval ka intezaar karein.")
+                                        st.stop()
+                                    elif status == 'rejected':
+                                        st.session_state.reg_name = name_clean
+                                        st.error("❌ Aapka access reject kar diya gaya hai. Admin se sampark karein.")
+                                        st.stop()
+                                    else:
+                                        st.session_state.reg_name = name_clean
+                                        st.rerun()
+                                else:
+                                    reg_res = register_user(name_clean, phone_input, 'Self')
+                                    if reg_res['success']:
+                                        st.session_state.reg_name = name_clean
+                                        st.success("✅ Aapka request admin ke paas bhej diya gaya hai! 🎉")
+                                        st.balloons()
+                                        st.info("⏳ Admin jaldi approve karega. Tab tak kripya wait karein.")
+                                        st.stop()
+                                    else:
+                                        st.error(f"❌ {reg_res['error']}")
+            st.stop()
+        else:
+            user_rec = get_user(reg_name)
+            if not user_rec:
+                st.session_state.reg_name = ''
                 st.rerun()
-        
-        st.stop()
-    
+            status = str(user_rec.get('STATUS', '')).strip().lower()
+            if status == 'pending':
+                st.markdown("""
+                <style>
+                .wait-wrap { max-width: 420px; margin: 80px auto; padding: 40px 30px;
+                    background: linear-gradient(135deg, #0f172a, #1e1b4b);
+                    border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
+                    box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center; }
+                .wait-icon { font-size: 4rem; animation: pulse-wait 2s infinite; }
+                @keyframes pulse-wait { 0%,100%{transform:scale(1);} 50%{transform:scale(1.1);} }
+                </style>
+                <div class="wait-wrap">
+                    <div class="wait-icon">⏳</div>
+                    <h2 style="color:#f1f5f9; margin-top:10px;">Approval Ka Intezaar</h2>
+                    <p style="color:#94a3b8;">Aapka request admin ke paas hai.<br>Jaise hi approve hoga, aapko access mil jayega.</p>
+                </div>
+                """, unsafe_allow_html=True)
+                st.caption(f"👤 Registered Name: {reg_name}")
+                if st.button("🔄 Status Check Karein", use_container_width=True, key="check_status_again"):
+                    st.rerun()
+                if st.button("🔙 Wapas jayein / Naam badle", use_container_width=True, key="back_to_reg"):
+                    st.session_state.reg_name = ''
+                    st.rerun()
+                st.stop()
+            elif status == 'rejected':
+                st.markdown("""
+                <style>
+                .rej-wrap { max-width: 420px; margin: 80px auto; padding: 40px 30px;
+                    background: linear-gradient(135deg, #1a0a0a, #2d1b1b);
+                    border-radius: 20px; border: 1px solid rgba(220,38,38,0.3);
+                    box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center; }
+                </style>
+                <div class="rej-wrap">
+                    <div style="font-size:4rem;">🚫</div>
+                    <h2 style="color:#f87171; margin-top:10px;">Access Rejected</h2>
+                    <p style="color:#fca5a5;">Aapka access admin ne reject kar diya hai.<br>Admin se sampark karein.</p>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.button("🔙 Wapas jayein", use_container_width=True, key="back_rej"):
+                    st.session_state.reg_name = ''
+                    st.rerun()
+                st.stop()
+            elif status == 'approved':
+                role = str(user_rec.get('ROLE', 'viewer')).strip().lower()
+                st.session_state.authenticated = True
+                st.session_state.username = reg_name
+                st.session_state.user_role = role
+                st.session_state.audit_log.append({
+                    "timestamp": format_datetime(),
+                    "user": reg_name,
+                    "role": role,
+                    "action": "🔐 Approved Login",
+                    "ip": "—"
+                })
+                st.rerun()
+            else:
+                st.session_state.reg_name = ''
+                st.rerun()
     else:
-        # Check if user is approved (in case admin changed status)
-        is_approved, role = check_user_approved(st.session_state.username)
-        if not is_approved and st.session_state.authenticated:
-            st.session_state.authenticated = False
-            st.warning("⚠️ Your account has been deactivated. Contact admin.")
-            time.sleep(1)
-            st.rerun()
-        
         st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="expanded")
 
     # BULLETPROOF: Initialize all pagination/session vars at top of main()
@@ -2863,7 +2810,7 @@ def main():
     </script>
     """, height=0)
 
-    # PWA + Mobile + Offline + Alert Sound
+    # PWA + Mobile + Offline + Alert Sound + Install Prompt
     components.html("""
     <script>
     (function(){
@@ -2889,6 +2836,11 @@ def main():
             g.gain.setValueAtTime(0.3,c.currentTime);g.gain.exponentialRampToValueAtTime(0.01,c.currentTime+0.5);
             o.start(c.currentTime);o.stop(c.currentTime+0.5);}catch(e){}
         };
+        window.__eqmsDeferredPrompt = null;
+        window.addEventListener('beforeinstallprompt', function(e) {
+            e.preventDefault();
+            window.__eqmsDeferredPrompt = e;
+        });
     })();
     </script>
     <meta name="theme-color" content="#075e54">
@@ -2918,46 +2870,55 @@ def main():
         position: absolute; top: 0; left: 0; width: 2px; height: 2px;
         background: transparent;
         box-shadow:
+            /* Row 1 - evenly spread */
             3vw 5vh #fff, 8vw 8vh #fff, 13vw 3vh #fff, 18vw 12vh #fff,
             23vw 6vh #fff, 28vw 15vh #fff, 33vw 4vh #fff, 38vw 10vh #fff,
             43vw 7vh #fff, 48vw 14vh #fff, 53vw 5vh #fff, 58vw 9vh #fff,
             63vw 11vh #fff, 68vw 6vh #fff, 73vw 13vh #fff, 78vw 4vh #fff,
             83vw 8vh #fff, 88vw 15vh #fff, 93vw 7vh #fff, 97vw 11vh #fff,
+            /* Row 2 */
             5vw 18vh #fff, 10vw 22vh #fff, 15vw 16vh #fff, 20vw 25vh #fff,
             25vw 19vh #fff, 30vw 24vh #fff, 35vw 17vh #fff, 40vw 21vh #fff,
             45vw 26vh #fff, 50vw 18vh #fff, 55vw 23vh #fff, 60vw 16vh #fff,
             65vw 20vh #fff, 70vw 25vh #fff, 75vw 17vh #fff, 80vw 22vh #fff,
             85vw 19vh #fff, 90vw 24vh #fff, 95vw 16vh #fff, 98vw 21vh #fff,
+            /* Row 3 */
             2vw 30vh #fff, 7vw 35vh #fff, 12vw 28vh #fff, 17vw 33vh #fff,
             22vw 29vh #fff, 27vw 34vh #fff, 32vw 31vh #fff, 37vw 36vh #fff,
             42vw 28vh #fff, 47vw 32vh #fff, 52vw 35vh #fff, 57vw 30vh #fff,
             62vw 34vh #fff, 67vw 29vh #fff, 72vw 33vh #fff, 77vw 31vh #fff,
             82vw 35vh #fff, 87vw 28vh #fff, 92vw 32vh #fff, 96vw 30vh #fff,
+            /* Row 4 */
             4vw 40vh #fff, 9vw 45vh #fff, 14vw 38vh #fff, 19vw 42vh #fff,
             24vw 46vh #fff, 29vw 39vh #fff, 34vw 44vh #fff, 39vw 37vh #fff,
             44vw 41vh #fff, 49vw 45vh #fff, 54vw 38vh #fff, 59vw 43vh #fff,
             64vw 40vh #fff, 69vw 44vh #fff, 74vw 39vh #fff, 79vw 42vh #fff,
             84vw 46vh #fff, 89vw 38vh #fff, 94vw 41vh #fff, 99vw 45vh #fff,
+            /* Row 5 */
             6vw 50vh #fff, 11vw 55vh #fff, 16vw 48vh #fff, 21vw 52vh #fff,
             26vw 56vh #fff, 31vw 49vh #fff, 36vw 54vh #fff, 41vw 47vh #fff,
             46vw 51vh #fff, 51vw 55vh #fff, 56vw 48vh #fff, 61vw 53vh #fff,
             66vw 50vh #fff, 71vw 54vh #fff, 76vw 49vh #fff, 81vw 52vh #fff,
             86vw 56vh #fff, 91vw 48vh #fff, 95vw 51vh #fff, 98vw 55vh #fff,
+            /* Row 6 */
             1vw 60vh #fff, 6vw 65vh #fff, 11vw 58vh #fff, 16vw 63vh #fff,
             21vw 59vh #fff, 26vw 64vh #fff, 31vw 61vh #fff, 36vw 66vh #fff,
             41vw 58vh #fff, 46vw 62vh #fff, 51vw 65vh #fff, 56vw 60vh #fff,
             61vw 64vh #fff, 66vw 59vh #fff, 71vw 63vh #fff, 76vw 61vh #fff,
             81vw 65vh #fff, 86vw 58vh #fff, 91vw 62vh #fff, 96vw 60vh #fff,
+            /* Row 7 */
             3vw 70vh #fff, 8vw 75vh #fff, 13vw 68vh #fff, 18vw 73vh #fff,
             23vw 77vh #fff, 28vw 69vh #fff, 33vw 74vh #fff, 38vw 71vh #fff,
             43vw 76vh #fff, 48vw 68vh #fff, 53vw 72vh #fff, 58vw 75vh #fff,
             63vw 70vh #fff, 68vw 74vh #fff, 73vw 69vh #fff, 78vw 73vh #fff,
             83vw 77vh #fff, 88vw 70vh #fff, 93vw 74vh #fff, 97vw 71vh #fff,
+            /* Row 8 */
             5vw 80vh #fff, 10vw 85vh #fff, 15vw 78vh #fff, 20vw 83vh #fff,
             25vw 87vh #fff, 30vw 79vh #fff, 35vw 84vh #fff, 40vw 81vh #fff,
             45vw 86vh #fff, 50vw 78vh #fff, 55vw 82vh #fff, 60vw 85vh #fff,
             65vw 80vh #fff, 70vw 84vh #fff, 75vw 79vh #fff, 80vw 83vh #fff,
             85vw 87vh #fff, 90vw 80vh #fff, 95vw 84vh #fff, 98vw 81vh #fff,
+            /* Row 9 */
             2vw 90vh #fff, 7vw 95vh #fff, 12vw 88vh #fff, 17vw 93vh #fff,
             22vw 89vh #fff, 27vw 94vh #fff, 32vw 91vh #fff, 37vw 96vh #fff,
             42vw 88vh #fff, 47vw 92vh #fff, 52vw 95vh #fff, 57vw 90vh #fff,
@@ -3198,9 +3159,10 @@ def main():
     if view_bg == "📊 Dashboard":
         st.markdown(EARTH_BG_HTML, unsafe_allow_html=True)
     elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
-        pass
+        pass  # Weather bg rendered later
     elif view_bg == "💬 Chat":
         st.markdown(AQUARIUM_BG_HTML, unsafe_allow_html=True)
+        # Force white text visibility for chat view
         st.markdown("""
         <style>
         [data-testid="stMain"] h1, [data-testid="stMain"] h2, [data-testid="stMain"] h3,
@@ -3256,8 +3218,16 @@ def main():
         st.markdown(bg_html, unsafe_allow_html=True)
 
     # =====================================================================
-    # WEATHER ANIMATED BACKGROUND
+    # WEATHER ANIMATED BACKGROUND (Replaces Solar when Weather is active)
     # =====================================================================
+    # Smart day/night text detection for the weather tab.
+    # (Main card / detail items / sunrise-sunset already compute their own
+    # correct day-or-night color further down, so they are left alone here.
+    # Only the forecast cards read CSS variables that were never defined
+    # anywhere, so they always fell back to plain black — this defines
+    # those variables from the real sunrise/sunset so forecast text is
+    # readable in both day and night scenes.)
+    # Compute day/night once for both CSS and background
     _wx_is_night = False
     if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         try:
@@ -3269,6 +3239,7 @@ def main():
                 _wx_sunset = int(_wx_sunset)
                 _wx_is_night = (_wx_now < _wx_sunrise - 1800) or (_wx_now > _wx_sunset + 1800)
             else:
+                # Fallback: IST hour
                 ist_h = now_ist().hour
                 _wx_is_night = ist_h < 6 or ist_h >= 19
         except Exception:
@@ -3296,6 +3267,7 @@ def main():
         temp = st.session_state.weather_data.get('temp', '--')
         desc = st.session_state.weather_data.get('weather', '').title()
 
+        # ---- DAY / NIGHT DETECTION (IST-based with API fallback) ----
         time_of_day = 'day'
         weather_mode = 'day'
         try:
@@ -3321,18 +3293,22 @@ def main():
                     time_of_day = 'night'
                     weather_mode = 'night'
             else:
+                # Fallback: IST hour-based
                 ist_hour = now_ist().hour
                 if ist_hour < 6 or ist_hour >= 19:
                     time_of_day = 'night'
                     weather_mode = 'night'
         except Exception:
+            # Fallback: IST hour-based
             ist_hour = now_ist().hour
             if ist_hour < 6 or ist_hour >= 19:
                 time_of_day = 'night'
                 weather_mode = 'night'
 
+        # Also update _wx_is_night for CSS consistency
         _wx_is_night = (weather_mode == 'night')
 
+        # ---- WEATHER TYPE (respects day/night) ----
         if 'rain' in weather_cond or 'drizz' in weather_cond:
             scene = 'rain' if time_of_day in ['day', 'dawn', 'dusk'] else 'night-rain'
         elif 'thunder' in weather_cond or 'storm' in weather_cond:
@@ -3346,9 +3322,10 @@ def main():
         else:
             scene = 'night' if time_of_day in ['night', 'dusk'] else 'sunny'
 
+        # ---- CSS & HTML ----
         bg_style = ""
         elements = ""
-        info_html = ""
+        info_html = ""  # Initialize to prevent UnboundLocalError
 
         if scene in ('rain', 'night-rain'):
             bg_style = "background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 35%, #2d3a4a 70%, #1a2332 100%);"
@@ -3498,7 +3475,7 @@ def main():
             elements += '<div style="position:absolute;bottom:115px;left:92%;font-size:58px;z-index:7;animation:treeSway 5s ease-in-out 3s infinite;">🌳</div>'
             elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#e0e0e0;z-index:8;"></div>'
 
-        else:
+        else:  # fog
             bg_style = "background: linear-gradient(180deg, #cfd8dc 0%, #b0bec5 50%, #90a4ae 100%);"
             for i in range(6):
                 top = 10 + i * 14
@@ -3527,6 +3504,7 @@ def main():
         st.markdown(weather_bg_html, unsafe_allow_html=True)
 
     # Sidebar Toggle + Back-to-Top Button
+    # BULLETPROOF: Inject script into parent window so it persists across reruns
     components.html("""
     <script>
     (function() {
@@ -3534,6 +3512,7 @@ def main():
             var P = window.parent;
             var doc = P.document;
 
+            // Inject persistent script into parent window
             var scriptId = 'eqms-persistent-toggle-script';
             var oldScript = doc.getElementById(scriptId);
             if (oldScript) oldScript.remove();
@@ -3542,6 +3521,7 @@ def main():
             s.id = scriptId;
             s.textContent = `
                 (function() {
+                    // Only initialize once per page lifecycle
                     if (window.__eqmsToggleEngineActive) return;
                     window.__eqmsToggleEngineActive = true;
 
@@ -3588,6 +3568,7 @@ def main():
                             body.appendChild(btn);
                         }
 
+                        // Always sync button appearance from localStorage
                         try {
                             var saved = localStorage.getItem('eqms_sidebar');
                             if (saved === 'closed') {
@@ -3622,6 +3603,7 @@ def main():
                         }
                     }
 
+                    // Keydown listener (only once)
                     if (!window.__eqmsKeydownInit) {
                         window.__eqmsKeydownInit = true;
                         document.addEventListener('keydown', function(e) {
@@ -3636,9 +3618,11 @@ def main():
                         });
                     }
 
+                    // Run immediately
                     ensureToggleButton();
                     ensureTopButton();
 
+                    // CRITICAL: Keep checking every 500ms to survive any DOM changes
                     setInterval(function() {
                         ensureToggleButton();
                         ensureTopButton();
@@ -3812,221 +3796,9 @@ def main():
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
-        # =====================================================================
-        # APP SHARING SECTION
-        # =====================================================================
-        with st.expander("📱 Share & Install App", expanded=True):
-            st.markdown("""
-            <style>
-            .share-btn-wa {
-                display: block;
-                width: 100%;
-                padding: 12px 16px;
-                background: linear-gradient(135deg, #25D366, #128C7E);
-                color: white !important;
-                border: none;
-                border-radius: 10px;
-                font-weight: 700;
-                font-size: 1rem;
-                text-align: center;
-                cursor: pointer;
-                text-decoration: none;
-                transition: all 0.2s;
-                margin-bottom: 8px;
-            }
-            .share-btn-wa:hover {
-                transform: scale(1.02);
-                box-shadow: 0 4px 20px rgba(37,211,102,0.4);
-                color: white !important;
-            }
-            .share-btn-copy {
-                display: block;
-                width: 100%;
-                padding: 10px 16px;
-                background: rgba(255,255,255,0.1);
-                color: #f1f5f9;
-                border: 1px solid rgba(255,255,255,0.2);
-                border-radius: 10px;
-                font-weight: 600;
-                font-size: 0.9rem;
-                text-align: center;
-                cursor: pointer;
-                transition: all 0.2s;
-            }
-            .share-btn-copy:hover {
-                background: rgba(255,255,255,0.2);
-                border-color: rgba(255,255,255,0.4);
-            }
-            .install-instructions {
-                background: rgba(255,255,255,0.05);
-                border: 1px solid rgba(255,255,255,0.1);
-                border-radius: 8px;
-                padding: 12px;
-                font-size: 0.85rem;
-                color: #94a3b8;
-                margin-top: 8px;
-            }
-            .install-stats {
-                display: flex;
-                gap: 10px;
-                margin-top: 10px;
-                flex-wrap: wrap;
-            }
-            .stat-badge {
-                background: rgba(255,255,255,0.08);
-                padding: 6px 12px;
-                border-radius: 20px;
-                font-size: 0.8rem;
-                color: #e2e8f0;
-                border: 1px solid rgba(255,255,255,0.1);
-            }
-            .stat-badge strong {
-                color: #60a5fa;
-            }
-            </style>
-            """, unsafe_allow_html=True)
 
-            # Generate share link
-            share_url = generate_share_link()
-            st.session_state.app_share_url = share_url
-
-            # WhatsApp share button with encoded message
-            share_msg = "🚂 *AI EQMS Hub Pro* - Emergency Quota Management System for Indian Railways\n\n📱 *Install the app now:*\n" + share_url + "\n\n🔹 Real-time EQ Management\n🔹 PNR Status & Live Train\n🔹 Weather Updates\n🔹 Gemini AI Assistant\n🔹 WhatsApp-style Group Chat\n\n✅ Works on mobile & desktop! Install as app for best experience."
-            encoded_msg = urllib.parse.quote(share_msg)
-            wa_url = f"https://api.whatsapp.com/send?text={encoded_msg}"
-
-            st.markdown(f'<a href="{wa_url}" target="_blank" class="share-btn-wa">📤 Share on WhatsApp</a>', unsafe_allow_html=True)
-
-            # Copy link button (uses JavaScript)
-            components.html(f"""
-            <button onclick="
-                (function(){{
-                    var url = '{share_url}';
-                    navigator.clipboard.writeText(url).then(function(){{
-                        alert('✅ App link copied to clipboard!\\n\\nShare it with your team.');
-                    }}).catch(function(){{
-                        var input = document.createElement('input');
-                        input.value = url;
-                        document.body.appendChild(input);
-                        input.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(input);
-                        alert('✅ App link copied to clipboard!\\n\\nShare it with your team.');
-                    }});
-                }})();
-            " style="display:block; width:100%; padding:10px 16px; background:rgba(255,255,255,0.08); color:#f1f5f9; border:1px solid rgba(255,255,255,0.15); border-radius:10px; font-weight:600; font-size:0.9rem; text-align:center; cursor:pointer; transition:all 0.2s; margin-bottom:8px;">
-                📋 Copy App Link
-            </button>
-            """, height=50)
-
-            # Install instructions
-            with st.expander("📲 How to Install as App", expanded=False):
-                st.markdown("""
-                <div class="install-instructions">
-                <strong>📱 For Android (Chrome):</strong><br>
-                1️⃣ Open this link in Chrome<br>
-                2️⃣ Tap the <strong>⋮</strong> (menu) icon<br>
-                3️⃣ Select <strong>Add to Home Screen</strong><br>
-                4️⃣ Choose a name and tap <strong>Add</strong><br>
-                <br>
-                <strong>🍎 For iOS (Safari):</strong><br>
-                1️⃣ Open this link in Safari<br>
-                2️⃣ Tap the <strong>⬆</strong> (share) button<br>
-                3️⃣ Scroll down and tap <strong>Add to Home Screen</strong><br>
-                4️⃣ Tap <strong>Add</strong> - Done! ✅<br>
-                <br>
-                <strong>💻 For Desktop:</strong><br>
-                Just bookmark the link or install as PWA from Chrome.
-                </div>
-                """, unsafe_allow_html=True)
-
-            # Install stats
-            stats = get_install_stats()
-            st.markdown(f"""
-            <div class="install-stats">
-                <span class="stat-badge">👥 Total Users: <strong>{stats['total']}</strong></span>
-                <span class="stat-badge">✅ Approved: <strong>{stats['approved']}</strong></span>
-                <span class="stat-badge">⏳ Pending: <strong>{stats['pending']}</strong></span>
-            </div>
-            """, unsafe_allow_html=True)
-
-        # =====================================================================
-        # ADMIN PANEL - User Management (only for admin)
-        # =====================================================================
-        if st.session_state.user_role == 'admin':
-            with st.expander("👑 Admin Panel - User Management", expanded=False):
-                st.markdown("### 📋 Pending Registrations")
-                pending_users = load_pending_registrations()
-                
-                if pending_users:
-                    st.warning(f"⏳ {len(pending_users)} pending registration(s)")
-                    for user in pending_users:
-                        col1, col2, col3, col4 = st.columns([2, 1.5, 1, 1])
-                        with col1:
-                            st.markdown(f"**{user['name']}**")
-                            st.caption(f"📧 {user['email']} | 📱 {user['phone']}")
-                            if user['department']: st.caption(f"🏢 {user['department']}")
-                            if user['designation']: st.caption(f"🪪 {user['designation']}")
-                            st.caption(f"🕐 {user['timestamp']}")
-                        with col2:
-                            # Role selection for approval
-                            new_role = st.selectbox(
-                                "Assign Role",
-                                ['viewer', 'editor'],
-                                index=0,
-                                key=f"role_{user['email']}",
-                                label_visibility="collapsed"
-                            )
-                        with col3:
-                            if st.button("✅ Approve", key=f"approve_{user['email']}", use_container_width=True):
-                                success, msg = approve_user(user['email'], new_role)
-                                if success:
-                                    st.success(msg)
-                                    # Post to chat
-                                    save_chat_message('System', 'admin', 
-                                        f"✅ User **{user['name']}** approved as **{new_role}** by {st.session_state.username}", 'admin')
-                                    st.rerun()
-                                else:
-                                    st.error(msg)
-                        with col4:
-                            if st.button("❌ Reject", key=f"reject_{user['email']}", use_container_width=True):
-                                success, msg = reject_user(user['email'])
-                                if success:
-                                    st.warning(msg)
-                                    st.rerun()
-                                else:
-                                    st.error(msg)
-                        st.divider()
-                else:
-                    st.success("✅ No pending registrations")
-                
-                st.markdown("### 👥 All Users")
-                approved_users = load_approved_users()
-                if approved_users:
-                    user_df = pd.DataFrame(approved_users)
-                    # Show with delete option
-                    for idx, user in enumerate(approved_users):
-                        col1, col2, col3 = st.columns([2, 1, 0.8])
-                        with col1:
-                            st.markdown(f"**{user['name']}**")
-                            st.caption(f"📧 {user['email']}")
-                        with col2:
-                            st.caption(f"🛡️ Role: **{user['role'].upper()}**")
-                        with col3:
-                            if st.button("🗑️", key=f"delete_{user['email']}", help="Delete this user"):
-                                success, msg = delete_user(user['email'])
-                                if success:
-                                    st.warning(msg)
-                                    save_chat_message('System', 'admin', 
-                                        f"🗑️ User **{user['name']}** removed by {st.session_state.username}", 'admin')
-                                    st.rerun()
-                                else:
-                                    st.error(msg)
-                        st.divider()
-                else:
-                    st.caption("No approved users found")
-
-        # Weather widget
+        # Sidebar Train Engine Background
+        
         with st.expander("🌤️ Quick Weather", expanded=True):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city", placeholder="Any city...")
             if city != st.session_state.weather_city: st.session_state.weather_city = city
@@ -4265,6 +4037,7 @@ def main():
                     st.rerun()
 
         with st.expander("📋 Activity & Audit Log", expanded=False):
+            # Merge activity_log + audit_log
             all_logs = st.session_state.activity_log + st.session_state.audit_log
             all_logs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
             if all_logs:
@@ -4285,7 +4058,7 @@ def main():
             st.cache_data.clear()
             st.rerun()
 
-        if sheet_choice != "NOTE" and sheet_choice != "USERS":
+        if sheet_choice != "NOTE":
             st.markdown("### 🔍 Filters")
             config = SHEET_CONFIG[sheet_choice]
             pnr_col_idx = config.get("pnr_col")
@@ -4327,6 +4100,7 @@ def main():
                 st.session_state.current_page = 1
                 st.rerun()
 
+            # Quick Date Buttons
             st.markdown("<div style='font-size:0.8rem; color:#94a3b8; margin-bottom:4px;'>⚡ Quick Dates</div>", unsafe_allow_html=True)
             qd1, qd2, qd3 = st.columns(3)
             today_dt = datetime.now().date()
@@ -4349,7 +4123,70 @@ def main():
                     st.session_state.current_page = 1
                     st.rerun()
 
+        # =====================================================================
+        # ADMIN: User Management Panel
+        # =====================================================================
+        if st.session_state.user_role == 'admin':
+            with st.expander("👑 User Management", expanded=True):
+                users_df = load_users()
+                if not users_df.empty and 'NAME' in users_df.columns and 'STATUS' in users_df.columns:
+                    pending_df = users_df[users_df['STATUS'].astype(str).str.strip().str.lower() == 'pending']
+                    if not pending_df.empty:
+                        st.markdown("**⏳ Pending Requests**")
+                        for idx, row in pending_df.iterrows():
+                            c1, c2, c3, c4, c5 = st.columns([2,1,1,1,1])
+                            with c1:
+                                st.write(f"👤 {row['NAME']}")
+                                if 'PHONE' in row and str(row['PHONE']).strip():
+                                    st.caption(f"📱 {row['PHONE']}")
+                            with c2:
+                                if st.button("✅ Admin", key=f"appr_admin_{idx}", use_container_width=True):
+                                    approve_user(row['NAME'], 'admin')
+                                    st.rerun()
+                            with c3:
+                                if st.button("✅ Editor", key=f"appr_edit_{idx}", use_container_width=True):
+                                    approve_user(row['NAME'], 'editor')
+                                    st.rerun()
+                            with c4:
+                                if st.button("✅ Viewer", key=f"appr_view_{idx}", use_container_width=True):
+                                    approve_user(row['NAME'], 'viewer')
+                                    st.rerun()
+                            with c5:
+                                if st.button("❌ Reject", key=f"rej_{idx}", use_container_width=True):
+                                    reject_user(row['NAME'])
+                                    st.rerun()
+                    else:
+                        st.success("✅ Koi pending request nahi hai.")
+                    
+                    st.markdown("---")
+                    all_users = users_df[users_df['STATUS'].astype(str).str.strip().str.lower() == 'approved']
+                    if not all_users.empty:
+                        st.markdown("**👥 Approved Users (Remove / Change Role)**")
+                        for idx, row in all_users.iterrows():
+                            c1, c2, c3, c4 = st.columns([2,1,1,1])
+                            with c1:
+                                st.write(f"👤 {row['NAME']} — *{row.get('ROLE','viewer').upper()}*")
+                            with c2:
+                                new_role = st.selectbox("Role", ['viewer','editor','admin'], 
+                                    index=['viewer','editor','admin'].index(row.get('ROLE','viewer').lower()) if row.get('ROLE','viewer').lower() in ['viewer','editor','admin'] else 0,
+                                    key=f"role_sel_{idx}", label_visibility="collapsed")
+                            with c3:
+                                if st.button("💾", key=f"save_role_{idx}", help="Save Role"):
+                                    update_user_role(row['NAME'], new_role)
+                                    st.rerun()
+                            with c4:
+                                if st.button("🗑️", key=f"rem_user_{idx}", help="Remove User Forever"):
+                                    remove_user(row['NAME'])
+                                    st.rerun()
+                    else:
+                        st.caption("Koi approved user nahi hai.")
+                else:
+                    st.caption("USERS sheet empty hai. Pehla user register hote hi yahan dikhega.")
+            st.markdown("---")
+
+        # User info + Logout
         st.markdown("---")
+        st.markdown("### 👤 User Info & Logout")
         st.markdown(f"<div style='text-align:center;'><div style='font-size:1.1rem;'>👤 <b>{st.session_state.username}</b></div><div style='font-size:0.8rem; color:#94a3b8;'>🛡️ Role: {st.session_state.user_role.upper()}</div></div>", unsafe_allow_html=True)
         if st.button("🚪 Logout", use_container_width=True, key="logout_btn"):
             st.session_state.audit_log.append({
@@ -4364,21 +4201,85 @@ def main():
             st.session_state.user_role = 'viewer'
             st.rerun()
 
+        # Mute alert toggle
         st.session_state.data_alert_muted = st.checkbox("🔕 Mute New Data Alert", value=st.session_state.data_alert_muted, key="mute_alert")
 
-        if st.button("🧹 Clear All Filters", use_container_width=True, key="clear_filters_btn"):
-                st.session_state.pnr_val = ''
-                st.session_state.train_val = ''
-                st.session_state.class_val = ''
-                st.session_state.from_val = None
-                st.session_state.to_val = None
-                st.session_state.current_page = 1
-                st.rerun()
+        # =====================================================================
+        # SHARE APP (WhatsApp + PWA Install)
+        # =====================================================================
+        st.markdown("---")
+        st.markdown("### 📲 App Share")
+        st.caption("Doston ko invite karein — WhatsApp par link jayega aur mobile par app ki tarah install hoga.")
+        
+        components.html("""
+        <style>
+        .share-btn-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .wa-btn { flex: 1; background: linear-gradient(135deg,#25D366,#128C7E); color: #fff; border: none; 
+            border-radius: 10px; padding: 12px; font-weight: 700; font-size: 0.95rem; cursor: pointer; 
+            text-align: center; text-decoration: none; display: block; font-family: inherit; }
+        .install-btn { flex: 1; background: linear-gradient(135deg,#FF9933,#138808); color: #fff; border: none; 
+            border-radius: 10px; padding: 12px; font-weight: 700; font-size: 0.95rem; cursor: pointer; 
+            text-align: center; display: none; font-family: inherit; }
+        .install-btn.show { display: block; }
+        .ios-hint { background: rgba(255,255,255,0.08); color: #e2e8f0; border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 10px; padding: 10px; text-align: center; font-size: 0.82rem; display: none; }
+        </style>
+        <div class="share-btn-row">
+            <a id="wa-share-link" href="#" target="_blank" class="wa-btn">📤 WhatsApp Share</a>
+            <button id="eqms-install-btn" class="install-btn">📲 Install App</button>
+        </div>
+        <div id="eqms-ios-hint" class="ios-hint">📲 iPhone users: Safari → Share icon → "Add to Home Screen"</div>
+        <script>
+        (function(){
+            var appUrl = window.location.href.split('?')[0];
+            var shareText = "🚂 *AI EQMS Hub Pro* — Indian Railways Emergency Quota Management App\\n\\n👉 Install karein aur use karein:\\n" + appUrl + "\\n\\n_Created by Sharique_";
+            document.getElementById('wa-share-link').href = "https://wa.me/?text=" + encodeURIComponent(shareText);
+            
+            var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            if (isIOS) {
+                document.getElementById('eqms-ios-hint').style.display = 'block';
+            }
+            
+            var deferredPrompt;
+            window.addEventListener('beforeinstallprompt', function(e) {
+                e.preventDefault();
+                deferredPrompt = e;
+                var btn = document.getElementById('eqms-install-btn');
+                btn.classList.add('show');
+                btn.innerHTML = '📲 Install App';
+                btn.onclick = function() {
+                    btn.innerHTML = '⏳ Installing...';
+                    deferredPrompt.prompt();
+                    deferredPrompt.userChoice.then(function(choice) {
+                        if (choice.outcome === 'accepted') {
+                            btn.innerHTML = '✅ Installed!';
+                            btn.style.background = '#16a34a';
+                        } else {
+                            btn.innerHTML = '📲 Install App';
+                        }
+                        deferredPrompt = null;
+                    });
+                };
+            });
+            window.addEventListener('appinstalled', function() {
+                var btn = document.getElementById('eqms-install-btn');
+                if (btn) { btn.innerHTML = '✅ App Installed!'; btn.style.background = '#16a34a'; }
+            });
+        })();
+        </script>
+        """, height=140)
 
-    # Load data for selected sheet (skip USERS sheet for data table)
-    df_raw = pd.DataFrame()
-    if sheet_choice != "USERS":
-        df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
+        if st.button("🧹 Clear All Filters", use_container_width=True, key="clear_filters_btn"):
+            st.session_state.pnr_val = ''
+            st.session_state.train_val = ''
+            st.session_state.class_val = ''
+            st.session_state.from_val = None
+            st.session_state.to_val = None
+            st.session_state.current_page = 1
+            st.rerun()
+
+    # Load data for selected sheet
+    df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
 
     # Data change detection + alert sound
     current_count = len(df_raw) if not df_raw.empty else 0
@@ -4399,8 +4300,8 @@ def main():
 
     filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
 
-    # Apply filters (skip for NOTE and USERS sheets)
-    if not filtered_df.empty and sheet_choice not in ["NOTE", "USERS"]:
+    # Apply filters (skip for NOTE sheet)
+    if not filtered_df.empty and sheet_choice != "NOTE":
         config = SHEET_CONFIG[sheet_choice]
         pnr_col_idx = config.get("pnr_col")
         train_col_idx = config.get("train_col")
@@ -4470,7 +4371,7 @@ def main():
     }
     </style>
     <div class="eqms-marquee-box">
-        <span class="scroll-text">🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save • User Registration System</span>
+        <span class="scroll-text">🚂 Welcome to AI EQMS Hub Pro • Created by Sharique • Indian Railways • Emergency Quota Management System • Real-time Data • PNR Status • Live Train • Weather • Gemini AI • Google Sheets Integration • Drive Auto-Save</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -4484,9 +4385,9 @@ def main():
             with nc:
                 if st.button(icon, key=f"nav_btn_{name}", help=name, use_container_width=True,
                              type="primary" if st.session_state.view_mode == name else "secondary"):
-                    if st.session_state.view_mode != name:
+                    if st.session_state.view_mode != name:  # Only rerun if actually switching
                         st.session_state.view_mode = name
-                        st.query_params['__view'] = name
+                        st.query_params['__view'] = name  # Persist choice in URL so refresh keeps the tab
                         st.rerun()
     with top_c2:
         st.markdown(f"<div style='padding-top:6px; text-align:right;'><span class='status-pill status-live'>● Live</span> &nbsp; <span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span></div>", unsafe_allow_html=True)
@@ -4498,562 +4399,559 @@ def main():
     # VIEW: 📋 DATA TABLE
     # =====================================================================
     if view == "📋 Data Table":
-        if sheet_choice == "USERS":
-            st.subheader("👥 User Management")
-            # Show users sheet data with admin controls
-            users_df = load_sheet_data_cached("USERS", SHEET_ID)
-            if not users_df.empty:
-                st.dataframe(users_df, use_container_width=True)
-            else:
-                st.info("No user data found")
-        else:
-            st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
+        st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
 
-            # Global Search
-            if not filtered_df.empty and sheet_choice not in ["NOTE", "USERS"]:
-                search_col1, search_col2 = st.columns([4, 1])
-                with search_col1:
-                    global_search = st.text_input("🔍 Global Search (searches all columns)",
-                        value=st.session_state.global_search,
-                        placeholder="Type to search across all columns...",
-                        key="global_search_input")
-                    st.markdown("""
-                    <style>
-                    input[aria-label="🔍 Global Search (searches all columns)"] {
-                        color: #ffffff !important;
-                        -webkit-text-fill-color: #ffffff !important;
-                        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
-                        background: rgba(0,0,0,0.4) !important;
-                        border: 1px solid rgba(255,255,255,0.3) !important;
-                        font-weight: 600 !important;
-                    }
-                    input[aria-label="🔍 Global Search (searches all columns)"]::placeholder {
-                        color: rgba(255,255,255,0.85) !important;
-                        -webkit-text-fill-color: rgba(255,255,255,0.85) !important;
-                        font-weight: 500 !important;
-                    }
-                    </style>
-                    """, unsafe_allow_html=True)
-                    if global_search != st.session_state.global_search:
-                        st.session_state.global_search = global_search
-                        st.session_state.current_page = 1; st.rerun()
-                with search_col2:
-                    if st.button("🧹 Clear Search", use_container_width=True, key="clear_global_search"):
-                        st.session_state.global_search = ''
-                        st.session_state.current_page = 1; st.rerun()
+        # Global Search
+        if not filtered_df.empty and sheet_choice != "NOTE":
+            search_col1, search_col2 = st.columns([4, 1])
+            with search_col1:
+                global_search = st.text_input("🔍 Global Search (searches all columns)",
+                    value=st.session_state.global_search,
+                    placeholder="Type to search across all columns...",
+                    key="global_search_input")
+                st.markdown("""
+                <style>
+                input[aria-label="🔍 Global Search (searches all columns)"] {
+                    color: #ffffff !important;
+                    -webkit-text-fill-color: #ffffff !important;
+                    text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+                    background: rgba(0,0,0,0.4) !important;
+                    border: 1px solid rgba(255,255,255,0.3) !important;
+                    font-weight: 600 !important;
+                }
+                input[aria-label="🔍 Global Search (searches all columns)"]::placeholder {
+                    color: rgba(255,255,255,0.85) !important;
+                    -webkit-text-fill-color: rgba(255,255,255,0.85) !important;
+                    font-weight: 500 !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+                if global_search != st.session_state.global_search:
+                    st.session_state.global_search = global_search
+                    st.session_state.current_page = 1; st.rerun()
+            with search_col2:
+                if st.button("🧹 Clear Search", use_container_width=True, key="clear_global_search"):
+                    st.session_state.global_search = ''
+                    st.session_state.current_page = 1; st.rerun()
 
-                if st.session_state.global_search:
-                    search_term = st.session_state.global_search.lower()
-                    mask = pd.Series([False] * len(filtered_df))
-                    for col in filtered_df.columns:
-                        if col != '_sheet_row':
-                            mask = mask | filtered_df[col].astype(str).str.lower().str.contains(search_term, na=False)
-                    filtered_df = filtered_df[mask]
+            if st.session_state.global_search:
+                search_term = st.session_state.global_search.lower()
+                mask = pd.Series([False] * len(filtered_df))
+                for col in filtered_df.columns:
+                    if col != '_sheet_row':
+                        mask = mask | filtered_df[col].astype(str).str.lower().str.contains(search_term, na=False)
+                filtered_df = filtered_df[mask]
 
-            # Advanced Filters
-            if not filtered_df.empty and sheet_choice not in ["NOTE", "USERS"]:
-                with st.expander("🔍 Advanced Filters & Column Search", expanded=False):
-                    st.markdown(f"**📊 Monitoring: {sheet_choice} Sheet**")
-                    af1, af2, af3, af4 = st.columns(4)
-                    with af1:
-                        adv_pnr = st.text_input("🔎 PNR", value=st.session_state.pnr_val, key="adv_pnr")
-                    with af2:
-                        adv_train = st.text_input("🚆 Train", value=st.session_state.train_val, key="adv_train")
-                    with af3:
-                        class_col = next((c for c in filtered_df.columns if 'CLASS' in c.upper()), None)
-                        if class_col:
-                            unique_classes = ['All'] + sorted(filtered_df[class_col].dropna().astype(str).unique().tolist())
-                            adv_class = st.selectbox("🎫 Class", unique_classes, key="adv_class")
-                        else:
-                            st.selectbox("🎫 Class", ['All'], key="adv_class_dummy")
-                    with af4:
-                        vip_col = next((c for c in filtered_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
-                        if vip_col:
-                            unique_vip = ['All'] + sorted([v for v in filtered_df[vip_col].dropna().astype(str).unique().tolist() if str(v).strip()])
-                            st.selectbox("⭐ VIP", unique_vip, key="adv_vip")
-                        else:
-                            st.selectbox("⭐ VIP", ['All'], key="adv_vip_dummy")
+        # Advanced Filters
+        if not filtered_df.empty and sheet_choice != "NOTE":
+            with st.expander("🔍 Advanced Filters & Column Search", expanded=False):
+                st.markdown(f"**📊 Monitoring: {sheet_choice} Sheet**")
+                af1, af2, af3, af4 = st.columns(4)
+                with af1:
+                    adv_pnr = st.text_input("🔎 PNR", value=st.session_state.pnr_val, key="adv_pnr")
+                with af2:
+                    adv_train = st.text_input("🚆 Train", value=st.session_state.train_val, key="adv_train")
+                with af3:
+                    class_col = next((c for c in filtered_df.columns if 'CLASS' in c.upper()), None)
+                    if class_col:
+                        unique_classes = ['All'] + sorted(filtered_df[class_col].dropna().astype(str).unique().tolist())
+                        adv_class = st.selectbox("🎫 Class", unique_classes, key="adv_class")
+                    else:
+                        st.selectbox("🎫 Class", ['All'], key="adv_class_dummy")
+                with af4:
+                    vip_col = next((c for c in filtered_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper()), None)
+                    if vip_col:
+                        unique_vip = ['All'] + sorted([v for v in filtered_df[vip_col].dropna().astype(str).unique().tolist() if str(v).strip()])
+                        st.selectbox("⭐ VIP", unique_vip, key="adv_vip")
+                    else:
+                        st.selectbox("⭐ VIP", ['All'], key="adv_vip_dummy")
 
-                    af5, af6, af7 = st.columns(3)
-                    with af5:
-                        from_col = next((c for c in filtered_df.columns if c.upper() == 'FROM'), None)
-                        to_col = next((c for c in filtered_df.columns if c.upper() == 'TO'), None)
-                        if from_col and to_col:
-                            routes = filtered_df[from_col].astype(str).str.upper() + " → " + filtered_df[to_col].astype(str).str.upper()
-                            unique_routes = ['All'] + sorted(routes.dropna().unique().tolist())
-                            st.selectbox("🛤️ Route", unique_routes, key="adv_route")
-                        else:
-                            st.selectbox("🛤️ Route", ['All'], key="adv_route_dummy")
-                    with af6:
-                        st.date_input("📅 From DOJ", value=st.session_state.from_val, key="adv_from_doj", format="DD-MM-YYYY")
-                    with af7:
-                        st.date_input("📅 To DOJ", value=st.session_state.to_val, key="adv_to_doj", format="DD-MM-YYYY")
+                af5, af6, af7 = st.columns(3)
+                with af5:
+                    from_col = next((c for c in filtered_df.columns if c.upper() == 'FROM'), None)
+                    to_col = next((c for c in filtered_df.columns if c.upper() == 'TO'), None)
+                    if from_col and to_col:
+                        routes = filtered_df[from_col].astype(str).str.upper() + " → " + filtered_df[to_col].astype(str).str.upper()
+                        unique_routes = ['All'] + sorted(routes.dropna().unique().tolist())
+                        st.selectbox("🛤️ Route", unique_routes, key="adv_route")
+                    else:
+                        st.selectbox("🛤️ Route", ['All'], key="adv_route_dummy")
+                with af6:
+                    st.date_input("📅 From DOJ", value=st.session_state.from_val, key="adv_from_doj", format="DD-MM-YYYY")
+                with af7:
+                    st.date_input("📅 To DOJ", value=st.session_state.to_val, key="adv_to_doj", format="DD-MM-YYYY")
 
-                    st.markdown("<div style='font-size:0.85rem; color:#64748b; margin:8px 0 4px 0;'>⚡ Quick Date Filters</div>", unsafe_allow_html=True)
-                    qf1, qf2, qf3, qf4 = st.columns(4)
-                    today_dt2 = datetime.now().date()
-                    with qf1:
-                        if st.button("📅 Today", use_container_width=True, key="adv_today"):
-                            st.session_state.from_val = today_dt2
-                            st.session_state.to_val = today_dt2
-                            st.session_state.current_page = 1
-                            st.rerun()
-                    with qf2:
-                        if st.button("📅 Tomorrow", use_container_width=True, key="adv_tomorrow"):
-                            st.session_state.from_val = today_dt2 + timedelta(days=1)
-                            st.session_state.to_val = today_dt2 + timedelta(days=1)
-                            st.session_state.current_page = 1
-                            st.rerun()
-                    with qf3:
-                        if st.button("📅 Day After", use_container_width=True, key="adv_day2"):
-                            st.session_state.from_val = today_dt2 + timedelta(days=2)
-                            st.session_state.to_val = today_dt2 + timedelta(days=2)
-                            st.session_state.current_page = 1
-                            st.rerun()
-                    with qf4:
-                        if st.button("🧹 Clear Dates", use_container_width=True, key="adv_clear_dates"):
-                            st.session_state.from_val = None
-                            st.session_state.to_val = None
-                            st.session_state.current_page = 1
-                            st.rerun()
-
-                    if st.button("🚀 Apply Filters", use_container_width=True, key="adv_apply"):
+                # Quick Date Buttons in Advanced Filters
+                st.markdown("<div style='font-size:0.85rem; color:#64748b; margin:8px 0 4px 0;'>⚡ Quick Date Filters</div>", unsafe_allow_html=True)
+                qf1, qf2, qf3, qf4 = st.columns(4)
+                today_dt2 = datetime.now().date()
+                with qf1:
+                    if st.button("📅 Today", use_container_width=True, key="adv_today"):
+                        st.session_state.from_val = today_dt2
+                        st.session_state.to_val = today_dt2
+                        st.session_state.current_page = 1
+                        st.rerun()
+                with qf2:
+                    if st.button("📅 Tomorrow", use_container_width=True, key="adv_tomorrow"):
+                        st.session_state.from_val = today_dt2 + timedelta(days=1)
+                        st.session_state.to_val = today_dt2 + timedelta(days=1)
+                        st.session_state.current_page = 1
+                        st.rerun()
+                with qf3:
+                    if st.button("📅 Day After", use_container_width=True, key="adv_day2"):
+                        st.session_state.from_val = today_dt2 + timedelta(days=2)
+                        st.session_state.to_val = today_dt2 + timedelta(days=2)
+                        st.session_state.current_page = 1
+                        st.rerun()
+                with qf4:
+                    if st.button("🧹 Clear Dates", use_container_width=True, key="adv_clear_dates"):
+                        st.session_state.from_val = None
+                        st.session_state.to_val = None
+                        st.session_state.current_page = 1
                         st.rerun()
 
-            # ================================================================
-            # Train count summary cards
-            # ================================================================
+                if st.button("🚀 Apply Filters", use_container_width=True, key="adv_apply"):
+                    st.rerun()
+
+        # ================================================================
+        # Train count summary cards — ALL sheets except NOTE
+        # ================================================================
+        train_col_metric = None
+        doj_col = None
+        try:
+            # PRIMARY: Use SHEET_CONFIG index (most reliable)
+            if sheet_choice in SHEET_CONFIG and sheet_choice != "NOTE":
+                cfg = SHEET_CONFIG[sheet_choice]
+                src = filtered_df if not filtered_df.empty else df_raw
+                if src is not None and len(src.columns) > 0:
+                    t_idx = cfg.get('train_col')
+                    if t_idx is not None and t_idx < len(src.columns):
+                        train_col_metric = src.columns[t_idx]
+                    d_idx = cfg.get('doj_col')
+                    if d_idx is not None and d_idx < len(src.columns):
+                        doj_col = src.columns[d_idx]
+            # FALLBACK: fuzzy header search if config index didn't work
+            if train_col_metric is None:
+                search_src = filtered_df if not filtered_df.empty else df_raw
+                if search_src is not None and not search_src.empty:
+                    train_col_metric = find_column(search_src, ['T/N', 'T_N', 'TRAIN', 'TRAIN NO', 'TRAIN NUMBER'])
+                    doj_col = find_column(search_src, ['DOJ', 'DATE OF JOURNEY', 'JOURNEY DATE'])
+        except Exception:
             train_col_metric = None
             doj_col = None
-            try:
-                if sheet_choice in SHEET_CONFIG and sheet_choice not in ["NOTE", "USERS"]:
-                    cfg = SHEET_CONFIG[sheet_choice]
-                    src = filtered_df if not filtered_df.empty else df_raw
-                    if src is not None and len(src.columns) > 0:
-                        t_idx = cfg.get('train_col')
-                        if t_idx is not None and t_idx < len(src.columns):
-                            train_col_metric = src.columns[t_idx]
-                        d_idx = cfg.get('doj_col')
-                        if d_idx is not None and d_idx < len(src.columns):
-                            doj_col = src.columns[d_idx]
-                if train_col_metric is None:
-                    search_src = filtered_df if not filtered_df.empty else df_raw
-                    if search_src is not None and not search_src.empty:
-                        train_col_metric = find_column(search_src, ['T/N', 'T_N', 'TRAIN', 'TRAIN NO', 'TRAIN NUMBER'])
-                        doj_col = find_column(search_src, ['DOJ', 'DATE OF JOURNEY', 'JOURNEY DATE'])
-            except Exception:
-                train_col_metric = None
-                doj_col = None
 
-            if sheet_choice not in ["NOTE", "USERS"]:
-                if not filtered_df.empty and train_col_metric and train_col_metric in filtered_df.columns:
-                    try:
-                        tc_series = filtered_df[train_col_metric].astype(str).str.strip()
-                        tc_series = tc_series[tc_series != '']
-                        train_counts_series = tc_series.value_counts()
-                        if len(train_counts_series) > 0:
-                            st.markdown("**🚆 Train-wise Count**")
-                            cards_html = '<div class="train-count-container">'
-                            total_eq = len(filtered_df)
-                            cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {total_eq}</div></div>'
-                            for train_num, cnt in train_counts_series.items():
-                                cards_html += f'<div class="train-count-card"><div class="train-count-number">{train_num}</div><div class="train-count-badge">{cnt}</div></div>'
-                            cards_html += '</div>'
-                            st.markdown(cards_html, unsafe_allow_html=True)
-                            st.markdown("---")
-                    except Exception:
-                        pass
-                elif not filtered_df.empty:
-                    st.markdown("**🚆 Train-wise Count**")
-                    cards_html = '<div class="train-count-container">'
-                    cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {len(filtered_df)}</div></div>'
-                    cards_html += '</div>'
-                    st.markdown(cards_html, unsafe_allow_html=True)
-                    st.markdown("---")
+        # Show train count cards for ALL sheets except NOTE
+        if sheet_choice != "NOTE":
+            if not filtered_df.empty and train_col_metric and train_col_metric in filtered_df.columns:
+                try:
+                    tc_series = filtered_df[train_col_metric].astype(str).str.strip()
+                    tc_series = tc_series[tc_series != '']
+                    train_counts_series = tc_series.value_counts()
+                    if len(train_counts_series) > 0:
+                        st.markdown("**🚆 Train-wise Count**")
+                        cards_html = '<div class="train-count-container">'
+                        total_eq = len(filtered_df)
+                        cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {total_eq}</div></div>'
+                        for train_num, cnt in train_counts_series.items():
+                            cards_html += f'<div class="train-count-card"><div class="train-count-number">{train_num}</div><div class="train-count-badge">{cnt}</div></div>'
+                        cards_html += '</div>'
+                        st.markdown(cards_html, unsafe_allow_html=True)
+                        st.markdown("---")
+                except Exception:
+                    pass
+            elif not filtered_df.empty:
+                # Column found but no valid train data — still show Total EQ
+                st.markdown("**🚆 Train-wise Count**")
+                cards_html = '<div class="train-count-container">'
+                cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {len(filtered_df)}</div></div>'
+                cards_html += '</div>'
+                st.markdown(cards_html, unsafe_allow_html=True)
+                st.markdown("---")
 
-            if st.button("🔄 Refresh Data", use_container_width=False, key="refresh_data_btn"):
-                st.cache_data.clear()
-                st.session_state.last_refresh = time.time()
-                log_activity("🔄 Manual refresh from main")
-                st.rerun()
+        if st.button("🔄 Refresh Data", use_container_width=False, key="refresh_data_btn"):
+            st.cache_data.clear()
+            st.session_state.last_refresh = time.time()
+            log_activity("🔄 Manual refresh from main")
+            st.rerun()
 
-            if filtered_df.empty:
-                st.info("📭 No data. Clear filters or select another sheet.")
-                has_structure = len(df_raw.columns) > 0
-                empty_df = df_raw.drop(columns=['_sheet_row'], errors='ignore') if has_structure else pd.DataFrame()
-                if has_structure and len(empty_df.columns) > 0:
-                    st.markdown("**📋 Column Structure**")
-                    display_empty = empty_df.head(0).copy()
-                    display_empty.insert(0, "Select", False)
-                    st.dataframe(display_empty, use_container_width=True, height=120)
-                else:
-                    st.caption("Sheet has headers but no data rows yet.")
+        if filtered_df.empty:
+            st.info("📭 No data. Clear filters or select another sheet.")
+            has_structure = len(df_raw.columns) > 0
+            empty_df = df_raw.drop(columns=['_sheet_row'], errors='ignore') if has_structure else pd.DataFrame()
+            if has_structure and len(empty_df.columns) > 0:
+                st.markdown("**📋 Column Structure**")
+                display_empty = empty_df.head(0).copy()
+                display_empty.insert(0, "Select", False)
+                st.dataframe(display_empty, use_container_width=True, height=120)
             else:
-                # Sorting
-                sort_col = st.session_state.sort_column
-                sort_asc = st.session_state.sort_ascending
-                if sort_col and sort_col in filtered_df.columns:
-                    try:
-                        filtered_df = filtered_df.sort_values(by=sort_col, ascending=sort_asc, key=lambda col: col.astype(str))
-                    except: pass
-
-                # Pagination
-                page_size = st.session_state.get('rows_per_page', 25)
-                if page_size not in [15, 25, 50, 100, 200]:
-                    page_size = 25
+                st.caption("Sheet has headers but no data rows yet.")
+        else:
+            # Sorting
+            sort_col = st.session_state.sort_column
+            sort_asc = st.session_state.sort_ascending
+            if sort_col and sort_col in filtered_df.columns:
                 try:
-                    idx = [15, 25, 50, 100, 200].index(page_size)
-                except Exception:
-                    idx = 1
-                selected_page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200],
-                    index=idx, key="page_size_select")
-                if not isinstance(selected_page_size, int) or selected_page_size <= 0:
-                    selected_page_size = 25
-                if selected_page_size != page_size:
-                    st.session_state.rows_per_page = selected_page_size
-                    st.session_state.current_page = 1
-                    st.rerun()
-                page_size = selected_page_size
+                    filtered_df = filtered_df.sort_values(by=sort_col, ascending=sort_asc, key=lambda col: col.astype(str))
+                except: pass
 
-                try:
-                    df_len = len(filtered_df)
-                    if df_len > 0 and page_size > 0:
-                        total_pages = max(1, int((df_len + page_size - 1) // page_size))
-                    else:
-                        total_pages = 1
-                except Exception:
-                    total_pages = 1
-                current_page = st.session_state.get('current_page', 1)
-                if current_page > total_pages: current_page = total_pages
-                if current_page < 1: current_page = 1
-                st.session_state.current_page = current_page
+            # Pagination - bulletproof with safe defaults
+            page_size = st.session_state.get('rows_per_page', 25)
+            if page_size not in [15, 25, 50, 100, 200]:
+                page_size = 25
+            try:
+                idx = [15, 25, 50, 100, 200].index(page_size)
+            except Exception:
+                idx = 1
+            selected_page_size = st.selectbox("Rows per page", [15, 25, 50, 100, 200],
+                index=idx, key="page_size_select")
+            if not isinstance(selected_page_size, int) or selected_page_size <= 0:
+                selected_page_size = 25
+            if selected_page_size != page_size:
+                st.session_state.rows_per_page = selected_page_size
+                st.session_state.current_page = 1
+                st.rerun()
+            page_size = selected_page_size
 
-                nav1, nav2, nav3 = st.columns([1, 2, 1])
-                with nav1:
-                    if st.button("◀ Previous", use_container_width=True, disabled=current_page <= 1, key="prev_page_btn"):
-                        st.session_state.current_page = current_page - 1
-                        st.rerun()
-                with nav2:
-                    st.markdown(f"<div style='text-align:center; padding-top:6px;'><b>Page {current_page} of {total_pages}</b> &nbsp;|&nbsp; <b>{len(filtered_df)} total rows</b></div>", unsafe_allow_html=True)
-                with nav3:
-                    if st.button("Next ▶", use_container_width=True, disabled=current_page >= total_pages, key="next_page_btn"):
-                        st.session_state.current_page = current_page + 1
-                        st.rerun()
-
-                page = current_page - 1
-                start_idx = page * page_size
-                end_idx = min(start_idx + page_size, len(filtered_df))
-                page_df = filtered_df.iloc[start_idx:end_idx].copy()
-                sheet_rows = page_df['_sheet_row'].tolist() if '_sheet_row' in page_df.columns else []
-                display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
-                display_df.insert(0, "Select", False)
-
-                # Sorting controls
-                if not display_df.empty:
-                    sort_cols = st.columns(4)
-                    with sort_cols[0]:
-                        sort_options = ['None'] + list(display_df.columns)
-                        current_sort = st.session_state.sort_column if st.session_state.sort_column in display_df.columns else 'None'
-                        new_sort = st.selectbox("📊 Sort by", sort_options, index=sort_options.index(current_sort) if current_sort in sort_options else 0, key="sort_by_select")
-                        if new_sort != current_sort:
-                            st.session_state.sort_column = None if new_sort == 'None' else new_sort
-                            st.rerun()
-                    with sort_cols[1]:
-                        if st.session_state.sort_column:
-                            sort_dir = st.selectbox("Direction", ['Ascending', 'Descending'],
-                                index=0 if st.session_state.sort_ascending else 1, key="sort_dir_select")
-                            new_asc = sort_dir == 'Ascending'
-                            if new_asc != st.session_state.sort_ascending:
-                                st.session_state.sort_ascending = new_asc
-                                st.rerun()
-
-                # Print-only table
-                print_export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
-                if not print_export_df.empty:
-                    print_html_table = print_export_df.to_html(index=False, border=1, classes='print-table', escape=False)
+            # Safe pagination calc without math.ceil
+            try:
+                df_len = len(filtered_df)
+                if df_len > 0 and page_size > 0:
+                    total_pages = max(1, int((df_len + page_size - 1) // page_size))
                 else:
-                    print_html_table = "<p>No data available</p>"
+                    total_pages = 1
+            except Exception:
+                total_pages = 1
+            current_page = st.session_state.get('current_page', 1)
+            if current_page > total_pages: current_page = total_pages
+            if current_page < 1: current_page = 1
+            st.session_state.current_page = current_page
 
-                st.markdown(f"""
-                <div class="print-only" id="print-content">
-                    <h2 style="text-align:center; margin-bottom:5px;">{sheet_choice} Sheet Report</h2>
-                    <p style="text-align:center; font-size:11pt; margin-bottom:15px;">Generated: {format_datetime()} IST | Total Records: {len(filtered_df)}</p>
-                    {print_html_table}
-                    <p style="text-align:center; font-size:10pt; margin-top:10px;">— End of Report —</p>
-                </div>
-                """, unsafe_allow_html=True)
-
-                st.markdown('<div class="print-area">', unsafe_allow_html=True)
-                edited_page = st.data_editor(display_df, use_container_width=True, height=500,
-                    column_config={"Select": st.column_config.CheckboxColumn("Select", width="small")},
-                    key=f"editor_{sheet_choice}_{st.session_state.current_page}_{page_size}")
-                st.markdown('</div>', unsafe_allow_html=True)
-
-                # Select All
-                selected_mask = edited_page["Select"] if "Select" in edited_page.columns else pd.Series([False] * len(edited_page))
-                if 'select_all_state' not in st.session_state:
-                    st.session_state.select_all_state = False
-                
-                select_all = st.checkbox("Select All on Page", value=st.session_state.select_all_state, key="select_all_cb")
-                if select_all != st.session_state.select_all_state:
-                    st.session_state.select_all_state = select_all
+            nav1, nav2, nav3 = st.columns([1, 2, 1])
+            with nav1:
+                if st.button("◀ Previous", use_container_width=True, disabled=current_page <= 1, key="prev_page_btn"):
+                    st.session_state.current_page = current_page - 1
                     st.rerun()
-                
-                if st.session_state.select_all_state:
-                    st.info("✅ All rows on this page are selected")
+            with nav2:
+                st.markdown(f"<div style='text-align:center; padding-top:6px;'><b>Page {current_page} of {total_pages}</b> &nbsp;|&nbsp; <b>{len(filtered_df)} total rows</b></div>", unsafe_allow_html=True)
+            with nav3:
+                if st.button("Next ▶", use_container_width=True, disabled=current_page >= total_pages, key="next_page_btn"):
+                    st.session_state.current_page = current_page + 1
+                    st.rerun()
 
-                selected_indices = edited_page[selected_mask].index.tolist()
-                selected_sheet_rows = []
-                if selected_indices and sheet_rows:
-                    for idx in selected_indices:
+            page = current_page - 1
+            start_idx = page * page_size
+            end_idx = min(start_idx + page_size, len(filtered_df))
+            page_df = filtered_df.iloc[start_idx:end_idx].copy()
+            sheet_rows = page_df['_sheet_row'].tolist() if '_sheet_row' in page_df.columns else []
+            display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
+            display_df.insert(0, "Select", False)
+
+            # Sorting controls
+            if not display_df.empty:
+                sort_cols = st.columns(4)
+                with sort_cols[0]:
+                    sort_options = ['None'] + list(display_df.columns)
+                    current_sort = st.session_state.sort_column if st.session_state.sort_column in display_df.columns else 'None'
+                    new_sort = st.selectbox("📊 Sort by", sort_options, index=sort_options.index(current_sort) if current_sort in sort_options else 0, key="sort_by_select")
+                    if new_sort != current_sort:
+                        st.session_state.sort_column = None if new_sort == 'None' else new_sort
+                        st.rerun()
+                with sort_cols[1]:
+                    if st.session_state.sort_column:
+                        sort_dir = st.selectbox("Direction", ['Ascending', 'Descending'],
+                            index=0 if st.session_state.sort_ascending else 1, key="sort_dir_select")
+                        new_asc = sort_dir == 'Ascending'
+                        if new_asc != st.session_state.sort_ascending:
+                            st.session_state.sort_ascending = new_asc
+                            st.rerun()
+
+            # Print-only table
+            print_export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
+            if not print_export_df.empty:
+                print_html_table = print_export_df.to_html(index=False, border=1, classes='print-table', escape=False)
+            else:
+                print_html_table = "<p>No data available</p>"
+
+            st.markdown(f"""
+            <div class="print-only" id="print-content">
+                <h2 style="text-align:center; margin-bottom:5px;">{sheet_choice} Sheet Report</h2>
+                <p style="text-align:center; font-size:11pt; margin-bottom:15px;">Generated: {format_datetime()} IST | Total Records: {len(filtered_df)}</p>
+                {print_html_table}
+                <p style="text-align:center; font-size:10pt; margin-top:10px;">— End of Report —</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown('<div class="print-area">', unsafe_allow_html=True)
+            edited_page = st.data_editor(display_df, use_container_width=True, height=500,
+                column_config={"Select": st.column_config.CheckboxColumn("Select", width="small")},
+                key=f"editor_{sheet_choice}_{st.session_state.current_page}_{page_size}")
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # Select All
+            selected_mask = edited_page["Select"] if "Select" in edited_page.columns else pd.Series([False] * len(edited_page))
+            if 'select_all_state' not in st.session_state:
+                st.session_state.select_all_state = False
+            
+            select_all = st.checkbox("Select All on Page", value=st.session_state.select_all_state, key="select_all_cb")
+            if select_all != st.session_state.select_all_state:
+                st.session_state.select_all_state = select_all
+                st.rerun()
+            
+            if st.session_state.select_all_state:
+                st.info("✅ All rows on this page are selected")
+
+            selected_indices = edited_page[selected_mask].index.tolist()
+            selected_sheet_rows = []
+            if selected_indices and sheet_rows:
+                for idx in selected_indices:
+                    try:
+                        pos = list(page_df.index).index(idx)
+                        selected_sheet_rows.append(sheet_rows[pos])
+                    except (ValueError, IndexError): pass
+
+            pnr_col = next((c for c in edited_page.columns if 'PNR' in str(c).upper()), None)
+            selected_pnrs = edited_page.loc[selected_indices, pnr_col].tolist() if pnr_col and selected_indices else []
+
+            # Quick Actions
+            st.markdown('<div class="action-box no-print">', unsafe_allow_html=True)
+            st.markdown("**⚡ Quick Actions**")
+            a1, a2, a3, a4, a5 = st.columns(5)
+            with a1:
+                can_edit = st.session_state.user_role in ['editor', 'admin']
+                if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn", disabled=not can_edit):
+                    if not can_edit:
+                        st.error("❌ You need EDITOR or ADMIN role to save edits.")
+                    else:
                         try:
-                            pos = list(page_df.index).index(idx)
-                            selected_sheet_rows.append(sheet_rows[pos])
-                        except (ValueError, IndexError): pass
-
-                pnr_col = next((c for c in edited_page.columns if 'PNR' in str(c).upper()), None)
-                selected_pnrs = edited_page.loc[selected_indices, pnr_col].tolist() if pnr_col and selected_indices else []
-
-                # Quick Actions
-                st.markdown('<div class="action-box no-print">', unsafe_allow_html=True)
-                st.markdown("**⚡ Quick Actions**")
-                a1, a2, a3, a4, a5 = st.columns(5)
-                with a1:
-                    can_edit = st.session_state.user_role in ['editor', 'admin']
-                    if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn", disabled=not can_edit):
-                        if not can_edit:
-                            st.error("❌ You need EDITOR or ADMIN role to save edits.")
-                        else:
-                            try:
-                                gc = init_sheets()
-                                sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                                data_to_update = edited_page.drop(columns=["Select"], errors='ignore')
-                                data_list = data_to_update.values.tolist()
-                                if data_list and sheet_rows:
-                                    for i, row_data in enumerate(data_list):
-                                        sheet_row_num = sheet_rows[i]
-                                        row_data = [str(x) if pd.notna(x) else '' for x in row_data]
-                                        num_cols = len(row_data)
-                                        col_letter = col_index_to_letter(num_cols)
-                                        range_name = f"A{sheet_row_num}:{col_letter}{sheet_row_num}"
-                                        sheet.update(range_name, [row_data])
-                                    st.toast("✅ Saved!", icon="💾")
-                                    log_activity(f"💾 Saved {len(data_list)} rows in {sheet_choice}")
-                                    st.session_state.audit_log.append({
-                                        "timestamp": format_datetime(),
-                                        "user": st.session_state.username,
-                                        "role": st.session_state.user_role,
-                                        "action": f"💾 Saved {len(data_list)} rows in {sheet_choice}",
-                                        "ip": "—"
-                                    })
-                                    st.cache_data.clear()
-                                    st.session_state.last_refresh = time.time()
-                                    time.sleep(0.3)
-                                    st.rerun()
-                                else: st.warning("Nothing to save")
-                            except Exception as e:
-                                if "429" in str(e): st.error("Write quota exceeded. Wait 1 minute.")
-                                else: st.error(f"Save error: {e}")
-                                log_activity(f"❌ Save: {str(e)[:40]}")
-                with a2:
-                    can_edit = st.session_state.user_role in ['editor', 'admin']
-                    if st.button("➕ Add Row", use_container_width=True, key="add_row_btn", disabled=not can_edit):
-                        if not can_edit:
-                            st.error("❌ You need EDITOR or ADMIN role to add rows.")
-                        else:
-                            try:
-                                gc = init_sheets()
-                                sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                                all_data = sheet.get_all_values()
-                                config = SHEET_CONFIG[sheet_choice]
-                                start_row = config["start_row"]
-                                num_cols = len(all_data[0]) if all_data else 1
-                                blank_row = [''] * num_cols
-                                if len(all_data) >= start_row: blank_row[0] = len(all_data) - start_row + 2
-                                sheet.append_row(blank_row)
-                                st.toast("✅ Row added", icon="➕")
-                                log_activity(f"➕ Added row in {sheet_choice}")
+                            gc = init_sheets()
+                            sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                            data_to_update = edited_page.drop(columns=["Select"], errors='ignore')
+                            data_list = data_to_update.values.tolist()
+                            if data_list and sheet_rows:
+                                for i, row_data in enumerate(data_list):
+                                    sheet_row_num = sheet_rows[i]
+                                    row_data = [str(x) if pd.notna(x) else '' for x in row_data]
+                                    num_cols = len(row_data)
+                                    col_letter = col_index_to_letter(num_cols)
+                                    range_name = f"A{sheet_row_num}:{col_letter}{sheet_row_num}"
+                                    sheet.update(range_name, [row_data])
+                                st.toast("✅ Saved!", icon="💾")
+                                log_activity(f"💾 Saved {len(data_list)} rows in {sheet_choice}")
+                                st.session_state.audit_log.append({
+                                    "timestamp": format_datetime(),
+                                    "user": st.session_state.username,
+                                    "role": st.session_state.user_role,
+                                    "action": f"💾 Saved {len(data_list)} rows in {sheet_choice}",
+                                    "ip": "—"
+                                })
                                 st.cache_data.clear()
                                 st.session_state.last_refresh = time.time()
                                 time.sleep(0.3)
                                 st.rerun()
-                            except Exception as e:
-                                st.error(f"Add error: {e}")
-                                log_activity(f"❌ Add: {str(e)[:40]}")
-                with a3:
-                    can_edit = st.session_state.user_role in ['editor', 'admin']
-                    if selected_sheet_rows:
-                        if st.button("🗑️ Delete", use_container_width=True, key="delete_btn", disabled=not can_edit):
-                            if not can_edit:
-                                st.error("❌ You need EDITOR or ADMIN role to delete.")
-                            else:
-                                if not st.session_state.delete_confirm:
-                                    st.session_state.delete_confirm = True
-                                    st.warning("Confirm delete by clicking again.")
-                                    st.rerun()
-                                else:
-                                    try:
-                                        gc = init_sheets()
-                                        sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                                        for row_num in sorted(selected_sheet_rows, reverse=True):
-                                            sheet.delete_rows(row_num)
-                                        st.toast(f"✅ Deleted {len(selected_sheet_rows)}", icon="🗑️")
-                                        log_activity(f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}")
-                                        st.session_state.audit_log.append({
-                                            "timestamp": format_datetime(),
-                                            "user": st.session_state.username,
-                                            "role": st.session_state.user_role,
-                                            "action": f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}",
-                                            "ip": "—"
-                                        })
-                                        st.session_state.delete_confirm = False
-                                        st.cache_data.clear()
-                                        st.session_state.last_refresh = time.time()
-                                        time.sleep(0.3)
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"Delete error: {e}")
-                                        log_activity(f"❌ Delete: {str(e)[:40]}")
+                            else: st.warning("Nothing to save")
+                        except Exception as e:
+                            if "429" in str(e): st.error("Write quota exceeded. Wait 1 minute.")
+                            else: st.error(f"Save error: {e}")
+                            log_activity(f"❌ Save: {str(e)[:40]}")
+            with a2:
+                can_edit = st.session_state.user_role in ['editor', 'admin']
+                if st.button("➕ Add Row", use_container_width=True, key="add_row_btn", disabled=not can_edit):
+                    if not can_edit:
+                        st.error("❌ You need EDITOR or ADMIN role to add rows.")
                     else:
-                        st.button("🗑️ Delete", disabled=True, use_container_width=True, key="delete_disabled_btn")
-                        st.session_state.delete_confirm = False
-                with a4:
-                    msg = build_whatsapp_message(sheet_choice, len(selected_indices), selected_pnrs, len(filtered_df), filtered_df)
-                    encoded = urllib.parse.quote(msg)
-                    wa_url = f"https://api.whatsapp.com/send?text={encoded}"
-                    st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
-                with a5:
-                    components.html("""
-                    <div style="width:100%;">
-                        <button onclick="
-                            (function(){
-                                var el = window.parent.document.querySelector('.print-only');
-                                if (!el) { alert('No data to print.'); return; }
-                                var content = el.innerHTML;
-                                if (!content || content.trim() === '' || content.includes('No data available')) {
-                                    alert('No data to print. Please load data first.');
-                                    return;
-                                }
-                                var iframe = window.parent.document.createElement('iframe');
-                                iframe.style.position = 'fixed';
-                                iframe.style.top = '-9999px';
-                                iframe.style.left = '-9999px';
-                                iframe.style.width = '0';
-                                iframe.style.height = '0';
-                                iframe.style.border = 'none';
-                                window.parent.document.body.appendChild(iframe);
-                                var doc = iframe.contentWindow.document;
-                                doc.open();
-                                doc.write('<html><head><title>Print</title>');
-                                doc.write('<style>@page { margin: 1cm; size: A4 landscape; } body { font-family: Arial; margin: 0; padding: 10px; background: white; } h2 { text-align: center; font-size: 18pt; margin-bottom: 5px; color: #000; } table { width: 100%; border-collapse: collapse; font-size: 7.5pt; page-break-inside: auto; } tr { page-break-inside: avoid; } thead { display: table-header-group; } th { background: #333 !important; color: white !important; padding: 4px 5px; border: 1px solid #333; text-align: center; font-weight: bold; } td { border: 1px solid #999; padding: 3px 4px; text-align: center; color: #000; word-wrap: break-word; } tr:nth-child(even) { background: #f5f5f5 !important; }</style></head><body>');
-                                doc.write(content);
-                                doc.write('</body></html>');
-                                doc.close();
-                                setTimeout(function(){ iframe.contentWindow.focus(); iframe.contentWindow.print(); setTimeout(function(){ window.parent.document.body.removeChild(iframe); }, 2000); }, 300);
-                            })();
-                        " style="display: block; width: 100%; padding: 9px 16px; background: #2563eb; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6); text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 1rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT</button>
-                    </div>
-                    """, height=45)
-                st.markdown('</div>', unsafe_allow_html=True)
+                        try:
+                            gc = init_sheets()
+                            sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                            all_data = sheet.get_all_values()
+                            config = SHEET_CONFIG[sheet_choice]
+                            start_row = config["start_row"]
+                            num_cols = len(all_data[0]) if all_data else 1
+                            blank_row = [''] * num_cols
+                            if len(all_data) >= start_row: blank_row[0] = len(all_data) - start_row + 2
+                            sheet.append_row(blank_row)
+                            st.toast("✅ Row added", icon="➕")
+                            log_activity(f"➕ Added row in {sheet_choice}")
+                            st.cache_data.clear()
+                            st.session_state.last_refresh = time.time()
+                            time.sleep(0.3)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Add error: {e}")
+                            log_activity(f"❌ Add: {str(e)[:40]}")
+            with a3:
+                can_edit = st.session_state.user_role in ['editor', 'admin']
+                if selected_sheet_rows:
+                    if st.button("🗑️ Delete", use_container_width=True, key="delete_btn", disabled=not can_edit):
+                        if not can_edit:
+                            st.error("❌ You need EDITOR or ADMIN role to delete.")
+                        else:
+                            if not st.session_state.delete_confirm:
+                                st.session_state.delete_confirm = True
+                                st.warning("Confirm delete by clicking again.")
+                                st.rerun()
+                            else:
+                                try:
+                                    gc = init_sheets()
+                                    sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                                    for row_num in sorted(selected_sheet_rows, reverse=True):
+                                        sheet.delete_rows(row_num)
+                                    st.toast(f"✅ Deleted {len(selected_sheet_rows)}", icon="🗑️")
+                                    log_activity(f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}")
+                                    st.session_state.audit_log.append({
+                                        "timestamp": format_datetime(),
+                                        "user": st.session_state.username,
+                                        "role": st.session_state.user_role,
+                                        "action": f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}",
+                                        "ip": "—"
+                                    })
+                                    st.session_state.delete_confirm = False
+                                    st.cache_data.clear()
+                                    st.session_state.last_refresh = time.time()
+                                    time.sleep(0.3)
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Delete error: {e}")
+                                    log_activity(f"❌ Delete: {str(e)[:40]}")
+                else:
+                    st.button("🗑️ Delete", disabled=True, use_container_width=True, key="delete_disabled_btn")
+                    st.session_state.delete_confirm = False
+            with a4:
+                msg = build_whatsapp_message(sheet_choice, len(selected_indices), selected_pnrs, len(filtered_df), filtered_df)
+                encoded = urllib.parse.quote(msg)
+                wa_url = f"https://api.whatsapp.com/send?text={encoded}"
+                st.link_button("📤 WhatsApp Text", wa_url, use_container_width=True)
+            with a5:
+                components.html("""
+                <div style="width:100%;">
+                    <button onclick="
+                        (function(){
+                            var el = window.parent.document.querySelector('.print-only');
+                            if (!el) { alert('No data to print.'); return; }
+                            var content = el.innerHTML;
+                            if (!content || content.trim() === '' || content.includes('No data available')) {
+                                alert('No data to print. Please load data first.');
+                                return;
+                            }
+                            var iframe = window.parent.document.createElement('iframe');
+                            iframe.style.position = 'fixed';
+                            iframe.style.top = '-9999px';
+                            iframe.style.left = '-9999px';
+                            iframe.style.width = '0';
+                            iframe.style.height = '0';
+                            iframe.style.border = 'none';
+                            window.parent.document.body.appendChild(iframe);
+                            var doc = iframe.contentWindow.document;
+                            doc.open();
+                            doc.write('<html><head><title>Print</title>');
+                            doc.write('<style>@page { margin: 1cm; size: A4 landscape; } body { font-family: Arial; margin: 0; padding: 10px; background: white; } h2 { text-align: center; font-size: 18pt; margin-bottom: 5px; color: #000; } table { width: 100%; border-collapse: collapse; font-size: 7.5pt; page-break-inside: auto; } tr { page-break-inside: avoid; } thead { display: table-header-group; } th { background: #333 !important; color: white !important; padding: 4px 5px; border: 1px solid #333; text-align: center; font-weight: bold; } td { border: 1px solid #999; padding: 3px 4px; text-align: center; color: #000; word-wrap: break-word; } tr:nth-child(even) { background: #f5f5f5 !important; }</style></head><body>');
+                            doc.write(content);
+                            doc.write('</body></html>');
+                            doc.close();
+                            setTimeout(function(){ iframe.contentWindow.focus(); iframe.contentWindow.print(); setTimeout(function(){ window.parent.document.body.removeChild(iframe); }, 2000); }, 300);
+                        })();
+                    " style="display: block; width: 100%; padding: 9px 16px; background: #2563eb; color: #000000; text-shadow: 0 1px 3px rgba(255,255,255,0.6); text-align: center; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 1rem; border: none; cursor: pointer; box-sizing: border-box; font-family: inherit;">🖨️ PRINT</button>
+                </div>
+                """, height=45)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-                # WhatsApp Image Share
-                st.markdown('<div class="no-print">', unsafe_allow_html=True)
-                st.markdown("**📱 WhatsApp Image Share**")
-                wa_col1, wa_col2, wa_col3 = st.columns(3)
-                with wa_col1:
-                    if not filtered_df.empty:
-                        img_bytes = create_table_image(filtered_df, f"{sheet_choice} Data")
-                        if img_bytes:
-                            st.download_button("Download Table Image", data=img_bytes,
-                                file_name=f"{sheet_choice}_table.png", mime="image/png",
-                                use_container_width=True, key="wa_img_download")
-                with wa_col2:
-                    if selected_indices and not filtered_df.empty:
-                        sel_img_bytes = create_table_image(filtered_df.iloc[selected_indices], f"{sheet_choice} Selected")
-                        if sel_img_bytes:
-                            st.download_button("Download Selected Image", data=sel_img_bytes,
-                                file_name=f"{sheet_choice}_selected.png", mime="image/png",
-                                use_container_width=True, key="wa_sel_img_download")
-                    else: st.info("Select rows to generate image")
-                with wa_col3:
-                    if not filtered_df.empty:
-                        img_bytes = create_table_image(filtered_df, f"{sheet_choice} Data")
-                        if img_bytes:
-                            img_b64 = base64.b64encode(img_bytes).decode()
-                            copy_js = '<div style="width:100%;"><button onclick="copyImg()" style="background:#25D366;color:white;border:none;border-radius:8px;padding:9px 16px;width:100%;font-weight:600;cursor:pointer;font-size:1rem;">Copy Sheet Image</button><script>function copyImg(){var d="' + img_b64 + '";fetch("data:image/png;base64,"+d).then(r=>r.blob()).then(b=>{navigator.clipboard.write([new ClipboardItem({"image/png":b})]).then(()=>alert("Copied! Paste into WhatsApp.")).catch(()=>alert("Failed. Use download."));});}</script></div>'
-                            components.html(copy_js, height=50)
-                st.markdown('</div>', unsafe_allow_html=True)
+            # WhatsApp Image Share
+            st.markdown('<div class="no-print">', unsafe_allow_html=True)
+            st.markdown("**📱 WhatsApp Image Share**")
+            wa_col1, wa_col2, wa_col3 = st.columns(3)
+            with wa_col1:
+                if not filtered_df.empty:
+                    img_bytes = create_table_image(filtered_df, f"{sheet_choice} Data")
+                    if img_bytes:
+                        st.download_button("Download Table Image", data=img_bytes,
+                            file_name=f"{sheet_choice}_table.png", mime="image/png",
+                            use_container_width=True, key="wa_img_download")
+            with wa_col2:
+                if selected_indices and not filtered_df.empty:
+                    sel_img_bytes = create_table_image(filtered_df.iloc[selected_indices], f"{sheet_choice} Selected")
+                    if sel_img_bytes:
+                        st.download_button("Download Selected Image", data=sel_img_bytes,
+                            file_name=f"{sheet_choice}_selected.png", mime="image/png",
+                            use_container_width=True, key="wa_sel_img_download")
+                else: st.info("Select rows to generate image")
+            with wa_col3:
+                if not filtered_df.empty:
+                    img_bytes = create_table_image(filtered_df, f"{sheet_choice} Data")
+                    if img_bytes:
+                        img_b64 = base64.b64encode(img_bytes).decode()
+                        copy_js = '<div style="width:100%;"><button onclick="copyImg()" style="background:#25D366;color:white;border:none;border-radius:8px;padding:9px 16px;width:100%;font-weight:600;cursor:pointer;font-size:1rem;">Copy Sheet Image</button><script>function copyImg(){var d="' + img_b64 + '";fetch("data:image/png;base64,"+d).then(r=>r.blob()).then(b=>{navigator.clipboard.write([new ClipboardItem({"image/png":b})]).then(()=>alert("Copied! Paste into WhatsApp.")).catch(()=>alert("Failed. Use download."));});}</script></div>'
+                        components.html(copy_js, height=50)
+            st.markdown('</div>', unsafe_allow_html=True)
 
-                # Export
-                st.markdown('<div class="no-print">', unsafe_allow_html=True)
-                st.markdown("**📄 Export**")
-                e1, e2, e3, e4 = st.columns(4)
-                with e1:
-                    try:
-                        export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
-                        pdf_bytes = generate_pdf(export_df, sheet_choice, full=True)
-                        st.download_button("PDF (All)", data=pdf_bytes,
-                            file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.pdf",
-                            mime="application/pdf", use_container_width=True, key="pdf_all_download")
-                    except Exception as e: st.warning(f"PDF error: {e}")
-                with e2:
-                    if selected_indices: export_sel = filtered_df.iloc[selected_indices].drop(columns=['_sheet_row'], errors='ignore')
-                    else: export_sel = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
-                    csv_sel = export_sel.to_csv(index=False).encode('utf-8')
-                    st.download_button("CSV (Selected)" if selected_indices else "CSV (All)", data=csv_sel,
-                        file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}_selected.csv",
-                        mime="text/csv", use_container_width=True, key="csv_download")
-                with e3:
+            # Export
+            st.markdown('<div class="no-print">', unsafe_allow_html=True)
+            st.markdown("**📄 Export**")
+            e1, e2, e3, e4 = st.columns(4)
+            with e1:
+                try:
                     export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
-                    excel_buffer = io.BytesIO()
-                    with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-                        export_df.to_excel(writer, sheet_name=sheet_choice, index=False)
-                    excel_data = excel_buffer.getvalue()
-                    st.download_button("Excel", data=excel_data,
-                        file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True, key="excel_download")
-                with e4:
-                    csv_full = filtered_df.drop(columns=['_sheet_row'], errors='ignore').to_csv(index=False).encode('utf-8')
-                    st.download_button("Copy CSV", data=csv_full, file_name="table.csv",
-                        mime="text/csv", use_container_width=True, key="copy_csv_download")
-                st.markdown('</div>', unsafe_allow_html=True)
+                    pdf_bytes = generate_pdf(export_df, sheet_choice, full=True)
+                    st.download_button("PDF (All)", data=pdf_bytes,
+                        file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.pdf",
+                        mime="application/pdf", use_container_width=True, key="pdf_all_download")
+                except Exception as e: st.warning(f"PDF error: {e}")
+            with e2:
+                if selected_indices: export_sel = filtered_df.iloc[selected_indices].drop(columns=['_sheet_row'], errors='ignore')
+                else: export_sel = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
+                csv_sel = export_sel.to_csv(index=False).encode('utf-8')
+                st.download_button("CSV (Selected)" if selected_indices else "CSV (All)", data=csv_sel,
+                    file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}_selected.csv",
+                    mime="text/csv", use_container_width=True, key="csv_download")
+            with e3:
+                export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
+                excel_buffer = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+                    export_df.to_excel(writer, sheet_name=sheet_choice, index=False)
+                excel_data = excel_buffer.getvalue()
+                st.download_button("Excel", data=excel_data,
+                    file_name=f"{sheet_choice}_{now_ist().strftime('%Y%m%d_%H%M')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True, key="excel_download")
+            with e4:
+                csv_full = filtered_df.drop(columns=['_sheet_row'], errors='ignore').to_csv(index=False).encode('utf-8')
+                st.download_button("Copy CSV", data=csv_full, file_name="table.csv",
+                    mime="text/csv", use_container_width=True, key="copy_csv_download")
+            st.markdown('</div>', unsafe_allow_html=True)
 
-                # Extra Features
-                st.markdown('<div class="no-print">', unsafe_allow_html=True)
-                with st.expander("🔧 Extra Features", expanded=False):
-                    feat1, feat2 = st.columns(2)
-                    with feat1:
-                        st.markdown("**🎫 PNR Status Check**")
-                        pnr_check = st.text_input("Enter PNR", max_chars=10, key="pnr_status_input")
-                        if pnr_check and len(pnr_check) == 10:
-                            pnr_url = get_pnr_status_url(pnr_check)
-                            st.link_button("Check PNR Status", pnr_url, use_container_width=True)
-                        st.markdown("**📊 Quick Stats**")
-                        if not filtered_df.empty and pnr_col:
-                            valid_pnrs = filtered_df[pnr_col].astype(str).str.match(r'\d{10}').sum()
-                            st.caption(f"Valid PNRs: {valid_pnrs}")
-                        if not filtered_df.empty and doj_col is not None:
-                            upcoming = sum(1 for _, r in filtered_df.iterrows() if not is_expired(r.get(doj_col, '')))
-                            st.caption(f"Upcoming DOJ: {upcoming}")
-                    with feat2:
-                        st.markdown("**🚆 Train Analysis**")
-                        if train_col_metric and train_col_metric in filtered_df.columns and not filtered_df.empty:
-                            try:
-                                mc = filtered_df[train_col_metric].astype(str).str.strip()
-                                mc = mc[mc != ''].mode()
-                                if not mc.empty: st.caption(f"Most frequent train: {mc.iloc[0]}")
-                            except Exception: pass
-                        if pnr_col and pnr_col in filtered_df.columns:
-                            try:
-                                dupes = filtered_df[pnr_col].value_counts()
-                                dupes = dupes[dupes > 1]
-                                if not dupes.empty: st.warning(f"⚠️ {len(dupes)} Duplicate PNRs found!")
-                                else: st.success("✅ No duplicate PNRs")
-                            except Exception: pass
-                        st.markdown("**⌨️ Shortcuts**")
-                        st.caption("D: Toggle Theme | Refresh button to sync data")
-                st.markdown('</div>', unsafe_allow_html=True)
+            # Extra Features
+            st.markdown('<div class="no-print">', unsafe_allow_html=True)
+            with st.expander("🔧 Extra Features", expanded=False):
+                feat1, feat2 = st.columns(2)
+                with feat1:
+                    st.markdown("**🎫 PNR Status Check**")
+                    pnr_check = st.text_input("Enter PNR", max_chars=10, key="pnr_status_input")
+                    if pnr_check and len(pnr_check) == 10:
+                        pnr_url = get_pnr_status_url(pnr_check)
+                        st.link_button("Check PNR Status", pnr_url, use_container_width=True)
+                    st.markdown("**📊 Quick Stats**")
+                    if not filtered_df.empty and pnr_col:
+                        valid_pnrs = filtered_df[pnr_col].astype(str).str.match(r'\d{10}').sum()
+                        st.caption(f"Valid PNRs: {valid_pnrs}")
+                    if not filtered_df.empty and doj_col is not None:
+                        upcoming = sum(1 for _, r in filtered_df.iterrows() if not is_expired(r.get(doj_col, '')))
+                        st.caption(f"Upcoming DOJ: {upcoming}")
+                with feat2:
+                    st.markdown("**🚆 Train Analysis**")
+                    if train_col_metric and train_col_metric in filtered_df.columns and not filtered_df.empty:
+                        try:
+                            mc = filtered_df[train_col_metric].astype(str).str.strip()
+                            mc = mc[mc != ''].mode()
+                            if not mc.empty: st.caption(f"Most frequent train: {mc.iloc[0]}")
+                        except Exception: pass
+                    if pnr_col and pnr_col in filtered_df.columns:
+                        try:
+                            dupes = filtered_df[pnr_col].value_counts()
+                            dupes = dupes[dupes > 1]
+                            if not dupes.empty: st.warning(f"⚠️ {len(dupes)} Duplicate PNRs found!")
+                            else: st.success("✅ No duplicate PNRs")
+                        except Exception: pass
+                    st.markdown("**⌨️ Shortcuts**")
+                    st.caption("D: Toggle Theme | Refresh button to sync data")
+            st.markdown('</div>', unsafe_allow_html=True)
 
     # =====================================================================
     # VIEW: 📊 DASHBOARD
@@ -5129,6 +5027,7 @@ def main():
         with kcol1: 
             st.markdown(f'<div class="metric-card"><h3>{total_records}</h3><p>Total Records</p></div>', unsafe_allow_html=True)
 
+        # Use SHEET_CONFIG for reliable column indices per sheet
         dash_cfg = SHEET_CONFIG.get(dash_sheet, {})
         def cfg_col(name):
             idx = dash_cfg.get(name)
@@ -5139,6 +5038,7 @@ def main():
         to_col_dash = cfg_col('to_col')
         berth_col_dash = cfg_col('berth_col')
         doj_col_dash = cfg_col('doj_col')
+        # VIP column is always the same header across sheets — find by header name
         vip_col_dash = next((c for c in dash_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper() or 'MINISTER' in c.upper()), None)
         if train_col_dash and column_has_data(dash_df, train_col_dash):
             unique_trains = dash_df[train_col_dash].dropna().astype(str).str.strip().ne('').nunique()
@@ -5148,6 +5048,7 @@ def main():
             with kcol2: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Unique Trains</p></div>', unsafe_allow_html=True)
 
+        # vip_col_dash already detected above via find_column()
         if vip_col_dash and column_has_data(dash_df, vip_col_dash):
             vip_count = dash_df[vip_col_dash].astype(str).str.strip().ne('').sum()
             with kcol3: 
@@ -5156,6 +5057,7 @@ def main():
             with kcol3: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>VIP Records</p></div>', unsafe_allow_html=True)
 
+        # class_col_dash already detected above via find_column()
         if class_col_dash and column_has_data(dash_df, class_col_dash):
             class_counts = dash_df[class_col_dash].dropna().astype(str).str.strip()
             class_counts = class_counts[class_counts != ''].value_counts()
@@ -5166,6 +5068,7 @@ def main():
             with kcol4: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Top Class</p></div>', unsafe_allow_html=True)
 
+        # doj_col_dash already detected above via find_column()
         if doj_col_dash and column_has_data(dash_df, doj_col_dash):
             upcoming = sum(1 for _, r in dash_df.iterrows() if not is_expired(r.get(doj_col_dash, '')))
             with kcol5: 
@@ -5222,6 +5125,7 @@ def main():
 
             # Graph 3: Route-wise Distribution
             st.markdown("### 3️⃣ Route-wise Distribution")
+            # from_col_dash & to_col_dash set via cfg_col above
             if from_col_dash and to_col_dash and column_has_data(dash_df, from_col_dash) and column_has_data(dash_df, to_col_dash):
                 dash_df['ROUTE'] = dash_df[from_col_dash].astype(str) + " → " + dash_df[to_col_dash].astype(str)
                 route_counts = dash_df['ROUTE'].value_counts().head(12).reset_index()
@@ -5305,6 +5209,7 @@ def main():
             st.markdown("### 6️⃣ Rush Comparison — High Demand vs Low Demand")
             if train_col_dash and column_has_data(dash_df, train_col_dash):
                 try:
+                    # Use berth/seat count for real demand if available, else fallback to record count
                     if berth_col_dash and column_has_data(dash_df, berth_col_dash):
                         train_demand = dash_df.groupby(train_col_dash)[berth_col_dash].apply(
                             lambda x: pd.to_numeric(x, errors='coerce').fillna(1).sum()
@@ -5729,6 +5634,7 @@ def main():
                     with st.spinner("Generating PDF for train " + train_num + "..."):
                         pdf_bytes, err = generate_train_pdf(train_num, "EQ")
                         if pdf_bytes:
+                            # Save PDF info to chat
                             save_chat_message('TSKEQ Bot', 'admin', 
                                 "📄 PDF generated for Train " + train_num + ". Download below 👇", 'admin')
                             st.session_state.chat_pdf_bytes = pdf_bytes
@@ -5874,6 +5780,7 @@ def main():
                         file_name=st.session_state.chat_pdf_name, mime="application/pdf",
                         use_container_width=True, key="chat_pdf_download")
                 st.markdown('</div>', unsafe_allow_html=True)
+                # Clear after showing
                 if st.button("🗑️ Clear PDF", key="clear_chat_pdf"):
                     st.session_state.chat_pdf_bytes = None
                     st.session_state.chat_pdf_name = None
@@ -5896,6 +5803,7 @@ def main():
                 with cmd_cols[i % 4]:
                     if st.button(label, use_container_width=True, key=f"cmd_{i}"):
                         save_chat_message(current_user, current_role, cmd_text, 'user')
+                        # Trigger command processing
                         cmd = parse_chat_command(cmd_text)
                         action = cmd.get('action', 'chat')
                         if action == 'pdf_today':
@@ -5951,6 +5859,7 @@ def main():
 
             # ===== Clear Chat =====
             if st.button("🗑️ Clear My Messages", use_container_width=True, key="clear_my_chat"):
+                # Note: In a real group chat, only admin can clear all. Users can only clear their view.
                 st.info("💡 Chat is shared. Messages remain for all users.")
 
             # ===== TTS Engine =====
@@ -5993,8 +5902,7 @@ def main():
             })();
             </script>
             """, height=0)
-
-    # VIEW: 🚂 RAILWAY
+# VIEW: 🚂 RAILWAY
     # =====================================================================
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real-time Info")
@@ -6084,6 +5992,7 @@ def main():
                 pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr")
                 st.markdown("""
                 <style>
+                /* Railway PNR input - BIG white numbers */
                 input[aria-label="Enter 10-digit PNR"] {
                     color: #ffffff !important;
                     -webkit-text-fill-color: #ffffff !important;
@@ -6105,6 +6014,7 @@ def main():
                     font-weight: 500 !important;
                     letter-spacing: 1px !important;
                 }
+                /* Also style the label */
                 .stTextInput:has(input[aria-label="Enter 10-digit PNR"]) label p,
                 .stTextInput:has(input[aria-label="Enter 10-digit PNR"]) label span {
                     color: #ffffff !important;
@@ -6318,6 +6228,8 @@ def main():
                             placeholder="Any city, town or village...", key="weather_city_input")
         if city != st.session_state.weather_city: st.session_state.weather_city = city
 
+        # Note: Weather fetched via "Get Weather" button to avoid API spam
+
         st.markdown('<div class="weather-input-wrapper">', unsafe_allow_html=True)
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -6351,8 +6263,9 @@ def main():
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
 
+            # Day/Night detection for styling
             time_of_day = 'day'
-            weather_mode = 'day'
+            weather_mode = 'day'  # <-- FIXED: Define weather_mode
             try:
                 now_ts = int(time.time())
                 sunrise = data.get('sunrise')
@@ -6377,6 +6290,7 @@ def main():
                         weather_mode = 'night'
             except: pass
 
+            # Location banner with LOCAL TIME
             loc_state = data.get('state', '')
             loc_country = data.get('country', '')
             loc_full = data.get('city', 'Unknown') + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
@@ -6384,6 +6298,7 @@ def main():
             banner_text = "#ffffff"
             banner_shadow = "0 2px 8px rgba(0,0,0,0.9)"
 
+            # Calculate local time from timezone offset
             tz_offset = data.get('timezone', 0)
             try:
                 utc_now = datetime.now(timezone.utc)
@@ -6487,6 +6402,7 @@ def main():
 
             if data.get('sunrise') and data.get('sunrise') != 'N/A':
                 try:
+                    # timezone imported at top level
                     UTC = timezone.utc
                     sunrise_dt = datetime.fromtimestamp(data['sunrise'], tz=UTC).astimezone(IST)
                     sunset_dt = datetime.fromtimestamp(data['sunset'], tz=UTC).astimezone(IST)
@@ -6713,6 +6629,7 @@ def main():
             st.info("Enter a city name and click 'Get Weather' to see detailed weather information.")
 
     # === COMPREHENSIVE TEXT VISIBILITY FIX ===
+    # This CSS block is rendered LAST and overrides all previous styles
     st.markdown("""
     <style>
     /* === FORCE ALL FORM LABELS BLACK === */
