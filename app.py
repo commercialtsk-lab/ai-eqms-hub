@@ -1,3 +1,4 @@
+
 # =====================================================================
 # AI EQMS Hub Pro - Complete Streamlit Application
 # =====================================================================
@@ -2570,7 +2571,7 @@ def main():
     # AUTHENTICATION & REGISTRATION GATE
     # =====================================================================
     if not st.session_state.authenticated:
-        st.set_page_config(page_title="AI EQMS Hub Pro — Welcome", page_icon="🔒", layout="centered")
+    # st.set_page_config already called at top of file
         reg_name = st.session_state.get('reg_name', '').strip()
         if not reg_name:
             st.markdown("""
@@ -2731,7 +2732,7 @@ def main():
                 st.session_state.reg_name = ''
                 st.rerun()
     else:
-        st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="expanded")
+        pass  # st.set_page_config already called at top of file
 
     # BULLETPROOF: Initialize all pagination/session vars at top of main()
     if 'rows_per_page' not in st.session_state or not isinstance(st.session_state.get('rows_per_page'), int) or st.session_state.get('rows_per_page') <= 0:
@@ -5272,636 +5273,636 @@ def main():
                     pass
 
     # =====================================================================
-        # VIEW: 💬 CHAT — WhatsApp Group Style
-        # =====================================================================
-        elif view == "💬 Chat":
-            # ===== WhatsApp Group Chat CSS =====
-            st.markdown("""
-            <style>
-            .wa-group-header {
-                background: linear-gradient(135deg, #075e54, #128c7e);
-                border-radius: 16px 16px 0 0;
-                padding: 14px 20px;
-                display: flex;
-                align-items: center;
-                gap: 14px;
-                border-bottom: 1px solid rgba(255,255,255,0.1);
-                margin-bottom: 0;
-            }
-            .wa-group-avatar {
-                width: 52px; height: 52px;
-                background: linear-gradient(135deg, #FF9933, #FF6B35);
-                border-radius: 50%;
-                display: flex; align-items: center; justify-content: center;
-                font-size: 1.8rem;
-                box-shadow: 0 4px 15px rgba(255,107,53,0.4);
-                border: 2px solid rgba(255,255,255,0.2);
-            }
-            .wa-group-info { flex: 1; }
-            .wa-group-name { color: #fff; font-weight: 700; font-size: 1.15rem; }
-            .wa-group-meta { color: rgba(255,255,255,0.75); font-size: 0.8rem; }
-            .wa-online-dot {
-                width: 10px; height: 10px; background: #22c55e;
-                border-radius: 50%; display: inline-block;
-                box-shadow: 0 0 8px #22c55e; animation: blink-dot 2s infinite;
-            }
-            @keyframes blink-dot { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
-            .wa-chat-container {
-                background: linear-gradient(180deg, #0a0a1a 0%, #0f172a 100%);
-                border-radius: 0 0 16px 16px;
-                padding: 16px;
-                max-height: 65vh;
-                overflow-y: auto;
-                border: 1px solid rgba(255,255,255,0.1);
-                border-top: none;
-            }
-            .wa-msg-row { display: flex; margin-bottom: 10px; align-items: flex-end; }
-            .wa-msg-row.me { justify-content: flex-end; }
-            .wa-msg-row.admin { justify-content: flex-start; }
-            .wa-msg-row.system { justify-content: center; }
-            .wa-msg-bubble {
-                max-width: 75%;
-                padding: 10px 14px;
-                border-radius: 12px;
-                font-size: 0.92rem;
-                line-height: 1.45;
-                word-wrap: break-word;
-                position: relative;
-            }
-            .wa-msg-bubble.me {
-                background: linear-gradient(135deg, #005c4b, #025144);
-                color: #e9edef;
-                border-radius: 12px 12px 0 12px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            }
-            .wa-msg-bubble.other {
-                background: #202c33;
-                color: #e9edef;
-                border-radius: 12px 12px 12px 0;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            }
-            .wa-msg-bubble.admin {
-                background: linear-gradient(135deg, #1e3a5f, #2d5a87);
-                color: #fff;
-                border-radius: 12px 12px 12px 0;
-                border-left: 3px solid #FF9933;
-                box-shadow: 0 2px 12px rgba(37,99,235,0.3);
-            }
-            .wa-msg-bubble.system {
-                background: rgba(255,255,255,0.08);
-                color: #94a3b8;
-                border-radius: 20px;
-                font-size: 0.8rem;
-                padding: 6px 16px;
-                text-align: center;
-                border: 1px solid rgba(255,255,255,0.1);
-            }
-            .wa-msg-sender {
-                font-size: 0.75rem;
-                font-weight: 700;
-                margin-bottom: 3px;
-                display: flex;
-                align-items: center;
-                gap: 5px;
-            }
-            .wa-admin-badge {
-                background: linear-gradient(90deg, #FF9933, #138808);
-                color: #000;
-                font-size: 0.6rem;
-                padding: 1px 6px;
-                border-radius: 10px;
-                font-weight: 800;
-                text-shadow: 0 1px 2px rgba(255,255,255,0.5);
-            }
-            .wa-msg-time {
-                font-size: 0.68rem;
-                opacity: 0.6;
-                text-align: right;
-                margin-top: 4px;
-            }
-            .wa-chat-input-wrap {
-                background: #202c33;
-                border-radius: 24px;
-                padding: 10px 16px;
-                margin-top: 12px;
-                border: 1px solid rgba(255,255,255,0.1);
-                display: flex;
-                gap: 10px;
-                align-items: center;
-            }
-            .wa-attach-btn {
-                background: rgba(255,255,255,0.1);
-                border: none;
-                color: #8696a0;
-                width: 36px; height: 36px;
-                border-radius: 50%;
-                cursor: pointer;
-                font-size: 1.1rem;
-                transition: all 0.2s;
-            }
-            .wa-attach-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
-            .wa-typing {
-                color: #8696a0;
-                font-size: 0.8rem;
-                font-style: italic;
-                padding: 4px 16px;
-            }
-            .wa-pdf-card {
-                background: rgba(37,99,235,0.15);
-                border: 1px solid rgba(37,99,235,0.3);
-                border-radius: 10px;
-                padding: 10px 14px;
-                margin-top: 8px;
-                display: flex;
-                align-items: center;
-                gap: 10px;
-            }
-            .wa-pdf-icon { font-size: 1.5rem; }
-            .wa-pdf-info { flex: 1; }
-            .wa-pdf-name { font-weight: 600; font-size: 0.85rem; }
-            .wa-pdf-size { font-size: 0.75rem; opacity: 0.7; }
-            </style>
-            """, unsafe_allow_html=True)
+    # VIEW: 💬 CHAT — WhatsApp Group Style
+    # =====================================================================
+    elif view == "💬 Chat":
+        # ===== WhatsApp Group Chat CSS =====
+        st.markdown("""
+        <style>
+        .wa-group-header {
+            background: linear-gradient(135deg, #075e54, #128c7e);
+            border-radius: 16px 16px 0 0;
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 0;
+        }
+        .wa-group-avatar {
+            width: 52px; height: 52px;
+            background: linear-gradient(135deg, #FF9933, #FF6B35);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.8rem;
+            box-shadow: 0 4px 15px rgba(255,107,53,0.4);
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+        .wa-group-info { flex: 1; }
+        .wa-group-name { color: #fff; font-weight: 700; font-size: 1.15rem; }
+        .wa-group-meta { color: rgba(255,255,255,0.75); font-size: 0.8rem; }
+        .wa-online-dot {
+            width: 10px; height: 10px; background: #22c55e;
+            border-radius: 50%; display: inline-block;
+            box-shadow: 0 0 8px #22c55e; animation: blink-dot 2s infinite;
+        }
+        @keyframes blink-dot { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+        .wa-chat-container {
+            background: linear-gradient(180deg, #0a0a1a 0%, #0f172a 100%);
+            border-radius: 0 0 16px 16px;
+            padding: 16px;
+            max-height: 65vh;
+            overflow-y: auto;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-top: none;
+        }
+        .wa-msg-row { display: flex; margin-bottom: 10px; align-items: flex-end; }
+        .wa-msg-row.me { justify-content: flex-end; }
+        .wa-msg-row.admin { justify-content: flex-start; }
+        .wa-msg-row.system { justify-content: center; }
+        .wa-msg-bubble {
+            max-width: 75%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 0.92rem;
+            line-height: 1.45;
+            word-wrap: break-word;
+            position: relative;
+        }
+        .wa-msg-bubble.me {
+            background: linear-gradient(135deg, #005c4b, #025144);
+            color: #e9edef;
+            border-radius: 12px 12px 0 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .wa-msg-bubble.other {
+            background: #202c33;
+            color: #e9edef;
+            border-radius: 12px 12px 12px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .wa-msg-bubble.admin {
+            background: linear-gradient(135deg, #1e3a5f, #2d5a87);
+            color: #fff;
+            border-radius: 12px 12px 12px 0;
+            border-left: 3px solid #FF9933;
+            box-shadow: 0 2px 12px rgba(37,99,235,0.3);
+        }
+        .wa-msg-bubble.system {
+            background: rgba(255,255,255,0.08);
+            color: #94a3b8;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            padding: 6px 16px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .wa-msg-sender {
+            font-size: 0.75rem;
+            font-weight: 700;
+            margin-bottom: 3px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .wa-admin-badge {
+            background: linear-gradient(90deg, #FF9933, #138808);
+            color: #000;
+            font-size: 0.6rem;
+            padding: 1px 6px;
+            border-radius: 10px;
+            font-weight: 800;
+            text-shadow: 0 1px 2px rgba(255,255,255,0.5);
+        }
+        .wa-msg-time {
+            font-size: 0.68rem;
+            opacity: 0.6;
+            text-align: right;
+            margin-top: 4px;
+        }
+        .wa-chat-input-wrap {
+            background: #202c33;
+            border-radius: 24px;
+            padding: 10px 16px;
+            margin-top: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .wa-attach-btn {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #8696a0;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all 0.2s;
+        }
+        .wa-attach-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
+        .wa-typing {
+            color: #8696a0;
+            font-size: 0.8rem;
+            font-style: italic;
+            padding: 4px 16px;
+        }
+        .wa-pdf-card {
+            background: rgba(37,99,235,0.15);
+            border: 1px solid rgba(37,99,235,0.3);
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .wa-pdf-icon { font-size: 1.5rem; }
+        .wa-pdf-info { flex: 1; }
+        .wa-pdf-name { font-weight: 600; font-size: 0.85rem; }
+        .wa-pdf-size { font-size: 0.75rem; opacity: 0.7; }
+        </style>
+        """, unsafe_allow_html=True)
 
-            # ===== Load Shared Chat History =====
+        # ===== Load Shared Chat History =====
+        chat_history = load_chat_history(limit=200)
+        online_users = get_online_users()
+        current_user = st.session_state.username
+        current_role = st.session_state.user_role
+
+        # ===== Post Sheet Alert if any =====
+        alert = check_sheet_alerts()
+        if alert:
+            save_chat_message('TSKEQ Bot', 'admin', alert, 'alert', '')
             chat_history = load_chat_history(limit=200)
-            online_users = get_online_users()
-            current_user = st.session_state.username
-            current_role = st.session_state.user_role
 
-            # ===== Post Sheet Alert if any =====
-            alert = check_sheet_alerts()
-            if alert:
-                save_chat_message('TSKEQ Bot', 'admin', alert, 'alert', '')
-                chat_history = load_chat_history(limit=200)
+        # ===== WhatsApp Group Header =====
+        online_count = len(online_users)
+        online_names = ", ".join(list(online_users.keys())[:5])
+        if len(online_users) > 5:
+            online_names += " +" + str(len(online_users) - 5) + " more"
 
-            # ===== WhatsApp Group Header =====
-            online_count = len(online_users)
-            online_names = ", ".join(list(online_users.keys())[:5])
-            if len(online_users) > 5:
-                online_names += " +" + str(len(online_users) - 5) + " more"
-
-            st.markdown(f"""
-            <div class="wa-group-header">
-                <div class="wa-group-avatar">🚂</div>
-                <div class="wa-group-info">
-                    <div class="wa-group-name">TSKEQ Team Group</div>
-                    <div class="wa-group-meta">
-                        <span class="wa-online-dot"></span> {online_count} online · {online_names if online_names else 'Just you'}
-                    </div>
+        st.markdown(f"""
+        <div class="wa-group-header">
+            <div class="wa-group-avatar">🚂</div>
+            <div class="wa-group-info">
+                <div class="wa-group-name">TSKEQ Team Group</div>
+                <div class="wa-group-meta">
+                    <span class="wa-online-dot"></span> {online_count} online · {online_names if online_names else 'Just you'}
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+        </div>
+        """, unsafe_allow_html=True)
 
-            # ===== Chat Messages Container =====
-            st.markdown('<div class="wa-chat-container">', unsafe_allow_html=True)
+        # ===== Chat Messages Container =====
+        st.markdown('<div class="wa-chat-container">', unsafe_allow_html=True)
 
-            for msg in chat_history:
-                sender = msg.get('username', 'Unknown')
-                msg_type = msg.get('type', 'user')
-                message_text = msg.get('message', '')
-                timestamp = msg.get('timestamp', '')
-                role = msg.get('role', 'viewer')
-                is_me = sender == current_user
-                is_admin = msg_type == 'admin' or sender == 'TSKEQ Bot'
-                is_alert = msg_type == 'alert' or msg_type == 'system'
+        for msg in chat_history:
+            sender = msg.get('username', 'Unknown')
+            msg_type = msg.get('type', 'user')
+            message_text = msg.get('message', '')
+            timestamp = msg.get('timestamp', '')
+            role = msg.get('role', 'viewer')
+            is_me = sender == current_user
+            is_admin = msg_type == 'admin' or sender == 'TSKEQ Bot'
+            is_alert = msg_type == 'alert' or msg_type == 'system'
 
-                if is_alert:
-                    st.markdown(f"""
-                    <div class="wa-msg-row system">
-                        <div class="wa-msg-bubble system">
-                            {message_text}<br>
-                            <span style="font-size:0.65rem;opacity:0.5;">{timestamp}</span>
-                        </div>
+            if is_alert:
+                st.markdown(f"""
+                <div class="wa-msg-row system">
+                    <div class="wa-msg-bubble system">
+                        {message_text}<br>
+                        <span style="font-size:0.65rem;opacity:0.5;">{timestamp}</span>
                     </div>
-                    """, unsafe_allow_html=True)
-                elif is_admin:
-                    st.markdown(f"""
-                    <div class="wa-msg-row admin">
-                        <div class="wa-msg-bubble admin">
-                            <div class="wa-msg-sender">
-                                🚂 {sender} <span class="wa-admin-badge">ADMIN</span>
-                            </div>
-                            {message_text}
-                            <div class="wa-msg-time">{timestamp}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            elif is_admin:
+                st.markdown(f"""
+                <div class="wa-msg-row admin">
+                    <div class="wa-msg-bubble admin">
+                        <div class="wa-msg-sender">
+                            🚂 {sender} <span class="wa-admin-badge">ADMIN</span>
                         </div>
+                        {message_text}
+                        <div class="wa-msg-time">{timestamp}</div>
                     </div>
-                    """, unsafe_allow_html=True)
-                elif is_me:
-                    st.markdown(f"""
-                    <div class="wa-msg-row me">
-                        <div class="wa-msg-bubble me">
-                            <div class="wa-msg-sender" style="justify-content:flex-end;">You · {role}</div>
-                            {message_text}
-                            <div class="wa-msg-time">{timestamp}</div>
-                        </div>
+                </div>
+                """, unsafe_allow_html=True)
+            elif is_me:
+                st.markdown(f"""
+                <div class="wa-msg-row me">
+                    <div class="wa-msg-bubble me">
+                        <div class="wa-msg-sender" style="justify-content:flex-end;">You · {role}</div>
+                        {message_text}
+                        <div class="wa-msg-time">{timestamp}</div>
                     </div>
-                    """, unsafe_allow_html=True)
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div class="wa-msg-row">
+                    <div class="wa-msg-bubble other">
+                        <div class="wa-msg-sender">{sender} · {role}</div>
+                        {message_text}
+                        <div class="wa-msg-time">{timestamp}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # ===== Auto-refresh indicator =====
+        st.caption(f"🔄 Auto-syncing · {len(chat_history)} messages · Last updated: {format_time()}")
+
+        # ===== Attachment & Process Area =====
+        with st.expander("📎 Attach & Process (Image / PDF / Audio / Text)", expanded=False):
+            st.caption("📷 Image • 📄 PDF • 🎤 Voice • 📝 Text")
+            up_mode = st.radio("Type", ["📝 Text", "📷 Image / PDF", "🎤 Voice / Audio"], 
+                horizontal=True, label_visibility="collapsed", key="chat_up_mode")
+            up_file = None
+            up_text = ""
+            up_audio = None
+            if up_mode == "📝 Text":
+                up_text = st.text_area("Paste messy railway text here...", height=120, 
+                    placeholder="PNR, Train, DOJ, Name, Class, etc...", 
+                    label_visibility="collapsed", key="chat_up_text")
+            elif up_mode == "📷 Image / PDF":
+                up_file = st.file_uploader("Drop image or PDF", type=["png","jpg","jpeg","pdf"], 
+                    label_visibility="collapsed", key="chat_up_file")
+            else:
+                up_audio = st.audio_input("Record voice", label_visibility="collapsed", key="chat_up_rec")
+                if not up_audio:
+                    up_file = st.file_uploader("Or upload audio file", type=["mp3","wav","ogg","m4a"], 
+                        label_visibility="collapsed", key="chat_up_audio_file")
+                if up_audio: st.audio(up_audio, format='audio/wav')
+                elif up_file: st.audio(up_file, format='audio/mp3')
+
+            if st.button("🚀 Process & Save to Sheet", type="primary", use_container_width=True, key="chat_process_btn"):
+                if up_mode == "📝 Text" and not up_text.strip():
+                    st.warning("Please enter text first.")
+                elif up_mode != "📝 Text" and not up_file and not up_audio:
+                    st.warning("Please upload a file first.")
                 else:
-                    st.markdown(f"""
-                    <div class="wa-msg-row">
-                        <div class="wa-msg-bubble other">
-                            <div class="wa-msg-sender">{sender} · {role}</div>
-                            {message_text}
-                            <div class="wa-msg-time">{timestamp}</div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    with st.spinner("Processing with Gemini..."):
+                        try:
+                            if up_mode == "📝 Text":
+                                res = gemini_universal_parser(up_text, "text", None)
+                                fname = "chat_text_" + now_ist().strftime('%H%M%S') + ".txt"
+                                fbytes = up_text.encode()
+                                mime = "text/plain"
+                            elif up_audio:
+                                fbytes = up_audio.getvalue()
+                                b64 = base64.b64encode(fbytes).decode()
+                                res = gemini_universal_parser(b64, "audio", "audio/wav")
+                                fname = "chat_voice_" + now_ist().strftime('%H%M%S') + ".wav"
+                                mime = "audio/wav"
+                            else:
+                                fbytes = up_file.read()
+                                b64 = base64.b64encode(fbytes).decode()
+                                ftype = "pdf" if up_file.type == "application/pdf" else "image"
+                                res = gemini_universal_parser(b64, ftype, up_file.type)
+                                fname = up_file.name
+                                mime = up_file.type
 
-            st.markdown('</div>', unsafe_allow_html=True)
-
-            # ===== Auto-refresh indicator =====
-            st.caption(f"🔄 Auto-syncing · {len(chat_history)} messages · Last updated: {format_time()}")
-
-            # ===== Attachment & Process Area =====
-            with st.expander("📎 Attach & Process (Image / PDF / Audio / Text)", expanded=False):
-                st.caption("📷 Image • 📄 PDF • 🎤 Voice • 📝 Text")
-                up_mode = st.radio("Type", ["📝 Text", "📷 Image / PDF", "🎤 Voice / Audio"], 
-                    horizontal=True, label_visibility="collapsed", key="chat_up_mode")
-                up_file = None
-                up_text = ""
-                up_audio = None
-                if up_mode == "📝 Text":
-                    up_text = st.text_area("Paste messy railway text here...", height=120, 
-                        placeholder="PNR, Train, DOJ, Name, Class, etc...", 
-                        label_visibility="collapsed", key="chat_up_text")
-                elif up_mode == "📷 Image / PDF":
-                    up_file = st.file_uploader("Drop image or PDF", type=["png","jpg","jpeg","pdf"], 
-                        label_visibility="collapsed", key="chat_up_file")
-                else:
-                    up_audio = st.audio_input("Record voice", label_visibility="collapsed", key="chat_up_rec")
-                    if not up_audio:
-                        up_file = st.file_uploader("Or upload audio file", type=["mp3","wav","ogg","m4a"], 
-                            label_visibility="collapsed", key="chat_up_audio_file")
-                    if up_audio: st.audio(up_audio, format='audio/wav')
-                    elif up_file: st.audio(up_file, format='audio/mp3')
-
-                if st.button("🚀 Process & Save to Sheet", type="primary", use_container_width=True, key="chat_process_btn"):
-                    if up_mode == "📝 Text" and not up_text.strip():
-                        st.warning("Please enter text first.")
-                    elif up_mode != "📝 Text" and not up_file and not up_audio:
-                        st.warning("Please upload a file first.")
-                    else:
-                        with st.spinner("Processing with Gemini..."):
-                            try:
-                                if up_mode == "📝 Text":
-                                    res = gemini_universal_parser(up_text, "text", None)
-                                    fname = "chat_text_" + now_ist().strftime('%H%M%S') + ".txt"
-                                    fbytes = up_text.encode()
-                                    mime = "text/plain"
-                                elif up_audio:
-                                    fbytes = up_audio.getvalue()
-                                    b64 = base64.b64encode(fbytes).decode()
-                                    res = gemini_universal_parser(b64, "audio", "audio/wav")
-                                    fname = "chat_voice_" + now_ist().strftime('%H%M%S') + ".wav"
-                                    mime = "audio/wav"
-                                else:
-                                    fbytes = up_file.read()
-                                    b64 = base64.b64encode(fbytes).decode()
-                                    ftype = "pdf" if up_file.type == "application/pdf" else "image"
-                                    res = gemini_universal_parser(b64, ftype, up_file.type)
-                                    fname = up_file.name
-                                    mime = up_file.type
-
-                                if "error" in res:
-                                    err_msg = "❌ Extraction Error: " + res['error']
-                                    save_chat_message(current_user, current_role, err_msg, 'user')
-                                    st.error(res["error"])
-                                else:
-                                    rec_count = res.get('count', 0)
-                                    records = res.get('records', [])
-                                    detail_lines = []
-                                    detail_lines.append("🎯 **Extraction Complete — " + str(rec_count) + " Record(s) Found**")
-                                    detail_lines.append("")
-                                    for idx, r in enumerate(records, 1):
-                                        detail_lines.append("📋 **Record #" + str(idx) + "**")
-                                        fields = []
-                                        if r.get('PNR'): fields.append("🔢 PNR: `" + r['PNR'] + "`")
-                                        if r.get('T_N'): fields.append("🚆 Train: `" + r['T_N'] + "`")
-                                        if r.get('CLASS'): fields.append("🎫 Class: `" + r['CLASS'] + "`")
-                                        if r.get('DOJ'): fields.append("📅 DOJ: `" + r['DOJ'] + "`")
-                                        if r.get('FROM'): fields.append("📍 From: `" + r['FROM'] + "`")
-                                        if r.get('TO'): fields.append("📍 To: `" + r['TO'] + "`")
-                                        if r.get('PASS_NAME'): fields.append("👤 Name: `" + r['PASS_NAME'] + "`")
-                                        if r.get('VIP_STATUS'): fields.append("⭐ VIP: `" + r['VIP_STATUS'] + "`")
-                                        detail_lines.append("  " + " | ".join(fields))
-                                        detail_lines.append("")
-
-                                    success_msg = "\n".join(detail_lines)
-
-                                    # Save to EQ Sheet
-                                    try:
-                                        gc = init_sheets()
-                                        eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
-                                        save_res = save_to_sheet(eq_sheet, records)
-                                        if "error" in save_res:
-                                            success_msg += "\n\n⚠️ **Sheet Save Error:** " + save_res['error']
-                                        else:
-                                            success_msg += "\n\n💾 **Saved to EQ Sheet:** `" + str(save_res['saved']) + "` new records, `" + str(save_res['skipped']) + "` duplicates skipped"
-                                            if up_mode != "📝 Text":
-                                                drive_res = upload_to_drive(fbytes, fname, mime)
-                                                if drive_res['success']:
-                                                    success_msg += "\n📁 **Drive File:** [" + fname + "](" + drive_res.get('view_url', '') + ")"
-                                            st.cache_data.clear()
-                                            st.session_state.last_refresh = time.time()
-                                    except Exception as e:
-                                        success_msg += "\n\n⚠️ **Sheet Error:** " + str(e)
-
-                                    save_chat_message(current_user, current_role, success_msg, 'user')
-                                    save_chat_message('TSKEQ Bot', 'admin', 
-                                        "✅ " + current_user + " processed " + str(rec_count) + " records and saved to EQ sheet.", 'admin')
-                                    st.success("✅ Processed & Saved " + str(rec_count) + " records")
-                                    time.sleep(0.5)
-                                    st.rerun()
-                            except Exception as e:
-                                err_msg = "❌ Processing failed: " + str(e)
+                            if "error" in res:
+                                err_msg = "❌ Extraction Error: " + res['error']
                                 save_chat_message(current_user, current_role, err_msg, 'user')
-                                st.error(str(e))
+                                st.error(res["error"])
+                            else:
+                                rec_count = res.get('count', 0)
+                                records = res.get('records', [])
+                                detail_lines = []
+                                detail_lines.append("🎯 **Extraction Complete — " + str(rec_count) + " Record(s) Found**")
+                                detail_lines.append("")
+                                for idx, r in enumerate(records, 1):
+                                    detail_lines.append("📋 **Record #" + str(idx) + "**")
+                                    fields = []
+                                    if r.get('PNR'): fields.append("🔢 PNR: `" + r['PNR'] + "`")
+                                    if r.get('T_N'): fields.append("🚆 Train: `" + r['T_N'] + "`")
+                                    if r.get('CLASS'): fields.append("🎫 Class: `" + r['CLASS'] + "`")
+                                    if r.get('DOJ'): fields.append("📅 DOJ: `" + r['DOJ'] + "`")
+                                    if r.get('FROM'): fields.append("📍 From: `" + r['FROM'] + "`")
+                                    if r.get('TO'): fields.append("📍 To: `" + r['TO'] + "`")
+                                    if r.get('PASS_NAME'): fields.append("👤 Name: `" + r['PASS_NAME'] + "`")
+                                    if r.get('VIP_STATUS'): fields.append("⭐ VIP: `" + r['VIP_STATUS'] + "`")
+                                    detail_lines.append("  " + " | ".join(fields))
+                                    detail_lines.append("")
 
-            # ===== Chat Input =====
-            prompt = st.chat_input("Type your message or command...", key="chat_input")
-            if prompt:
-                # Save user message
-                save_chat_message(current_user, current_role, prompt, 'user')
+                                success_msg = "\n".join(detail_lines)
 
-                # Parse command
-                cmd = parse_chat_command(prompt)
-                action = cmd.get('action', 'chat')
+                                # Save to EQ Sheet
+                                try:
+                                    gc = init_sheets()
+                                    eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
+                                    save_res = save_to_sheet(eq_sheet, records)
+                                    if "error" in save_res:
+                                        success_msg += "\n\n⚠️ **Sheet Save Error:** " + save_res['error']
+                                    else:
+                                        success_msg += "\n\n💾 **Saved to EQ Sheet:** `" + str(save_res['saved']) + "` new records, `" + str(save_res['skipped']) + "` duplicates skipped"
+                                        if up_mode != "📝 Text":
+                                            drive_res = upload_to_drive(fbytes, fname, mime)
+                                            if drive_res['success']:
+                                                success_msg += "\n📁 **Drive File:** [" + fname + "](" + drive_res.get('view_url', '') + ")"
+                                        st.cache_data.clear()
+                                        st.session_state.last_refresh = time.time()
+                                except Exception as e:
+                                    success_msg += "\n\n⚠️ **Sheet Error:** " + str(e)
 
-                if action == 'pdf_train':
-                    train_num = cmd.get('train', '')
-                    with st.spinner("Generating PDF for train " + train_num + "..."):
-                        pdf_bytes, err = generate_train_pdf(train_num, "EQ")
-                        if pdf_bytes:
-                            # Save PDF info to chat
-                            save_chat_message('TSKEQ Bot', 'admin', 
-                                "📄 PDF generated for Train " + train_num + ". Download below 👇", 'admin')
-                            st.session_state.chat_pdf_bytes = pdf_bytes
-                            st.session_state.chat_pdf_name = "Train_" + train_num + "_EQ.pdf"
+                                save_chat_message(current_user, current_role, success_msg, 'user')
+                                save_chat_message('TSKEQ Bot', 'admin', 
+                                    "✅ " + current_user + " processed " + str(rec_count) + " records and saved to EQ sheet.", 'admin')
+                                st.success("✅ Processed & Saved " + str(rec_count) + " records")
+                                time.sleep(0.5)
+                                st.rerun()
+                        except Exception as e:
+                            err_msg = "❌ Processing failed: " + str(e)
+                            save_chat_message(current_user, current_role, err_msg, 'user')
+                            st.error(str(e))
+
+        # ===== Chat Input =====
+        prompt = st.chat_input("Type your message or command...", key="chat_input")
+        if prompt:
+            # Save user message
+            save_chat_message(current_user, current_role, prompt, 'user')
+
+            # Parse command
+            cmd = parse_chat_command(prompt)
+            action = cmd.get('action', 'chat')
+
+            if action == 'pdf_train':
+                train_num = cmd.get('train', '')
+                with st.spinner("Generating PDF for train " + train_num + "..."):
+                    pdf_bytes, err = generate_train_pdf(train_num, "EQ")
+                    if pdf_bytes:
+                        # Save PDF info to chat
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "📄 PDF generated for Train " + train_num + ". Download below 👇", 'admin')
+                        st.session_state.chat_pdf_bytes = pdf_bytes
+                        st.session_state.chat_pdf_name = "Train_" + train_num + "_EQ.pdf"
+                    else:
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "❌ " + (err or "Could not generate PDF"), 'admin')
+                st.rerun()
+
+            elif action == 'pdf_today':
+                with st.spinner("Generating today's PDF..."):
+                    pdf_bytes, err = generate_today_pdf("EQ")
+                    if pdf_bytes:
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "📄 Today's PDF generated. Download below 👇", 'admin')
+                        st.session_state.chat_pdf_bytes = pdf_bytes
+                        st.session_state.chat_pdf_name = "Today_" + now_ist().strftime('%d%m%Y') + "_EQ.pdf"
+                    else:
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "❌ " + (err or "Could not generate PDF"), 'admin')
+                st.rerun()
+
+            elif action == 'pdf_full':
+                with st.spinner("Generating full EQ PDF..."):
+                    df = load_sheet_data_cached("EQ", SHEET_ID)
+                    if not df.empty:
+                        pdf_bytes = generate_pdf(df, "EQ Full Report", full=True)
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "📄 Full EQ PDF generated (" + str(len(df)) + " records). Download below 👇", 'admin')
+                        st.session_state.chat_pdf_bytes = pdf_bytes
+                        st.session_state.chat_pdf_name = "EQ_Full_Report_" + now_ist().strftime('%d%m%Y') + ".pdf"
+                    else:
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "❌ No data in EQ sheet to generate PDF.", 'admin')
+                st.rerun()
+
+            elif action == 'sheet_link':
+                link = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/edit"
+                save_chat_message('TSKEQ Bot', 'admin', 
+                    "🔗 **Sheet Link:**\n" + link + "\n\n📋 Copy and share with full access.", 'admin')
+                st.rerun()
+
+            elif action == 'eq_list':
+                train_num = cmd.get('train', '')
+                df = load_sheet_data_cached("EQ", SHEET_ID)
+                if not df.empty:
+                    config = SHEET_CONFIG.get("EQ", {})
+                    train_col_idx = config.get('train_col')
+                    if train_col_idx is not None and train_col_idx < len(df.columns):
+                        train_col = df.columns[train_col_idx]
+                        filtered = df[df[train_col].astype(str).str.contains(str(train_num), case=False, na=False)]
+                        if not filtered.empty:
+                            msg_lines = ["🚆 **Train " + train_num + " EQ List**\n"]
+                            msg_lines.append("| S/N | PNR | From | To | DOJ | Class | Name | Berths | VIP |")
+                            msg_lines.append("|-----|-----|------|-----|-----|-------|------|--------|-----|")
+                            for idx, row in filtered.head(20).iterrows():
+                                vals = [str(row.get(c, '-'))[:12] for c in filtered.columns[:9]]
+                                msg_lines.append("| " + " | ".join(vals) + " |")
+                            if len(filtered) > 20:
+                                msg_lines.append("\n... and " + str(len(filtered)-20) + " more records")
+                            save_chat_message('TSKEQ Bot', 'admin', "\n".join(msg_lines), 'admin')
                         else:
                             save_chat_message('TSKEQ Bot', 'admin', 
-                                "❌ " + (err or "Could not generate PDF"), 'admin')
-                    st.rerun()
+                                "❌ No EQ records found for Train " + train_num, 'admin')
+                st.rerun()
 
-                elif action == 'pdf_today':
-                    with st.spinner("Generating today's PDF..."):
+            elif action == 'chart_time':
+                train_num = cmd.get('train', '')
+                df = load_sheet_data_cached("EQ", SHEET_ID)
+                chart_results = []
+                if not df.empty:
+                    config = SHEET_CONFIG.get("EQ", {})
+                    train_col_idx = config.get('train_col')
+                    doj_col_idx = config.get('doj_col')
+                    if train_col_idx is not None and doj_col_idx is not None:
+                        train_col = df.columns[train_col_idx]
+                        doj_col = df.columns[doj_col_idx]
+                        filtered = df[df[train_col].astype(str).str.contains(str(train_num), case=False, na=False)]
+                        seen_doj = set()
+                        for _, row in filtered.iterrows():
+                            doj = str(row.get(doj_col, ''))
+                            if doj and doj not in seen_doj:
+                                seen_doj.add(doj)
+                                ct = get_charting_time(train_num, doj)
+                                chart_results.append("📅 DOJ: " + doj + " → " + ct)
+                if chart_results:
+                    save_chat_message('TSKEQ Bot', 'admin', 
+                        "⏰ **Charting Time for Train " + train_num + "**\n\n" + "\n".join(chart_results), 'admin')
+                else:
+                    save_chat_message('TSKEQ Bot', 'admin', 
+                        "⏰ **Charting Time for Train " + train_num + "**\nNo active EQ records found.", 'admin')
+                st.rerun()
+
+            elif action == 'pnr_status':
+                pnr = cmd.get('pnr', '')
+                if NTES_AVAILABLE:
+                    data = get_pnr_status(pnr)
+                    msg = format_pnr_result(data) if data else "❌ PNR not found"
+                else:
+                    msg = "🔍 [Check PNR " + pnr + " on ConfirmTkt](https://www.confirmtkt.com/pnr-status/" + pnr + ")"
+                save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
+                st.rerun()
+
+            elif action == 'live_train':
+                train_num = cmd.get('train', '')
+                if NTES_AVAILABLE:
+                    data = get_live_train_status(train_num)
+                    msg, _ = format_live_train_result(data) if data else ("❌ No data", None)
+                else:
+                    msg = "🚂 [Check Live Status for " + train_num + " on RailYatri](https://www.railyatri.in/live-train-status/" + train_num + ")"
+                save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
+                st.rerun()
+
+            elif action == 'weather':
+                city = cmd.get('city', 'Tinsukia')
+                data = get_weather(city)
+                if data and 'error' not in data:
+                    msg = "🌤️ **Weather in " + data.get('city', city) + "**\n\n"
+                    msg += "🌡️ Temp: " + str(data.get('temp', '--')) + "°C (feels like " + str(data.get('feels_like', '--')) + "°C)\n"
+                    msg += "📝 " + data.get('weather', 'N/A').title() + "\n"
+                    msg += "💧 Humidity: " + str(data.get('humidity', '--')) + "%\n"
+                    msg += "🌬️ Wind: " + str(data.get('wind_speed', '--')) + " m/s"
+                else:
+                    msg = "❌ Could not fetch weather for " + city
+                save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
+                st.rerun()
+
+            else:
+                # Regular chat - use Gemini
+                with st.spinner("TSKEQ Bot is typing..."):
+                    response = chat_with_gemini(prompt, chat_history)
+                    save_chat_message('TSKEQ Bot', 'admin', response, 'admin')
+                st.rerun()
+
+        # ===== PDF Download in Chat =====
+        if st.session_state.get('chat_pdf_bytes'):
+            st.markdown('<div class="wa-pdf-card">', unsafe_allow_html=True)
+            c1, c2 = st.columns([4, 1])
+            with c1:
+                st.markdown("📄 **" + st.session_state.chat_pdf_name + "** ready for download")
+            with c2:
+                st.download_button("⬇️ Download", data=st.session_state.chat_pdf_bytes,
+                    file_name=st.session_state.chat_pdf_name, mime="application/pdf",
+                    use_container_width=True, key="chat_pdf_download")
+            st.markdown('</div>', unsafe_allow_html=True)
+            # Clear after showing
+            if st.button("🗑️ Clear PDF", key="clear_chat_pdf"):
+                st.session_state.chat_pdf_bytes = None
+                st.session_state.chat_pdf_name = None
+                st.rerun()
+
+        # ===== Quick Command Suggestions =====
+        st.markdown("**⚡ Quick Commands**")
+        cmd_cols = st.columns(4)
+        quick_cmds = [
+            ("📄 Today's PDF", "today pdf"),
+            ("🚆 Train PDF", "pdf 15909"),
+            ("📋 Full PDF", "full pdf"),
+            ("🔗 Sheet Link", "sheet link"),
+            ("⏰ Chart Time", "chart time 15909"),
+            ("🔍 PNR Status", "pnr 6002236104"),
+            ("🚂 Live Train", "live 15909"),
+            ("🌤️ Weather", "weather Tinsukia"),
+        ]
+        for i, (label, cmd_text) in enumerate(quick_cmds):
+            with cmd_cols[i % 4]:
+                if st.button(label, use_container_width=True, key=f"cmd_{i}"):
+                    save_chat_message(current_user, current_role, cmd_text, 'user')
+                    # Trigger command processing
+                    cmd = parse_chat_command(cmd_text)
+                    action = cmd.get('action', 'chat')
+                    if action == 'pdf_today':
                         pdf_bytes, err = generate_today_pdf("EQ")
                         if pdf_bytes:
-                            save_chat_message('TSKEQ Bot', 'admin', 
-                                "📄 Today's PDF generated. Download below 👇", 'admin')
+                            save_chat_message('TSKEQ Bot', 'admin', "📄 Today's PDF generated. Download below 👇", 'admin')
                             st.session_state.chat_pdf_bytes = pdf_bytes
                             st.session_state.chat_pdf_name = "Today_" + now_ist().strftime('%d%m%Y') + "_EQ.pdf"
                         else:
-                            save_chat_message('TSKEQ Bot', 'admin', 
-                                "❌ " + (err or "Could not generate PDF"), 'admin')
-                    st.rerun()
-
-                elif action == 'pdf_full':
-                    with st.spinner("Generating full EQ PDF..."):
+                            save_chat_message('TSKEQ Bot', 'admin', "❌ " + (err or "Error"), 'admin')
+                    elif action == 'pdf_train':
+                        pdf_bytes, err = generate_train_pdf(cmd.get('train', ''), "EQ")
+                        if pdf_bytes:
+                            save_chat_message('TSKEQ Bot', 'admin', "📄 PDF generated. Download below 👇", 'admin')
+                            st.session_state.chat_pdf_bytes = pdf_bytes
+                            st.session_state.chat_pdf_name = "Train_" + cmd.get('train', '') + "_EQ.pdf"
+                        else:
+                            save_chat_message('TSKEQ Bot', 'admin', "❌ " + (err or "Error"), 'admin')
+                    elif action == 'pdf_full':
                         df = load_sheet_data_cached("EQ", SHEET_ID)
                         if not df.empty:
                             pdf_bytes = generate_pdf(df, "EQ Full Report", full=True)
-                            save_chat_message('TSKEQ Bot', 'admin', 
-                                "📄 Full EQ PDF generated (" + str(len(df)) + " records). Download below 👇", 'admin')
+                            save_chat_message('TSKEQ Bot', 'admin', "📄 Full PDF generated. Download below 👇", 'admin')
                             st.session_state.chat_pdf_bytes = pdf_bytes
                             st.session_state.chat_pdf_name = "EQ_Full_Report_" + now_ist().strftime('%d%m%Y') + ".pdf"
                         else:
-                            save_chat_message('TSKEQ Bot', 'admin', 
-                                "❌ No data in EQ sheet to generate PDF.", 'admin')
-                    st.rerun()
-
-                elif action == 'sheet_link':
-                    link = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/edit"
-                    save_chat_message('TSKEQ Bot', 'admin', 
-                        "🔗 **Sheet Link:**\n" + link + "\n\n📋 Copy and share with full access.", 'admin')
-                    st.rerun()
-
-                elif action == 'eq_list':
-                    train_num = cmd.get('train', '')
-                    df = load_sheet_data_cached("EQ", SHEET_ID)
-                    if not df.empty:
-                        config = SHEET_CONFIG.get("EQ", {})
-                        train_col_idx = config.get('train_col')
-                        if train_col_idx is not None and train_col_idx < len(df.columns):
-                            train_col = df.columns[train_col_idx]
-                            filtered = df[df[train_col].astype(str).str.contains(str(train_num), case=False, na=False)]
-                            if not filtered.empty:
-                                msg_lines = ["🚆 **Train " + train_num + " EQ List**\n"]
-                                msg_lines.append("| S/N | PNR | From | To | DOJ | Class | Name | Berths | VIP |")
-                                msg_lines.append("|-----|-----|------|-----|-----|-------|------|--------|-----|")
-                                for idx, row in filtered.head(20).iterrows():
-                                    vals = [str(row.get(c, '-'))[:12] for c in filtered.columns[:9]]
-                                    msg_lines.append("| " + " | ".join(vals) + " |")
-                                if len(filtered) > 20:
-                                    msg_lines.append("\n... and " + str(len(filtered)-20) + " more records")
-                                save_chat_message('TSKEQ Bot', 'admin', "\n".join(msg_lines), 'admin')
-                            else:
-                                save_chat_message('TSKEQ Bot', 'admin', 
-                                    "❌ No EQ records found for Train " + train_num, 'admin')
-                    st.rerun()
-
-                elif action == 'chart_time':
-                    train_num = cmd.get('train', '')
-                    df = load_sheet_data_cached("EQ", SHEET_ID)
-                    chart_results = []
-                    if not df.empty:
-                        config = SHEET_CONFIG.get("EQ", {})
-                        train_col_idx = config.get('train_col')
-                        doj_col_idx = config.get('doj_col')
-                        if train_col_idx is not None and doj_col_idx is not None:
-                            train_col = df.columns[train_col_idx]
-                            doj_col = df.columns[doj_col_idx]
-                            filtered = df[df[train_col].astype(str).str.contains(str(train_num), case=False, na=False)]
-                            seen_doj = set()
-                            for _, row in filtered.iterrows():
-                                doj = str(row.get(doj_col, ''))
-                                if doj and doj not in seen_doj:
-                                    seen_doj.add(doj)
-                                    ct = get_charting_time(train_num, doj)
-                                    chart_results.append("📅 DOJ: " + doj + " → " + ct)
-                    if chart_results:
+                            save_chat_message('TSKEQ Bot', 'admin', "❌ No data", 'admin')
+                    elif action == 'sheet_link':
                         save_chat_message('TSKEQ Bot', 'admin', 
-                            "⏰ **Charting Time for Train " + train_num + "**\n\n" + "\n".join(chart_results), 'admin')
-                    else:
+                            "🔗 **Sheet Link:**\nhttps://docs.google.com/spreadsheets/d/" + SHEET_ID + "/edit", 'admin')
+                    elif action == 'chart_time':
+                        train_num = cmd.get('train', '')
+                        ct = get_charting_time(train_num, '')
                         save_chat_message('TSKEQ Bot', 'admin', 
-                            "⏰ **Charting Time for Train " + train_num + "**\nNo active EQ records found.", 'admin')
+                            "⏰ Charting for Train " + train_num + ": " + ct, 'admin')
+                    elif action == 'pnr_status':
+                        pnr = cmd.get('pnr', '')
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "🔍 [Check PNR " + pnr + "](https://www.confirmtkt.com/pnr-status/" + pnr + ")", 'admin')
+                    elif action == 'live_train':
+                        train_num = cmd.get('train', '')
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "🚂 [Check Live Status for " + train_num + "](https://www.railyatri.in/live-train-status/" + train_num + ")", 'admin')
+                    elif action == 'weather':
+                        city = cmd.get('city', 'Tinsukia')
+                        data = get_weather(city)
+                        if data and 'error' not in data:
+                            msg = "🌤️ **" + data.get('city', city) + "**: " + str(data.get('temp', '--')) + "°C, " + data.get('weather', '').title()
+                        else:
+                            msg = "❌ Weather not found"
+                        save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
                     st.rerun()
 
-                elif action == 'pnr_status':
-                    pnr = cmd.get('pnr', '')
-                    if NTES_AVAILABLE:
-                        data = get_pnr_status(pnr)
-                        msg = format_pnr_result(data) if data else "❌ PNR not found"
-                    else:
-                        msg = "🔍 [Check PNR " + pnr + " on ConfirmTkt](https://www.confirmtkt.com/pnr-status/" + pnr + ")"
-                    save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
-                    st.rerun()
+        # ===== Clear Chat =====
+        if st.button("🗑️ Clear My Messages", use_container_width=True, key="clear_my_chat"):
+            # Note: In a real group chat, only admin can clear all. Users can only clear their view.
+            st.info("💡 Chat is shared. Messages remain for all users.")
 
-                elif action == 'live_train':
-                    train_num = cmd.get('train', '')
-                    if NTES_AVAILABLE:
-                        data = get_live_train_status(train_num)
-                        msg, _ = format_live_train_result(data) if data else ("❌ No data", None)
-                    else:
-                        msg = "🚂 [Check Live Status for " + train_num + " on RailYatri](https://www.railyatri.in/live-train-status/" + train_num + ")"
-                    save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
-                    st.rerun()
-
-                elif action == 'weather':
-                    city = cmd.get('city', 'Tinsukia')
-                    data = get_weather(city)
-                    if data and 'error' not in data:
-                        msg = "🌤️ **Weather in " + data.get('city', city) + "**\n\n"
-                        msg += "🌡️ Temp: " + str(data.get('temp', '--')) + "°C (feels like " + str(data.get('feels_like', '--')) + "°C)\n"
-                        msg += "📝 " + data.get('weather', 'N/A').title() + "\n"
-                        msg += "💧 Humidity: " + str(data.get('humidity', '--')) + "%\n"
-                        msg += "🌬️ Wind: " + str(data.get('wind_speed', '--')) + " m/s"
-                    else:
-                        msg = "❌ Could not fetch weather for " + city
-                    save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
-                    st.rerun()
-
-                else:
-                    # Regular chat - use Gemini
-                    with st.spinner("TSKEQ Bot is typing..."):
-                        response = chat_with_gemini(prompt, chat_history)
-                        save_chat_message('TSKEQ Bot', 'admin', response, 'admin')
-                    st.rerun()
-
-            # ===== PDF Download in Chat =====
-            if st.session_state.get('chat_pdf_bytes'):
-                st.markdown('<div class="wa-pdf-card">', unsafe_allow_html=True)
-                c1, c2 = st.columns([4, 1])
-                with c1:
-                    st.markdown("📄 **" + st.session_state.chat_pdf_name + "** ready for download")
-                with c2:
-                    st.download_button("⬇️ Download", data=st.session_state.chat_pdf_bytes,
-                        file_name=st.session_state.chat_pdf_name, mime="application/pdf",
-                        use_container_width=True, key="chat_pdf_download")
-                st.markdown('</div>', unsafe_allow_html=True)
-                # Clear after showing
-                if st.button("🗑️ Clear PDF", key="clear_chat_pdf"):
-                    st.session_state.chat_pdf_bytes = None
-                    st.session_state.chat_pdf_name = None
-                    st.rerun()
-
-            # ===== Quick Command Suggestions =====
-            st.markdown("**⚡ Quick Commands**")
-            cmd_cols = st.columns(4)
-            quick_cmds = [
-                ("📄 Today's PDF", "today pdf"),
-                ("🚆 Train PDF", "pdf 15909"),
-                ("📋 Full PDF", "full pdf"),
-                ("🔗 Sheet Link", "sheet link"),
-                ("⏰ Chart Time", "chart time 15909"),
-                ("🔍 PNR Status", "pnr 6002236104"),
-                ("🚂 Live Train", "live 15909"),
-                ("🌤️ Weather", "weather Tinsukia"),
-            ]
-            for i, (label, cmd_text) in enumerate(quick_cmds):
-                with cmd_cols[i % 4]:
-                    if st.button(label, use_container_width=True, key=f"cmd_{i}"):
-                        save_chat_message(current_user, current_role, cmd_text, 'user')
-                        # Trigger command processing
-                        cmd = parse_chat_command(cmd_text)
-                        action = cmd.get('action', 'chat')
-                        if action == 'pdf_today':
-                            pdf_bytes, err = generate_today_pdf("EQ")
-                            if pdf_bytes:
-                                save_chat_message('TSKEQ Bot', 'admin', "📄 Today's PDF generated. Download below 👇", 'admin')
-                                st.session_state.chat_pdf_bytes = pdf_bytes
-                                st.session_state.chat_pdf_name = "Today_" + now_ist().strftime('%d%m%Y') + "_EQ.pdf"
-                            else:
-                                save_chat_message('TSKEQ Bot', 'admin', "❌ " + (err or "Error"), 'admin')
-                        elif action == 'pdf_train':
-                            pdf_bytes, err = generate_train_pdf(cmd.get('train', ''), "EQ")
-                            if pdf_bytes:
-                                save_chat_message('TSKEQ Bot', 'admin', "📄 PDF generated. Download below 👇", 'admin')
-                                st.session_state.chat_pdf_bytes = pdf_bytes
-                                st.session_state.chat_pdf_name = "Train_" + cmd.get('train', '') + "_EQ.pdf"
-                            else:
-                                save_chat_message('TSKEQ Bot', 'admin', "❌ " + (err or "Error"), 'admin')
-                        elif action == 'pdf_full':
-                            df = load_sheet_data_cached("EQ", SHEET_ID)
-                            if not df.empty:
-                                pdf_bytes = generate_pdf(df, "EQ Full Report", full=True)
-                                save_chat_message('TSKEQ Bot', 'admin', "📄 Full PDF generated. Download below 👇", 'admin')
-                                st.session_state.chat_pdf_bytes = pdf_bytes
-                                st.session_state.chat_pdf_name = "EQ_Full_Report_" + now_ist().strftime('%d%m%Y') + ".pdf"
-                            else:
-                                save_chat_message('TSKEQ Bot', 'admin', "❌ No data", 'admin')
-                        elif action == 'sheet_link':
-                            save_chat_message('TSKEQ Bot', 'admin', 
-                                "🔗 **Sheet Link:**\nhttps://docs.google.com/spreadsheets/d/" + SHEET_ID + "/edit", 'admin')
-                        elif action == 'chart_time':
-                            train_num = cmd.get('train', '')
-                            ct = get_charting_time(train_num, '')
-                            save_chat_message('TSKEQ Bot', 'admin', 
-                                "⏰ Charting for Train " + train_num + ": " + ct, 'admin')
-                        elif action == 'pnr_status':
-                            pnr = cmd.get('pnr', '')
-                            save_chat_message('TSKEQ Bot', 'admin', 
-                                "🔍 [Check PNR " + pnr + "](https://www.confirmtkt.com/pnr-status/" + pnr + ")", 'admin')
-                        elif action == 'live_train':
-                            train_num = cmd.get('train', '')
-                            save_chat_message('TSKEQ Bot', 'admin', 
-                                "🚂 [Check Live Status for " + train_num + "](https://www.railyatri.in/live-train-status/" + train_num + ")", 'admin')
-                        elif action == 'weather':
-                            city = cmd.get('city', 'Tinsukia')
-                            data = get_weather(city)
-                            if data and 'error' not in data:
-                                msg = "🌤️ **" + data.get('city', city) + "**: " + str(data.get('temp', '--')) + "°C, " + data.get('weather', '').title()
-                            else:
-                                msg = "❌ Weather not found"
-                            save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
-                        st.rerun()
-
-            # ===== Clear Chat =====
-            if st.button("🗑️ Clear My Messages", use_container_width=True, key="clear_my_chat"):
-                # Note: In a real group chat, only admin can clear all. Users can only clear their view.
-                st.info("💡 Chat is shared. Messages remain for all users.")
-
-            # ===== TTS Engine =====
-            components.html("""
-            <script>
-            (function(){
-                if (window.__waTTSInit) return;
-                window.__waTTSInit = true;
-                function speak(text) {
-                    if (!window.speechSynthesis) return;
-                    window.speechSynthesis.cancel();
-                    var utter = new SpeechSynthesisUtterance(text);
-                    utter.rate = 1.0; utter.pitch = 1.0; utter.volume = 1.0;
-                    utter.lang = 'en-IN';
-                    var voices = window.speechSynthesis.getVoices();
-                    var hiVoice = voices.find(function(v){ return v.lang.includes('hi') || v.lang.includes('en-IN'); });
-                    if (hiVoice) utter.voice = hiVoice;
-                    window.speechSynthesis.speak(utter);
-                }
-                function addTTSButtons() {
-                    var msgs = document.querySelectorAll('.wa-msg-bubble.admin, .wa-msg-bubble.other');
-                    msgs.forEach(function(msg){
-                        if (msg.querySelector('.tts-btn')) return;
-                        var text = msg.innerText || msg.textContent || '';
-                        if (text.length < 10) return;
-                        var btn = document.createElement('button');
-                        btn.className = 'tts-btn';
-                        btn.innerHTML = '🔊 Listen';
-                        btn.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.1);border:none;color:#8696a0;font-size:0.75rem;padding:4px 8px;border-radius:12px;cursor:pointer;margin-top:4px;transition:all 0.2s;';
-                        btn.onmouseenter = function(){ btn.style.background = 'rgba(255,255,255,0.2)'; btn.style.color = '#fff'; };
-                        btn.onmouseleave = function(){ btn.style.background = 'rgba(255,255,255,0.1)'; btn.style.color = '#8696a0'; };
-                        btn.onclick = function(e){ e.stopPropagation(); speak(text); };
-                        msg.appendChild(btn);
-                    });
-                }
-                var observer = new MutationObserver(function(){ addTTSButtons(); });
-                observer.observe(document.body, { childList: true, subtree: true });
-                setTimeout(addTTSButtons, 500);
-                setInterval(addTTSButtons, 2000);
-            })();
-            </script>
-            """, height=0)
-# VIEW: 🚂 RAILWAY
+        # ===== TTS Engine =====
+        components.html("""
+        <script>
+        (function(){
+            if (window.__waTTSInit) return;
+            window.__waTTSInit = true;
+            function speak(text) {
+                if (!window.speechSynthesis) return;
+                window.speechSynthesis.cancel();
+                var utter = new SpeechSynthesisUtterance(text);
+                utter.rate = 1.0; utter.pitch = 1.0; utter.volume = 1.0;
+                utter.lang = 'en-IN';
+                var voices = window.speechSynthesis.getVoices();
+                var hiVoice = voices.find(function(v){ return v.lang.includes('hi') || v.lang.includes('en-IN'); });
+                if (hiVoice) utter.voice = hiVoice;
+                window.speechSynthesis.speak(utter);
+            }
+            function addTTSButtons() {
+                var msgs = document.querySelectorAll('.wa-msg-bubble.admin, .wa-msg-bubble.other');
+                msgs.forEach(function(msg){
+                    if (msg.querySelector('.tts-btn')) return;
+                    var text = msg.innerText || msg.textContent || '';
+                    if (text.length < 10) return;
+                    var btn = document.createElement('button');
+                    btn.className = 'tts-btn';
+                    btn.innerHTML = '🔊 Listen';
+                    btn.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.1);border:none;color:#8696a0;font-size:0.75rem;padding:4px 8px;border-radius:12px;cursor:pointer;margin-top:4px;transition:all 0.2s;';
+                    btn.onmouseenter = function(){ btn.style.background = 'rgba(255,255,255,0.2)'; btn.style.color = '#fff'; };
+                    btn.onmouseleave = function(){ btn.style.background = 'rgba(255,255,255,0.1)'; btn.style.color = '#8696a0'; };
+                    btn.onclick = function(e){ e.stopPropagation(); speak(text); };
+                    msg.appendChild(btn);
+                });
+            }
+            var observer = new MutationObserver(function(){ addTTSButtons(); });
+            observer.observe(document.body, { childList: true, subtree: true });
+            setTimeout(addTTSButtons, 500);
+            setInterval(addTTSButtons, 2000);
+        })();
+        </script>
+        """, height=0)
+    # VIEW: 🚂 RAILWAY
     # =====================================================================
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real-time Info")
