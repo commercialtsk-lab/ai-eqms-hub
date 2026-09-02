@@ -4344,19 +4344,20 @@ def main():
                 users_df = load_users()
                 if not users_df.empty:
                     st.caption(f"Total users: {len(users_df)}")
-                    for _, row in users_df.iterrows():
+                    for idx, row in users_df.iterrows():
                         name = str(row.get('NAME', '')).strip()
                         role = str(row.get('ROLE', 'viewer')).strip()
                         status = str(row.get('STATUS', 'pending')).strip()
                         if not name:
                             continue
+                        safe_key = re.sub(r'[^a-zA-Z0-9_]', '_', name)[:20]
                         col_u1, col_u2, col_u3 = st.columns([2.5, 1.5, 1])
                         with col_u1:
                             status_icon = "🟢" if status.lower() == 'active' else "🟡" if status.lower() == 'pending' else "🔴"
                             st.markdown(f"**{name}**<br><span style='font-size:0.75rem;'>{status_icon} {role} • {status}</span>", unsafe_allow_html=True)
                         with col_u2:
                             if status.lower() == 'pending':
-                                if st.button("✅ Approve", key=f"approve_{name}", use_container_width=True):
+                                if st.button("✅ Approve", key=f"approve_{idx}_{safe_key}", use_container_width=True):
                                     save_user(name, 'editor', 'active')
                                     try:
                                         post_system_alert(f"✅ User '{name}' has been approved as EDITOR by Admin {st.session_state.username}.")
@@ -4364,16 +4365,16 @@ def main():
                                         pass
                                     st.rerun()
                             else:
-                                new_role = st.selectbox("", ['viewer', 'editor', 'admin'],
+                                new_role = st.selectbox("Role", ['viewer', 'editor', 'admin'],
                                     index=['viewer', 'editor', 'admin'].index(role) if role in ['viewer', 'editor', 'admin'] else 0,
-                                    key=f"role_sel_{name}", label_visibility="collapsed")
+                                    key=f"role_sel_{idx}_{safe_key}", label_visibility="collapsed")
                                 if new_role != role:
-                                    if st.button("💾 Save", key=f"save_role_{name}", use_container_width=True):
+                                    if st.button("💾 Save", key=f"save_role_{idx}_{safe_key}", use_container_width=True):
                                         save_user(name, new_role, 'active')
                                         st.rerun()
                         with col_u3:
                             if name.lower() != st.session_state.username.lower():
-                                if st.button("🗑️", key=f"remove_{name}", use_container_width=True):
+                                if st.button("🗑️", key=f"remove_{idx}_{safe_key}", use_container_width=True):
                                     try:
                                         gc = init_sheets()
                                         sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
@@ -4390,7 +4391,6 @@ def main():
                                                 st.rerun()
                                     except Exception as e:
                                         st.error(f"Error: {e}")
-                else:
                     st.caption("No users found in USERS sheet.")
 
         # App Share Button
