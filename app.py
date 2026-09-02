@@ -1,9 +1,8 @@
-
 # =====================================================================
 # AI EQMS Hub Pro - Complete Streamlit Application
 # =====================================================================
 # Created by: Sharique
-# Version: 4.1 (Final)
+# Version: 3.0 (Full)
 # Description: Emergency Quota Management System for Indian Railways
 # =====================================================================
 
@@ -120,7 +119,6 @@ defaults = {
     # Auth & Audit
     'authenticated': False, 'username': '', 'user_role': 'viewer',
     'audit_log': [], 'last_data_count': 0, 'data_alert_muted': False,
-    'reg_name': '',
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -137,119 +135,6 @@ def get_date_label(offset):
 
 def get_date_for_offset(offset):
     return (datetime.now() - timedelta(days=offset)).strftime("%d-%b-%Y")
-
-# =====================================================================
-# User Management (Sheet-backed Registration & Approval)
-# =====================================================================
-def load_users():
-    """Load all users from USERS sheet."""
-    try:
-        gc = init_sheets()
-        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
-        data = sheet.get_all_values()
-        if len(data) < 2:
-            return pd.DataFrame(columns=['TIMESTAMP', 'NAME', 'PHONE', 'ROLE', 'STATUS', 'REGISTERED_BY'])
-        headers = data[0]
-        rows = data[1:]
-        df = pd.DataFrame(rows, columns=headers)
-        return df
-    except Exception as e:
-        try:
-            gc = init_sheets()
-            sh = gc.open_by_key(SHEET_ID)
-            sh.add_worksheet(title="USERS", rows=1000, cols=10)
-            sheet = sh.worksheet("USERS")
-            sheet.append_row(['TIMESTAMP', 'NAME', 'PHONE', 'ROLE', 'STATUS', 'REGISTERED_BY'])
-            return pd.DataFrame(columns=['TIMESTAMP', 'NAME', 'PHONE', 'ROLE', 'STATUS', 'REGISTERED_BY'])
-        except:
-            return pd.DataFrame(columns=['TIMESTAMP', 'NAME', 'PHONE', 'ROLE', 'STATUS', 'REGISTERED_BY'])
-
-def get_user(name):
-    """Get single user record by name (case-insensitive)."""
-    df = load_users()
-    if df.empty or 'NAME' not in df.columns:
-        return None
-    match = df[df['NAME'].astype(str).str.strip().str.lower() == str(name).strip().lower()]
-    if not match.empty:
-        return match.iloc[0].to_dict()
-    return None
-
-def register_user(name, phone="", registered_by="Self"):
-    """Register a new user with pending status."""
-    try:
-        gc = init_sheets()
-        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
-        df = load_users()
-        if not df.empty and 'NAME' in df.columns:
-            existing = df[df['NAME'].astype(str).str.strip().str.lower() == str(name).strip().lower()]
-            if not existing.empty:
-                return {'success': False, 'error': 'Name already registered. Please wait for approval or enter the same name to check status.'}
-        timestamp = format_datetime()
-        sheet.append_row([timestamp, str(name).strip(), str(phone).strip(), 'viewer', 'pending', registered_by])
-        return {'success': True}
-    except Exception as e:
-        return {'success': False, 'error': str(e)}
-
-def approve_user(name, role='editor'):
-    """Approve a pending user and assign role."""
-    try:
-        gc = init_sheets()
-        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
-        data = sheet.get_all_values()
-        for i, row in enumerate(data[1:], start=2):
-            if len(row) > 1 and str(row[1]).strip().lower() == str(name).strip().lower():
-                sheet.update_cell(i, 4, role)
-                sheet.update_cell(i, 5, 'approved')
-                return {'success': True}
-        return {'success': False, 'error': 'User not found'}
-    except Exception as e:
-        return {'success': False, 'error': str(e)}
-
-def reject_user(name):
-    """Reject a pending user."""
-    try:
-        gc = init_sheets()
-        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
-        data = sheet.get_all_values()
-        for i, row in enumerate(data[1:], start=2):
-            if len(row) > 1 and str(row[1]).strip().lower() == str(name).strip().lower():
-                sheet.update_cell(i, 5, 'rejected')
-                return {'success': True}
-        return {'success': False, 'error': 'User not found'}
-    except Exception as e:
-        return {'success': False, 'error': str(e)}
-
-def remove_user(name):
-    """Permanently remove a user from USERS sheet."""
-    try:
-        gc = init_sheets()
-        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
-        data = sheet.get_all_values()
-        for i, row in enumerate(data[1:], start=2):
-            if len(row) > 1 and str(row[1]).strip().lower() == str(name).strip().lower():
-                sheet.delete_rows(i)
-                return {'success': True}
-        return {'success': False, 'error': 'User not found'}
-    except Exception as e:
-        return {'success': False, 'error': str(e)}
-
-def update_user_role(name, new_role):
-    """Change role of an existing approved user."""
-    try:
-        gc = init_sheets()
-        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
-        data = sheet.get_all_values()
-        for i, row in enumerate(data[1:], start=2):
-            if len(row) > 1 and str(row[1]).strip().lower() == str(name).strip().lower():
-                sheet.update_cell(i, 4, new_role)
-                return {'success': True}
-        return {'success': False, 'error': 'User not found'}
-    except Exception as e:
-        return {'success': False, 'error': str(e)}
-
-def is_master_admin(name):
-    """Master admin override — always full access."""
-    return str(name).strip().lower() in ['sharique', 'admin']
 
 # =====================================================================
 # Station Map
@@ -371,6 +256,103 @@ def col_index_to_letter(idx):
         result = chr(65 + remainder) + result
     return result
 
+# =====================================================================
+# User Management Functions
+# =====================================================================
+def load_users():
+    """Load all users from USERS sheet."""
+    try:
+        gc = init_sheets()
+        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
+        data = sheet.get_all_values()
+        if len(data) < 2:
+            return pd.DataFrame()
+        headers = data[0]
+        rows = data[1:]
+        if not rows:
+            return pd.DataFrame()
+        df = pd.DataFrame(rows, columns=headers)
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+def get_user_status(username):
+    """Get role and status for a user. Returns (role, status) or (None, None)."""
+    df = load_users()
+    if df.empty:
+        return None, None
+    user = df[df['NAME'].astype(str).str.lower() == str(username).lower().strip()]
+    if user.empty:
+        return None, None
+    return user.iloc[0].get('ROLE', 'viewer'), user.iloc[0].get('STATUS', 'pending')
+
+def save_user(username, role='viewer', status='pending'):
+    """Save or update a user in USERS sheet."""
+    try:
+        gc = init_sheets()
+        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
+        df = load_users()
+        if not df.empty and str(username).lower().strip() in df['NAME'].astype(str).str.lower().str.strip().values:
+            row_idx = df[df['NAME'].astype(str).str.lower().str.strip() == str(username).lower().strip()].index[0] + 2
+            sheet.update_cell(row_idx, 2, role)
+            sheet.update_cell(row_idx, 3, status)
+            sheet.update_cell(row_idx, 4, format_datetime())
+        else:
+            sheet.append_row([username.strip(), role, status, format_datetime(), format_datetime()])
+        return True
+    except Exception as e:
+        return False
+
+def update_user_activity(username):
+    """Update last active timestamp for user."""
+    try:
+        gc = init_sheets()
+        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
+        df = load_users()
+        if not df.empty:
+            mask = df['NAME'].astype(str).str.lower().str.strip() == str(username).lower().strip()
+            if mask.any():
+                row_idx = mask.idxmax() + 2
+                sheet.update_cell(row_idx, 4, format_datetime())
+    except Exception:
+        pass
+
+def get_all_online_users():
+    """Get all currently active users (active within last 5 minutes)."""
+    try:
+        df = load_users()
+        if df.empty:
+            return {}
+        now = now_ist()
+        cutoff = now - timedelta(minutes=5)
+        online = {}
+        for _, row in df.iterrows():
+            status = str(row.get('STATUS', '')).lower()
+            if status == 'active':
+                try:
+                    last = datetime.strptime(str(row.get('LAST_ACTIVE', '')), "%d-%m-%Y %H:%M:%S")
+                    if last >= cutoff:
+                        online[row['NAME']] = {
+                            'role': row.get('ROLE', 'viewer'),
+                            'last_seen': str(row.get('LAST_ACTIVE', ''))
+                        }
+                except Exception:
+                    pass
+        return online
+    except Exception:
+        return {}
+
+def should_trigger_gemini(text):
+    """Check if message mentions Gemini/Bot to trigger AI response."""
+    text_lower = str(text).lower()
+    triggers = [
+        'gemini', '@gemini', 'bot', '@bot', 'tskeq bot', 'ai', '@ai',
+        'hey gemini', 'hello gemini', 'hi gemini', 'ok gemini', 'gemini ji',
+        'gemini bhai', 'gemini please', 'gemini help', 'gemini karo',
+        'hey bot', 'hello bot', 'hi bot', 'ok bot'
+    ]
+    return any(t in text_lower for t in triggers)
+
 def log_activity(action: str):
     st.session_state.activity_log.append({'timestamp': format_time(), 'action': action})
     if len(st.session_state.activity_log) > 50:
@@ -408,14 +390,23 @@ EQ_HEADINGS = ['S/N', 'PNR', 'FROM', 'TO', 'BOARDING', 'T/N', 'CLASS', 'DOJ',
     'APPLICATION DATE', 'RAILWAY/ZONE/DIVISION', 'PREFERENCE']
 
 SHEET_CONFIG = {
+    # EQ & DATA: same layout — data rows start at row 5 (EQ) / row 4 (DATA)
+    # Cols: A=S/N, B=PNR, C=FROM, D=TO, E=BOARDING, F=T/N, G=CLASS, H=DOJ, I=PASS_NAME, J=PASS_PH,
+    #       K=T/BERTHS, L=PURPOSE, M=ADDRESS, N=DIARY_NO, O=RECOMMENDATION, P=DESIGNATION, Q=PHONE,
+    #       R=VIP_STATUS, S=WARRANT, T=PROC_DATE, U=APP_DATE, V=ZONE, W=PREFERENCE
     "EQ": {"start_row": 5, "pnr_col": 1, "train_col": 5, "class_col": 6, "from_col": 2, "to_col": 3, "berth_col": 10, "doj_col": 7, "headings": EQ_HEADINGS},
     "DATA": {"start_row": 4, "pnr_col": 1, "train_col": 5, "class_col": 6, "from_col": 2, "to_col": 3, "berth_col": 10, "doj_col": 7, "headings": EQ_HEADINGS},
+
+    # FINAL & DATA2: same layout — data rows start at row 6
+    # Cols: A=T/N, B=CLASS, C=FROM, D=TO, E=BOARDING, F=T/BERTHS, G=PASS_NAME, H=PASS_PH, I=PURPOSE,
+    #       J=ADDRESS, K=FROM_STN, L=TO_STN, M=DOJ, N=RECOMMENDATION ...
     "FINAL": {"start_row": 6, "pnr_col": 7, "train_col": 1, "class_col": 2, "from_col": 10, "to_col": 11, "berth_col": 5, "doj_col": 12, "headings": EQ_HEADINGS},
     "DATA2": {"start_row": 6, "pnr_col": 7, "train_col": 1, "class_col": 2, "from_col": 10, "to_col": 11, "berth_col": 5, "doj_col": 12, "headings": EQ_HEADINGS},
+
     "EMAIL_DATA": {"start_row": 2, "pnr_col": 6, "train_col": 8, "class_col": 12, "from_col": 9, "to_col": 10, "berth_col": 15, "doj_col": 11, "headings": EQ_HEADINGS},
     "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": []},
     "CHAT": {"start_row": 2, "pnr_col": None, "train_col": None, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": ['TIMESTAMP', 'USERNAME', 'ROLE', 'MESSAGE', 'TYPE', 'META']},
-    "USERS": {"start_row": 2, "pnr_col": None, "train_col": None, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": ['TIMESTAMP', 'NAME', 'PHONE', 'ROLE', 'STATUS', 'REGISTERED_BY']},
+    "USERS": {"start_row": 2, "pnr_col": None, "train_col": None, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": ['NAME', 'ROLE', 'STATUS', 'LAST_ACTIVE', 'JOINED_AT']},
 }
 
 # =====================================================================
@@ -456,9 +447,14 @@ def load_sheet_data_cached(sheet_name, sheet_id):
         return pd.DataFrame()
 
 # =====================================================================
+# Smart Detection Functions
+# =====================================================================
+
+# =====================================================================
 # Chat Persistence (Shared Group Chat via Sheet)
 # =====================================================================
 def load_chat_history(limit=200):
+    """Load chat messages from CHAT sheet — shared across all users."""
     try:
         gc = init_sheets()
         chat_sheet = gc.open_by_key(SHEET_ID).worksheet("CHAT")
@@ -481,6 +477,7 @@ def load_chat_history(limit=200):
         return []
 
 def save_chat_message(username, role, message, msg_type='user', meta=''):
+    """Save a message to CHAT sheet."""
     try:
         gc = init_sheets()
         chat_sheet = gc.open_by_key(SHEET_ID).worksheet("CHAT")
@@ -491,6 +488,7 @@ def save_chat_message(username, role, message, msg_type='user', meta=''):
         return False
 
 def get_online_users():
+    """Get recently active users from chat + activity log."""
     try:
         gc = init_sheets()
         chat_sheet = gc.open_by_key(SHEET_ID).worksheet("CHAT")
@@ -511,11 +509,14 @@ def get_online_users():
         return {}
 
 def post_system_alert(alert_text):
+    """Post a system alert to group chat."""
     return save_chat_message('TSKEQ Bot', 'admin', alert_text, 'alert', '')
 
 def parse_chat_command(text):
+    """Parse WhatsApp-style commands from chat."""
     text_lower = str(text).lower().strip()
 
+    # PDF commands
     pdf_train = re.search(r'(?:pdf|report)\s+(?:for\s+)?(\d{3,5})', text_lower)
     if pdf_train:
         return {'action': 'pdf_train', 'train': pdf_train.group(1)}
@@ -526,25 +527,31 @@ def parse_chat_command(text):
     if any(k in text_lower for k in ['full pdf', 'all pdf', 'complete pdf', 'sara pdf']):
         return {'action': 'pdf_full'}
 
+    # Sheet link
     if any(k in text_lower for k in ['sheet link', 'google sheet', 'spreadsheet link']):
         return {'action': 'sheet_link'}
 
+    # EQ List by train
     eq_match = re.search(r'(\d{3,5})\s*(?:eq|quota|list)', text_lower)
     if eq_match:
         return {'action': 'eq_list', 'train': eq_match.group(1)}
 
+    # Charting time
     chart_match = re.search(r'chart(?:ing)?\s+(?:time|status)\s+(?:for\s+)?(\d{3,5})', text_lower)
     if chart_match:
         return {'action': 'chart_time', 'train': chart_match.group(1)}
 
+    # PNR status
     pnr_match = re.search(r'pnr\s*(\d{10})', text_lower)
     if pnr_match:
         return {'action': 'pnr_status', 'pnr': pnr_match.group(1)}
 
+    # Live train
     live_match = re.search(r'live\s+(?:status\s+)?(\d{3,5})', text_lower)
     if live_match:
         return {'action': 'live_train', 'train': live_match.group(1)}
 
+    # Weather
     weather_match = re.search(r'weather\s+(?:of\s+)?(.+)', text_lower)
     if weather_match:
         return {'action': 'weather', 'city': weather_match.group(1).strip()}
@@ -552,6 +559,7 @@ def parse_chat_command(text):
     return {'action': 'chat', 'text': text}
 
 def generate_train_pdf(train_number, sheet_name="EQ"):
+    """Generate PDF for a specific train from EQ sheet."""
     try:
         df = load_sheet_data_cached(sheet_name, SHEET_ID)
         if df.empty: return None, "No data in sheet"
@@ -569,6 +577,7 @@ def generate_train_pdf(train_number, sheet_name="EQ"):
         return None, str(e)
 
 def generate_today_pdf(sheet_name="EQ"):
+    """Generate PDF for today's DOJ records."""
     try:
         df = load_sheet_data_cached(sheet_name, SHEET_ID)
         if df.empty: return None, "No data"
@@ -587,6 +596,7 @@ def generate_today_pdf(sheet_name="EQ"):
         return None, str(e)
 
 def check_sheet_alerts():
+    """Check for new data in EQ sheet and return alerts."""
     try:
         gc = init_sheets()
         eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
@@ -601,7 +611,6 @@ def check_sheet_alerts():
         return None
     except:
         return None
-
 def smart_detect_warrant(text):
     if not text: return {'warrant': '', 'found': False}
     text = str(text).upper()
@@ -1006,8 +1015,11 @@ Previous conversation:
 # =====================================================================
 def get_weather(city_name):
     if not city_name or not str(city_name).strip(): return {'error': 'Please enter a city name'}
-    city_name = " ".join(str(city_name).strip().split())
+    city_name = " ".join(str(city_name).strip().split())  # collapse extra/stray spaces
     try:
+        # Step 1: Geocode to get lat, lon, name, state, country
+        # Try the name as typed first, then fall back to Title Case so any
+        # capitalization the user types (all caps, all lowercase, mixed) works.
         geo_data = None
         for attempt in (city_name, city_name.title()):
             geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={urllib.parse.quote(attempt)}&limit=1&appid={WEATHER_API_KEY}"
@@ -1026,6 +1038,7 @@ def get_weather(city_name):
                 country = geo_data[0].get('country', '')
                 state = geo_data[0].get('state', '')
 
+        # Step 2: Get weather by coordinates (most accurate)
         if lat and lon:
             coord_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric"
             coord_resp = requests.get(coord_url, timeout=10)
@@ -1040,6 +1053,7 @@ def get_weather(city_name):
                     'sunrise': data.get('sys', {}).get('sunrise', 'N/A'), 'sunset': data.get('sys', {}).get('sunset', 'N/A'),
                     'lat': lat, 'lon': lon, 'timezone': data.get('timezone', 0)}
 
+        # Fallback: direct city name API (no state available)
         url = f"https://api.openweathermap.org/data/2.5/weather?q={urllib.parse.quote(city_name)}&appid={WEATHER_API_KEY}&units=metric"
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
@@ -1080,6 +1094,7 @@ def get_weather_forecast(city_name):
                     'weather': info['weather'], 'description': info['description'].title(),
                     'icon': info['icon'], 'humidity': info['humidity'], 'wind': info['wind'], 'pressure': info['pressure']})
             return {'forecast': result, 'city': data.get('city', {}).get('name', city_name), 'country': data.get('city', {}).get('country', '')}
+        # Fallback: geocoding then forecast by coords
         geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city_name}&limit=1&appid={WEATHER_API_KEY}"
         geo_resp = requests.get(geo_url, timeout=10)
         if geo_resp.status_code == 200:
@@ -1268,10 +1283,12 @@ def get_full_schedule(train_number):
                 or s.get('STA') == 'Source' or s.get('STD') == 'Dest']
     except Exception: return []
 
+
 # =====================================================================
 # Charting Time Calculator
 # =====================================================================
 def get_charting_time(train_number, doj_str):
+    """Calculate charting time (usually 4 hours before origin departure)"""
     if not train_number or not doj_str: return "—"
     try:
         schedule = get_full_schedule(train_number)
@@ -1303,7 +1320,6 @@ def get_charting_time(train_number, doj_str):
         return "—"
     except Exception:
         return "—"
-
 def get_pnr_status(pnr):
     if not NTES_AVAILABLE: return {"error": "NTES library not installed"}
     try:
@@ -2540,178 +2556,137 @@ def main():
     st.session_state.last_refresh = time.time()
 
     # =====================================================================
-    # AUTHENTICATION & REGISTRATION GATE
+    # AUTHENTICATION GATE — One-Time Name Entry with Admin Approval
     # =====================================================================
     if not st.session_state.authenticated:
-        reg_name = st.session_state.get('reg_name', '').strip()
-        if not reg_name:
-            st.markdown("""
-            <style>
-            .login-wrap { max-width: 460px; margin: 50px auto; padding: 40px 30px;
-                background: linear-gradient(135deg, #0f172a, #1e1b4b);
-                border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
-                box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center; }
-            .login-icon { font-size: 4.5rem; margin-bottom: 10px; filter: drop-shadow(0 0 20px rgba(255,153,51,0.5)); }
-            .login-title { color: #f1f5f9; font-size: 1.7rem; font-weight: 800; margin-bottom: 4px; }
-            .login-sub { color: #94a3b8; font-size: 0.95rem; margin-bottom: 28px; }
-            .login-input input { background: rgba(255,255,255,0.08) !important; color: #fff !important;
-                border: 1px solid rgba(255,255,255,0.2) !important; border-radius: 10px !important;
-                text-align: center !important; font-size: 1.15rem !important; letter-spacing: 1px !important; }
-            .login-input input::placeholder { color: #64748b !important; }
-            .login-btn button { background: linear-gradient(135deg, #FF9933, #138808) !important;
-                color: #fff !important; font-weight: 700 !important; font-size: 1.05rem !important;
-                border: none !important; border-radius: 10px !important; padding: 12px 24px !important; }
-            .login-footer { color: #475569; font-size: 0.8rem; margin-top: 20px; }
-            .login-note { background: rgba(255,153,51,0.1); border: 1px solid rgba(255,153,51,0.3); 
-                border-radius: 10px; padding: 12px; color: #fbbf24; font-size: 0.9rem; margin: 16px 0; }
-            </style>
-            <div class="login-wrap">
-                <div class="login-icon">🚂</div>
-                <div class="login-title">AI EQMS Hub Pro</div>
-                <div class="login-sub">Indian Railways — Emergency Quota Management</div>
-                <div class="login-note">👋 Pehli baar aaye hain? Apna naam likhein.<br>Admin approve karega, phir aap use kar sakte hain.</div>
-            </div>
-            """, unsafe_allow_html=True)
-            with st.container():
-                c1, c2, c3 = st.columns([1, 3, 1])
-                with c2:
-                    name_input = st.text_input("📝 Apna Naam", placeholder="Aapka poora naam...", key="reg_name_input")
-                    phone_input = st.text_input("📱 Phone Number (optional)", placeholder="10 digit phone...", key="reg_phone_input")
-                    if st.button("🚀 Request Bhejein", use_container_width=True, key="submit_reg_btn"):
-                        if not name_input or not name_input.strip():
-                            st.error("❌ Kripya naam likhein. Bina naam ke entry nahi ho sakti.")
-                        else:
-                            name_clean = name_input.strip()
-                            if is_master_admin(name_clean):
-                                register_user(name_clean, phone_input, 'Master')
-                                approve_user(name_clean, 'admin')
-                                st.session_state.authenticated = True
-                                st.session_state.username = name_clean
-                                st.session_state.user_role = 'admin'
-                                st.session_state.audit_log.append({
-                                    "timestamp": format_datetime(),
-                                    "user": name_clean,
-                                    "role": "admin",
-                                    "action": "👑 Master Admin Login",
-                                    "ip": "—"
-                                })
-                                st.success(f"👑 Welcome Master Admin {name_clean}! Redirecting...")
-                                time.sleep(0.6)
-                                st.rerun()
-                            else:
-                                user_rec = get_user(name_clean)
-                                if user_rec:
-                                    status = str(user_rec.get('STATUS', '')).strip().lower()
-                                    if status == 'approved':
-                                        role = str(user_rec.get('ROLE', 'viewer')).strip().lower()
-                                        st.session_state.authenticated = True
-                                        st.session_state.username = name_clean
-                                        st.session_state.user_role = role
-                                        st.session_state.audit_log.append({
-                                            "timestamp": format_datetime(),
-                                            "user": name_clean,
-                                            "role": role,
-                                            "action": "🔐 Auto Login",
-                                            "ip": "—"
-                                        })
-                                        st.success(f"✅ Welcome back, {name_clean}! Redirecting...")
-                                        time.sleep(0.6)
-                                        st.rerun()
-                                    elif status == 'pending':
-                                        st.session_state.reg_name = name_clean
-                                        st.info("⏳ Aapka request pehle se admin ke paas hai. Approval ka intezaar karein.")
-                                        st.stop()
-                                    elif status == 'rejected':
-                                        st.session_state.reg_name = name_clean
-                                        st.error("❌ Aapka access reject kar diya gaya hai. Admin se sampark karein.")
-                                        st.stop()
-                                    else:
-                                        st.session_state.reg_name = name_clean
-                                        st.rerun()
-                                else:
-                                    reg_res = register_user(name_clean, phone_input, 'Self')
-                                    if reg_res['success']:
-                                        st.session_state.reg_name = name_clean
-                                        st.success("✅ Aapka request admin ke paas bhej diya gaya hai! 🎉")
-                                        st.balloons()
-                                        st.info("⏳ Admin jaldi approve karega. Tab tak kripya wait karein.")
-                                        st.stop()
-                                    else:
-                                        st.error(f"❌ {reg_res['error']}")
-            st.stop()
-        else:
-            user_rec = get_user(reg_name)
-            if not user_rec:
-                st.session_state.reg_name = ''
-                st.rerun()
-            status = str(user_rec.get('STATUS', '')).strip().lower()
-            if status == 'pending':
-                st.markdown("""
-                <style>
-                .wait-wrap { max-width: 420px; margin: 80px auto; padding: 40px 30px;
-                    background: linear-gradient(135deg, #0f172a, #1e1b4b);
-                    border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
-                    box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center; }
-                .wait-icon { font-size: 4rem; animation: pulse-wait 2s infinite; }
-                @keyframes pulse-wait { 0%,100%{transform:scale(1);} 50%{transform:scale(1.1);} }
-                </style>
-                <div class="wait-wrap">
-                    <div class="wait-icon">⏳</div>
-                    <h2 style="color:#f1f5f9; margin-top:10px;">Approval Ka Intezaar</h2>
-                    <p style="color:#94a3b8;">Aapka request admin ke paas hai.<br>Jaise hi approve hoga, aapko access mil jayega.</p>
-                </div>
-                """, unsafe_allow_html=True)
-                st.caption(f"👤 Registered Name: {reg_name}")
-                if st.button("🔄 Status Check Karein", use_container_width=True, key="check_status_again"):
-                    st.rerun()
-                if st.button("🔙 Wapas jayein / Naam badle", use_container_width=True, key="back_to_reg"):
-                    st.session_state.reg_name = ''
-                    st.rerun()
-                st.stop()
-            elif status == 'rejected':
-                st.markdown("""
-                <style>
-                .rej-wrap { max-width: 420px; margin: 80px auto; padding: 40px 30px;
-                    background: linear-gradient(135deg, #1a0a0a, #2d1b1b);
-                    border-radius: 20px; border: 1px solid rgba(220,38,38,0.3);
-                    box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center; }
-                </style>
-                <div class="rej-wrap">
-                    <div style="font-size:4rem;">🚫</div>
-                    <h2 style="color:#f87171; margin-top:10px;">Access Rejected</h2>
-                    <p style="color:#fca5a5;">Aapka access admin ne reject kar diya hai.<br>Admin se sampark karein.</p>
-                </div>
-                """, unsafe_allow_html=True)
-                if st.button("🔙 Wapas jayein", use_container_width=True, key="back_rej"):
-                    st.session_state.reg_name = ''
-                    st.rerun()
-                st.stop()
-            elif status == 'approved':
-                role = str(user_rec.get('ROLE', 'viewer')).strip().lower()
-                st.session_state.authenticated = True
-                st.session_state.username = reg_name
-                st.session_state.user_role = role
-                st.session_state.audit_log.append({
-                    "timestamp": format_datetime(),
-                    "user": reg_name,
-                    "role": role,
-                    "action": "🔐 Approved Login",
-                    "ip": "—"
-                })
-                st.rerun()
-            else:
-                st.session_state.reg_name = ''
-                st.rerun()
-    else:
-        pass
+        st.set_page_config(page_title="AI EQMS Hub Pro — Welcome", page_icon="🚂", layout="centered")
 
-    # Initialize pagination variables
+        # Try auto-login from localStorage via query param
+        components.html("""
+        <script>
+        (function(){
+            var P = window.parent;
+            var saved = P.localStorage.getItem('eqms_user');
+            if (saved && saved.trim() !== '') {
+                var url = new URL(P.location.href);
+                if (!url.searchParams.has('auto_user')) {
+                    url.searchParams.set('auto_user', saved);
+                    P.location.href = url.toString();
+                }
+            }
+        })();
+        </script>
+        """, height=0)
+
+        auto_user = st.query_params.get('auto_user')
+        if auto_user and str(auto_user).strip():
+            role, status = get_user_status(auto_user)
+            if role and str(status).lower() == 'active':
+                st.session_state.authenticated = True
+                st.session_state.username = str(auto_user).strip()
+                st.session_state.user_role = role
+                update_user_activity(str(auto_user).strip())
+                st.rerun()
+
+        st.markdown("""
+        <style>
+        .login-wrap { max-width: 420px; margin: 60px auto; padding: 40px 30px;
+            background: linear-gradient(135deg, #0f172a, #1e1b4b);
+            border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center; }
+        .login-icon { font-size: 4rem; margin-bottom: 10px; }
+        .login-title { color: #f1f5f9; font-size: 1.6rem; font-weight: 800; margin-bottom: 4px; }
+        .login-sub { color: #94a3b8; font-size: 0.9rem; margin-bottom: 24px; }
+        .login-input input { background: rgba(255,255,255,0.08) !important; color: #fff !important;
+            border: 1px solid rgba(255,255,255,0.2) !important; border-radius: 10px !important;
+            text-align: center !important; font-size: 1.1rem !important; }
+        .login-input input::placeholder { color: #64748b !important; }
+        .login-btn button { background: linear-gradient(135deg, #FF9933, #138808) !important;
+            color: #fff !important; font-weight: 700 !important; font-size: 1rem !important;
+            border: none !important; border-radius: 10px !important; padding: 10px 24px !important; }
+        .pending-box { background: rgba(234,179,8,0.15); border: 1px solid rgba(234,179,8,0.4);
+            border-radius: 12px; padding: 20px; margin-top: 20px; color: #fbbf24; text-align: center; }
+        .admin-notify { background: rgba(37,99,235,0.15); border: 1px solid rgba(37,99,235,0.4);
+            border-radius: 12px; padding: 15px; margin-top: 15px; color: #60a5fa; font-size: 0.9rem; }
+        </style>
+        <div class="login-wrap">
+            <div class="login-icon">🚂</div>
+            <div class="login-title">AI EQMS Hub Pro</div>
+            <div class="login-sub">Indian Railways — Emergency Quota Management</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.container():
+            c1, c2, c3 = st.columns([1, 3, 1])
+            with c2:
+                username = st.text_input("👤 Enter Your Name", placeholder="Your full name", key="login_user")
+
+                if st.button("🚀 Join App", use_container_width=True, key="login_btn"):
+                    if not username or not username.strip():
+                        st.error("❌ Please enter your name.")
+                    else:
+                        username = username.strip()
+                        role, status = get_user_status(username)
+
+                        if role is None:
+                            # New user — save as pending
+                            save_user(username, 'viewer', 'pending')
+                            st.session_state.username = username
+                            st.session_state.user_role = 'viewer'
+                            st.session_state.user_status = 'pending'
+                            st.info("⏳ Your request has been sent to Admin for approval. Please wait...")
+                            # Notify admin via chat
+                            try:
+                                post_system_alert(f"🆕 New user '{username}' is waiting for approval. Go to User Management in sidebar to approve.")
+                            except Exception:
+                                pass
+                        else:
+                            if str(status).lower() == 'active':
+                                st.session_state.authenticated = True
+                                st.session_state.username = username
+                                st.session_state.user_role = role
+                                update_user_activity(username)
+                                # Save to localStorage for auto-login
+                                components.html(f"""
+                                <script>
+                                window.parent.localStorage.setItem('eqms_user', '{username}');
+                                </script>
+                                """, height=0)
+                                st.success(f"✅ Welcome back, {username}! Redirecting...")
+                                time.sleep(0.5)
+                                st.rerun()
+                            elif str(status).lower() == 'pending':
+                                st.session_state.username = username
+                                st.session_state.user_role = role if role else 'viewer'
+                                st.session_state.user_status = 'pending'
+                                st.warning("⏳ Your account is pending admin approval. Please wait or contact admin.")
+                            else:
+                                st.error("❌ Your account has been deactivated. Contact admin.")
+
+                # Show pending/rejected message if applicable
+                if st.session_state.get('user_status') == 'pending' and st.session_state.get('username'):
+                    st.markdown(f"""
+                    <div class="pending-box">
+                        <div style="font-weight:700; font-size:1.1rem;">⏳ Hello {st.session_state.username}</div>
+                        <div style="margin-top:8px;">Your account is pending approval.</div>
+                        <div style="margin-top:8px; font-size:0.85rem;">Admin will review and assign your role soon.</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if st.button("🔄 Check Again", use_container_width=True, key="recheck_status"):
+                        st.rerun()
+        st.stop()
+    else:
+        # Update activity on every rerun while authenticated
+        update_user_activity(st.session_state.username)
+        st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="expanded")
+
+    # BULLETPROOF: Initialize all pagination/session vars at top of main()
     if 'rows_per_page' not in st.session_state or not isinstance(st.session_state.get('rows_per_page'), int) or st.session_state.get('rows_per_page') <= 0:
         st.session_state.rows_per_page = 25
     if 'current_page' not in st.session_state or not isinstance(st.session_state.get('current_page'), int) or st.session_state.get('current_page') <= 0:
         st.session_state.current_page = 1
 
-    # Splash Screen
+    # Splash Screen (shows once per page load)
     components.html("""
     <script>
     (function(){
@@ -2781,15 +2756,32 @@ def main():
     </script>
     """, height=0)
 
-    # PWA + Offline + Alert Sound
+    # PWA + Mobile + Offline + Alert Sound
     components.html("""
     <script>
     (function(){
-        var manifest={name:"AI EQMS Hub Pro",short_name:"EQMS Hub",start_url:"/",display:"standalone",background_color:"#0a0a1a",theme_color:"#075e54",icons:[{src:"https://cdn-icons-png.flaticon.com/512/1042/1042381.png",sizes:"512x512",type:"image/png"}]};
+        var manifest={
+            name:"AI EQMS Hub Pro",
+            short_name:"EQMS Hub",
+            start_url:"/",
+            display:"standalone",
+            background_color:"#0a0a1a",
+            theme_color:"#075e54",
+            orientation: "any",
+            scope: "/",
+            icons:[
+                {src:"https://cdn-icons-png.flaticon.com/512/1042/1042381.png",sizes:"512x512",type:"image/png"},
+                {src:"https://cdn-icons-png.flaticon.com/512/1042/1042381.png",sizes:"192x192",type:"image/png"},
+                {src:"https://cdn-icons-png.flaticon.com/512/1042/1042381.png",sizes:"144x144",type:"image/png"},
+                {src:"https://cdn-icons-png.flaticon.com/512/1042/1042381.png",sizes:"96x96",type:"image/png"},
+                {src:"https://cdn-icons-png.flaticon.com/512/1042/1042381.png",sizes:"72x72",type:"image/png"},
+                {src:"https://cdn-icons-png.flaticon.com/512/1042/1042381.png",sizes:"48x48",type:"image/png"}
+            ]
+        };
         var mb=new Blob([JSON.stringify(manifest)],{type:"application/json"});
         var mu=URL.createObjectURL(mb);
         var l=document.createElement("link");l.rel="manifest";l.href=mu;document.head.appendChild(l);
-        var swc='self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));self.addEventListener("fetch",e=>e.respondWith(fetch(e.request).catch(()=>new Response("Offline",{status:503}))));self.addEventListener("activate",e=>e.waitUntil(self.clients.claim()));';
+        var swc='self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));self.addEventListener("fetch",e=>e.respondWith(fetch(e.request).catch(()=>new Response("Offline — AI EQMS Hub Pro requires internet.",{status:503,headers:{"Content-Type":"text/html"}}))));self.addEventListener("activate",e=>e.waitUntil(self.clients.claim()));';
         var swb=new Blob([swc],{type:"application/javascript"});
         var swu=URL.createObjectURL(swb);
         if("serviceWorker" in navigator)navigator.serviceWorker.register(swu).catch(function(){});
@@ -2807,11 +2799,6 @@ def main():
             g.gain.setValueAtTime(0.3,c.currentTime);g.gain.exponentialRampToValueAtTime(0.01,c.currentTime+0.5);
             o.start(c.currentTime);o.stop(c.currentTime+0.5);}catch(e){}
         };
-        window.__eqmsDeferredPrompt = null;
-        window.addEventListener('beforeinstallprompt', function(e) {
-            e.preventDefault();
-            window.__eqmsDeferredPrompt = e;
-        });
     })();
     </script>
     <meta name="theme-color" content="#075e54">
@@ -2829,8 +2816,7 @@ def main():
     }
     </style>
     """, height=0)
-
-    # Solar System Background
+        # Solar System Background
     bg_html = """
     <style>
     .eqms-bg {
@@ -2842,46 +2828,55 @@ def main():
         position: absolute; top: 0; left: 0; width: 2px; height: 2px;
         background: transparent;
         box-shadow:
+            /* Row 1 - evenly spread */
             3vw 5vh #fff, 8vw 8vh #fff, 13vw 3vh #fff, 18vw 12vh #fff,
             23vw 6vh #fff, 28vw 15vh #fff, 33vw 4vh #fff, 38vw 10vh #fff,
             43vw 7vh #fff, 48vw 14vh #fff, 53vw 5vh #fff, 58vw 9vh #fff,
             63vw 11vh #fff, 68vw 6vh #fff, 73vw 13vh #fff, 78vw 4vh #fff,
             83vw 8vh #fff, 88vw 15vh #fff, 93vw 7vh #fff, 97vw 11vh #fff,
+            /* Row 2 */
             5vw 18vh #fff, 10vw 22vh #fff, 15vw 16vh #fff, 20vw 25vh #fff,
             25vw 19vh #fff, 30vw 24vh #fff, 35vw 17vh #fff, 40vw 21vh #fff,
             45vw 26vh #fff, 50vw 18vh #fff, 55vw 23vh #fff, 60vw 16vh #fff,
             65vw 20vh #fff, 70vw 25vh #fff, 75vw 17vh #fff, 80vw 22vh #fff,
             85vw 19vh #fff, 90vw 24vh #fff, 95vw 16vh #fff, 98vw 21vh #fff,
+            /* Row 3 */
             2vw 30vh #fff, 7vw 35vh #fff, 12vw 28vh #fff, 17vw 33vh #fff,
             22vw 29vh #fff, 27vw 34vh #fff, 32vw 31vh #fff, 37vw 36vh #fff,
             42vw 28vh #fff, 47vw 32vh #fff, 52vw 35vh #fff, 57vw 30vh #fff,
             62vw 34vh #fff, 67vw 29vh #fff, 72vw 33vh #fff, 77vw 31vh #fff,
             82vw 35vh #fff, 87vw 28vh #fff, 92vw 32vh #fff, 96vw 30vh #fff,
+            /* Row 4 */
             4vw 40vh #fff, 9vw 45vh #fff, 14vw 38vh #fff, 19vw 42vh #fff,
             24vw 46vh #fff, 29vw 39vh #fff, 34vw 44vh #fff, 39vw 37vh #fff,
             44vw 41vh #fff, 49vw 45vh #fff, 54vw 38vh #fff, 59vw 43vh #fff,
             64vw 40vh #fff, 69vw 44vh #fff, 74vw 39vh #fff, 79vw 42vh #fff,
             84vw 46vh #fff, 89vw 38vh #fff, 94vw 41vh #fff, 99vw 45vh #fff,
+            /* Row 5 */
             6vw 50vh #fff, 11vw 55vh #fff, 16vw 48vh #fff, 21vw 52vh #fff,
             26vw 56vh #fff, 31vw 49vh #fff, 36vw 54vh #fff, 41vw 47vh #fff,
             46vw 51vh #fff, 51vw 55vh #fff, 56vw 48vh #fff, 61vw 53vh #fff,
             66vw 50vh #fff, 71vw 54vh #fff, 76vw 49vh #fff, 81vw 52vh #fff,
             86vw 56vh #fff, 91vw 48vh #fff, 95vw 51vh #fff, 98vw 55vh #fff,
+            /* Row 6 */
             1vw 60vh #fff, 6vw 65vh #fff, 11vw 58vh #fff, 16vw 63vh #fff,
             21vw 59vh #fff, 26vw 64vh #fff, 31vw 61vh #fff, 36vw 66vh #fff,
             41vw 58vh #fff, 46vw 62vh #fff, 51vw 65vh #fff, 56vw 60vh #fff,
             61vw 64vh #fff, 66vw 59vh #fff, 71vw 63vh #fff, 76vw 61vh #fff,
             81vw 65vh #fff, 86vw 58vh #fff, 91vw 62vh #fff, 96vw 60vh #fff,
+            /* Row 7 */
             3vw 70vh #fff, 8vw 75vh #fff, 13vw 68vh #fff, 18vw 73vh #fff,
             23vw 77vh #fff, 28vw 69vh #fff, 33vw 74vh #fff, 38vw 71vh #fff,
             43vw 76vh #fff, 48vw 68vh #fff, 53vw 72vh #fff, 58vw 75vh #fff,
             63vw 70vh #fff, 68vw 74vh #fff, 73vw 69vh #fff, 78vw 73vh #fff,
             83vw 77vh #fff, 88vw 70vh #fff, 93vw 74vh #fff, 97vw 71vh #fff,
+            /* Row 8 */
             5vw 80vh #fff, 10vw 85vh #fff, 15vw 78vh #fff, 20vw 83vh #fff,
             25vw 87vh #fff, 30vw 79vh #fff, 35vw 84vh #fff, 40vw 81vh #fff,
             45vw 86vh #fff, 50vw 78vh #fff, 55vw 82vh #fff, 60vw 85vh #fff,
             65vw 80vh #fff, 70vw 84vh #fff, 75vw 79vh #fff, 80vw 83vh #fff,
             85vw 87vh #fff, 90vw 80vh #fff, 95vw 84vh #fff, 98vw 81vh #fff,
+            /* Row 9 */
             2vw 90vh #fff, 7vw 95vh #fff, 12vw 88vh #fff, 17vw 93vh #fff,
             22vw 89vh #fff, 27vw 94vh #fff, 32vw 91vh #fff, 37vw 96vh #fff,
             42vw 88vh #fff, 47vw 92vh #fff, 52vw 95vh #fff, 57vw 90vh #fff,
@@ -2911,82 +2906,286 @@ def main():
         0% { transform: translate(-50%, -50%) scale(1); }
         100% { transform: translate(-50%, -50%) scale(1.15); }
     }
-    .ring-1 { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 260px; height: 260px; border: 1px dashed rgba(255,153,51,0.25); border-radius: 50%; animation: ring-pulse-1 4s ease-in-out infinite; }
-    .ring-2 { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 400px; height: 400px; border: 1px dashed rgba(19,136,8,0.25); border-radius: 50%; animation: ring-pulse-2 4s ease-in-out infinite; animation-delay: 2s; }
-    .ring-3 { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 540px; height: 540px; border: 1px dashed rgba(200,180,140,0.2); border-radius: 50%; animation: ring-pulse-3 5s ease-in-out infinite; animation-delay: 1s; }
-    .ring-4 { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 680px; height: 680px; border: 1px dashed rgba(180,140,100,0.2); border-radius: 50%; animation: ring-pulse-4 5s ease-in-out infinite; animation-delay: 3s; }
-    @keyframes ring-pulse-1 { 0%,100% { border-color: rgba(255,153,51,0.15); } 50% { border-color: rgba(255,153,51,0.45); } }
-    @keyframes ring-pulse-2 { 0%,100% { border-color: rgba(19,136,8,0.15); } 50% { border-color: rgba(19,136,8,0.45); } }
-    @keyframes ring-pulse-3 { 0%,100% { border-color: rgba(200,180,140,0.1); } 50% { border-color: rgba(200,180,140,0.35); } }
-    @keyframes ring-pulse-4 { 0%,100% { border-color: rgba(180,140,100,0.1); } 50% { border-color: rgba(180,140,100,0.35); } }
-    .orbit-1 { position: absolute; top: 50%; left: 50%; width: 260px; height: 260px; transform: translate(-50%, -50%); animation: spin-1 22s linear infinite; }
-    @keyframes spin-1 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+    .ring-1 {
+        position: absolute; top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 260px; height: 260px;
+        border: 1px dashed rgba(255,153,51,0.25);
+        border-radius: 50%;
+        animation: ring-pulse-1 4s ease-in-out infinite;
+    }
+    .ring-2 {
+        position: absolute; top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 400px; height: 400px;
+        border: 1px dashed rgba(19,136,8,0.25);
+        border-radius: 50%;
+        animation: ring-pulse-2 4s ease-in-out infinite;
+        animation-delay: 2s;
+    }
+    .ring-3 {
+        position: absolute; top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 540px; height: 540px;
+        border: 1px dashed rgba(200,180,140,0.2);
+        border-radius: 50%;
+        animation: ring-pulse-3 5s ease-in-out infinite;
+        animation-delay: 1s;
+    }
+    .ring-4 {
+        position: absolute; top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 680px; height: 680px;
+        border: 1px dashed rgba(180,140,100,0.2);
+        border-radius: 50%;
+        animation: ring-pulse-4 5s ease-in-out infinite;
+        animation-delay: 3s;
+    }
+    @keyframes ring-pulse-1 {
+        0%, 100% { border-color: rgba(255,153,51,0.15); }
+        50% { border-color: rgba(255,153,51,0.45); }
+    }
+    @keyframes ring-pulse-2 {
+        0%, 100% { border-color: rgba(19,136,8,0.15); }
+        50% { border-color: rgba(19,136,8,0.45); }
+    }
+    @keyframes ring-pulse-3 {
+        0%, 100% { border-color: rgba(200,180,140,0.1); }
+        50% { border-color: rgba(200,180,140,0.35); }
+    }
+    @keyframes ring-pulse-4 {
+        0%, 100% { border-color: rgba(180,140,100,0.1); }
+        50% { border-color: rgba(180,140,100,0.35); }
+    }
+    .orbit-1 {
+        position: absolute; top: 50%; left: 50%;
+        width: 260px; height: 260px;
+        transform: translate(-50%, -50%);
+        animation: spin-1 22s linear infinite;
+    }
+    @keyframes spin-1 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
     .t1 { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 28px; filter: drop-shadow(0 0 10px rgba(255,153,51,0.9)); animation: bob-1 0.9s ease-in-out infinite alternate; }
     .t1-b1 { transform: translateX(-50%) translateX(-36px); animation-delay: 0.04s; }
     .t1-b2 { transform: translateX(-50%) translateX(-68px); animation-delay: 0.08s; }
     .t1-b3 { transform: translateX(-50%) translateX(-96px); animation-delay: 0.12s; }
-    @keyframes bob-1 { from { transform: translateX(-50%) translateY(0) scale(1); } to { transform: translateX(-50%) translateY(-5px) scale(1.07); } }
-    .orbit-2 { position: absolute; top: 50%; left: 50%; width: 400px; height: 400px; transform: translate(-50%, -50%); animation: spin-2 32s linear infinite reverse; }
-    @keyframes spin-2 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+    @keyframes bob-1 {
+        from { transform: translateX(-50%) translateY(0) scale(1); }
+        to { transform: translateX(-50%) translateY(-5px) scale(1.07); }
+    }
+    .orbit-2 {
+        position: absolute; top: 50%; left: 50%;
+        width: 400px; height: 400px;
+        transform: translate(-50%, -50%);
+        animation: spin-2 32s linear infinite reverse;
+    }
+    @keyframes spin-2 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
     .t2 { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 26px; filter: drop-shadow(0 0 10px rgba(19,136,8,0.9)); animation: bob-2 1s ease-in-out infinite alternate; }
     .t2-b1 { transform: translateX(-50%) translateX(-34px); animation-delay: 0.04s; }
     .t2-b2 { transform: translateX(-50%) translateX(-64px); animation-delay: 0.08s; }
     .t2-b3 { transform: translateX(-50%) translateX(-90px); animation-delay: 0.12s; }
-    @keyframes bob-2 { from { transform: translateX(-50%) translateY(0) scale(1); } to { transform: translateX(-50%) translateY(-4px) scale(1.05); } }
-    .orbit-3 { position: absolute; top: 50%; left: 50%; width: 540px; height: 540px; transform: translate(-50%, -50%); animation: spin-3 48s linear infinite; }
-    @keyframes spin-3 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-    .planet-saturn { position: absolute; top: -24px; left: 50%; transform: translateX(-50%); font-size: 34px; filter: drop-shadow(0 0 18px rgba(210,180,140,0.6)); animation: planet-bob 3.5s ease-in-out infinite; }
-    @keyframes planet-bob { 0%,100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-6px); } }
-    .orbit-4 { position: absolute; top: 50%; left: 50%; width: 680px; height: 680px; transform: translate(-50%, -50%); animation: spin-4 65s linear infinite reverse; }
-    @keyframes spin-4 { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
-    .planet-jupiter { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); width: 32px; height: 32px; background: radial-gradient(circle at 30% 30%, #e8b89d, #c07848, #8b4513); border-radius: 50%; box-shadow: 0 0 22px rgba(192,120,72,0.5), inset -5px -5px 10px rgba(0,0,0,0.35); animation: planet-bob 4.5s ease-in-out infinite; }
-    .planet-jupiter::before { content: ''; position: absolute; top: 40%; left: 10%; width: 80%; height: 3px; background: rgba(139,69,19,0.4); border-radius: 2px; }
-    .planet-jupiter::after { content: ''; position: absolute; top: 60%; left: 15%; width: 70%; height: 2px; background: rgba(160,82,45,0.35); border-radius: 2px; }
-    .planet-1 { position: absolute; top: 12%; right: 18%; width: 16px; height: 16px; background: radial-gradient(circle, #ff6b6b, #c92a2a); border-radius: 50%; box-shadow: 0 0 15px rgba(255,107,107,0.4); animation: float-1 7s ease-in-out infinite; }
-    .planet-2 { position: absolute; bottom: 22%; left: 10%; width: 12px; height: 12px; background: radial-gradient(circle, #4ecdc4, #087f5b); border-radius: 50%; box-shadow: 0 0 12px rgba(78,205,196,0.4); animation: float-2 7s ease-in-out infinite; animation-delay: -3s; }
-    .planet-3 { position: absolute; top: 68%; right: 12%; width: 20px; height: 20px; background: radial-gradient(circle, #ffe66d, #f59f00); border-radius: 50%; box-shadow: 0 0 20px rgba(255,230,109,0.4); animation: float-3 7s ease-in-out infinite; animation-delay: -6s; }
-    @keyframes float-1 { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
-    @keyframes float-2 { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-    @keyframes float-3 { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
-    .shooting { position: absolute; top: 10%; left: 10%; width: 100px; height: 2px; background: linear-gradient(90deg, rgba(255,255,255,1), transparent); transform: rotate(-45deg); opacity: 0; animation: shoot 5s linear infinite; }
-    @keyframes shoot { 0% { transform: translateX(0) translateY(0) rotate(-45deg); opacity: 1; } 100% { transform: translateX(500px) translateY(500px) rotate(-45deg); opacity: 0; } }
+    @keyframes bob-2 {
+        from { transform: translateX(-50%) translateY(0) scale(1); }
+        to { transform: translateX(-50%) translateY(-4px) scale(1.05); }
+    }
+    .orbit-3 {
+        position: absolute; top: 50%; left: 50%;
+        width: 540px; height: 540px;
+        transform: translate(-50%, -50%);
+        animation: spin-3 48s linear infinite;
+    }
+    @keyframes spin-3 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .planet-saturn {
+        position: absolute; top: -24px; left: 50%; transform: translateX(-50%);
+        font-size: 34px; filter: drop-shadow(0 0 18px rgba(210,180,140,0.6));
+        animation: planet-bob 3.5s ease-in-out infinite;
+    }
+    @keyframes planet-bob {
+        0%, 100% { transform: translateX(-50%) translateY(0); }
+        50% { transform: translateX(-50%) translateY(-6px); }
+    }
+    .orbit-4 {
+        position: absolute; top: 50%; left: 50%;
+        width: 680px; height: 680px;
+        transform: translate(-50%, -50%);
+        animation: spin-4 65s linear infinite reverse;
+    }
+    @keyframes spin-4 {
+        from { transform: translate(-50%, -50%) rotate(0deg); }
+        to { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+    .planet-jupiter {
+        position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
+        width: 32px; height: 32px;
+        background: radial-gradient(circle at 30% 30%, #e8b89d, #c07848, #8b4513);
+        border-radius: 50%;
+        box-shadow: 0 0 22px rgba(192,120,72,0.5), inset -5px -5px 10px rgba(0,0,0,0.35);
+        animation: planet-bob 4.5s ease-in-out infinite;
+    }
+    .planet-jupiter::before {
+        content: ''; position: absolute; top: 40%; left: 10%; width: 80%; height: 3px;
+        background: rgba(139,69,19,0.4); border-radius: 2px;
+    }
+    .planet-jupiter::after {
+        content: ''; position: absolute; top: 60%; left: 15%; width: 70%; height: 2px;
+        background: rgba(160,82,45,0.35); border-radius: 2px;
+    }
+    .planet-1 {
+        position: absolute; top: 12%; right: 18%;
+        width: 16px; height: 16px;
+        background: radial-gradient(circle, #ff6b6b, #c92a2a);
+        border-radius: 50%;
+        box-shadow: 0 0 15px rgba(255,107,107,0.4);
+        animation: float-1 7s ease-in-out infinite;
+    }
+    .planet-2 {
+        position: absolute; bottom: 22%; left: 10%;
+        width: 12px; height: 12px;
+        background: radial-gradient(circle, #4ecdc4, #087f5b);
+        border-radius: 50%;
+        box-shadow: 0 0 12px rgba(78,205,196,0.4);
+        animation: float-2 7s ease-in-out infinite;
+        animation-delay: -3s;
+    }
+    .planet-3 {
+        position: absolute; top: 68%; right: 12%;
+        width: 20px; height: 20px;
+        background: radial-gradient(circle, #ffe66d, #f59f00);
+        border-radius: 50%;
+        box-shadow: 0 0 20px rgba(255,230,109,0.4);
+        animation: float-3 7s ease-in-out infinite;
+        animation-delay: -6s;
+    }
+    @keyframes float-1 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+    @keyframes float-2 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    @keyframes float-3 { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+    .shooting {
+        position: absolute; top: 10%; left: 10%;
+        width: 100px; height: 2px;
+        background: linear-gradient(90deg, rgba(255,255,255,1), transparent);
+        transform: rotate(-45deg);
+        opacity: 0;
+        animation: shoot 5s linear infinite;
+    }
+    @keyframes shoot {
+        0% { transform: translateX(0) translateY(0) rotate(-45deg); opacity: 1; }
+        100% { transform: translateX(500px) translateY(500px) rotate(-45deg); opacity: 0; }
+    }
     </style>
     <div class="eqms-bg">
         <div class="stars"></div>
-        <div class="sun-wrap"><div class="sun-core"></div></div>
-        <div class="ring-1"></div><div class="ring-2"></div><div class="ring-3"></div><div class="ring-4"></div>
-        <div class="orbit-1"><div class="t1">🚂</div><div class="t1 t1-b1">🚃</div><div class="t1 t1-b2">🚃</div><div class="t1 t1-b3">🚃</div></div>
-        <div class="orbit-2"><div class="t2">🚂</div><div class="t2 t2-b1">🚋</div><div class="t2 t2-b2">🚋</div><div class="t2 t2-b3">🚋</div></div>
-        <div class="orbit-3"><div class="planet-saturn">🪐</div></div>
-        <div class="orbit-4"><div class="planet-jupiter"></div></div>
-        <div class="planet-1"></div><div class="planet-2"></div><div class="planet-3"></div>
+        <div class="sun-wrap">
+            <div class="sun-core"></div>
+        </div>
+        <div class="ring-1"></div>
+        <div class="ring-2"></div>
+        <div class="ring-3"></div>
+        <div class="ring-4"></div>
+        <div class="orbit-1">
+            <div class="t1">🚂</div>
+            <div class="t1 t1-b1">🚃</div>
+            <div class="t1 t1-b2">🚃</div>
+            <div class="t1 t1-b3">🚃</div>
+        </div>
+        <div class="orbit-2">
+            <div class="t2">🚂</div>
+            <div class="t2 t2-b1">🚋</div>
+            <div class="t2 t2-b2">🚋</div>
+            <div class="t2 t2-b3">🚋</div>
+        </div>
+        <div class="orbit-3">
+            <div class="planet-saturn">🪐</div>
+        </div>
+        <div class="orbit-4">
+            <div class="planet-jupiter"></div>
+        </div>
+        <div class="planet-1"></div>
+        <div class="planet-2"></div>
+        <div class="planet-3"></div>
         <div class="shooting"></div>
     </div>
     """
-
     view_bg = st.session_state.view_mode
     if view_bg == "📊 Dashboard":
         st.markdown(EARTH_BG_HTML, unsafe_allow_html=True)
     elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         pass  # Weather bg rendered later
     elif view_bg == "💬 Chat":
-        # For chat, we use a light background, not aquarium
+        st.markdown(AQUARIUM_BG_HTML, unsafe_allow_html=True)
+        # Force white text visibility for chat view
         st.markdown("""
         <style>
-        .chat-light-bg {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            z-index: -1; pointer-events: none; overflow: hidden;
-            background: #f0f0f0;
+        [data-testid="stMain"] h1, [data-testid="stMain"] h2, [data-testid="stMain"] h3,
+        [data-testid="stMain"] h4, [data-testid="stMain"] h5, [data-testid="stMain"] h6,
+        [data-testid="stMain"] .stMarkdown p, [data-testid="stMain"] .stMarkdown div,
+        [data-testid="stMain"] .stCaption, [data-testid="stMain"] .stCaption p,
+        [data-testid="stMain"] label, [data-testid="stMain"] .stWidgetLabel,
+        [data-testid="stMain"] .stRadio label, [data-testid="stMain"] .stCheckbox label,
+        [data-testid="stMain"] .streamlit-expanderHeader,
+        [data-testid="stMain"] .streamlit-expanderHeader p,
+        [data-testid="stMain"] .streamlit-expanderHeader span {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.5) !important;
+            font-weight: 600 !important;
+        }
+        [data-testid="stMain"] .stButton > button {
+            background: rgba(255,255,255,0.12) !important;
+            border: 1px solid rgba(255,255,255,0.25) !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        }
+        [data-testid="stMain"] .stButton > button:hover {
+            background: rgba(255,255,255,0.25) !important;
+            border-color: rgba(255,255,255,0.5) !important;
+        }
+        [data-testid="stMain"] .stChatMessage {
+            background: rgba(0,20,40,0.6) !important;
+            border: 1px solid rgba(255,255,255,0.15) !important;
+            backdrop-filter: blur(12px) !important;
+        }
+        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] p,
+        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] div {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        }
+        [data-testid="stMain"] .stChatInput {
+            background: rgba(0,20,40,0.5) !important;
+            border: 1px solid rgba(255,255,255,0.2) !important;
+        }
+        [data-testid="stMain"] .stChatInput input {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+        }
+        [data-testid="stMain"] .stChatInput input::placeholder {
+            color: rgba(255,255,255,0.6) !important;
         }
         </style>
-        <div class="chat-light-bg"></div>
         """, unsafe_allow_html=True)
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
     # =====================================================================
-    # Weather Animated Background (only when Weather tab active)
+    # WEATHER ANIMATED BACKGROUND (Replaces Solar when Weather is active)
     # =====================================================================
+    # Smart day/night text detection for the weather tab.
+    # (Main card / detail items / sunrise-sunset already compute their own
+    # correct day-or-night color further down, so they are left alone here.
+    # Only the forecast cards read CSS variables that were never defined
+    # anywhere, so they always fell back to plain black — this defines
+    # those variables from the real sunrise/sunset so forecast text is
+    # readable in both day and night scenes.)
+    # Compute day/night once for both CSS and background
     _wx_is_night = False
     if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         try:
@@ -2998,6 +3197,7 @@ def main():
                 _wx_sunset = int(_wx_sunset)
                 _wx_is_night = (_wx_now < _wx_sunrise - 1800) or (_wx_now > _wx_sunset + 1800)
             else:
+                # Fallback: IST hour
                 ist_h = now_ist().hour
                 _wx_is_night = ist_h < 6 or ist_h >= 19
         except Exception:
@@ -3025,6 +3225,7 @@ def main():
         temp = st.session_state.weather_data.get('temp', '--')
         desc = st.session_state.weather_data.get('weather', '').title()
 
+        # ---- DAY / NIGHT DETECTION (IST-based with API fallback) ----
         time_of_day = 'day'
         weather_mode = 'day'
         try:
@@ -3035,26 +3236,37 @@ def main():
                 sunrise = int(sunrise)
                 sunset = int(sunset)
                 if now_ts < sunrise - 1800:
-                    time_of_day = 'night'; weather_mode = 'night'
+                    time_of_day = 'night'
+                    weather_mode = 'night'
                 elif now_ts < sunrise + 1800:
-                    time_of_day = 'dawn'; weather_mode = 'day'
+                    time_of_day = 'dawn'
+                    weather_mode = 'day'
                 elif now_ts < sunset - 1800:
-                    time_of_day = 'day'; weather_mode = 'day'
+                    time_of_day = 'day'
+                    weather_mode = 'day'
                 elif now_ts < sunset + 1800:
-                    time_of_day = 'dusk'; weather_mode = 'day'
+                    time_of_day = 'dusk'
+                    weather_mode = 'day'
                 else:
-                    time_of_day = 'night'; weather_mode = 'night'
+                    time_of_day = 'night'
+                    weather_mode = 'night'
             else:
+                # Fallback: IST hour-based
                 ist_hour = now_ist().hour
                 if ist_hour < 6 or ist_hour >= 19:
-                    time_of_day = 'night'; weather_mode = 'night'
+                    time_of_day = 'night'
+                    weather_mode = 'night'
         except Exception:
+            # Fallback: IST hour-based
             ist_hour = now_ist().hour
             if ist_hour < 6 or ist_hour >= 19:
-                time_of_day = 'night'; weather_mode = 'night'
+                time_of_day = 'night'
+                weather_mode = 'night'
 
+        # Also update _wx_is_night for CSS consistency
         _wx_is_night = (weather_mode == 'night')
 
+        # ---- WEATHER TYPE (respects day/night) ----
         if 'rain' in weather_cond or 'drizz' in weather_cond:
             scene = 'rain' if time_of_day in ['day', 'dawn', 'dusk'] else 'night-rain'
         elif 'thunder' in weather_cond or 'storm' in weather_cond:
@@ -3068,9 +3280,10 @@ def main():
         else:
             scene = 'night' if time_of_day in ['night', 'dusk'] else 'sunny'
 
+        # ---- CSS & HTML ----
         bg_style = ""
         elements = ""
-        info_html = ""
+        info_html = ""  # Initialize to prevent UnboundLocalError
 
         if scene in ('rain', 'night-rain'):
             bg_style = "background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 35%, #2d3a4a 70%, #1a2332 100%);"
@@ -3249,6 +3462,7 @@ def main():
         st.markdown(weather_bg_html, unsafe_allow_html=True)
 
     # Sidebar Toggle + Back-to-Top Button
+    # BULLETPROOF: Inject script into parent window so it persists across reruns
     components.html("""
     <script>
     (function() {
@@ -3256,6 +3470,7 @@ def main():
             var P = window.parent;
             var doc = P.document;
 
+            // Inject persistent script into parent window
             var scriptId = 'eqms-persistent-toggle-script';
             var oldScript = doc.getElementById(scriptId);
             if (oldScript) oldScript.remove();
@@ -3264,6 +3479,7 @@ def main():
             s.id = scriptId;
             s.textContent = `
                 (function() {
+                    // Only initialize once per page lifecycle
                     if (window.__eqmsToggleEngineActive) return;
                     window.__eqmsToggleEngineActive = true;
 
@@ -3310,6 +3526,7 @@ def main():
                             body.appendChild(btn);
                         }
 
+                        // Always sync button appearance from localStorage
                         try {
                             var saved = localStorage.getItem('eqms_sidebar');
                             if (saved === 'closed') {
@@ -3344,6 +3561,7 @@ def main():
                         }
                     }
 
+                    // Keydown listener (only once)
                     if (!window.__eqmsKeydownInit) {
                         window.__eqmsKeydownInit = true;
                         document.addEventListener('keydown', function(e) {
@@ -3358,9 +3576,11 @@ def main():
                         });
                     }
 
+                    // Run immediately
                     ensureToggleButton();
                     ensureTopButton();
 
+                    // CRITICAL: Keep checking every 500ms to survive any DOM changes
                     setInterval(function() {
                         ensureToggleButton();
                         ensureTopButton();
@@ -3387,6 +3607,7 @@ def main():
     qp_view = st.query_params.get('__view')
     if qp_view in view_options and st.session_state.view_mode != qp_view: st.session_state.view_mode = qp_view
 
+    # Time-based greeting
     hour = now_ist().hour
     if 5 <= hour < 12:
         greeting = "☀️ Good Morning"
@@ -3444,17 +3665,45 @@ def main():
             border: 2px solid rgba(255,255,255,0.15);
             display: flex;
         }
-        .welcome-saffron { background: linear-gradient(135deg, #FF9933, #FF8C00); padding: 16px 8px; text-align: center; flex: 1; display: flex; align-items: center; justify-content: center; }
-        .welcome-white { background: #FFFFFF; padding: 16px 8px; text-align: center; position: relative; flex: 1; display: flex; align-items: center; justify-content: center; }
-        .welcome-green { background: linear-gradient(135deg, #138808, #0d6e05); padding: 16px 8px; text-align: center; flex: 1; display: flex; align-items: center; justify-content: center; }
-        .welcome-text-saffron { font-size: 1.3em; font-weight: 700; color: #000000 !important; font-family: 'Segoe UI', Arial, sans-serif; }
-        .welcome-text-white { font-size: 1.3em; font-weight: 700; color: #000000 !important; position: relative; z-index: 2; font-family: 'Segoe UI', Arial, sans-serif; }
-        .welcome-text-green { font-size: 1.3em; font-weight: 700; color: #000000 !important; font-family: 'Segoe UI', Arial, sans-serif; }
-        .chakra-emblem { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; z-index: 1; opacity: 0.3; }
+        .welcome-saffron {
+            background: linear-gradient(135deg, #FF9933, #FF8C00);
+            padding: 16px 8px; text-align: center;
+            flex: 1; display: flex; align-items: center; justify-content: center;
+        }
+        .welcome-white {
+            background: #FFFFFF; padding: 16px 8px; text-align: center; position: relative;
+            flex: 1; display: flex; align-items: center; justify-content: center;
+        }
+        .welcome-green {
+            background: linear-gradient(135deg, #138808, #0d6e05);
+            padding: 16px 8px; text-align: center;
+            flex: 1; display: flex; align-items: center; justify-content: center;
+        }
+        .welcome-text-saffron {
+            font-size: 1.3em; font-weight: 700; color: #000000 !important;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+        .welcome-text-white {
+            font-size: 1.3em; font-weight: 700; color: #000000 !important;
+            position: relative; z-index: 2;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+        .welcome-text-green {
+            font-size: 1.3em; font-weight: 700; color: #000000 !important;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+        .chakra-emblem {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 44px; height: 44px; z-index: 1;
+            opacity: 0.3;
+        }
         .chakra-emblem svg { width: 100%; height: 100%; }
         </style>
         <div class="welcome-flag-card">
-            <div class="welcome-saffron"><div class="welcome-text-saffron">🙏</div></div>
+            <div class="welcome-saffron">
+                <div class="welcome-text-saffron">🙏</div>
+            </div>
             <div class="welcome-white">
                 <div class="chakra-emblem">
                     <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
@@ -3471,30 +3720,43 @@ def main():
                             <line x1="30" y1="70" x2="18" y2="82"/>
                         </g>
                         <g stroke="#000080" stroke-width="1.5" transform="rotate(22.5 50 50)">
-                            <line x1="50" y1="5" x2="50" y2="22"/><line x1="50" y1="78" x2="50" y2="95"/>
-                            <line x1="5" y1="50" x2="22" y2="50"/><line x1="78" y1="50" x2="95" y2="50"/>
-                            <line x1="18" y1="18" x2="30" y2="30"/><line x1="70" y1="70" x2="82" y2="82"/>
-                            <line x1="82" y1="18" x2="70" y2="30"/><line x1="30" y1="70" x2="18" y2="82"/>
+                            <line x1="50" y1="5" x2="50" y2="22"/>
+                            <line x1="50" y1="78" x2="50" y2="95"/>
+                            <line x1="5" y1="50" x2="22" y2="50"/>
+                            <line x1="78" y1="50" x2="95" y2="50"/>
+                            <line x1="18" y1="18" x2="30" y2="30"/>
+                            <line x1="70" y1="70" x2="82" y2="82"/>
+                            <line x1="82" y1="18" x2="70" y2="30"/>
+                            <line x1="30" y1="70" x2="18" y2="82"/>
                         </g>
                         <g stroke="#000080" stroke-width="1.2" transform="rotate(45 50 50)">
-                            <line x1="50" y1="5" x2="50" y2="22"/><line x1="50" y1="78" x2="50" y2="95"/>
-                            <line x1="5" y1="50" x2="22" y2="50"/><line x1="78" y1="50" x2="95" y2="50"/>
+                            <line x1="50" y1="5" x2="50" y2="22"/>
+                            <line x1="50" y1="78" x2="50" y2="95"/>
+                            <line x1="5" y1="50" x2="22" y2="50"/>
+                            <line x1="78" y1="50" x2="95" y2="50"/>
                         </g>
                         <g stroke="#000080" stroke-width="1.2" transform="rotate(67.5 50 50)">
-                            <line x1="50" y1="5" x2="50" y2="22"/><line x1="50" y1="78" x2="50" y2="95"/>
-                            <line x1="5" y1="50" x2="22" y2="50"/><line x1="78" y1="50" x2="95" y2="50"/>
+                            <line x1="50" y1="5" x2="50" y2="22"/>
+                            <line x1="50" y1="78" x2="50" y2="95"/>
+                            <line x1="5" y1="50" x2="22" y2="50"/>
+                            <line x1="78" y1="50" x2="95" y2="50"/>
                         </g>
                     </svg>
                 </div>
                 <div class="welcome-text-white">🇮🇳</div>
             </div>
-            <div class="welcome-green"><div class="welcome-text-green">🫡</div></div>
+            <div class="welcome-green">
+                <div class="welcome-text-green">🫡</div>
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
+
+        # Sidebar Train Engine Background
+        
         with st.expander("🌤️ Quick Weather", expanded=True):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city", placeholder="Any city...")
             if city != st.session_state.weather_city: st.session_state.weather_city = city
@@ -3562,7 +3824,18 @@ def main():
                     var doc = iframe.contentWindow.document;
                     doc.open();
                     doc.write('<html><head><title>Sheet Print</title>');
-                    doc.write('<style>@page { margin: 1cm; size: A4 landscape; } body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background: white; } h2 { text-align: center; font-size: 18pt; margin-bottom: 5px; color: #000; } p.meta { text-align: center; font-size: 10pt; margin-bottom: 15px; color: #333; } table { width: 100%; border-collapse: collapse; font-size: 7.5pt; page-break-inside: auto; } tr { page-break-inside: avoid; } thead { display: table-header-group; } th { background: #333 !important; color: white !important; padding: 4px 5px; border: 1px solid #333; text-align: center; font-weight: bold; } td { border: 1px solid #999; padding: 3px 4px; text-align: center; color: #000; word-wrap: break-word; } tr:nth-child(even) { background: #f5f5f5 !important; }</style></head><body>');
+                    doc.write('<style>');
+                    doc.write('@page { margin: 1cm; size: A4 landscape; }');
+                    doc.write('body { font-family: Arial, sans-serif; margin: 0; padding: 10px; background: white; }');
+                    doc.write('h2 { text-align: center; font-size: 18pt; margin-bottom: 5px; color: #000; }');
+                    doc.write('p.meta { text-align: center; font-size: 10pt; margin-bottom: 15px; color: #333; }');
+                    doc.write('table { width: 100%; border-collapse: collapse; font-size: 7.5pt; page-break-inside: auto; }');
+                    doc.write('tr { page-break-inside: avoid; }');
+                    doc.write('thead { display: table-header-group; }');
+                    doc.write('th { background: #333 !important; color: white !important; padding: 4px 5px; border: 1px solid #333; text-align: center; font-weight: bold; }');
+                    doc.write('td { border: 1px solid #999; padding: 3px 4px; text-align: center; color: #000; word-wrap: break-word; }');
+                    doc.write('tr:nth-child(even) { background: #f5f5f5 !important; }');
+                    doc.write('</style></head><body>');
                     doc.write(content);
                     doc.write('</body></html>');
                     doc.close();
@@ -3722,6 +3995,7 @@ def main():
                     st.rerun()
 
         with st.expander("📋 Activity & Audit Log", expanded=False):
+            # Merge activity_log + audit_log
             all_logs = st.session_state.activity_log + st.session_state.audit_log
             all_logs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
             if all_logs:
@@ -3784,6 +4058,7 @@ def main():
                 st.session_state.current_page = 1
                 st.rerun()
 
+            # Quick Date Buttons
             st.markdown("<div style='font-size:0.8rem; color:#94a3b8; margin-bottom:4px;'>⚡ Quick Dates</div>", unsafe_allow_html=True)
             qd1, qd2, qd3 = st.columns(3)
             today_dt = datetime.now().date()
@@ -3806,72 +4081,144 @@ def main():
                     st.session_state.current_page = 1
                     st.rerun()
 
-        # =====================================================================
-        # ADMIN: User Management Panel
-        # =====================================================================
-        if st.session_state.user_role == 'admin':
-            with st.expander("👑 User Management", expanded=True):
-                users_df = load_users()
-                if not users_df.empty and 'NAME' in users_df.columns and 'STATUS' in users_df.columns:
-                    pending_df = users_df[users_df['STATUS'].astype(str).str.strip().str.lower() == 'pending']
-                    if not pending_df.empty:
-                        st.markdown("**⏳ Pending Requests**")
-                        for idx, row in pending_df.iterrows():
-                            c1, c2, c3, c4, c5 = st.columns([2,1,1,1,1])
-                            with c1:
-                                st.write(f"👤 {row['NAME']}")
-                                if 'PHONE' in row and str(row['PHONE']).strip():
-                                    st.caption(f"📱 {row['PHONE']}")
-                            with c2:
-                                if st.button("✅ Admin", key=f"appr_admin_{idx}", use_container_width=True):
-                                    approve_user(row['NAME'], 'admin')
-                                    st.rerun()
-                            with c3:
-                                if st.button("✅ Editor", key=f"appr_edit_{idx}", use_container_width=True):
-                                    approve_user(row['NAME'], 'editor')
-                                    st.rerun()
-                            with c4:
-                                if st.button("✅ Viewer", key=f"appr_view_{idx}", use_container_width=True):
-                                    approve_user(row['NAME'], 'viewer')
-                                    st.rerun()
-                            with c5:
-                                if st.button("❌ Reject", key=f"rej_{idx}", use_container_width=True):
-                                    reject_user(row['NAME'])
-                                    st.rerun()
-                    else:
-                        st.success("✅ Koi pending request nahi hai.")
-                    
-                    st.markdown("---")
-                    all_users = users_df[users_df['STATUS'].astype(str).str.strip().str.lower() == 'approved']
-                    if not all_users.empty:
-                        st.markdown("**👥 Approved Users (Remove / Change Role)**")
-                        for idx, row in all_users.iterrows():
-                            c1, c2, c3, c4 = st.columns([2,1,1,1])
-                            with c1:
-                                st.write(f"👤 {row['NAME']} — *{row.get('ROLE','viewer').upper()}*")
-                            with c2:
-                                new_role = st.selectbox("Role", ['viewer','editor','admin'], 
-                                    index=['viewer','editor','admin'].index(row.get('ROLE','viewer').lower()) if row.get('ROLE','viewer').lower() in ['viewer','editor','admin'] else 0,
-                                    key=f"role_sel_{idx}", label_visibility="collapsed")
-                            with c3:
-                                if st.button("💾", key=f"save_role_{idx}", help="Save Role"):
-                                    update_user_role(row['NAME'], new_role)
-                                    st.rerun()
-                            with c4:
-                                if st.button("🗑️", key=f"rem_user_{idx}", help="Remove User Forever"):
-                                    remove_user(row['NAME'])
-                                    st.rerun()
-                    else:
-                        st.caption("Koi approved user nahi hai.")
-                else:
-                    st.caption("USERS sheet empty hai. Pehla user register hote hi yahan dikhega.")
-            st.markdown("---")
-
-        # User info + Logout
+            # User info + Logout
         st.markdown("---")
-        st.markdown("### 👤 User Info & Logout")
-        st.markdown(f"<div style='text-align:center;'><div style='font-size:1.1rem;'>👤 <b>{st.session_state.username}</b></div><div style='font-size:0.8rem; color:#94a3b8;'>🛡️ Role: {st.session_state.user_role.upper()}</div></div>", unsafe_allow_html=True)
+
+        # Online Users Display
+        online_users = get_all_online_users()
+        st.markdown(f"""
+        <div style='text-align:center; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 12px; margin-bottom: 10px;'>
+            <div style='font-size:1.2rem;'>👤 <b>{st.session_state.username}</b></div>
+            <div style='font-size:0.8rem; color:#94a3b8;'>🛡️ Role: {st.session_state.user_role.upper()}</div>
+            <div style='font-size:0.75rem; color:#22c55e; margin-top:4px;'>🟢 You are online</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if online_users:
+            st.markdown("<div style='font-size:0.8rem; color:#94a3b8; margin-bottom:6px;'>🟢 Online Now</div>", unsafe_allow_html=True)
+            for uname, uinfo in list(online_users.items())[:10]:
+                if uname != st.session_state.username:
+                    role_icon = "👑" if uinfo['role'] == 'admin' else "✏️" if uinfo['role'] == 'editor' else "👁️"
+                    st.markdown(f"<div style='font-size:0.85rem; padding: 2px 0;'><span style='color:#22c55e;'>●</span> {role_icon} {uname}</div>", unsafe_allow_html=True)
+            if len(online_users) > 10:
+                st.caption(f"+{len(online_users)-10} more online")
+
+        # User Management — Admin Only
+        if st.session_state.user_role == 'admin':
+            st.markdown("---")
+            st.markdown("### 👥 User Management")
+            with st.expander("🛡️ Manage Users", expanded=False):
+                users_df = load_users()
+                if not users_df.empty:
+                    st.caption(f"Total users: {len(users_df)}")
+                    for _, row in users_df.iterrows():
+                        name = str(row.get('NAME', '')).strip()
+                        role = str(row.get('ROLE', 'viewer')).strip()
+                        status = str(row.get('STATUS', 'pending')).strip()
+                        if not name:
+                            continue
+                        col_u1, col_u2, col_u3 = st.columns([2.5, 1.5, 1])
+                        with col_u1:
+                            status_icon = "🟢" if status.lower() == 'active' else "🟡" if status.lower() == 'pending' else "🔴"
+                            st.markdown(f"**{name}**<br><span style='font-size:0.75rem;'>{status_icon} {role} • {status}</span>", unsafe_allow_html=True)
+                        with col_u2:
+                            if status.lower() == 'pending':
+                                if st.button("✅ Approve", key=f"approve_{name}", use_container_width=True):
+                                    save_user(name, 'editor', 'active')
+                                    try:
+                                        post_system_alert(f"✅ User '{name}' has been approved as EDITOR by Admin {st.session_state.username}.")
+                                    except Exception:
+                                        pass
+                                    st.rerun()
+                            else:
+                                new_role = st.selectbox("", ['viewer', 'editor', 'admin'],
+                                    index=['viewer', 'editor', 'admin'].index(role) if role in ['viewer', 'editor', 'admin'] else 0,
+                                    key=f"role_sel_{name}", label_visibility="collapsed")
+                                if new_role != role:
+                                    if st.button("💾 Save", key=f"save_role_{name}", use_container_width=True):
+                                        save_user(name, new_role, 'active')
+                                        st.rerun()
+                        with col_u3:
+                            if name.lower() != st.session_state.username.lower():
+                                if st.button("🗑️", key=f"remove_{name}", use_container_width=True):
+                                    try:
+                                        gc = init_sheets()
+                                        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
+                                        df2 = load_users()
+                                        if not df2.empty:
+                                            match = df2['NAME'].astype(str).str.lower().str.strip() == name.lower()
+                                            if match.any():
+                                                row_idx = match.idxmax() + 2
+                                                sheet.delete_rows(int(row_idx))
+                                                try:
+                                                    post_system_alert(f"🗑️ User '{name}' has been removed by Admin {st.session_state.username}.")
+                                                except Exception:
+                                                    pass
+                                                st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+                else:
+                    st.caption("No users found in USERS sheet.")
+
+        # App Share Button
+        st.markdown("---")
+        st.markdown("### 📱 Share App")
+        # Detect current URL for sharing
+        share_app_url = "https://your-app-url.streamlit.app"  # Replace with your deployed URL
+        share_text = f"🚂 *AI EQMS Hub Pro* — Indian Railways Emergency Quota Management App\n\n👤 Join as: *{st.session_state.username}*\n\n📲 Open now: {share_app_url}\n\n✅ Add to Home Screen for app-like experience!"
+        wa_share_url = f"https://wa.me/?text={urllib.parse.quote(share_text)}"
+        st.markdown(f'<a href="{wa_share_url}" target="_blank" style="display:block; width:100%; padding:10px 16px; background:linear-gradient(135deg, #25D366, #128C7E); color:#fff; text-align:center; border-radius:10px; text-decoration:none; font-weight:700; margin-bottom:8px;">📤 Share on WhatsApp</a>', unsafe_allow_html=True)
+
+        # PWA Install Button
+        components.html("""
+        <div style="width:100%; margin-top:8px;">
+            <button id="eqms-install-btn" onclick="installPWA()" style="display:none; width:100%; padding:10px 16px; background:linear-gradient(135deg, #FF9933, #138808); color:#fff; text-align:center; border-radius:10px; text-decoration:none; font-weight:700; border:none; cursor:pointer; font-family:inherit; font-size:0.95rem;">
+                📲 Install App (Add to Home Screen)
+            </button>
+            <div id="eqms-install-hint" style="display:none; font-size:0.8rem; color:#94a3b8; text-align:center; margin-top:6px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                📱 Tap browser menu → "Add to Home Screen" to install as app
+            </div>
+        </div>
+        <script>
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            var btn = document.getElementById('eqms-install-btn');
+            if (btn) btn.style.display = 'block';
+        });
+        function installPWA() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('PWA installed');
+                    }
+                    deferredPrompt = null;
+                });
+            } else {
+                var hint = document.getElementById('eqms-install-hint');
+                if (hint) {
+                    hint.style.display = 'block';
+                    setTimeout(() => { hint.style.display = 'none'; }, 8000);
+                }
+            }
+        }
+        if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+            console.log('Running as installed app');
+        }
+        </script>
+        """, height=100)
+        st.caption("💡 After sharing, tell users to tap 'Add to Home Screen' in their browser menu for app-like experience.")
+
+        st.markdown("---")
         if st.button("🚪 Logout", use_container_width=True, key="logout_btn"):
+            # Clear localStorage
+            components.html("""
+            <script>
+            window.parent.localStorage.removeItem('eqms_user');
+            </script>
+            """, height=0)
             st.session_state.audit_log.append({
                 "timestamp": format_datetime(),
                 "user": st.session_state.username,
@@ -3882,83 +4229,20 @@ def main():
             st.session_state.authenticated = False
             st.session_state.username = ''
             st.session_state.user_role = 'viewer'
+            st.session_state.user_status = ''
             st.rerun()
 
+        # Mute alert toggle
         st.session_state.data_alert_muted = st.checkbox("🔕 Mute New Data Alert", value=st.session_state.data_alert_muted, key="mute_alert")
 
-        # =====================================================================
-        # SHARE APP (WhatsApp + PWA Install)
-        # =====================================================================
-        st.markdown("---")
-        st.markdown("### 📲 App Share")
-        st.caption("Doston ko invite karein — WhatsApp par link jayega aur mobile par app ki tarah install hoga.")
-        
-        components.html("""
-        <style>
-        .share-btn-row { display: flex; gap: 10px; margin-bottom: 10px; }
-        .wa-btn { flex: 1; background: linear-gradient(135deg,#25D366,#128C7E); color: #fff; border: none; 
-            border-radius: 10px; padding: 12px; font-weight: 700; font-size: 0.95rem; cursor: pointer; 
-            text-align: center; text-decoration: none; display: block; font-family: inherit; }
-        .install-btn { flex: 1; background: linear-gradient(135deg,#FF9933,#138808); color: #fff; border: none; 
-            border-radius: 10px; padding: 12px; font-weight: 700; font-size: 0.95rem; cursor: pointer; 
-            text-align: center; display: none; font-family: inherit; }
-        .install-btn.show { display: block; }
-        .ios-hint { background: rgba(255,255,255,0.08); color: #e2e8f0; border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 10px; padding: 10px; text-align: center; font-size: 0.82rem; display: none; }
-        </style>
-        <div class="share-btn-row">
-            <a id="wa-share-link" href="#" target="_blank" class="wa-btn">📤 WhatsApp Share</a>
-            <button id="eqms-install-btn" class="install-btn">📲 Install App</button>
-        </div>
-        <div id="eqms-ios-hint" class="ios-hint">📲 iPhone users: Safari → Share icon → "Add to Home Screen"</div>
-        <script>
-        (function(){
-            var appUrl = window.location.href.split('?')[0];
-            var shareText = "🚂 *AI EQMS Hub Pro* — Indian Railways Emergency Quota Management App\\n\\n👉 Install karein aur use karein:\\n" + appUrl + "\\n\\n_Created by Sharique_";
-            document.getElementById('wa-share-link').href = "https://wa.me/?text=" + encodeURIComponent(shareText);
-            
-            var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-            if (isIOS) {
-                document.getElementById('eqms-ios-hint').style.display = 'block';
-            }
-            
-            var deferredPrompt;
-            window.addEventListener('beforeinstallprompt', function(e) {
-                e.preventDefault();
-                deferredPrompt = e;
-                var btn = document.getElementById('eqms-install-btn');
-                btn.classList.add('show');
-                btn.innerHTML = '📲 Install App';
-                btn.onclick = function() {
-                    btn.innerHTML = '⏳ Installing...';
-                    deferredPrompt.prompt();
-                    deferredPrompt.userChoice.then(function(choice) {
-                        if (choice.outcome === 'accepted') {
-                            btn.innerHTML = '✅ Installed!';
-                            btn.style.background = '#16a34a';
-                        } else {
-                            btn.innerHTML = '📲 Install App';
-                        }
-                        deferredPrompt = null;
-                    });
-                };
-            });
-            window.addEventListener('appinstalled', function() {
-                var btn = document.getElementById('eqms-install-btn');
-                if (btn) { btn.innerHTML = '✅ App Installed!'; btn.style.background = '#16a34a'; }
-            });
-        })();
-        </script>
-        """, height=140)
-
         if st.button("🧹 Clear All Filters", use_container_width=True, key="clear_filters_btn"):
-            st.session_state.pnr_val = ''
-            st.session_state.train_val = ''
-            st.session_state.class_val = ''
-            st.session_state.from_val = None
-            st.session_state.to_val = None
-            st.session_state.current_page = 1
-            st.rerun()
+                st.session_state.pnr_val = ''
+                st.session_state.train_val = ''
+                st.session_state.class_val = ''
+                st.session_state.from_val = None
+                st.session_state.to_val = None
+                st.session_state.current_page = 1
+                st.rerun()
 
     # Load data for selected sheet
     df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
@@ -4067,9 +4351,9 @@ def main():
             with nc:
                 if st.button(icon, key=f"nav_btn_{name}", help=name, use_container_width=True,
                              type="primary" if st.session_state.view_mode == name else "secondary"):
-                    if st.session_state.view_mode != name:
+                    if st.session_state.view_mode != name:  # Only rerun if actually switching
                         st.session_state.view_mode = name
-                        st.query_params['__view'] = name
+                        st.query_params['__view'] = name  # Persist choice in URL so refresh keeps the tab
                         st.rerun()
     with top_c2:
         st.markdown(f"<div style='padding-top:6px; text-align:right;'><span class='status-pill status-live'>● Live</span> &nbsp; <span style='font-size:13px;'>Sync {format_time(datetime.fromtimestamp(st.session_state.last_refresh, tz=IST))} IST</span></div>", unsafe_allow_html=True)
@@ -4083,6 +4367,7 @@ def main():
     if view == "📋 Data Table":
         st.subheader(f"📋 {sheet_choice}  —  {len(filtered_df)} rows")
 
+        # Global Search
         if not filtered_df.empty and sheet_choice != "NOTE":
             search_col1, search_col2 = st.columns([4, 1])
             with search_col1:
@@ -4123,6 +4408,7 @@ def main():
                         mask = mask | filtered_df[col].astype(str).str.lower().str.contains(search_term, na=False)
                 filtered_df = filtered_df[mask]
 
+        # Advanced Filters
         if not filtered_df.empty and sheet_choice != "NOTE":
             with st.expander("🔍 Advanced Filters & Column Search", expanded=False):
                 st.markdown(f"**📊 Monitoring: {sheet_choice} Sheet**")
@@ -4161,6 +4447,7 @@ def main():
                 with af7:
                     st.date_input("📅 To DOJ", value=st.session_state.to_val, key="adv_to_doj", format="DD-MM-YYYY")
 
+                # Quick Date Buttons in Advanced Filters
                 st.markdown("<div style='font-size:0.85rem; color:#64748b; margin:8px 0 4px 0;'>⚡ Quick Date Filters</div>", unsafe_allow_html=True)
                 qf1, qf2, qf3, qf4 = st.columns(4)
                 today_dt2 = datetime.now().date()
@@ -4192,10 +4479,13 @@ def main():
                 if st.button("🚀 Apply Filters", use_container_width=True, key="adv_apply"):
                     st.rerun()
 
-        # Train count summary cards
+        # ================================================================
+        # Train count summary cards — ALL sheets except NOTE
+        # ================================================================
         train_col_metric = None
         doj_col = None
         try:
+            # PRIMARY: Use SHEET_CONFIG index (most reliable)
             if sheet_choice in SHEET_CONFIG and sheet_choice != "NOTE":
                 cfg = SHEET_CONFIG[sheet_choice]
                 src = filtered_df if not filtered_df.empty else df_raw
@@ -4206,6 +4496,7 @@ def main():
                     d_idx = cfg.get('doj_col')
                     if d_idx is not None and d_idx < len(src.columns):
                         doj_col = src.columns[d_idx]
+            # FALLBACK: fuzzy header search if config index didn't work
             if train_col_metric is None:
                 search_src = filtered_df if not filtered_df.empty else df_raw
                 if search_src is not None and not search_src.empty:
@@ -4215,6 +4506,7 @@ def main():
             train_col_metric = None
             doj_col = None
 
+        # Show train count cards for ALL sheets except NOTE
         if sheet_choice != "NOTE":
             if not filtered_df.empty and train_col_metric and train_col_metric in filtered_df.columns:
                 try:
@@ -4234,6 +4526,7 @@ def main():
                 except Exception:
                     pass
             elif not filtered_df.empty:
+                # Column found but no valid train data — still show Total EQ
                 st.markdown("**🚆 Train-wise Count**")
                 cards_html = '<div class="train-count-container">'
                 cards_html += f'<div class="train-total-card"><div class="train-total-number">Total EQ: {len(filtered_df)}</div></div>'
@@ -4259,6 +4552,7 @@ def main():
             else:
                 st.caption("Sheet has headers but no data rows yet.")
         else:
+            # Sorting
             sort_col = st.session_state.sort_column
             sort_asc = st.session_state.sort_ascending
             if sort_col and sort_col in filtered_df.columns:
@@ -4266,6 +4560,7 @@ def main():
                     filtered_df = filtered_df.sort_values(by=sort_col, ascending=sort_asc, key=lambda col: col.astype(str))
                 except: pass
 
+            # Pagination - bulletproof with safe defaults
             page_size = st.session_state.get('rows_per_page', 25)
             if page_size not in [15, 25, 50, 100, 200]:
                 page_size = 25
@@ -4283,6 +4578,7 @@ def main():
                 st.rerun()
             page_size = selected_page_size
 
+            # Safe pagination calc without math.ceil
             try:
                 df_len = len(filtered_df)
                 if df_len > 0 and page_size > 0:
@@ -4316,6 +4612,7 @@ def main():
             display_df = page_df.drop(columns=['_sheet_row'], errors='ignore')
             display_df.insert(0, "Select", False)
 
+            # Sorting controls
             if not display_df.empty:
                 sort_cols = st.columns(4)
                 with sort_cols[0]:
@@ -4334,6 +4631,7 @@ def main():
                             st.session_state.sort_ascending = new_asc
                             st.rerun()
 
+            # Print-only table
             print_export_df = filtered_df.drop(columns=['_sheet_row'], errors='ignore')
             if not print_export_df.empty:
                 print_html_table = print_export_df.to_html(index=False, border=1, classes='print-table', escape=False)
@@ -4355,6 +4653,7 @@ def main():
                 key=f"editor_{sheet_choice}_{st.session_state.current_page}_{page_size}")
             st.markdown('</div>', unsafe_allow_html=True)
 
+            # Select All
             selected_mask = edited_page["Select"] if "Select" in edited_page.columns else pd.Series([False] * len(edited_page))
             if 'select_all_state' not in st.session_state:
                 st.session_state.select_all_state = False
@@ -4379,6 +4678,7 @@ def main():
             pnr_col = next((c for c in edited_page.columns if 'PNR' in str(c).upper()), None)
             selected_pnrs = edited_page.loc[selected_indices, pnr_col].tolist() if pnr_col and selected_indices else []
 
+            # Quick Actions
             st.markdown('<div class="action-box no-print">', unsafe_allow_html=True)
             st.markdown("**⚡ Quick Actions**")
             a1, a2, a3, a4, a5 = st.columns(5)
@@ -4520,6 +4820,7 @@ def main():
                 """, height=45)
             st.markdown('</div>', unsafe_allow_html=True)
 
+            # WhatsApp Image Share
             st.markdown('<div class="no-print">', unsafe_allow_html=True)
             st.markdown("**📱 WhatsApp Image Share**")
             wa_col1, wa_col2, wa_col3 = st.columns(3)
@@ -4547,6 +4848,7 @@ def main():
                         components.html(copy_js, height=50)
             st.markdown('</div>', unsafe_allow_html=True)
 
+            # Export
             st.markdown('<div class="no-print">', unsafe_allow_html=True)
             st.markdown("**📄 Export**")
             e1, e2, e3, e4 = st.columns(4)
@@ -4581,6 +4883,7 @@ def main():
                     mime="text/csv", use_container_width=True, key="copy_csv_download")
             st.markdown('</div>', unsafe_allow_html=True)
 
+            # Extra Features
             st.markdown('<div class="no-print">', unsafe_allow_html=True)
             with st.expander("🔧 Extra Features", expanded=False):
                 feat1, feat2 = st.columns(2)
@@ -4654,6 +4957,7 @@ def main():
             st.session_state.last_refresh = time.time()
             st.rerun()
 
+        # Apply filters
         if not dash_df.empty and dash_sheet != "NOTE":
             config = SHEET_CONFIG[dash_sheet]
             pnr_col_idx = config.get("pnr_col")
@@ -4689,6 +4993,7 @@ def main():
         with kcol1: 
             st.markdown(f'<div class="metric-card"><h3>{total_records}</h3><p>Total Records</p></div>', unsafe_allow_html=True)
 
+        # Use SHEET_CONFIG for reliable column indices per sheet
         dash_cfg = SHEET_CONFIG.get(dash_sheet, {})
         def cfg_col(name):
             idx = dash_cfg.get(name)
@@ -4699,6 +5004,7 @@ def main():
         to_col_dash = cfg_col('to_col')
         berth_col_dash = cfg_col('berth_col')
         doj_col_dash = cfg_col('doj_col')
+        # VIP column is always the same header across sheets — find by header name
         vip_col_dash = next((c for c in dash_df.columns if 'VIP' in c.upper() or 'MP/MLA' in c.upper() or 'MINISTER' in c.upper()), None)
         if train_col_dash and column_has_data(dash_df, train_col_dash):
             unique_trains = dash_df[train_col_dash].dropna().astype(str).str.strip().ne('').nunique()
@@ -4708,6 +5014,7 @@ def main():
             with kcol2: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Unique Trains</p></div>', unsafe_allow_html=True)
 
+        # vip_col_dash already detected above via find_column()
         if vip_col_dash and column_has_data(dash_df, vip_col_dash):
             vip_count = dash_df[vip_col_dash].astype(str).str.strip().ne('').sum()
             with kcol3: 
@@ -4716,6 +5023,7 @@ def main():
             with kcol3: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>VIP Records</p></div>', unsafe_allow_html=True)
 
+        # class_col_dash already detected above via find_column()
         if class_col_dash and column_has_data(dash_df, class_col_dash):
             class_counts = dash_df[class_col_dash].dropna().astype(str).str.strip()
             class_counts = class_counts[class_counts != ''].value_counts()
@@ -4726,6 +5034,7 @@ def main():
             with kcol4: 
                 st.markdown(f'<div class="metric-card"><h3>—</h3><p>Top Class</p></div>', unsafe_allow_html=True)
 
+        # doj_col_dash already detected above via find_column()
         if doj_col_dash and column_has_data(dash_df, doj_col_dash):
             upcoming = sum(1 for _, r in dash_df.iterrows() if not is_expired(r.get(doj_col_dash, '')))
             with kcol5: 
@@ -4739,6 +5048,7 @@ def main():
         if dash_df.empty:
             st.info("No data for charts. Adjust filters or choose another sheet.")
         else:
+            # Graph 1: Train-wise Distribution
             st.markdown("### 1️⃣ Train-wise Distribution")
             if train_col_dash and column_has_data(dash_df, train_col_dash):
                 tc = dash_df[train_col_dash].dropna().astype(str).str.strip()
@@ -4759,6 +5069,7 @@ def main():
             else:
                 st.info("ℹ️ Train column not found or empty in this sheet.")
 
+            # Graph 2: Class-wise Distribution
             st.markdown("### 2️⃣ Class-wise Distribution")
             if class_col_dash and column_has_data(dash_df, class_col_dash):
                 cc = dash_df[class_col_dash].dropna().astype(str).str.strip()
@@ -4778,7 +5089,9 @@ def main():
             else:
                 st.info("ℹ️ Class column not found or empty in this sheet.")
 
+            # Graph 3: Route-wise Distribution
             st.markdown("### 3️⃣ Route-wise Distribution")
+            # from_col_dash & to_col_dash set via cfg_col above
             if from_col_dash and to_col_dash and column_has_data(dash_df, from_col_dash) and column_has_data(dash_df, to_col_dash):
                 dash_df['ROUTE'] = dash_df[from_col_dash].astype(str) + " → " + dash_df[to_col_dash].astype(str)
                 route_counts = dash_df['ROUTE'].value_counts().head(12).reset_index()
@@ -4792,6 +5105,7 @@ def main():
                     font=dict(size=11), title_font_size=16)
                 st.plotly_chart(fig3, use_container_width=True)
 
+            # Graph 4: Train × Class Heatmap
             st.markdown("### 4️⃣ Train × Class Heatmap")
             if train_col_dash and class_col_dash and column_has_data(dash_df, train_col_dash) and column_has_data(dash_df, class_col_dash):
                 try:
@@ -4833,6 +5147,7 @@ def main():
                     st.warning(f"⚠️ Could not generate heatmap: {str(e)[:100]}")
                     st.info("Try selecting different filters or check if the data has both Train and Class columns.")
 
+            # Graph 5: Train × Route Grouped Bar
             st.markdown("### 5️⃣ Train × Route Analysis")
             if train_col_dash and from_col_dash and to_col_dash and column_has_data(dash_df, train_col_dash):
                 try:
@@ -4856,9 +5171,11 @@ def main():
                 except Exception as e:
                     st.info("ℹ️ Could not generate route analysis chart.")
 
+            # Graph 6: Rush Comparison
             st.markdown("### 6️⃣ Rush Comparison — High Demand vs Low Demand")
             if train_col_dash and column_has_data(dash_df, train_col_dash):
                 try:
+                    # Use berth/seat count for real demand if available, else fallback to record count
                     if berth_col_dash and column_has_data(dash_df, berth_col_dash):
                         train_demand = dash_df.groupby(train_col_dash)[berth_col_dash].apply(
                             lambda x: pd.to_numeric(x, errors='coerce').fillna(1).sum()
@@ -4903,6 +5220,7 @@ def main():
                 except Exception as e:
                     st.info("ℹ️ Could not generate rush comparison chart.")
 
+            # DOJ Timeline
             st.markdown("### 📅 DOJ Timeline")
             if doj_col_dash and column_has_data(dash_df, doj_col_dash):
                 try:
@@ -4921,13 +5239,12 @@ def main():
                     pass
 
     # =====================================================================
-    # VIEW: 💬 CHAT — WhatsApp Group Style (UPDATED)
+    # VIEW: 💬 CHAT — WhatsApp Group Style
     # =====================================================================
     elif view == "💬 Chat":
         # ===== WhatsApp Group Chat CSS =====
         st.markdown("""
         <style>
-        /* Override previous chat styles for this view */
         .wa-group-header {
             background: linear-gradient(135deg, #075e54, #128c7e);
             border-radius: 16px 16px 0 0;
@@ -4957,15 +5274,13 @@ def main():
         }
         @keyframes blink-dot { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
         .wa-chat-container {
-            background: #e5ddd5;  /* WhatsApp light background */
+            background: linear-gradient(180deg, #0a0a1a 0%, #0f172a 100%);
             border-radius: 0 0 16px 16px;
-            padding: 16px 20px;
+            padding: 16px;
             max-height: 65vh;
             overflow-y: auto;
-            border: 1px solid rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.1);
             border-top: none;
-            display: flex;
-            flex-direction: column;
         }
         .wa-msg-row { display: flex; margin-bottom: 10px; align-items: flex-end; }
         .wa-msg-row.me { justify-content: flex-end; }
@@ -4975,45 +5290,38 @@ def main():
             max-width: 75%;
             padding: 10px 14px;
             border-radius: 12px;
-            font-size: 0.95rem;
-            line-height: 1.5;
+            font-size: 0.92rem;
+            line-height: 1.45;
             word-wrap: break-word;
             position: relative;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-            font-weight: bold;
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
-            text-shadow: none !important;
         }
         .wa-msg-bubble.me {
-            background: #dcf8c6;  /* WhatsApp sent bubble */
+            background: linear-gradient(135deg, #005c4b, #025144);
+            color: #e9edef;
             border-radius: 12px 12px 0 12px;
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
         .wa-msg-bubble.other {
-            background: #ffffff;  /* WhatsApp received bubble */
+            background: #202c33;
+            color: #e9edef;
             border-radius: 12px 12px 12px 0;
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
         .wa-msg-bubble.admin {
-            background: #e1f5fe;
-            border-left: 4px solid #FF9933;
+            background: linear-gradient(135deg, #1e3a5f, #2d5a87);
+            color: #fff;
             border-radius: 12px 12px 12px 0;
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
+            border-left: 3px solid #FF9933;
+            box-shadow: 0 2px 12px rgba(37,99,235,0.3);
         }
         .wa-msg-bubble.system {
-            background: rgba(0,0,0,0.05);
-            color: #555 !important;
-            -webkit-text-fill-color: #555 !important;
+            background: rgba(255,255,255,0.08);
+            color: #94a3b8;
             border-radius: 20px;
             font-size: 0.8rem;
             padding: 6px 16px;
             text-align: center;
-            border: 1px solid #ccc;
-            font-weight: normal;
+            border: 1px solid rgba(255,255,255,0.1);
         }
         .wa-msg-sender {
             font-size: 0.75rem;
@@ -5022,8 +5330,6 @@ def main():
             display: flex;
             align-items: center;
             gap: 5px;
-            color: #000 !important;
-            -webkit-text-fill-color: #000 !important;
         }
         .wa-admin-badge {
             background: linear-gradient(90deg, #FF9933, #138808);
@@ -5035,42 +5341,40 @@ def main():
             text-shadow: 0 1px 2px rgba(255,255,255,0.5);
         }
         .wa-msg-time {
-            font-size: 0.65rem;
+            font-size: 0.68rem;
             opacity: 0.6;
             text-align: right;
             margin-top: 4px;
-            color: #000 !important;
-            -webkit-text-fill-color: #000 !important;
         }
         .wa-chat-input-wrap {
-            background: #f0f0f0;
+            background: #202c33;
             border-radius: 24px;
             padding: 10px 16px;
             margin-top: 12px;
-            border: 1px solid #ccc;
+            border: 1px solid rgba(255,255,255,0.1);
             display: flex;
             gap: 10px;
             align-items: center;
         }
         .wa-attach-btn {
-            background: rgba(0,0,0,0.05);
+            background: rgba(255,255,255,0.1);
             border: none;
-            color: #555;
+            color: #8696a0;
             width: 36px; height: 36px;
             border-radius: 50%;
             cursor: pointer;
             font-size: 1.1rem;
             transition: all 0.2s;
         }
-        .wa-attach-btn:hover { background: rgba(0,0,0,0.1); }
+        .wa-attach-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
         .wa-typing {
-            color: #555;
+            color: #8696a0;
             font-size: 0.8rem;
             font-style: italic;
             padding: 4px 16px;
         }
         .wa-pdf-card {
-            background: rgba(37,99,235,0.1);
+            background: rgba(37,99,235,0.15);
             border: 1px solid rgba(37,99,235,0.3);
             border-radius: 10px;
             padding: 10px 14px;
@@ -5079,8 +5383,10 @@ def main():
             align-items: center;
             gap: 10px;
         }
-        .wa-pdf-name { font-weight: 600; font-size: 0.85rem; color:#000; }
-        .wa-pdf-size { font-size: 0.75rem; opacity: 0.7; color:#000; }
+        .wa-pdf-icon { font-size: 1.5rem; }
+        .wa-pdf-info { flex: 1; }
+        .wa-pdf-name { font-weight: 600; font-size: 0.85rem; }
+        .wa-pdf-size { font-size: 0.75rem; opacity: 0.7; }
         </style>
         """, unsafe_allow_html=True)
 
@@ -5174,7 +5480,7 @@ def main():
         # ===== Auto-refresh indicator =====
         st.caption(f"🔄 Auto-syncing · {len(chat_history)} messages · Last updated: {format_time()}")
 
-        # ===== Attachment & Process Area (integrated below chat) =====
+        # ===== Attachment & Process Area =====
         with st.expander("📎 Attach & Process (Image / PDF / Audio / Text)", expanded=False):
             st.caption("📷 Image • 📄 PDF • 🎤 Voice • 📝 Text")
             up_mode = st.radio("Type", ["📝 Text", "📷 Image / PDF", "🎤 Voice / Audio"], 
@@ -5280,164 +5586,156 @@ def main():
                             st.error(str(e))
 
         # ===== Chat Input =====
-        prompt = st.chat_input("Type your message or command... (mention 'Gemini' for AI)", key="chat_input")
+        prompt = st.chat_input("Type your message or command...", key="chat_input")
         if prompt:
-            # Save user message immediately
+            # Save user message
             save_chat_message(current_user, current_role, prompt, 'user')
 
-            # Check for command (actions like pdf, weather, etc.)
+            # Parse command
             cmd = parse_chat_command(prompt)
             action = cmd.get('action', 'chat')
 
-            if action != 'chat':
-                # Handle command (non-Gemini system actions)
-                if action == 'pdf_train':
-                    train_num = cmd.get('train', '')
-                    with st.spinner("Generating PDF for train " + train_num + "..."):
-                        pdf_bytes, err = generate_train_pdf(train_num, "EQ")
-                        if pdf_bytes:
-                            save_chat_message('TSKEQ Bot', 'admin', 
-                                "📄 PDF generated for Train " + train_num + ". Download below 👇", 'admin')
-                            st.session_state.chat_pdf_bytes = pdf_bytes
-                            st.session_state.chat_pdf_name = "Train_" + train_num + "_EQ.pdf"
+            if action == 'pdf_train':
+                train_num = cmd.get('train', '')
+                with st.spinner("Generating PDF for train " + train_num + "..."):
+                    pdf_bytes, err = generate_train_pdf(train_num, "EQ")
+                    if pdf_bytes:
+                        # Save PDF info to chat
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "📄 PDF generated for Train " + train_num + ". Download below 👇", 'admin')
+                        st.session_state.chat_pdf_bytes = pdf_bytes
+                        st.session_state.chat_pdf_name = "Train_" + train_num + "_EQ.pdf"
+                    else:
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "❌ " + (err or "Could not generate PDF"), 'admin')
+                st.rerun()
+
+            elif action == 'pdf_today':
+                with st.spinner("Generating today's PDF..."):
+                    pdf_bytes, err = generate_today_pdf("EQ")
+                    if pdf_bytes:
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "📄 Today's PDF generated. Download below 👇", 'admin')
+                        st.session_state.chat_pdf_bytes = pdf_bytes
+                        st.session_state.chat_pdf_name = "Today_" + now_ist().strftime('%d%m%Y') + "_EQ.pdf"
+                    else:
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "❌ " + (err or "Could not generate PDF"), 'admin')
+                st.rerun()
+
+            elif action == 'pdf_full':
+                with st.spinner("Generating full EQ PDF..."):
+                    df = load_sheet_data_cached("EQ", SHEET_ID)
+                    if not df.empty:
+                        pdf_bytes = generate_pdf(df, "EQ Full Report", full=True)
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "📄 Full EQ PDF generated (" + str(len(df)) + " records). Download below 👇", 'admin')
+                        st.session_state.chat_pdf_bytes = pdf_bytes
+                        st.session_state.chat_pdf_name = "EQ_Full_Report_" + now_ist().strftime('%d%m%Y') + ".pdf"
+                    else:
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "❌ No data in EQ sheet to generate PDF.", 'admin')
+                st.rerun()
+
+            elif action == 'sheet_link':
+                link = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/edit"
+                save_chat_message('TSKEQ Bot', 'admin', 
+                    "🔗 **Sheet Link:**\n" + link + "\n\n📋 Copy and share with full access.", 'admin')
+                st.rerun()
+
+            elif action == 'eq_list':
+                train_num = cmd.get('train', '')
+                df = load_sheet_data_cached("EQ", SHEET_ID)
+                if not df.empty:
+                    config = SHEET_CONFIG.get("EQ", {})
+                    train_col_idx = config.get('train_col')
+                    if train_col_idx is not None and train_col_idx < len(df.columns):
+                        train_col = df.columns[train_col_idx]
+                        filtered = df[df[train_col].astype(str).str.contains(str(train_num), case=False, na=False)]
+                        if not filtered.empty:
+                            msg_lines = ["🚆 **Train " + train_num + " EQ List**\n"]
+                            msg_lines.append("| S/N | PNR | From | To | DOJ | Class | Name | Berths | VIP |")
+                            msg_lines.append("|-----|-----|------|-----|-----|-------|------|--------|-----|")
+                            for idx, row in filtered.head(20).iterrows():
+                                vals = [str(row.get(c, '-'))[:12] for c in filtered.columns[:9]]
+                                msg_lines.append("| " + " | ".join(vals) + " |")
+                            if len(filtered) > 20:
+                                msg_lines.append("\n... and " + str(len(filtered)-20) + " more records")
+                            save_chat_message('TSKEQ Bot', 'admin', "\n".join(msg_lines), 'admin')
                         else:
                             save_chat_message('TSKEQ Bot', 'admin', 
-                                "❌ " + (err or "Could not generate PDF"), 'admin')
-                    st.rerun()
+                                "❌ No EQ records found for Train " + train_num, 'admin')
+                st.rerun()
 
-                elif action == 'pdf_today':
-                    with st.spinner("Generating today's PDF..."):
-                        pdf_bytes, err = generate_today_pdf("EQ")
-                        if pdf_bytes:
-                            save_chat_message('TSKEQ Bot', 'admin', 
-                                "📄 Today's PDF generated. Download below 👇", 'admin')
-                            st.session_state.chat_pdf_bytes = pdf_bytes
-                            st.session_state.chat_pdf_name = "Today_" + now_ist().strftime('%d%m%Y') + "_EQ.pdf"
-                        else:
-                            save_chat_message('TSKEQ Bot', 'admin', 
-                                "❌ " + (err or "Could not generate PDF"), 'admin')
-                    st.rerun()
-
-                elif action == 'pdf_full':
-                    with st.spinner("Generating full EQ PDF..."):
-                        df = load_sheet_data_cached("EQ", SHEET_ID)
-                        if not df.empty:
-                            pdf_bytes = generate_pdf(df, "EQ Full Report", full=True)
-                            save_chat_message('TSKEQ Bot', 'admin', 
-                                "📄 Full EQ PDF generated (" + str(len(df)) + " records). Download below 👇", 'admin')
-                            st.session_state.chat_pdf_bytes = pdf_bytes
-                            st.session_state.chat_pdf_name = "EQ_Full_Report_" + now_ist().strftime('%d%m%Y') + ".pdf"
-                        else:
-                            save_chat_message('TSKEQ Bot', 'admin', 
-                                "❌ No data in EQ sheet to generate PDF.", 'admin')
-                    st.rerun()
-
-                elif action == 'sheet_link':
-                    link = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/edit"
+            elif action == 'chart_time':
+                train_num = cmd.get('train', '')
+                df = load_sheet_data_cached("EQ", SHEET_ID)
+                chart_results = []
+                if not df.empty:
+                    config = SHEET_CONFIG.get("EQ", {})
+                    train_col_idx = config.get('train_col')
+                    doj_col_idx = config.get('doj_col')
+                    if train_col_idx is not None and doj_col_idx is not None:
+                        train_col = df.columns[train_col_idx]
+                        doj_col = df.columns[doj_col_idx]
+                        filtered = df[df[train_col].astype(str).str.contains(str(train_num), case=False, na=False)]
+                        seen_doj = set()
+                        for _, row in filtered.iterrows():
+                            doj = str(row.get(doj_col, ''))
+                            if doj and doj not in seen_doj:
+                                seen_doj.add(doj)
+                                ct = get_charting_time(train_num, doj)
+                                chart_results.append("📅 DOJ: " + doj + " → " + ct)
+                if chart_results:
                     save_chat_message('TSKEQ Bot', 'admin', 
-                        "🔗 **Sheet Link:**\n" + link + "\n\n📋 Copy and share with full access.", 'admin')
-                    st.rerun()
-
-                elif action == 'eq_list':
-                    train_num = cmd.get('train', '')
-                    df = load_sheet_data_cached("EQ", SHEET_ID)
-                    if not df.empty:
-                        config = SHEET_CONFIG.get("EQ", {})
-                        train_col_idx = config.get('train_col')
-                        if train_col_idx is not None and train_col_idx < len(df.columns):
-                            train_col = df.columns[train_col_idx]
-                            filtered = df[df[train_col].astype(str).str.contains(str(train_num), case=False, na=False)]
-                            if not filtered.empty:
-                                msg_lines = ["🚆 **Train " + train_num + " EQ List**\n"]
-                                msg_lines.append("| S/N | PNR | From | To | DOJ | Class | Name | Berths | VIP |")
-                                msg_lines.append("|-----|-----|------|-----|-----|-------|------|--------|-----|")
-                                for idx, row in filtered.head(20).iterrows():
-                                    vals = [str(row.get(c, '-'))[:12] for c in filtered.columns[:9]]
-                                    msg_lines.append("| " + " | ".join(vals) + " |")
-                                if len(filtered) > 20:
-                                    msg_lines.append("\n... and " + str(len(filtered)-20) + " more records")
-                                save_chat_message('TSKEQ Bot', 'admin', "\n".join(msg_lines), 'admin')
-                            else:
-                                save_chat_message('TSKEQ Bot', 'admin', 
-                                    "❌ No EQ records found for Train " + train_num, 'admin')
-                    st.rerun()
-
-                elif action == 'chart_time':
-                    train_num = cmd.get('train', '')
-                    df = load_sheet_data_cached("EQ", SHEET_ID)
-                    chart_results = []
-                    if not df.empty:
-                        config = SHEET_CONFIG.get("EQ", {})
-                        train_col_idx = config.get('train_col')
-                        doj_col_idx = config.get('doj_col')
-                        if train_col_idx is not None and doj_col_idx is not None:
-                            train_col = df.columns[train_col_idx]
-                            doj_col = df.columns[doj_col_idx]
-                            filtered = df[df[train_col].astype(str).str.contains(str(train_num), case=False, na=False)]
-                            seen_doj = set()
-                            for _, row in filtered.iterrows():
-                                doj = str(row.get(doj_col, ''))
-                                if doj and doj not in seen_doj:
-                                    seen_doj.add(doj)
-                                    ct = get_charting_time(train_num, doj)
-                                    chart_results.append("📅 DOJ: " + doj + " → " + ct)
-                    if chart_results:
-                        save_chat_message('TSKEQ Bot', 'admin', 
-                            "⏰ **Charting Time for Train " + train_num + "**\n\n" + "\n".join(chart_results), 'admin')
-                    else:
-                        save_chat_message('TSKEQ Bot', 'admin', 
-                            "⏰ **Charting Time for Train " + train_num + "**\nNo active EQ records found.", 'admin')
-                    st.rerun()
-
-                elif action == 'pnr_status':
-                    pnr = cmd.get('pnr', '')
-                    if NTES_AVAILABLE:
-                        data = get_pnr_status(pnr)
-                        msg = format_pnr_result(data) if data else "❌ PNR not found"
-                    else:
-                        msg = "🔍 [Check PNR " + pnr + " on ConfirmTkt](https://www.confirmtkt.com/pnr-status/" + pnr + ")"
-                    save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
-                    st.rerun()
-
-                elif action == 'live_train':
-                    train_num = cmd.get('train', '')
-                    if NTES_AVAILABLE:
-                        data = get_live_train_status(train_num)
-                        msg, _ = format_live_train_result(data) if data else ("❌ No data", None)
-                    else:
-                        msg = "🚂 [Check Live Status for " + train_num + " on RailYatri](https://www.railyatri.in/live-train-status/" + train_num + ")"
-                    save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
-                    st.rerun()
-
-                elif action == 'weather':
-                    city = cmd.get('city', 'Tinsukia')
-                    data = get_weather(city)
-                    if data and 'error' not in data:
-                        msg = "🌤️ **Weather in " + data.get('city', city) + "**\n\n"
-                        msg += "🌡️ Temp: " + str(data.get('temp', '--')) + "°C (feels like " + str(data.get('feels_like', '--')) + "°C)\n"
-                        msg += "📝 " + data.get('weather', 'N/A').title() + "\n"
-                        msg += "💧 Humidity: " + str(data.get('humidity', '--')) + "%\n"
-                        msg += "🌬️ Wind: " + str(data.get('wind_speed', '--')) + " m/s"
-                    else:
-                        msg = "❌ Could not fetch weather for " + city
-                    save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
-                    st.rerun()
-
+                        "⏰ **Charting Time for Train " + train_num + "**\n\n" + "\n".join(chart_results), 'admin')
                 else:
-                    # Fallback: just save the message (should not happen)
-                    pass
+                    save_chat_message('TSKEQ Bot', 'admin', 
+                        "⏰ **Charting Time for Train " + train_num + "**\nNo active EQ records found.", 'admin')
+                st.rerun()
+
+            elif action == 'pnr_status':
+                pnr = cmd.get('pnr', '')
+                if NTES_AVAILABLE:
+                    data = get_pnr_status(pnr)
+                    msg = format_pnr_result(data) if data else "❌ PNR not found"
+                else:
+                    msg = "🔍 [Check PNR " + pnr + " on ConfirmTkt](https://www.confirmtkt.com/pnr-status/" + pnr + ")"
+                save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
+                st.rerun()
+
+            elif action == 'live_train':
+                train_num = cmd.get('train', '')
+                if NTES_AVAILABLE:
+                    data = get_live_train_status(train_num)
+                    msg, _ = format_live_train_result(data) if data else ("❌ No data", None)
+                else:
+                    msg = "🚂 [Check Live Status for " + train_num + " on RailYatri](https://www.railyatri.in/live-train-status/" + train_num + ")"
+                save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
+                st.rerun()
+
+            elif action == 'weather':
+                city = cmd.get('city', 'Tinsukia')
+                data = get_weather(city)
+                if data and 'error' not in data:
+                    msg = "🌤️ **Weather in " + data.get('city', city) + "**\n\n"
+                    msg += "🌡️ Temp: " + str(data.get('temp', '--')) + "°C (feels like " + str(data.get('feels_like', '--')) + "°C)\n"
+                    msg += "📝 " + data.get('weather', 'N/A').title() + "\n"
+                    msg += "💧 Humidity: " + str(data.get('humidity', '--')) + "%\n"
+                    msg += "🌬️ Wind: " + str(data.get('wind_speed', '--')) + " m/s"
+                else:
+                    msg = "❌ Could not fetch weather for " + city
+                save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
+                st.rerun()
 
             else:
-                # Not a command: check if Gemini is mentioned
-                if "gemini" in prompt.lower():
-                    with st.spinner("TSKEQ Bot is thinking..."):
+                # Regular chat - Gemini only responds when explicitly mentioned
+                if should_trigger_gemini(prompt):
+                    with st.spinner("TSKEQ Bot is typing..."):
                         response = chat_with_gemini(prompt, chat_history)
                         save_chat_message('TSKEQ Bot', 'admin', response, 'admin')
-                    st.rerun()
-                else:
-                    # Normal user message - no response needed
-                    # Message already saved, just rerun to show it
-                    st.rerun()
+                # If not mentioning Gemini, just a normal group message - no AI response
+                st.rerun()
 
         # ===== PDF Download in Chat =====
         if st.session_state.get('chat_pdf_bytes'):
@@ -5450,6 +5748,7 @@ def main():
                     file_name=st.session_state.chat_pdf_name, mime="application/pdf",
                     use_container_width=True, key="chat_pdf_download")
             st.markdown('</div>', unsafe_allow_html=True)
+            # Clear after showing
             if st.button("🗑️ Clear PDF", key="clear_chat_pdf"):
                 st.session_state.chat_pdf_bytes = None
                 st.session_state.chat_pdf_name = None
@@ -5471,19 +5770,67 @@ def main():
         for i, (label, cmd_text) in enumerate(quick_cmds):
             with cmd_cols[i % 4]:
                 if st.button(label, use_container_width=True, key=f"cmd_{i}"):
-                    # Process command as if typed
                     save_chat_message(current_user, current_role, cmd_text, 'user')
-                    # Simulate command processing
+                    # Trigger command processing
                     cmd = parse_chat_command(cmd_text)
                     action = cmd.get('action', 'chat')
-                    # We'll re-run so the command is processed in the main flow
+                    if action == 'pdf_today':
+                        pdf_bytes, err = generate_today_pdf("EQ")
+                        if pdf_bytes:
+                            save_chat_message('TSKEQ Bot', 'admin', "📄 Today's PDF generated. Download below 👇", 'admin')
+                            st.session_state.chat_pdf_bytes = pdf_bytes
+                            st.session_state.chat_pdf_name = "Today_" + now_ist().strftime('%d%m%Y') + "_EQ.pdf"
+                        else:
+                            save_chat_message('TSKEQ Bot', 'admin', "❌ " + (err or "Error"), 'admin')
+                    elif action == 'pdf_train':
+                        pdf_bytes, err = generate_train_pdf(cmd.get('train', ''), "EQ")
+                        if pdf_bytes:
+                            save_chat_message('TSKEQ Bot', 'admin', "📄 PDF generated. Download below 👇", 'admin')
+                            st.session_state.chat_pdf_bytes = pdf_bytes
+                            st.session_state.chat_pdf_name = "Train_" + cmd.get('train', '') + "_EQ.pdf"
+                        else:
+                            save_chat_message('TSKEQ Bot', 'admin', "❌ " + (err or "Error"), 'admin')
+                    elif action == 'pdf_full':
+                        df = load_sheet_data_cached("EQ", SHEET_ID)
+                        if not df.empty:
+                            pdf_bytes = generate_pdf(df, "EQ Full Report", full=True)
+                            save_chat_message('TSKEQ Bot', 'admin', "📄 Full PDF generated. Download below 👇", 'admin')
+                            st.session_state.chat_pdf_bytes = pdf_bytes
+                            st.session_state.chat_pdf_name = "EQ_Full_Report_" + now_ist().strftime('%d%m%Y') + ".pdf"
+                        else:
+                            save_chat_message('TSKEQ Bot', 'admin', "❌ No data", 'admin')
+                    elif action == 'sheet_link':
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "🔗 **Sheet Link:**\nhttps://docs.google.com/spreadsheets/d/" + SHEET_ID + "/edit", 'admin')
+                    elif action == 'chart_time':
+                        train_num = cmd.get('train', '')
+                        ct = get_charting_time(train_num, '')
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "⏰ Charting for Train " + train_num + ": " + ct, 'admin')
+                    elif action == 'pnr_status':
+                        pnr = cmd.get('pnr', '')
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "🔍 [Check PNR " + pnr + "](https://www.confirmtkt.com/pnr-status/" + pnr + ")", 'admin')
+                    elif action == 'live_train':
+                        train_num = cmd.get('train', '')
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "🚂 [Check Live Status for " + train_num + "](https://www.railyatri.in/live-train-status/" + train_num + ")", 'admin')
+                    elif action == 'weather':
+                        city = cmd.get('city', 'Tinsukia')
+                        data = get_weather(city)
+                        if data and 'error' not in data:
+                            msg = "🌤️ **" + data.get('city', city) + "**: " + str(data.get('temp', '--')) + "°C, " + data.get('weather', '').title()
+                        else:
+                            msg = "❌ Weather not found"
+                        save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
                     st.rerun()
 
-        # ===== Clear Chat (only admin can clear all) =====
+        # ===== Clear Chat =====
         if st.button("🗑️ Clear My Messages", use_container_width=True, key="clear_my_chat"):
+            # Note: In a real group chat, only admin can clear all. Users can only clear their view.
             st.info("💡 Chat is shared. Messages remain for all users.")
 
-        # ===== TTS Engine for chat messages =====
+        # ===== TTS Engine =====
         components.html("""
         <script>
         (function(){
@@ -5501,7 +5848,7 @@ def main():
                 window.speechSynthesis.speak(utter);
             }
             function addTTSButtons() {
-                var msgs = document.querySelectorAll('.wa-msg-bubble.admin, .wa-msg-bubble.other, .wa-msg-bubble.me');
+                var msgs = document.querySelectorAll('.wa-msg-bubble.admin, .wa-msg-bubble.other');
                 msgs.forEach(function(msg){
                     if (msg.querySelector('.tts-btn')) return;
                     var text = msg.innerText || msg.textContent || '';
@@ -5509,9 +5856,9 @@ def main():
                     var btn = document.createElement('button');
                     btn.className = 'tts-btn';
                     btn.innerHTML = '🔊 Listen';
-                    btn.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:rgba(0,0,0,0.05);border:none;color:#555;font-size:0.7rem;padding:2px 8px;border-radius:12px;cursor:pointer;margin-top:4px;transition:all 0.2s;';
-                    btn.onmouseenter = function(){ btn.style.background = 'rgba(0,0,0,0.1)'; };
-                    btn.onmouseleave = function(){ btn.style.background = 'rgba(0,0,0,0.05)'; };
+                    btn.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.1);border:none;color:#8696a0;font-size:0.75rem;padding:4px 8px;border-radius:12px;cursor:pointer;margin-top:4px;transition:all 0.2s;';
+                    btn.onmouseenter = function(){ btn.style.background = 'rgba(255,255,255,0.2)'; btn.style.color = '#fff'; };
+                    btn.onmouseleave = function(){ btn.style.background = 'rgba(255,255,255,0.1)'; btn.style.color = '#8696a0'; };
                     btn.onclick = function(e){ e.stopPropagation(); speak(text); };
                     msg.appendChild(btn);
                 });
@@ -5523,9 +5870,7 @@ def main():
         })();
         </script>
         """, height=0)
-
-    # =====================================================================
-    # VIEW: 🚂 RAILWAY
+# VIEW: 🚂 RAILWAY
     # =====================================================================
     elif view == "🚂 Railway":
         st.subheader("🚂 Indian Railways - Real-time Info")
@@ -5615,6 +5960,7 @@ def main():
                 pnr_input = st.text_input("Enter 10-digit PNR", max_chars=10, key="rail_pnr")
                 st.markdown("""
                 <style>
+                /* Railway PNR input - BIG white numbers */
                 input[aria-label="Enter 10-digit PNR"] {
                     color: #ffffff !important;
                     -webkit-text-fill-color: #ffffff !important;
@@ -5636,6 +5982,7 @@ def main():
                     font-weight: 500 !important;
                     letter-spacing: 1px !important;
                 }
+                /* Also style the label */
                 .stTextInput:has(input[aria-label="Enter 10-digit PNR"]) label p,
                 .stTextInput:has(input[aria-label="Enter 10-digit PNR"]) label span {
                     color: #ffffff !important;
@@ -5849,6 +6196,8 @@ def main():
                             placeholder="Any city, town or village...", key="weather_city_input")
         if city != st.session_state.weather_city: st.session_state.weather_city = city
 
+        # Note: Weather fetched via "Get Weather" button to avoid API spam
+
         st.markdown('<div class="weather-input-wrapper">', unsafe_allow_html=True)
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -5882,8 +6231,9 @@ def main():
         if st.session_state.weather_data and 'error' not in st.session_state.weather_data:
             data = st.session_state.weather_data
 
+            # Day/Night detection for styling
             time_of_day = 'day'
-            weather_mode = 'day'
+            weather_mode = 'day'  # <-- FIXED: Define weather_mode
             try:
                 now_ts = int(time.time())
                 sunrise = data.get('sunrise')
@@ -5892,17 +6242,23 @@ def main():
                     sunrise = int(sunrise)
                     sunset = int(sunset)
                     if now_ts < sunrise - 1800:
-                        time_of_day = 'night'; weather_mode = 'night'
+                        time_of_day = 'night'
+                        weather_mode = 'night'
                     elif now_ts < sunrise + 1800:
-                        time_of_day = 'dawn'; weather_mode = 'day'
+                        time_of_day = 'dawn'
+                        weather_mode = 'day'
                     elif now_ts < sunset - 1800:
-                        time_of_day = 'day'; weather_mode = 'day'
+                        time_of_day = 'day'
+                        weather_mode = 'day'
                     elif now_ts < sunset + 1800:
-                        time_of_day = 'dusk'; weather_mode = 'day'
+                        time_of_day = 'dusk'
+                        weather_mode = 'day'
                     else:
-                        time_of_day = 'night'; weather_mode = 'night'
+                        time_of_day = 'night'
+                        weather_mode = 'night'
             except: pass
 
+            # Location banner with LOCAL TIME
             loc_state = data.get('state', '')
             loc_country = data.get('country', '')
             loc_full = data.get('city', 'Unknown') + (f", {loc_state}" if loc_state else "") + (f", {loc_country}" if loc_country else "")
@@ -5910,6 +6266,7 @@ def main():
             banner_text = "#ffffff"
             banner_shadow = "0 2px 8px rgba(0,0,0,0.9)"
 
+            # Calculate local time from timezone offset
             tz_offset = data.get('timezone', 0)
             try:
                 utc_now = datetime.now(timezone.utc)
@@ -6013,6 +6370,7 @@ def main():
 
             if data.get('sunrise') and data.get('sunrise') != 'N/A':
                 try:
+                    # timezone imported at top level
                     UTC = timezone.utc
                     sunrise_dt = datetime.fromtimestamp(data['sunrise'], tz=UTC).astimezone(IST)
                     sunset_dt = datetime.fromtimestamp(data['sunset'], tz=UTC).astimezone(IST)
@@ -6239,9 +6597,10 @@ def main():
             st.info("Enter a city name and click 'Get Weather' to see detailed weather information.")
 
     # === COMPREHENSIVE TEXT VISIBILITY FIX ===
+    # This CSS block is rendered LAST and overrides all previous styles
     st.markdown("""
     <style>
-    /* FORCE ALL FORM LABELS BLACK */
+    /* === FORCE ALL FORM LABELS BLACK === */
     div[data-testid="stMain"] .stTextInput label p,
     div[data-testid="stMain"] .stTextInput label span,
     div[data-testid="stMain"] .stSelectbox label p,
@@ -6264,7 +6623,7 @@ def main():
         text-shadow: none !important;
         font-weight: 600 !important;
     }
-    /* FORCE ALL FORM INPUT VALUES BLACK */
+    /* === FORCE ALL FORM INPUT VALUES BLACK === */
     div[data-testid="stMain"] .stTextInput input,
     div[data-testid="stMain"] .stSelectbox div[data-baseweb="select"] div,
     div[data-testid="stMain"] .stDateInput input,
@@ -6273,7 +6632,7 @@ def main():
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
     }
-    /* EXPANDER HEADERS BLACK */
+    /* === EXPANDER HEADERS BLACK === */
     div[data-testid="stMain"] .streamlit-expanderHeader,
     div[data-testid="stMain"] .streamlit-expanderHeader p,
     div[data-testid="stMain"] .streamlit-expanderHeader span {
@@ -6282,14 +6641,36 @@ def main():
         text-shadow: none !important;
         font-weight: 700 !important;
     }
-    /* CAPTIONS BLACK */
+    /* === CAPTIONS BLACK === */
     div[data-testid="stMain"] .stCaption,
     div[data-testid="stMain"] [data-testid="stCaption"] {
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
         text-shadow: none !important;
     }
-    /* DATA TABLE HEADERS - WHITE */
+    /* === SUBHEADERS & SMALL TEXT BLACK === */
+    div[data-testid="stMain"] .stMarkdown p[data-testid="stMarkdownContainer"] p,
+    div[data-testid="stMain"] .stMarkdown small,
+    div[data-testid="stMain"] .stMarkdown strong {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+    }
+    /* === WEATHER SECTION SPECIFIC === */
+    div[data-testid="stMain"] input[aria-label="🏙️ Enter City Name"] {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
+    }
+    /* Weather labels - WHITE for dark bg */
+    div[data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) label p,
+    div[data-testid="stMain"] .stTextInput:has(input[aria-label="🏙️ Enter City Name"]) label span {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        font-weight: 700 !important;
+    }
+    /* === DATA TABLE HEADERS === */
     div[data-testid="stMain"] .stDataFrame th,
     div[data-testid="stMain"] .stDataEditor th {
         color: #ffffff !important;
@@ -6297,13 +6678,14 @@ def main():
         text-shadow: none !important;
         font-weight: 700 !important;
     }
+    /* === DATA TABLE CELLS === */
     div[data-testid="stMain"] .stDataFrame td,
     div[data-testid="stMain"] .stDataEditor td {
         color: #1e293b !important;
         -webkit-text-fill-color: #1e293b !important;
         text-shadow: none !important;
     }
-    /* WEATHER SECTION - FORCE WHITE TEXT ON DARK BG */
+    /* === WEATHER STAMP / INPUT / CARD - FORCE WHITE TEXT === */
     div[data-testid="stMain"] .weather-input-wrapper,
     div[data-testid="stMain"] .weather-input-wrapper * {
         color: #ffffff !important;
@@ -6322,6 +6704,11 @@ def main():
         -webkit-text-fill-color: #ffffff !important;
         text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
     }
+    div[data-testid="stMain"] .forecast-card-0,
+    div[data-testid="stMain"] .forecast-card-1,
+    div[data-testid="stMain"] .forecast-card-2,
+    div[data-testid="stMain"] .forecast-card-3,
+    div[data-testid="stMain"] .forecast-card-4,
     div[data-testid="stMain"] [class*="forecast-card-"] {
         color: #ffffff !important;
         -webkit-text-fill-color: #ffffff !important;
@@ -6351,16 +6738,6 @@ def main():
         color: #ffffff !important;
         -webkit-text-fill-color: #ffffff !important;
         text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
-    }
-    /* CHAT MESSAGES - BLACK BOLD (already set in .wa-msg-bubble) */
-    .wa-msg-bubble, .wa-msg-bubble * {
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-        text-shadow: none !important;
-        font-weight: bold !important;
-    }
-    .wa-msg-bubble.system, .wa-msg-bubble.system * {
-        font-weight: normal !important;
     }
     </style>
     """, unsafe_allow_html=True)
