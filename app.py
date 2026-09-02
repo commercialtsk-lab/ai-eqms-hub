@@ -2742,8 +2742,6 @@ def main():
                 # Admin password field (only for Sharique or if needed)
                 with st.expander("🔐 Admin Login", expanded=False):
                     admin_pass = st.text_input("Admin Password", type="password", placeholder="Enter if admin", key="admin_pass_input")
-                    if admin_pass:
-                        st.session_state.admin_pass_input = admin_pass
 
                 if st.button("🚀 Join App", use_container_width=True, key="login_btn"):
                     if not username or not username.strip():
