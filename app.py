@@ -1120,13 +1120,17 @@ Instructions:
 Previous conversation:
 """
         for msg in chat_history[-30:]:
-            if msg['role'] == 'user': system_prompt += f"User: {msg['content']}\n"
-            else: system_prompt += f"Assistant: {msg['content']}\n"
+            msg_type = msg.get('type', 'user')
+            msg_text = msg.get('message', '')
+            if msg_type == 'user':
+                system_prompt += f"User: {msg_text}\n"
+            else:
+                system_prompt += f"Assistant: {msg_text}\n"
         system_prompt += f"\nUser: {user_message}\nAssistant:"
         response = model.generate_content(system_prompt)
         return response.text
     except Exception as e:
-        return f"⚠️ Error: Could not process your request. Please try again later. ({str(e)})"
+        return f"⚠️ Gemini Error: {str(e)[:200]}. Please try again or check your API key."
 
 # =====================================================================
 # Weather Functions
@@ -2323,6 +2327,86 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
     </style>
     """
+    css += """
+        /* === GLOBAL TEXT VISIBILITY FIX === */
+        [data-testid="stMain"] .stMarkdown p,
+        [data-testid="stMain"] .stMarkdown div,
+        [data-testid="stMain"] .stMarkdown span,
+        [data-testid="stMain"] .stCaption,
+        [data-testid="stMain"] label,
+        [data-testid="stMain"] [data-testid="stWidgetLabel"] {
+            color: #f1f5f9 !important;
+            -webkit-text-fill-color: #f1f5f9 !important;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.9) !important;
+        }
+        [data-testid="stMain"] h1, [data-testid="stMain"] h2,
+        [data-testid="stMain"] h3, [data-testid="stMain"] h4,
+        [data-testid="stMain"] h5, [data-testid="stMain"] h6 {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.9) !important;
+        }
+        [data-testid="stMain"] .stButton > button {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        }
+        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] p,
+        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] div {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        }
+        [data-testid="stMain"] .stChatInput input {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+        }
+        [data-testid="stMain"] .stChatInput input::placeholder {
+            color: rgba(255,255,255,0.7) !important;
+        }
+        .streamlit-expanderHeader, .streamlit-expanderHeader p, .streamlit-expanderHeader span {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+        }
+        .stCaption, [data-testid="stCaption"] {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+        }
+        /* Weather tab text fix */
+        [data-testid="stMain"] .weather-main-card *,
+        [data-testid="stMain"] .weather-detail-item * {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+        }
+        /* Data table / editor text */
+        .stDataFrame td, .stDataEditor td, .stDataFrame th, .stDataEditor th {
+            color: #f1f5f9 !important;
+            -webkit-text-fill-color: #f1f5f9 !important;
+        }
+        /* Input values always visible */
+        [data-testid="stMain"] .stTextInput input,
+        [data-testid="stMain"] .stSelectbox > div > div > div,
+        [data-testid="stMain"] .stDateInput input,
+        [data-testid="stMain"] .stNumberInput input,
+        [data-testid="stMain"] .stTextArea textarea {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+            background-color: rgba(255,255,255,0.95) !important;
+        }
+        [data-testid="stMain"] .stTextInput label,
+        [data-testid="stMain"] .stSelectbox label,
+        [data-testid="stMain"] .stDateInput label,
+        [data-testid="stMain"] .stNumberInput label,
+        [data-testid="stMain"] .stTextArea label {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+            font-weight: 700 !important;
+        }
+        """
     st.markdown(css, unsafe_allow_html=True)
 
 # =====================================================================
@@ -2677,7 +2761,8 @@ def main():
     # AUTHENTICATION GATE — One-Time Name Entry with Admin Approval
     # =====================================================================
     if not st.session_state.authenticated:
-        st.set_page_config(page_title="AI EQMS Hub Pro — Welcome", page_icon="🚂", layout="centered")
+        # st.set_page_config removed - already set at module level to avoid Streamlit error
+        pass
 
         # Try auto-login from localStorage via query param
         components.html("""
@@ -2704,6 +2789,11 @@ def main():
                 st.session_state.username = str(auto_user).strip()
                 st.session_state.user_role = role
                 update_user_activity(str(auto_user).strip())
+                # Clear auto_user from URL to prevent loop on refresh
+                try:
+                    st.query_params.pop('auto_user', None)
+                except Exception:
+                    pass
                 st.rerun()
 
         st.markdown("""
@@ -3425,6 +3515,7 @@ def main():
         bg_style = ""
         elements = ""
         info_html = ""  # Initialize to prevent UnboundLocalError
+        weather_mode = 'day'  # Default
 
         if scene in ('rain', 'night-rain'):
             bg_style = "background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 35%, #2d3a4a 70%, #1a2332 100%);"
@@ -3590,14 +3681,15 @@ def main():
             elements += '<div style="position:absolute;bottom:110px;left:60%;font-size:45px;z-index:5;opacity:0.6;animation:treeSway 6s ease-in-out 3s infinite;">🌲</div>'
             elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#455a64;z-index:6;"></div>'
 
-            loc_detail = city_name
-            if st.session_state.weather_data.get('state'):
-                loc_detail += f", {st.session_state.weather_data['state']}"
-            if st.session_state.weather_data.get('country'):
-                loc_detail += f", {st.session_state.weather_data['country']}"
-            info_html = f"""<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:100;pointer-events:none;"><div style="font-size:2.6rem;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);letter-spacing:2px;">{loc_detail}</div><div style="font-size:7rem;font-weight:900;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);line-height:1;margin:10px 0;">{temp}°</div><div style="font-size:1.6rem;font-weight:600;color:#ffffff;text-shadow:0 2px 8px rgba(0,0,0,0.9),0 0 20px rgba(0,0,0,0.5);text-transform:capitalize;">{desc}</div></div>"""
+        # Build weather info overlay for ALL scenes
+        loc_detail = city_name
+        if st.session_state.weather_data.get('state'):
+            loc_detail += f", {st.session_state.weather_data['state']}"
+        if st.session_state.weather_data.get('country'):
+            loc_detail += f", {st.session_state.weather_data['country']}"
+        info_html = f"""<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:100;pointer-events:none;"><div style="font-size:2.6rem;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);letter-spacing:2px;">{loc_detail}</div><div style="font-size:7rem;font-weight:900;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);line-height:1;margin:10px 0;">{temp}°</div><div style="font-size:1.6rem;font-weight:600;color:#ffffff;text-shadow:0 2px 8px rgba(0,0,0,0.9),0 0 20px rgba(0,0,0,0.5);text-transform:capitalize;">{desc}</div></div>"""
 
-        weather_bg_html = f"""<style>@keyframes rainFall{{from{{transform:translateY(-20px);opacity:0;}}10%{{opacity:0.8;}}90%{{opacity:0.8;}}to{{transform:translateY(110vh);opacity:0;}}}}@keyframes snowFall{{from{{transform:translateY(-20px) rotate(0deg);opacity:0;}}10%{{opacity:1;}}90%{{opacity:1;}}to{{transform:translateY(110vh) rotate(360deg);opacity:0;}}}}@keyframes cloudDrift{{from{{transform:translateX(-300px);}}to{{transform:translateX(calc(100vw + 300px));}}}}@keyframes sunPulse{{0%,100%{{transform:scale(1);opacity:0.9;}}50%{{transform:scale(1.15);opacity:1;}}}}@keyframes raySpin{{from{{transform:translate(-50%,-50%) rotate(0deg);}}to{{transform:translate(-50%,-50%) rotate(360deg);}}}}@keyframes moonGlow{{0%,100%{{box-shadow:0 0 60px 20px rgba(245,245,220,0.3);}}50%{{box-shadow:0 0 80px 30px rgba(245,245,220,0.5);}}}}@keyframes twinkle{{0%,100%{{opacity:0.3;}}50%{{opacity:1;}}}}@keyframes treeSway{{0%,100%{{transform:rotate(-3deg);}}50%{{transform:rotate(3deg);}}}}@keyframes waterShimmer{{0%,100%{{opacity:0.3;transform:scaleX(1);}}50%{{opacity:0.7;transform:scaleX(1.2);}}}}@keyframes lightning{{0%,90%,100%{{opacity:0;}}91%{{opacity:0.3;}}92%{{opacity:0;}}93%{{opacity:0.6;}}94%{{opacity:0;}}}}@keyframes windowLight{{0%,100%{{opacity:0.6;}}50%{{opacity:1;}}}}@keyframes birdFly{{from{{transform:translateX(-50px);}}to{{transform:translateX(calc(100vw + 50px));}}}}@keyframes fogDrift{{from{{transform:translateX(-50%);}}to{{transform:translateX(0%);}}}}</style><div style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;overflow:hidden;{bg_style}">{elements}{info_html}</div>"""
+                weather_bg_html = f"""<style>@keyframes rainFall{{from{{transform:translateY(-20px);opacity:0;}}10%{{opacity:0.8;}}90%{{opacity:0.8;}}to{{transform:translateY(110vh);opacity:0;}}}}@keyframes snowFall{{from{{transform:translateY(-20px) rotate(0deg);opacity:0;}}10%{{opacity:1;}}90%{{opacity:1;}}to{{transform:translateY(110vh) rotate(360deg);opacity:0;}}}}@keyframes cloudDrift{{from{{transform:translateX(-300px);}}to{{transform:translateX(calc(100vw + 300px));}}}}@keyframes sunPulse{{0%,100%{{transform:scale(1);opacity:0.9;}}50%{{transform:scale(1.15);opacity:1;}}}}@keyframes raySpin{{from{{transform:translate(-50%,-50%) rotate(0deg);}}to{{transform:translate(-50%,-50%) rotate(360deg);}}}}@keyframes moonGlow{{0%,100%{{box-shadow:0 0 60px 20px rgba(245,245,220,0.3);}}50%{{box-shadow:0 0 80px 30px rgba(245,245,220,0.5);}}}}@keyframes twinkle{{0%,100%{{opacity:0.3;}}50%{{opacity:1;}}}}@keyframes treeSway{{0%,100%{{transform:rotate(-3deg);}}50%{{transform:rotate(3deg);}}}}@keyframes waterShimmer{{0%,100%{{opacity:0.3;transform:scaleX(1);}}50%{{opacity:0.7;transform:scaleX(1.2);}}}}@keyframes lightning{{0%,90%,100%{{opacity:0;}}91%{{opacity:0.3;}}92%{{opacity:0;}}93%{{opacity:0.6;}}94%{{opacity:0;}}}}@keyframes windowLight{{0%,100%{{opacity:0.6;}}50%{{opacity:1;}}}}@keyframes birdFly{{from{{transform:translateX(-50px);}}to{{transform:translateX(calc(100vw + 50px));}}}}@keyframes fogDrift{{from{{transform:translateX(-50%);}}to{{transform:translateX(0%);}}}}</style><div style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;overflow:hidden;{bg_style}">{elements}{info_html}</div>"""
 
     if weather_bg_html:
         st.markdown(weather_bg_html, unsafe_allow_html=True)
@@ -5472,15 +5564,7 @@ def main():
             align-items: center;
             gap: 5px;
         }
-        .wa-admin-badge {
-            background: linear-gradient(90deg, #FF9933, #138808);
-            color: #000;
-            font-size: 0.6rem;
-            padding: 1px 6px;
-            border-radius: 10px;
-            font-weight: 800;
-            text-shadow: 0 1px 2px rgba(255,255,255,0.5);
-        }
+
         .wa-msg-time {
             font-size: 0.68rem;
             opacity: 0.6;
@@ -5624,9 +5708,7 @@ def main():
                 st.markdown(f"""
                 <div class="wa-msg-row admin">
                     <div class="wa-msg-bubble admin">
-                        <div class="wa-msg-sender">
-                            🚂 {sender} <span class="wa-admin-badge">ADMIN</span>
-                        </div>
+                        <div class="wa-msg-sender">🚂 {sender}</div>
                         {message_text}
                         <div class="wa-msg-time">{timestamp}</div>
                     </div>
@@ -5636,7 +5718,7 @@ def main():
                 st.markdown(f"""
                 <div class="wa-msg-row me">
                     <div class="wa-msg-bubble me">
-                        <div class="wa-msg-sender" style="justify-content:flex-end;">You · {role}</div>
+                        <div class="wa-msg-sender" style="justify-content:flex-end;">You</div>
                         {message_text}
                         <div class="wa-msg-time">{timestamp}</div>
                     </div>
@@ -5646,7 +5728,7 @@ def main():
                 st.markdown(f"""
                 <div class="wa-msg-row">
                     <div class="wa-msg-bubble other">
-                        <div class="wa-msg-sender">{sender} · {role}</div>
+                        <div class="wa-msg-sender">{sender}</div>
                         {message_text}
                         <div class="wa-msg-time">{timestamp}</div>
                     </div>
