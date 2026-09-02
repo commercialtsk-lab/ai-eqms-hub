@@ -1,3 +1,4 @@
+
 # =====================================================================
 # AI EQMS Hub Pro - Complete Streamlit Application
 # =====================================================================
@@ -978,6 +979,123 @@ def get_sheet_context():
         return summary
     except Exception:
         return "Sheet data temporarily unavailable."
+
+# =====================================================================
+# Time-Based Chat Auto-Messages
+# =====================================================================
+def get_time_based_chat_message():
+    """Generate a time-based automatic message for chat."""
+    hour = now_ist().hour
+    if 5 <= hour < 12:
+        greeting = "🌅 Good Morning"
+        tip = "☀️ Start your day with a fresh look at the EQ sheet!"
+    elif 12 <= hour < 16:
+        greeting = "🌤️ Good Afternoon"
+        tip = "📊 Mid-day check: Review pending EQ requests."
+    elif 16 <= hour < 21:
+        greeting = "🌆 Good Evening"
+        tip = "🌙 Evening roundup: Check tomorrow's charting times."
+    else:
+        greeting = "🌙 Good Night"
+        tip = "💤 Rest well! Auto-sync is running in background."
+
+    # Get sheet stats
+    try:
+        gc = init_sheets()
+        eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
+        all_data = eq_sheet.get_all_values()
+        total_eq = max(0, len(all_data) - 4)
+
+        note_sheet = gc.open_by_key(SHEET_ID).worksheet("NOTE")
+        note_data = note_sheet.get_all_values()
+        note_trains = [row[0] for row in note_data[1:] if row and row[0].strip()] if len(note_data) > 1 else []
+
+        data_sheet = gc.open_by_key(SHEET_ID).worksheet("DATA")
+        data_all = data_sheet.get_all_values()
+        total_data = max(0, len(data_all) - 3)
+
+        msg = f"""{greeting} Team! {tip}
+
+📋 **Live Sheet Summary** ({format_datetime()})
+━━━━━━━━━━━━━━━━━━━━━━━
+🚂 **EQ Sheet**: {total_eq} active records
+📁 **DATA Sheet**: {total_data} archived records
+📋 **NOTE Trains**: {len(note_trains)} trains monitored
+━━━━━━━━━━━━━━━━━━━━━━━
+💡 *Tip: Type "today pdf" or "15909 eq" for quick reports*
+"""
+    except Exception:
+        msg = f"""{greeting} Team! {tip}
+
+📋 **Sheet Summary** ({format_datetime()})
+━━━━━━━━━━━━━━━━━━━━━━━
+🚂 EQ Sheet: Data available
+💡 *Tip: Type "today pdf" or "15909 eq" for quick reports*
+━━━━━━━━━━━━━━━━━━━━━━━
+"""
+    return msg
+
+def get_sheet_quick_stats():
+    """Get quick stats for chat auto-messages."""
+    try:
+        gc = init_sheets()
+        eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
+        all_data = eq_sheet.get_all_values()
+        total = max(0, len(all_data) - 4)
+
+        # Count today's records
+        today_str = now_ist().strftime("%d-%m-%Y")
+        today_count = 0
+        for row in all_data[4:]:
+            if len(row) > 7 and today_str in str(row[7]):
+                today_count += 1
+
+        # Count by class
+        class_counts = {}
+        for row in all_data[4:]:
+            if len(row) > 6:
+                cls = str(row[6]).strip().upper()
+                if cls:
+                    class_counts[cls] = class_counts.get(cls, 0) + 1
+
+        top_class = max(class_counts, key=class_counts.get) if class_counts else "N/A"
+
+        return {
+            'total': total,
+            'today': today_count,
+            'top_class': top_class,
+            'classes': class_counts
+        }
+    except Exception:
+        return {'total': 0, 'today': 0, 'top_class': 'N/A', 'classes': {}}
+
+def post_time_based_auto_message():
+    """Post automatic time-based message to chat if enough time has passed."""
+    try:
+        gc = init_sheets()
+        chat_sheet = gc.open_by_key(SHEET_ID).worksheet("CHAT")
+        all_data = chat_sheet.get_all_values()
+
+        # Check last auto-message time
+        last_auto_time = None
+        for row in reversed(all_data[1:]):
+            if len(row) >= 5 and row[4] == 'auto':
+                try:
+                    last_auto_time = datetime.strptime(row[0], "%d-%m-%Y %H:%M:%S")
+                    break
+                except Exception:
+                    continue
+
+        now = now_ist()
+        # Post every 4 hours
+        if last_auto_time is None or (now - last_auto_time).total_seconds() > 14400:
+            msg = get_time_based_chat_message()
+            save_chat_message('TSKEQ Bot', 'admin', msg, 'auto', '')
+            return True
+    except Exception:
+        pass
+    return False
+
 
 # =====================================================================
 # Chat with Gemini
@@ -2621,11 +2739,36 @@ def main():
             with c2:
                 username = st.text_input("👤 Enter Your Name", placeholder="Your full name", key="login_user")
 
+                # Admin password field (only for Sharique or if needed)
+                with st.expander("🔐 Admin Login", expanded=False):
+                    admin_pass = st.text_input("Admin Password", type="password", placeholder="Enter if admin", key="admin_pass_input")
+                    if admin_pass:
+                        st.session_state.admin_pass_input = admin_pass
+
                 if st.button("🚀 Join App", use_container_width=True, key="login_btn"):
                     if not username or not username.strip():
                         st.error("❌ Please enter your name.")
                     else:
                         username = username.strip()
+
+                        # ADMIN BYPASS: Sharique + password 1988 = instant admin
+                        admin_password = st.session_state.get('admin_pass_input', '')
+                        if username.lower() == 'sharique' and admin_password == '1988':
+                            st.session_state.authenticated = True
+                            st.session_state.username = username
+                            st.session_state.user_role = 'admin'
+                            st.session_state.user_status = 'active'
+                            save_user(username, 'admin', 'active')
+                            update_user_activity(username)
+                            components.html(f"""
+                            <script>
+                            window.parent.localStorage.setItem('eqms_user', '{username}');
+                            </script>
+                            """, height=0)
+                            st.success(f"✅ Welcome Admin, {username}! Redirecting...")
+                            time.sleep(0.5)
+                            st.rerun()
+
                         role, status = get_user_status(username)
 
                         if role is None:
@@ -5402,6 +5545,31 @@ def main():
             save_chat_message('TSKEQ Bot', 'admin', alert, 'alert', '')
             chat_history = load_chat_history(limit=200)
 
+        # ===== Post Time-Based Auto Message =====
+        post_time_based_auto_message()
+        # Reload to include auto-message
+        chat_history = load_chat_history(limit=200)
+
+        # ===== Sheet Quick Stats for Chat Header =====
+        try:
+            quick_stats = get_sheet_quick_stats()
+            stats_badge = f"📊 EQ: {quick_stats['total']} | Today: {quick_stats['today']} | Top: {quick_stats['top_class']}"
+        except Exception:
+            stats_badge = "📊 Sheet data available"
+
+        # ===== Time-Based Welcome Banner =====
+        hour = now_ist().hour
+        if 5 <= hour < 12:
+            welcome_emoji = "🌅"; welcome_text = "Good Morning"
+        elif 12 <= hour < 16:
+            welcome_emoji = "☀️"; welcome_text = "Good Afternoon"
+        elif 16 <= hour < 21:
+            welcome_emoji = "🌆"; welcome_text = "Good Evening"
+        else:
+            welcome_emoji = "🌙"; welcome_text = "Good Night"
+
+        welcome_banner = f"{welcome_emoji} {welcome_text}, {current_user}! {stats_badge}"
+
         # ===== WhatsApp Group Header =====
         online_count = len(online_users)
         online_names = ", ".join(list(online_users.keys())[:5])
@@ -5417,6 +5585,18 @@ def main():
                     <span class="wa-online-dot"></span> {online_count} online · {online_names if online_names else 'Just you'}
                 </div>
             </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ===== Welcome Banner =====
+        st.markdown(f"""
+        <div style="background: linear-gradient(90deg, rgba(255,153,51,0.2), rgba(255,255,255,0.1), rgba(19,136,8,0.2)); 
+            border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 10px 16px; 
+            margin: 8px 0; text-align: center; backdrop-filter: blur(10px);
+            color: #ffffff !important; font-weight: 600; font-size: 0.95rem;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+            -webkit-text-fill-color: #ffffff !important;">
+            {welcome_banner}
         </div>
         """, unsafe_allow_html=True)
 
