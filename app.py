@@ -3371,7 +3371,7 @@ def main():
         st.markdown(EARTH_BG_HTML, unsafe_allow_html=True)
     elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         pass  # Weather bg rendered later
-        elif view_bg == "💬 Chat":
+    elif view_bg == "💬 Chat":
         st.markdown(AQUARIUM_BG_HTML, unsafe_allow_html=True)
         # Chat-specific white text ONLY for chat elements, NOT global
         st.markdown("""
