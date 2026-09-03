@@ -117,9 +117,6 @@ defaults = {
     'rows_per_page': 25, 'dashboard_sheet': 'EQ', 'adv_filters': {},
     'weather_lat': None, 'weather_lon': None, 'weather_location_name': None,
     'pnr_last_checked': None,
-    # Auth & Audit
-    'authenticated': False, 'username': '', 'user_role': 'viewer',
-    'audit_log': [], 'last_data_count': 0, 'data_alert_muted': False,
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -2258,77 +2255,6 @@ def main():
     # Always update last_refresh to current time on page load so sync time matches live time
     st.session_state.last_refresh = time.time()
 
-    # =====================================================================
-    # AUTHENTICATION GATE
-    # =====================================================================
-    if not st.session_state.authenticated:
-        st.set_page_config(page_title="AI EQMS Hub Pro — Login", page_icon="🔒", layout="centered")
-        st.markdown("""
-        <style>
-        .login-wrap { max-width: 420px; margin: 60px auto; padding: 40px 30px;
-            background: linear-gradient(135deg, #0f172a, #1e1b4b);
-            border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center; }
-        .login-icon { font-size: 4rem; margin-bottom: 10px; }
-        .login-title { color: #f1f5f9; font-size: 1.6rem; font-weight: 800; margin-bottom: 4px; }
-        .login-sub { color: #94a3b8; font-size: 0.9rem; margin-bottom: 24px; }
-        .login-input input { background: rgba(255,255,255,0.08) !important; color: #fff !important;
-            border: 1px solid rgba(255,255,255,0.2) !important; border-radius: 10px !important;
-            text-align: center !important; font-size: 1.1rem !important; letter-spacing: 2px !important; }
-        .login-input input::placeholder { color: #64748b !important; }
-        .login-btn button { background: linear-gradient(135deg, #FF9933, #138808) !important;
-            color: #fff !important; font-weight: 700 !important; font-size: 1rem !important;
-            border: none !important; border-radius: 10px !important; padding: 10px 24px !important; }
-        .login-footer { color: #475569; font-size: 0.8rem; margin-top: 20px; }
-        </style>
-        <div class="login-wrap">
-            <div class="login-icon">🚂</div>
-            <div class="login-title">AI EQMS Hub Pro</div>
-            <div class="login-sub">Indian Railways — Emergency Quota Management</div>
-        </div>
-        """, unsafe_allow_html=True)
-        with st.container():
-            c1, c2, c3 = st.columns([1, 3, 1])
-            with c2:
-                username = st.text_input("👤 Username", placeholder="Enter username", key="login_user")
-                password = st.text_input("🔑 Password", type="password", placeholder="Enter password", key="login_pass")
-                role = st.selectbox("🛡️ Role", ["viewer", "editor", "admin"], key="login_role")
-                if st.button("🔓 Login", use_container_width=True, key="login_btn"):
-                    # Simple auth — customize passwords as needed
-                    valid_users = {
-                        "admin": "admin123",
-                        "editor": "edit123",
-                        "viewer": "view123",
-                        "sharique": "sharique123"
-                    }
-                    if username.lower() in valid_users and password == valid_users[username.lower()]:
-                        st.session_state.authenticated = True
-                        st.session_state.username = username
-                        st.session_state.user_role = role
-                        st.session_state.audit_log.append({
-                            "timestamp": format_datetime(),
-                            "user": username,
-                            "role": role,
-                            "action": "🔐 Login",
-                            "ip": "—"
-                        })
-                        st.success(f"✅ Welcome, {username}! Redirecting...")
-                        time.sleep(0.8)
-                        st.rerun()
-                    else:
-                        st.error("❌ Invalid username or password")
-                        st.session_state.audit_log.append({
-                            "timestamp": format_datetime(),
-                            "user": username or "unknown",
-                            "role": "—",
-                            "action": "❌ Failed Login Attempt",
-                            "ip": "—"
-                        })
-                st.markdown("<div class='login-footer'>Default: admin/admin123 | editor/edit123 | viewer/view123</div>", unsafe_allow_html=True)
-        st.stop()
-    else:
-        st.set_page_config(page_title="AI EQMS Hub Pro", page_icon="🚂", layout="wide", initial_sidebar_state="expanded")
-
     # BULLETPROOF: Initialize all pagination/session vars at top of main()
     if 'rows_per_page' not in st.session_state or not isinstance(st.session_state.get('rows_per_page'), int) or st.session_state.get('rows_per_page') <= 0:
         st.session_state.rows_per_page = 25
@@ -2405,50 +2331,7 @@ def main():
     </script>
     """, height=0)
 
-    # PWA + Mobile + Offline + Alert Sound
-    components.html("""
-    <script>
-    (function(){
-        var manifest={name:"AI EQMS Hub Pro",short_name:"EQMS Hub",start_url:"/",display:"standalone",background_color:"#0a0a1a",theme_color:"#075e54",icons:[{src:"https://cdn-icons-png.flaticon.com/512/1042/1042381.png",sizes:"512x512",type:"image/png"}]};
-        var mb=new Blob([JSON.stringify(manifest)],{type:"application/json"});
-        var mu=URL.createObjectURL(mb);
-        var l=document.createElement("link");l.rel="manifest";l.href=mu;document.head.appendChild(l);
-        var swc='self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));self.addEventListener("fetch",e=>e.respondWith(fetch(e.request).catch(()=>new Response("Offline",{status:503}))));self.addEventListener("activate",e=>e.waitUntil(self.clients.claim()));';
-        var swb=new Blob([swc],{type:"application/javascript"});
-        var swu=URL.createObjectURL(swb);
-        if("serviceWorker" in navigator)navigator.serviceWorker.register(swu).catch(function(){});
-        var ob=document.createElement("div");
-        ob.id="eqms-offline-banner";
-        ob.style.cssText="position:fixed;top:0;left:0;width:100%;background:#dc2626;color:#fff;text-align:center;padding:8px;font-weight:700;z-index:9999999;display:none;font-family:inherit;";
-        ob.innerHTML="⚠️ You are offline — Some features may not work";
-        document.body.appendChild(ob);
-        function uos(){ob.style.display=navigator.onLine?"none":"block";}
-        window.addEventListener("online",uos);window.addEventListener("offline",uos);uos();
-        window.__eqmsAlertSound=function(){
-            try{var C=window.AudioContext||window.webkitAudioContext;var c=new C();
-            var o=c.createOscillator();var g=c.createGain();o.connect(g);g.connect(c.destination);
-            o.type="sine";o.frequency.setValueAtTime(523,c.currentTime);o.frequency.setValueAtTime(659,c.currentTime+0.1);o.frequency.setValueAtTime(784,c.currentTime+0.2);
-            g.gain.setValueAtTime(0.3,c.currentTime);g.gain.exponentialRampToValueAtTime(0.01,c.currentTime+0.5);
-            o.start(c.currentTime);o.stop(c.currentTime+0.5);}catch(e){}
-        };
-    })();
-    </script>
-    <meta name="theme-color" content="#075e54">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="EQMS Hub">
-    <style>
-    @media (max-width:768px){
-        .main .block-container{padding:0.3rem!important;}
-        [data-testid="stSidebar"]{min-width:280px!important;}
-        .train-count-card{min-width:60px!important;padding:6px 10px!important;}
-        .train-count-number{font-size:1.3rem!important;}
-        .metric-card h3{font-size:1.6rem!important;}
-        .weather-temp{font-size:2.5rem!important;}
-    }
-    </style>
-    """, height=0)
-        # Solar System Background
+    # Solar System Background
     bg_html = """
     <style>
     .eqms-bg {
@@ -3560,13 +3443,6 @@ def main():
                                             st.session_state.upload_success = True
                                             st.session_state.last_upload_time = format_time()
                                             log_activity(f"✅ {fname} → {save_res['saved']} records")
-                                    st.session_state.audit_log.append({
-                                        "timestamp": format_datetime(),
-                                        "user": st.session_state.username,
-                                        "role": st.session_state.user_role,
-                                        "action": f"📁 Drive Upload: {fname}",
-                                        "ip": "—"
-                                    })
                                         else:
                                             st.error(f"❌ Drive: {drive_res['error']}")
                                             log_activity(f"❌ Drive failed: {drive_res['error'][:40]}")
@@ -3574,13 +3450,6 @@ def main():
                                         st.session_state.upload_success = True
                                         st.session_state.last_upload_time = format_time()
                                         log_activity(f"✅ Text input → {save_res['saved']} records")
-                                    st.session_state.audit_log.append({
-                                        "timestamp": format_datetime(),
-                                        "user": st.session_state.username,
-                                        "role": st.session_state.user_role,
-                                        "action": f"📤 Sidebar Upload: {save_res['saved']} records",
-                                        "ip": "—"
-                                    })
                                     st.session_state.text_input_key += 1
                                     st.session_state.img_uploader_key += 1
                                     st.session_state.audio_uploader_key += 1
@@ -3626,16 +3495,11 @@ def main():
                     st.session_state.upload_success = False
                     st.rerun()
 
-        with st.expander("📋 Activity & Audit Log", expanded=False):
-            # Merge activity_log + audit_log
-            all_logs = st.session_state.activity_log + st.session_state.audit_log
-            all_logs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-            if all_logs:
-                st.caption(f"Total entries: {len(all_logs)}")
-                log_df = pd.DataFrame(all_logs[-50:])
-                st.dataframe(log_df, use_container_width=True, height=250, hide_index=True)
-            else:
-                st.caption("No activity yet")
+        with st.expander("📋 Activity Log", expanded=False):
+            if st.session_state.activity_log:
+                for log in reversed(st.session_state.activity_log[-20:]):
+                    st.caption(f"{log.get('timestamp', '')} — {log.get('action', '')}")
+            else: st.caption("No activity yet")
         st.markdown("---")
 
         st.markdown("### 📑 Select Sheet")
@@ -3690,49 +3554,7 @@ def main():
                 st.session_state.current_page = 1
                 st.rerun()
 
-            # Quick Date Buttons
-            st.markdown("<div style='font-size:0.8rem; color:#94a3b8; margin-bottom:4px;'>⚡ Quick Dates</div>", unsafe_allow_html=True)
-            qd1, qd2, qd3 = st.columns(3)
-            today_dt = datetime.now().date()
-            with qd1:
-                if st.button("📅 Today", use_container_width=True, key="sb_today"):
-                    st.session_state.from_val = today_dt
-                    st.session_state.to_val = today_dt
-                    st.session_state.current_page = 1
-                    st.rerun()
-            with qd2:
-                if st.button("📅 Tomorrow", use_container_width=True, key="sb_tomorrow"):
-                    st.session_state.from_val = today_dt + timedelta(days=1)
-                    st.session_state.to_val = today_dt + timedelta(days=1)
-                    st.session_state.current_page = 1
-                    st.rerun()
-            with qd3:
-                if st.button("📅 Day+2", use_container_width=True, key="sb_day2"):
-                    st.session_state.from_val = today_dt + timedelta(days=2)
-                    st.session_state.to_val = today_dt + timedelta(days=2)
-                    st.session_state.current_page = 1
-                    st.rerun()
-
-            # User info + Logout
-        st.markdown("---")
-        st.markdown(f"<div style='text-align:center;'><div style='font-size:1.1rem;'>👤 <b>{st.session_state.username}</b></div><div style='font-size:0.8rem; color:#94a3b8;'>🛡️ Role: {st.session_state.user_role.upper()}</div></div>", unsafe_allow_html=True)
-        if st.button("🚪 Logout", use_container_width=True, key="logout_btn"):
-            st.session_state.audit_log.append({
-                "timestamp": format_datetime(),
-                "user": st.session_state.username,
-                "role": st.session_state.user_role,
-                "action": "🚪 Logout",
-                "ip": "—"
-            })
-            st.session_state.authenticated = False
-            st.session_state.username = ''
-            st.session_state.user_role = 'viewer'
-            st.rerun()
-
-        # Mute alert toggle
-        st.session_state.data_alert_muted = st.checkbox("🔕 Mute New Data Alert", value=st.session_state.data_alert_muted, key="mute_alert")
-
-        if st.button("🧹 Clear All Filters", use_container_width=True, key="clear_filters_btn"):
+            if st.button("🧹 Clear All Filters", use_container_width=True, key="clear_filters_btn"):
                 st.session_state.pnr_val = ''
                 st.session_state.train_val = ''
                 st.session_state.class_val = ''
@@ -3743,24 +3565,6 @@ def main():
 
     # Load data for selected sheet
     df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
-
-    # Data change detection + alert sound
-    current_count = len(df_raw) if not df_raw.empty else 0
-    if st.session_state.last_data_count > 0 and current_count > st.session_state.last_data_count:
-        new_records = current_count - st.session_state.last_data_count
-        if not st.session_state.data_alert_muted:
-            components.html(f"""
-            <script>if(window.__eqmsAlertSound)window.__eqmsAlertSound();</script>
-            <div style="position:fixed;top:60px;right:20px;z-index:999999;background:linear-gradient(135deg,#16a34a,#22c55e);
-            color:#fff;padding:12px 20px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);
-            font-weight:700;animation:slideIn 0.5s ease-out;">
-            🔔 {new_records} new record(s) detected in {sheet_choice}!
-            </div>
-            <style>@keyframes slideIn{{from{{transform:translateX(100%);opacity:0;}}to{{transform:translateX(0);opacity:1;}}}}</style>
-            """, height=0)
-            st.toast(f"🔔 {new_records} new record(s) in {sheet_choice}!", icon="🚨")
-    st.session_state.last_data_count = current_count
-
     filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
 
     # Apply filters (skip for NOTE sheet)
@@ -3943,35 +3747,6 @@ def main():
                     st.date_input("📅 From DOJ", value=st.session_state.from_val, key="adv_from_doj", format="DD-MM-YYYY")
                 with af7:
                     st.date_input("📅 To DOJ", value=st.session_state.to_val, key="adv_to_doj", format="DD-MM-YYYY")
-
-                # Quick Date Buttons in Advanced Filters
-                st.markdown("<div style='font-size:0.85rem; color:#64748b; margin:8px 0 4px 0;'>⚡ Quick Date Filters</div>", unsafe_allow_html=True)
-                qf1, qf2, qf3, qf4 = st.columns(4)
-                today_dt2 = datetime.now().date()
-                with qf1:
-                    if st.button("📅 Today", use_container_width=True, key="adv_today"):
-                        st.session_state.from_val = today_dt2
-                        st.session_state.to_val = today_dt2
-                        st.session_state.current_page = 1
-                        st.rerun()
-                with qf2:
-                    if st.button("📅 Tomorrow", use_container_width=True, key="adv_tomorrow"):
-                        st.session_state.from_val = today_dt2 + timedelta(days=1)
-                        st.session_state.to_val = today_dt2 + timedelta(days=1)
-                        st.session_state.current_page = 1
-                        st.rerun()
-                with qf3:
-                    if st.button("📅 Day After", use_container_width=True, key="adv_day2"):
-                        st.session_state.from_val = today_dt2 + timedelta(days=2)
-                        st.session_state.to_val = today_dt2 + timedelta(days=2)
-                        st.session_state.current_page = 1
-                        st.rerun()
-                with qf4:
-                    if st.button("🧹 Clear Dates", use_container_width=True, key="adv_clear_dates"):
-                        st.session_state.from_val = None
-                        st.session_state.to_val = None
-                        st.session_state.current_page = 1
-                        st.rerun()
 
                 if st.button("🚀 Apply Filters", use_container_width=True, key="adv_apply"):
                     st.rerun()
@@ -4180,12 +3955,8 @@ def main():
             st.markdown("**⚡ Quick Actions**")
             a1, a2, a3, a4, a5 = st.columns(5)
             with a1:
-                can_edit = st.session_state.user_role in ['editor', 'admin']
-                if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn", disabled=not can_edit):
-                    if not can_edit:
-                        st.error("❌ You need EDITOR or ADMIN role to save edits.")
-                    else:
-                        try:
+                if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn"):
+                    try:
                         gc = init_sheets()
                         sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
                         data_to_update = edited_page.drop(columns=["Select"], errors='ignore')
@@ -4200,13 +3971,6 @@ def main():
                                 sheet.update(range_name, [row_data])
                             st.toast("✅ Saved!", icon="💾")
                             log_activity(f"💾 Saved {len(data_list)} rows in {sheet_choice}")
-                            st.session_state.audit_log.append({
-                                "timestamp": format_datetime(),
-                                "user": st.session_state.username,
-                                "role": st.session_state.user_role,
-                                "action": f"💾 Saved {len(data_list)} rows in {sheet_choice}",
-                                "ip": "—"
-                            })
                             st.cache_data.clear()
                             st.session_state.last_refresh = time.time()
                             time.sleep(0.3)
@@ -4217,12 +3981,8 @@ def main():
                         else: st.error(f"Save error: {e}")
                         log_activity(f"❌ Save: {str(e)[:40]}")
             with a2:
-                can_edit = st.session_state.user_role in ['editor', 'admin']
-                if st.button("➕ Add Row", use_container_width=True, key="add_row_btn", disabled=not can_edit):
-                    if not can_edit:
-                        st.error("❌ You need EDITOR or ADMIN role to add rows.")
-                    else:
-                        try:
+                if st.button("➕ Add Row", use_container_width=True, key="add_row_btn"):
+                    try:
                         gc = init_sheets()
                         sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
                         all_data = sheet.get_all_values()
@@ -4242,12 +4002,8 @@ def main():
                         st.error(f"Add error: {e}")
                         log_activity(f"❌ Add: {str(e)[:40]}")
             with a3:
-                can_edit = st.session_state.user_role in ['editor', 'admin']
                 if selected_sheet_rows:
-                    if st.button("🗑️ Delete", use_container_width=True, key="delete_btn", disabled=not can_edit):
-                        if not can_edit:
-                            st.error("❌ You need EDITOR or ADMIN role to delete.")
-                        else:
+                    if st.button("🗑️ Delete", use_container_width=True, key="delete_btn"):
                         if not st.session_state.delete_confirm:
                             st.session_state.delete_confirm = True
                             st.warning("Confirm delete by clicking again.")
@@ -4260,13 +4016,6 @@ def main():
                                     sheet.delete_rows(row_num)
                                 st.toast(f"✅ Deleted {len(selected_sheet_rows)}", icon="🗑️")
                                 log_activity(f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}")
-                                st.session_state.audit_log.append({
-                                    "timestamp": format_datetime(),
-                                    "user": st.session_state.username,
-                                    "role": st.session_state.user_role,
-                                    "action": f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}",
-                                    "ip": "—"
-                                })
                                 st.session_state.delete_confirm = False
                                 st.cache_data.clear()
                                 st.session_state.last_refresh = time.time()
@@ -4856,29 +4605,13 @@ def main():
         </script>
         """, height=0)
 
-        # WhatsApp Header with Animated Avatar
+        # WhatsApp Header
         st.markdown("""
-        <style>
-        @keyframes avatar-bounce { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);} }
-        @keyframes avatar-glow { 0%,100%{box-shadow:0 0 8px rgba(37,99,235,0.3);} 50%{box-shadow:0 0 20px rgba(37,99,235,0.6);} }
-        .wa-avatar-wrap { position:relative; width:48px; height:48px; }
-        .wa-avatar { width:48px; height:48px; border-radius:50%; background:linear-gradient(135deg,#2563eb,#1d4ed8);
-            display:flex; align-items:center; justify-content:center; font-size:1.6rem;
-            animation:avatar-bounce 2s ease-in-out infinite, avatar-glow 3s ease-in-out infinite;
-            border:2px solid rgba(255,255,255,0.2);
-        }
-        .wa-avatar-dot { position:absolute; bottom:2px; right:2px; width:12px; height:12px;
-            background:#22c55e; border-radius:50%; border:2px solid #075e54;
-        }
-        </style>
         <div class="wa-header">
-            <div class="wa-avatar-wrap">
-                <div class="wa-avatar">🤖</div>
-                <div class="wa-avatar-dot"></div>
-            </div>
+            <div class="wa-header-icon">🚂</div>
             <div>
                 <div class="wa-header-title">TSKEQ Bot</div>
-                <div class="wa-header-sub">🟢 Online — Gemini AI Powered</div>
+                <div class="wa-header-sub">Online — Gemini AI Powered</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -4936,79 +4669,33 @@ def main():
                                 st.error(res["error"])
                             else:
                                 rec_count = res.get('count', 0)
-                                records = res.get('records', [])
-
-                                # ===== DETAILED EXTRACTION REPORT =====
-                                detail_lines = []
-                                detail_lines.append(f"🎯 **Extraction Complete — {rec_count} Record(s) Found**")
-                                detail_lines.append("")
-
-                                for idx, r in enumerate(records, 1):
-                                    detail_lines.append(f"📋 **Record #{idx}**")
-                                    fields = []
-                                    if r.get('PNR'): fields.append(f"🔢 PNR: `{r['PNR']}`")
-                                    if r.get('T_N'): fields.append(f"🚆 Train: `{r['T_N']}`")
-                                    if r.get('CLASS'): fields.append(f"🎫 Class: `{r['CLASS']}`")
-                                    if r.get('DOJ'): fields.append(f"📅 DOJ: `{r['DOJ']}`")
-                                    if r.get('FROM'): fields.append(f"📍 From: `{r['FROM']}`")
-                                    if r.get('TO'): fields.append(f"📍 To: `{r['TO']}`")
-                                    if r.get('BOARDING'): fields.append(f"🚉 Boarding: `{r['BOARDING']}`")
-                                    if r.get('PASS_NAME'): fields.append(f"👤 Name: `{r['PASS_NAME']}`")
-                                    if r.get('PASS_PH'): fields.append(f"📱 Phone: `{r['PASS_PH']}`")
-                                    if r.get('T_BERTHS'): fields.append(f"🛏️ Berths: `{r['T_BERTHS']}`")
-                                    if r.get('PURPOSE'): fields.append(f"📝 Purpose: `{r['PURPOSE']}`")
-                                    if r.get('ADDRESS'): fields.append(f"🏠 Address: `{r['ADDRESS'][:50]}...`" if len(str(r.get('ADDRESS',''))) > 50 else f"🏠 Address: `{r['ADDRESS']}`")
-                                    if r.get('DIARY_NO'): fields.append(f"📘 Diary: `{r['DIARY_NO']}`")
-                                    if r.get('RECOMMENDATION'): fields.append(f"👔 Recommendation: `{r['RECOMMENDATION']}`")
-                                    if r.get('DESIGNATION'): fields.append(f"🎖️ Designation: `{r['DESIGNATION']}`")
-                                    if r.get('VIP_STATUS'): fields.append(f"⭐ VIP: `{r['VIP_STATUS']}`")
-                                    if r.get('WARRANT_NO'): fields.append(f"📄 Warrant: `{r['WARRANT_NO']}`")
-                                    if r.get('RAILWAY_ZONE'): fields.append(f"🌐 Zone: `{r['RAILWAY_ZONE']}`")
-                                    if r.get('PREFERENCE'): fields.append(f"⚙️ Preference: `{r['PREFERENCE']}`")
-                                    if r.get('APPLICATION_DATE'): fields.append(f"📆 App Date: `{r['APPLICATION_DATE']}`")
-                                    detail_lines.append("  " + " | ".join(fields))
-                                    detail_lines.append("")
-
-                                # Summary table
-                                detail_lines.append("📊 **Quick Summary Table:**")
-                                detail_lines.append("")
-                                detail_lines.append("| # | PNR | Train | Class | DOJ | From | To | Name | Berths | VIP |")
-                                detail_lines.append("|---|-----|-------|-------|-----|------|----|------|--------|-----|")
-                                for idx, r in enumerate(records[:10], 1):
-                                    detail_lines.append(f"| {idx} | {r.get('PNR','-')} | {r.get('T_N','-')} | {r.get('CLASS','-')} | {r.get('DOJ','-')} | {r.get('FROM','-')} | {r.get('TO','-')} | {r.get('PASS_NAME','-')[:15]} | {r.get('T_BERTHS','-')} | {r.get('VIP_STATUS','-')} |")
-                                if len(records) > 10:
-                                    detail_lines.append(f"| ... | *+{len(records)-10} more* | | | | | | | | |")
-                                detail_lines.append("")
-
-                                success_msg = chr(10).join(detail_lines)
-
-                                # ===== SAVE TO SHEET =====
+                                success_msg = f"✅ Extracted **{rec_count}** record(s) from your upload."
+                                success_msg += chr(10) + chr(10)
+                                if res.get('records'):
+                                    preview_lines = []
+                                    for r in res['records'][:5]:
+                                        preview_lines.append(f"• PNR: `{r.get('PNR','')}` | Train: `{r.get('T_N','')}` | DOJ: `{r.get('DOJ','')}` | Name: `{r.get('PASS_NAME','')}` | Class: `{r.get('CLASS','')}`")
+                                    success_msg += "**Preview:**"
+                                    success_msg += chr(10) + chr(10)
+                                    success_msg += chr(10).join(preview_lines)
                                 try:
                                     gc = init_sheets()
                                     eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
-                                    save_res = save_to_sheet(eq_sheet, records)
+                                    save_res = save_to_sheet(eq_sheet, res['records'])
                                     if "error" in save_res:
                                         success_msg += chr(10) + chr(10) + f"⚠️ **Sheet Save Error:** {save_res['error']}"
                                     else:
-                                        success_msg += chr(10) + chr(10) + f"💾 **Saved to EQ Sheet:** `{save_res['saved']}` new records, `{save_res['skipped']}` duplicates skipped"
+                                        success_msg += chr(10) + chr(10) + f"💾 **Saved to EQ Sheet:** {save_res['saved']} new, {save_res['skipped']} skipped"
                                         if up_mode != "📝 Text":
                                             drive_res = upload_to_drive(fbytes, fname, mime)
                                             if drive_res['success']:
-                                                success_msg += chr(10) + f"📁 **Drive File:** [{fname}]({drive_res.get('view_url')})"
+                                                success_msg += chr(10) + chr(10) + f"📁 **Drive:** [{fname}]({drive_res.get('view_url')})"
                                         st.cache_data.clear()
                                         st.session_state.last_refresh = time.time()
                                 except Exception as e:
                                     success_msg += chr(10) + chr(10) + f"⚠️ **Sheet Error:** {str(e)}"
-
                                 st.session_state.messages.append({"role": "assistant", "content": success_msg})
-                                st.session_state.audit_log.append({
-                                    "timestamp": format_datetime(),
-                                    "user": st.session_state.username,
-                                    "role": st.session_state.user_role,
-                                    "action": f"📎 Chat Upload: {rec_count} records processed",
-                                    "ip": "—"
-                                })
-                                st.success(f"✅ Processed & Saved {rec_count} records")
+                                st.success(f"Processed {rec_count} records")
                                 time.sleep(0.5)
                                 st.rerun()
                         except Exception as e:
