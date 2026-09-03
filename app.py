@@ -3410,7 +3410,7 @@ def main():
             text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
         }
         </style>
-        """, unsafe_allow_html=True)e)
+        """, unsafe_allow_html=True)
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
