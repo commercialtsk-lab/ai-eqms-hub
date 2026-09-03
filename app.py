@@ -3560,13 +3560,13 @@ def main():
                                             st.session_state.upload_success = True
                                             st.session_state.last_upload_time = format_time()
                                             log_activity(f"✅ {fname} → {save_res['saved']} records")
-                                            st.session_state.audit_log.append({
-                                                "timestamp": format_datetime(),
-                                                "user": st.session_state.username,
-                                                "role": st.session_state.user_role,
-                                                "action": f"📁 Drive Upload: {fname}",
-                                                "ip": "—"
-                                            })
+                                    st.session_state.audit_log.append({
+                                        "timestamp": format_datetime(),
+                                        "user": st.session_state.username,
+                                        "role": st.session_state.user_role,
+                                        "action": f"📁 Drive Upload: {fname}",
+                                        "ip": "—"
+                                    })
                                         else:
                                             st.error(f"❌ Drive: {drive_res['error']}")
                                             log_activity(f"❌ Drive failed: {drive_res['error'][:40]}")
@@ -3574,13 +3574,13 @@ def main():
                                         st.session_state.upload_success = True
                                         st.session_state.last_upload_time = format_time()
                                         log_activity(f"✅ Text input → {save_res['saved']} records")
-                                        st.session_state.audit_log.append({
-                                            "timestamp": format_datetime(),
-                                            "user": st.session_state.username,
-                                            "role": st.session_state.user_role,
-                                            "action": f"📤 Sidebar Upload: {save_res['saved']} records",
-                                            "ip": "—"
-                                        })
+                                    st.session_state.audit_log.append({
+                                        "timestamp": format_datetime(),
+                                        "user": st.session_state.username,
+                                        "role": st.session_state.user_role,
+                                        "action": f"📤 Sidebar Upload: {save_res['saved']} records",
+                                        "ip": "—"
+                                    })
                                     st.session_state.text_input_key += 1
                                     st.session_state.img_uploader_key += 1
                                     st.session_state.audio_uploader_key += 1
@@ -4186,36 +4186,36 @@ def main():
                         st.error("❌ You need EDITOR or ADMIN role to save edits.")
                     else:
                         try:
-                            gc = init_sheets()
-                            sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                            data_to_update = edited_page.drop(columns=["Select"], errors='ignore')
-                            data_list = data_to_update.values.tolist()
-                            if data_list and sheet_rows:
-                                for i, row_data in enumerate(data_list):
-                                    sheet_row_num = sheet_rows[i]
-                                    row_data = [str(x) if pd.notna(x) else '' for x in row_data]
-                                    num_cols = len(row_data)
-                                    col_letter = col_index_to_letter(num_cols)
-                                    range_name = f"A{sheet_row_num}:{col_letter}{sheet_row_num}"
-                                    sheet.update(range_name, [row_data])
-                                st.toast("✅ Saved!", icon="💾")
-                                log_activity(f"💾 Saved {len(data_list)} rows in {sheet_choice}")
-                                st.session_state.audit_log.append({
-                                    "timestamp": format_datetime(),
-                                    "user": st.session_state.username,
-                                    "role": st.session_state.user_role,
-                                    "action": f"💾 Saved {len(data_list)} rows in {sheet_choice}",
-                                    "ip": "—"
-                                })
-                                st.cache_data.clear()
-                                st.session_state.last_refresh = time.time()
-                                time.sleep(0.3)
-                                st.rerun()
-                            else: st.warning("Nothing to save")
-                        except Exception as e:
-                            if "429" in str(e): st.error("Write quota exceeded. Wait 1 minute.")
-                            else: st.error(f"Save error: {e}")
-                            log_activity(f"❌ Save: {str(e)[:40]}")
+                        gc = init_sheets()
+                        sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                        data_to_update = edited_page.drop(columns=["Select"], errors='ignore')
+                        data_list = data_to_update.values.tolist()
+                        if data_list and sheet_rows:
+                            for i, row_data in enumerate(data_list):
+                                sheet_row_num = sheet_rows[i]
+                                row_data = [str(x) if pd.notna(x) else '' for x in row_data]
+                                num_cols = len(row_data)
+                                col_letter = col_index_to_letter(num_cols)
+                                range_name = f"A{sheet_row_num}:{col_letter}{sheet_row_num}"
+                                sheet.update(range_name, [row_data])
+                            st.toast("✅ Saved!", icon="💾")
+                            log_activity(f"💾 Saved {len(data_list)} rows in {sheet_choice}")
+                            st.session_state.audit_log.append({
+                                "timestamp": format_datetime(),
+                                "user": st.session_state.username,
+                                "role": st.session_state.user_role,
+                                "action": f"💾 Saved {len(data_list)} rows in {sheet_choice}",
+                                "ip": "—"
+                            })
+                            st.cache_data.clear()
+                            st.session_state.last_refresh = time.time()
+                            time.sleep(0.3)
+                            st.rerun()
+                        else: st.warning("Nothing to save")
+                    except Exception as e:
+                        if "429" in str(e): st.error("Write quota exceeded. Wait 1 minute.")
+                        else: st.error(f"Save error: {e}")
+                        log_activity(f"❌ Save: {str(e)[:40]}")
             with a2:
                 can_edit = st.session_state.user_role in ['editor', 'admin']
                 if st.button("➕ Add Row", use_container_width=True, key="add_row_btn", disabled=not can_edit):
@@ -4223,24 +4223,24 @@ def main():
                         st.error("❌ You need EDITOR or ADMIN role to add rows.")
                     else:
                         try:
-                            gc = init_sheets()
-                            sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                            all_data = sheet.get_all_values()
-                            config = SHEET_CONFIG[sheet_choice]
-                            start_row = config["start_row"]
-                            num_cols = len(all_data[0]) if all_data else 1
-                            blank_row = [''] * num_cols
-                            if len(all_data) >= start_row: blank_row[0] = len(all_data) - start_row + 2
-                            sheet.append_row(blank_row)
-                            st.toast("✅ Row added", icon="➕")
-                            log_activity(f"➕ Added row in {sheet_choice}")
-                            st.cache_data.clear()
-                            st.session_state.last_refresh = time.time()
-                            time.sleep(0.3)
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Add error: {e}")
-                            log_activity(f"❌ Add: {str(e)[:40]}")
+                        gc = init_sheets()
+                        sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                        all_data = sheet.get_all_values()
+                        config = SHEET_CONFIG[sheet_choice]
+                        start_row = config["start_row"]
+                        num_cols = len(all_data[0]) if all_data else 1
+                        blank_row = [''] * num_cols
+                        if len(all_data) >= start_row: blank_row[0] = len(all_data) - start_row + 2
+                        sheet.append_row(blank_row)
+                        st.toast("✅ Row added", icon="➕")
+                        log_activity(f"➕ Added row in {sheet_choice}")
+                        st.cache_data.clear()
+                        st.session_state.last_refresh = time.time()
+                        time.sleep(0.3)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Add error: {e}")
+                        log_activity(f"❌ Add: {str(e)[:40]}")
             with a3:
                 can_edit = st.session_state.user_role in ['editor', 'admin']
                 if selected_sheet_rows:
@@ -4248,33 +4248,33 @@ def main():
                         if not can_edit:
                             st.error("❌ You need EDITOR or ADMIN role to delete.")
                         else:
-                            if not st.session_state.delete_confirm:
-                                st.session_state.delete_confirm = True
-                                st.warning("Confirm delete by clicking again.")
+                        if not st.session_state.delete_confirm:
+                            st.session_state.delete_confirm = True
+                            st.warning("Confirm delete by clicking again.")
+                            st.rerun()
+                        else:
+                            try:
+                                gc = init_sheets()
+                                sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                                for row_num in sorted(selected_sheet_rows, reverse=True):
+                                    sheet.delete_rows(row_num)
+                                st.toast(f"✅ Deleted {len(selected_sheet_rows)}", icon="🗑️")
+                                log_activity(f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}")
+                                st.session_state.audit_log.append({
+                                    "timestamp": format_datetime(),
+                                    "user": st.session_state.username,
+                                    "role": st.session_state.user_role,
+                                    "action": f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}",
+                                    "ip": "—"
+                                })
+                                st.session_state.delete_confirm = False
+                                st.cache_data.clear()
+                                st.session_state.last_refresh = time.time()
+                                time.sleep(0.3)
                                 st.rerun()
-                            else:
-                                try:
-                                    gc = init_sheets()
-                                    sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                                    for row_num in sorted(selected_sheet_rows, reverse=True):
-                                        sheet.delete_rows(row_num)
-                                    st.toast(f"✅ Deleted {len(selected_sheet_rows)}", icon="🗑️")
-                                    log_activity(f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}")
-                                    st.session_state.audit_log.append({
-                                        "timestamp": format_datetime(),
-                                        "user": st.session_state.username,
-                                        "role": st.session_state.user_role,
-                                        "action": f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}",
-                                        "ip": "—"
-                                    })
-                                    st.session_state.delete_confirm = False
-                                    st.cache_data.clear()
-                                    st.session_state.last_refresh = time.time()
-                                    time.sleep(0.3)
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Delete error: {e}")
-                                    log_activity(f"❌ Delete: {str(e)[:40]}")
+                            except Exception as e:
+                                st.error(f"Delete error: {e}")
+                                log_activity(f"❌ Delete: {str(e)[:40]}")
                 else:
                     st.button("🗑️ Delete", disabled=True, use_container_width=True, key="delete_disabled_btn")
                     st.session_state.delete_confirm = False
@@ -4873,7 +4873,7 @@ def main():
         </style>
         <div class="wa-header">
             <div class="wa-avatar-wrap">
-                <div class="wa-avatar">🚂</div>
+                <div class="wa-avatar">🤖</div>
                 <div class="wa-avatar-dot"></div>
             </div>
             <div>
