@@ -117,6 +117,9 @@ defaults = {
     'rows_per_page': 25, 'dashboard_sheet': 'EQ', 'adv_filters': {},
     'weather_lat': None, 'weather_lon': None, 'weather_location_name': None,
     'pnr_last_checked': None,
+    # Auth & Audit
+    'authenticated': False, 'username': '', 'user_role': 'viewer',
+    'audit_log': [], 'last_data_count': 0, 'data_alert_muted': False,
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -254,6 +257,103 @@ def col_index_to_letter(idx):
         result = chr(65 + remainder) + result
     return result
 
+# =====================================================================
+# User Management Functions
+# =====================================================================
+def load_users():
+    """Load all users from USERS sheet."""
+    try:
+        gc = init_sheets()
+        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
+        data = sheet.get_all_values()
+        if len(data) < 2:
+            return pd.DataFrame()
+        headers = data[0]
+        rows = data[1:]
+        if not rows:
+            return pd.DataFrame()
+        df = pd.DataFrame(rows, columns=headers)
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+def get_user_status(username):
+    """Get role and status for a user. Returns (role, status) or (None, None)."""
+    df = load_users()
+    if df.empty:
+        return None, None
+    user = df[df['NAME'].astype(str).str.lower() == str(username).lower().strip()]
+    if user.empty:
+        return None, None
+    return user.iloc[0].get('ROLE', 'viewer'), user.iloc[0].get('STATUS', 'pending')
+
+def save_user(username, role='viewer', status='pending'):
+    """Save or update a user in USERS sheet."""
+    try:
+        gc = init_sheets()
+        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
+        df = load_users()
+        if not df.empty and str(username).lower().strip() in df['NAME'].astype(str).str.lower().str.strip().values:
+            row_idx = df[df['NAME'].astype(str).str.lower().str.strip() == str(username).lower().strip()].index[0] + 2
+            sheet.update_cell(row_idx, 2, role)
+            sheet.update_cell(row_idx, 3, status)
+            sheet.update_cell(row_idx, 4, format_datetime())
+        else:
+            sheet.append_row([username.strip(), role, status, format_datetime(), format_datetime()])
+        return True
+    except Exception as e:
+        return False
+
+def update_user_activity(username):
+    """Update last active timestamp for user."""
+    try:
+        gc = init_sheets()
+        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
+        df = load_users()
+        if not df.empty:
+            mask = df['NAME'].astype(str).str.lower().str.strip() == str(username).lower().strip()
+            if mask.any():
+                row_idx = mask.idxmax() + 2
+                sheet.update_cell(row_idx, 4, format_datetime())
+    except Exception:
+        pass
+
+def get_all_online_users():
+    """Get all currently active users (active within last 5 minutes)."""
+    try:
+        df = load_users()
+        if df.empty:
+            return {}
+        now = now_ist()
+        cutoff = now - timedelta(minutes=5)
+        online = {}
+        for _, row in df.iterrows():
+            status = str(row.get('STATUS', '')).lower()
+            if status == 'active':
+                try:
+                    last = datetime.strptime(str(row.get('LAST_ACTIVE', '')), "%d-%m-%Y %H:%M:%S")
+                    if last >= cutoff:
+                        online[row['NAME']] = {
+                            'role': row.get('ROLE', 'viewer'),
+                            'last_seen': str(row.get('LAST_ACTIVE', ''))
+                        }
+                except Exception:
+                    pass
+        return online
+    except Exception:
+        return {}
+
+def should_trigger_gemini(text):
+    """Check if message mentions Gemini/Bot to trigger AI response."""
+    text_lower = str(text).lower()
+    triggers = [
+        'gemini', '@gemini', 'bot', '@bot', 'tskeq bot', 'ai', '@ai',
+        'hey gemini', 'hello gemini', 'hi gemini', 'ok gemini', 'gemini ji',
+        'gemini bhai', 'gemini please', 'gemini help', 'gemini karo',
+        'hey bot', 'hello bot', 'hi bot', 'ok bot'
+    ]
+    return any(t in text_lower for t in triggers)
+
 def log_activity(action: str):
     st.session_state.activity_log.append({'timestamp': format_time(), 'action': action})
     if len(st.session_state.activity_log) > 50:
@@ -305,7 +405,9 @@ SHEET_CONFIG = {
     "DATA2": {"start_row": 6, "pnr_col": 7, "train_col": 1, "class_col": 2, "from_col": 10, "to_col": 11, "berth_col": 5, "doj_col": 12, "headings": EQ_HEADINGS},
 
     "EMAIL_DATA": {"start_row": 2, "pnr_col": 6, "train_col": 8, "class_col": 12, "from_col": 9, "to_col": 10, "berth_col": 15, "doj_col": 11, "headings": EQ_HEADINGS},
-    "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": []}
+    "NOTE": {"start_row": 2, "pnr_col": None, "train_col": 0, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": []},
+    "CHAT": {"start_row": 2, "pnr_col": None, "train_col": None, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": ['TIMESTAMP', 'USERNAME', 'ROLE', 'MESSAGE', 'TYPE', 'META']},
+    "USERS": {"start_row": 2, "pnr_col": None, "train_col": None, "class_col": None, "from_col": None, "to_col": None, "berth_col": None, "doj_col": None, "headings": ['NAME', 'ROLE', 'STATUS', 'LAST_ACTIVE', 'JOINED_AT']},
 }
 
 # =====================================================================
@@ -348,6 +450,168 @@ def load_sheet_data_cached(sheet_name, sheet_id):
 # =====================================================================
 # Smart Detection Functions
 # =====================================================================
+
+# =====================================================================
+# Chat Persistence (Shared Group Chat via Sheet)
+# =====================================================================
+def load_chat_history(limit=200):
+    """Load chat messages from CHAT sheet — shared across all users."""
+    try:
+        gc = init_sheets()
+        chat_sheet = gc.open_by_key(SHEET_ID).worksheet("CHAT")
+        all_data = chat_sheet.get_all_values()
+        if len(all_data) < 2: return []
+        rows = all_data[1:]
+        messages = []
+        for row in rows[-limit:]:
+            if len(row) >= 5:
+                messages.append({
+                    'timestamp': row[0] if len(row) > 0 else '',
+                    'username': row[1] if len(row) > 1 else 'Unknown',
+                    'role': row[2] if len(row) > 2 else 'viewer',
+                    'message': row[3] if len(row) > 3 else '',
+                    'type': row[4] if len(row) > 4 else 'user',
+                    'meta': row[5] if len(row) > 5 else ''
+                })
+        return messages
+    except Exception as e:
+        return []
+
+def save_chat_message(username, role, message, msg_type='user', meta=''):
+    """Save a message to CHAT sheet."""
+    try:
+        gc = init_sheets()
+        chat_sheet = gc.open_by_key(SHEET_ID).worksheet("CHAT")
+        timestamp = format_datetime()
+        chat_sheet.append_row([timestamp, username, role, message, msg_type, meta])
+        return True
+    except Exception as e:
+        return False
+
+def get_online_users():
+    """Get recently active users from chat + activity log."""
+    try:
+        gc = init_sheets()
+        chat_sheet = gc.open_by_key(SHEET_ID).worksheet("CHAT")
+        all_data = chat_sheet.get_all_values()
+        if len(all_data) < 2: return {}
+        now = now_ist()
+        cutoff = now - timedelta(minutes=15)
+        users = {}
+        for row in all_data[1:][-100:]:
+            if len(row) >= 3:
+                try:
+                    ts = datetime.strptime(row[0], "%d-%m-%Y %H:%M:%S")
+                    if ts >= cutoff:
+                        users[row[1]] = {'role': row[2], 'last_seen': row[0]}
+                except: pass
+        return users
+    except:
+        return {}
+
+def post_system_alert(alert_text):
+    """Post a system alert to group chat."""
+    return save_chat_message('TSKEQ Bot', 'admin', alert_text, 'alert', '')
+
+def parse_chat_command(text):
+    """Parse WhatsApp-style commands from chat."""
+    text_lower = str(text).lower().strip()
+
+    # PDF commands
+    pdf_train = re.search(r'(?:pdf|report)\s+(?:for\s+)?(\d{3,5})', text_lower)
+    if pdf_train:
+        return {'action': 'pdf_train', 'train': pdf_train.group(1)}
+
+    if any(k in text_lower for k in ['today pdf', 'aj ka pdf', 'aaj ka pdf', 'today report']):
+        return {'action': 'pdf_today'}
+
+    if any(k in text_lower for k in ['full pdf', 'all pdf', 'complete pdf', 'sara pdf']):
+        return {'action': 'pdf_full'}
+
+    # Sheet link
+    if any(k in text_lower for k in ['sheet link', 'google sheet', 'spreadsheet link']):
+        return {'action': 'sheet_link'}
+
+    # EQ List by train
+    eq_match = re.search(r'(\d{3,5})\s*(?:eq|quota|list)', text_lower)
+    if eq_match:
+        return {'action': 'eq_list', 'train': eq_match.group(1)}
+
+    # Charting time
+    chart_match = re.search(r'chart(?:ing)?\s+(?:time|status)\s+(?:for\s+)?(\d{3,5})', text_lower)
+    if chart_match:
+        return {'action': 'chart_time', 'train': chart_match.group(1)}
+
+    # PNR status
+    pnr_match = re.search(r'pnr\s*(\d{10})', text_lower)
+    if pnr_match:
+        return {'action': 'pnr_status', 'pnr': pnr_match.group(1)}
+
+    # Live train
+    live_match = re.search(r'live\s+(?:status\s+)?(\d{3,5})', text_lower)
+    if live_match:
+        return {'action': 'live_train', 'train': live_match.group(1)}
+
+    # Weather
+    weather_match = re.search(r'weather\s+(?:of\s+)?(.+)', text_lower)
+    if weather_match:
+        return {'action': 'weather', 'city': weather_match.group(1).strip()}
+
+    return {'action': 'chat', 'text': text}
+
+def generate_train_pdf(train_number, sheet_name="EQ"):
+    """Generate PDF for a specific train from EQ sheet."""
+    try:
+        df = load_sheet_data_cached(sheet_name, SHEET_ID)
+        if df.empty: return None, "No data in sheet"
+        config = SHEET_CONFIG.get(sheet_name, {})
+        train_col_idx = config.get('train_col')
+        if train_col_idx is None or train_col_idx >= len(df.columns):
+            return None, "Train column not found"
+        train_col = df.columns[train_col_idx]
+        filtered = df[df[train_col].astype(str).str.contains(str(train_number), case=False, na=False)]
+        if filtered.empty:
+            return None, "No records found for train " + str(train_number)
+        pdf_bytes = generate_pdf(filtered, "Train " + str(train_number) + " - " + sheet_name, full=True)
+        return pdf_bytes, None
+    except Exception as e:
+        return None, str(e)
+
+def generate_today_pdf(sheet_name="EQ"):
+    """Generate PDF for today's DOJ records."""
+    try:
+        df = load_sheet_data_cached(sheet_name, SHEET_ID)
+        if df.empty: return None, "No data"
+        config = SHEET_CONFIG.get(sheet_name, {})
+        doj_col_idx = config.get('doj_col')
+        if doj_col_idx is None or doj_col_idx >= len(df.columns):
+            return None, "DOJ column not found"
+        doj_col = df.columns[doj_col_idx]
+        today_str = now_ist().strftime("%d-%m-%Y")
+        filtered = df[df[doj_col].astype(str).str.contains(today_str, case=False, na=False)]
+        if filtered.empty:
+            return None, "No records for today (" + today_str + ")"
+        pdf_bytes = generate_pdf(filtered, "Today " + today_str + " - " + sheet_name, full=True)
+        return pdf_bytes, None
+    except Exception as e:
+        return None, str(e)
+
+def check_sheet_alerts():
+    """Check for new data in EQ sheet and return alerts."""
+    try:
+        gc = init_sheets()
+        eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
+        all_data = eq_sheet.get_all_values()
+        total = max(0, len(all_data) - 4)
+        last_count = st.session_state.get('last_alert_count', 0)
+        if total > last_count and last_count > 0:
+            new_count = total - last_count
+            st.session_state.last_alert_count = total
+            return "🚨 " + str(new_count) + " new record(s) added to EQ sheet! Total: " + str(total)
+        st.session_state.last_alert_count = total
+        return None
+    except:
+        return None
 def smart_detect_warrant(text):
     if not text: return {'warrant': '', 'found': False}
     text = str(text).upper()
@@ -717,6 +981,123 @@ def get_sheet_context():
         return "Sheet data temporarily unavailable."
 
 # =====================================================================
+# Time-Based Chat Auto-Messages
+# =====================================================================
+def get_time_based_chat_message():
+    """Generate a time-based automatic message for chat."""
+    hour = now_ist().hour
+    if 5 <= hour < 12:
+        greeting = "🌅 Good Morning"
+        tip = "☀️ Start your day with a fresh look at the EQ sheet!"
+    elif 12 <= hour < 16:
+        greeting = "🌤️ Good Afternoon"
+        tip = "📊 Mid-day check: Review pending EQ requests."
+    elif 16 <= hour < 21:
+        greeting = "🌆 Good Evening"
+        tip = "🌙 Evening roundup: Check tomorrow's charting times."
+    else:
+        greeting = "🌙 Good Night"
+        tip = "💤 Rest well! Auto-sync is running in background."
+
+    # Get sheet stats
+    try:
+        gc = init_sheets()
+        eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
+        all_data = eq_sheet.get_all_values()
+        total_eq = max(0, len(all_data) - 4)
+
+        note_sheet = gc.open_by_key(SHEET_ID).worksheet("NOTE")
+        note_data = note_sheet.get_all_values()
+        note_trains = [row[0] for row in note_data[1:] if row and row[0].strip()] if len(note_data) > 1 else []
+
+        data_sheet = gc.open_by_key(SHEET_ID).worksheet("DATA")
+        data_all = data_sheet.get_all_values()
+        total_data = max(0, len(data_all) - 3)
+
+        msg = f"""{greeting} Team! {tip}
+
+📋 **Live Sheet Summary** ({format_datetime()})
+━━━━━━━━━━━━━━━━━━━━━━━
+🚂 **EQ Sheet**: {total_eq} active records
+📁 **DATA Sheet**: {total_data} archived records
+📋 **NOTE Trains**: {len(note_trains)} trains monitored
+━━━━━━━━━━━━━━━━━━━━━━━
+💡 *Tip: Type "today pdf" or "15909 eq" for quick reports*
+"""
+    except Exception:
+        msg = f"""{greeting} Team! {tip}
+
+📋 **Sheet Summary** ({format_datetime()})
+━━━━━━━━━━━━━━━━━━━━━━━
+🚂 EQ Sheet: Data available
+💡 *Tip: Type "today pdf" or "15909 eq" for quick reports*
+━━━━━━━━━━━━━━━━━━━━━━━
+"""
+    return msg
+
+def get_sheet_quick_stats():
+    """Get quick stats for chat auto-messages."""
+    try:
+        gc = init_sheets()
+        eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
+        all_data = eq_sheet.get_all_values()
+        total = max(0, len(all_data) - 4)
+
+        # Count today's records
+        today_str = now_ist().strftime("%d-%m-%Y")
+        today_count = 0
+        for row in all_data[4:]:
+            if len(row) > 7 and today_str in str(row[7]):
+                today_count += 1
+
+        # Count by class
+        class_counts = {}
+        for row in all_data[4:]:
+            if len(row) > 6:
+                cls = str(row[6]).strip().upper()
+                if cls:
+                    class_counts[cls] = class_counts.get(cls, 0) + 1
+
+        top_class = max(class_counts, key=class_counts.get) if class_counts else "N/A"
+
+        return {
+            'total': total,
+            'today': today_count,
+            'top_class': top_class,
+            'classes': class_counts
+        }
+    except Exception:
+        return {'total': 0, 'today': 0, 'top_class': 'N/A', 'classes': {}}
+
+def post_time_based_auto_message():
+    """Post automatic time-based message to chat if enough time has passed."""
+    try:
+        gc = init_sheets()
+        chat_sheet = gc.open_by_key(SHEET_ID).worksheet("CHAT")
+        all_data = chat_sheet.get_all_values()
+
+        # Check last auto-message time
+        last_auto_time = None
+        for row in reversed(all_data[1:]):
+            if len(row) >= 5 and row[4] == 'auto':
+                try:
+                    last_auto_time = datetime.strptime(row[0], "%d-%m-%Y %H:%M:%S")
+                    break
+                except Exception:
+                    continue
+
+        now = now_ist()
+        # Post every 4 hours
+        if last_auto_time is None or (now - last_auto_time).total_seconds() > 14400:
+            msg = get_time_based_chat_message()
+            save_chat_message('TSKEQ Bot', 'admin', msg, 'auto', '')
+            return True
+    except Exception:
+        pass
+    return False
+
+
+# =====================================================================
 # Chat with Gemini
 # =====================================================================
 def chat_with_gemini(user_message, chat_history):
@@ -739,13 +1120,17 @@ Instructions:
 Previous conversation:
 """
         for msg in chat_history[-30:]:
-            if msg['role'] == 'user': system_prompt += f"User: {msg['content']}\n"
-            else: system_prompt += f"Assistant: {msg['content']}\n"
+            msg_type = msg.get('type', 'user')
+            msg_text = msg.get('message', '')
+            if msg_type == 'user':
+                system_prompt += f"User: {msg_text}\n"
+            else:
+                system_prompt += f"Assistant: {msg_text}\n"
         system_prompt += f"\nUser: {user_message}\nAssistant:"
         response = model.generate_content(system_prompt)
         return response.text
     except Exception as e:
-        return f"⚠️ Error: Could not process your request. Please try again later. ({str(e)})"
+        return f"⚠️ Gemini Error: {str(e)[:200]}. Please try again or check your API key."
 
 # =====================================================================
 # Weather Functions
@@ -1020,6 +1405,43 @@ def get_full_schedule(train_number):
                 or s.get('STA') == 'Source' or s.get('STD') == 'Dest']
     except Exception: return []
 
+
+# =====================================================================
+# Charting Time Calculator
+# =====================================================================
+def get_charting_time(train_number, doj_str):
+    """Calculate charting time (usually 4 hours before origin departure)"""
+    if not train_number or not doj_str: return "—"
+    try:
+        schedule = get_full_schedule(train_number)
+        if not schedule: return "—"
+        origin = schedule[0]
+        origin_dept = origin.get('STD', '')
+        if not origin_dept or origin_dept in ['N/A', 'Dest', 'Source', '']:
+            return "—"
+        doj_dt = datetime.strptime(doj_str, "%d-%m-%Y")
+        time_parts = origin_dept.split(':')
+        if len(time_parts) >= 2:
+            dept_hour = int(time_parts[0])
+            dept_min = int(time_parts[1])
+            dept_dt = doj_dt.replace(hour=dept_hour, minute=dept_min, second=0, microsecond=0)
+            chart_dt = dept_dt - timedelta(hours=4)
+            now = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+            now_full = now_ist().replace(tzinfo=None)
+            time_left = chart_dt - now_full
+            if time_left.total_seconds() <= 0:
+                return "⚠️ Charted"
+            hours = int(time_left.total_seconds() // 3600)
+            mins = int((time_left.total_seconds() % 3600) // 60)
+            days = hours // 24
+            rem_hours = hours % 24
+            if days > 0:
+                return f"⏰ {days}d {rem_hours}h left"
+            else:
+                return f"⏰ {hours}h {mins}m left"
+        return "—"
+    except Exception:
+        return "—"
 def get_pnr_status(pnr):
     if not NTES_AVAILABLE: return {"error": "NTES library not installed"}
     try:
@@ -1905,6 +2327,109 @@ def apply_theme(theme, custom_bg=None, custom_text=None):
         }}
     </style>
     """
+    css += """
+        /* === CONTEXT-AWARE TEXT VISIBILITY FIX === */
+        /* Only force white text on KNOWN dark backgrounds */
+
+        /* Chat tab — aquarium background (dark) */
+        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] p,
+        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] div,
+        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] span {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        }
+        [data-testid="stMain"] .stChatInput input {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+        }
+        [data-testid="stMain"] .stChatInput input::placeholder {
+            color: rgba(255,255,255,0.7) !important;
+        }
+        /* Chat tab buttons on dark bg */
+        [data-testid="stMain"] .element-container:has(.stChatMessage) ~ .element-container .stButton > button,
+        [data-testid="stMain"] .stChatMessage ~ .element-container .stButton > button {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 4px rgba(0,0,0,0.9) !important;
+            background: rgba(255,255,255,0.12) !important;
+            border: 1px solid rgba(255,255,255,0.3) !important;
+        }
+
+        /* Weather tab — animated background (dark/variable) */
+        [data-testid="stMain"] .weather-main-card *,
+        [data-testid="stMain"] .weather-detail-item * {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.9) !important;
+        }
+
+        /* Railway tab — video background (dark) */
+        [data-testid="stMain"] .railway-video-bg ~ * h1,
+        [data-testid="stMain"] .railway-video-bg ~ * h2,
+        [data-testid="stMain"] .railway-video-bg ~ * h3,
+        [data-testid="stMain"] .railway-video-bg ~ * .stMarkdown p {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 2px 6px rgba(0,0,0,0.9) !important;
+        }
+
+        /* Expander headers & captions — always on light/transparent cards */
+        .streamlit-expanderHeader, .streamlit-expanderHeader p, .streamlit-expanderHeader span {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+        }
+        .stCaption, [data-testid="stCaption"] {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+        }
+
+        /* Form inputs — white bg = black text */
+        [data-testid="stMain"] .stTextInput input,
+        [data-testid="stMain"] .stSelectbox > div > div > div,
+        [data-testid="stMain"] .stDateInput input,
+        [data-testid="stMain"] .stNumberInput input,
+        [data-testid="stMain"] .stTextArea textarea {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+            background-color: rgba(255,255,255,0.95) !important;
+        }
+        [data-testid="stMain"] .stTextInput label,
+        [data-testid="stMain"] .stSelectbox label,
+        [data-testid="stMain"] .stDateInput label,
+        [data-testid="stMain"] .stNumberInput label,
+        [data-testid="stMain"] .stTextArea label {
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+            text-shadow: none !important;
+            font-weight: 700 !important;
+        }
+
+        /* Data table — use theme color, NOT forced white */
+        .stDataFrame td, .stDataEditor td, .stDataFrame th, .stDataEditor th {
+            color: {text_color} !important;
+            -webkit-text-fill-color: {text_color} !important;
+        }
+
+        /* Tab buttons — ensure visibility on all backgrounds */
+        .stTabs [data-baseweb="tab"] {
+            color: {text_color} !important;
+            -webkit-text-fill-color: {text_color} !important;
+        }
+
+        /* Metric values — ensure visibility */
+        [data-testid="stMetricValue"] {
+            color: {accent} !important;
+            -webkit-text-fill-color: {accent} !important;
+        }
+        [data-testid="stMetricLabel"] {
+            color: {text_secondary} !important;
+            -webkit-text-fill-color: {text_secondary} !important;
+        }
+        """
     st.markdown(css, unsafe_allow_html=True)
 
 # =====================================================================
@@ -2255,6 +2780,159 @@ def main():
     # Always update last_refresh to current time on page load so sync time matches live time
     st.session_state.last_refresh = time.time()
 
+    # =====================================================================
+    # AUTHENTICATION GATE — One-Time Name Entry with Admin Approval
+    # =====================================================================
+    if not st.session_state.authenticated:
+        # st.set_page_config removed - already set at module level to avoid Streamlit error
+        pass
+
+        # Try auto-login from localStorage via query param
+        components.html("""
+        <script>
+        (function(){
+            var P = window.parent;
+            var saved = P.localStorage.getItem('eqms_user');
+            if (saved && saved.trim() !== '') {
+                var url = new URL(P.location.href);
+                if (!url.searchParams.has('auto_user')) {
+                    url.searchParams.set('auto_user', saved);
+                    P.location.href = url.toString();
+                }
+            }
+        })();
+        </script>
+        """, height=0)
+
+        auto_user = st.query_params.get('auto_user')
+        if auto_user and str(auto_user).strip():
+            role, status = get_user_status(auto_user)
+            if role and str(status).lower() == 'active':
+                st.session_state.authenticated = True
+                st.session_state.username = str(auto_user).strip()
+                st.session_state.user_role = role
+                update_user_activity(str(auto_user).strip())
+                # Clear auto_user from URL to prevent loop on refresh
+                try:
+                    st.query_params.pop('auto_user', None)
+                except Exception:
+                    pass
+                st.rerun()
+
+        st.markdown("""
+        <style>
+        .login-wrap { max-width: 420px; margin: 60px auto; padding: 40px 30px;
+            background: linear-gradient(135deg, #0f172a, #1e1b4b);
+            border-radius: 20px; border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5); text-align: center; }
+        .login-icon { font-size: 4rem; margin-bottom: 10px; }
+        .login-title { color: #f1f5f9; font-size: 1.6rem; font-weight: 800; margin-bottom: 4px; }
+        .login-sub { color: #94a3b8; font-size: 0.9rem; margin-bottom: 24px; }
+        .login-input input { background: rgba(255,255,255,0.08) !important; color: #fff !important;
+            border: 1px solid rgba(255,255,255,0.2) !important; border-radius: 10px !important;
+            text-align: center !important; font-size: 1.1rem !important; }
+        .login-input input::placeholder { color: #64748b !important; }
+        .login-btn button { background: linear-gradient(135deg, #FF9933, #138808) !important;
+            color: #fff !important; font-weight: 700 !important; font-size: 1rem !important;
+            border: none !important; border-radius: 10px !important; padding: 10px 24px !important; }
+        .pending-box { background: rgba(234,179,8,0.15); border: 1px solid rgba(234,179,8,0.4);
+            border-radius: 12px; padding: 20px; margin-top: 20px; color: #fbbf24; text-align: center; }
+        .admin-notify { background: rgba(37,99,235,0.15); border: 1px solid rgba(37,99,235,0.4);
+            border-radius: 12px; padding: 15px; margin-top: 15px; color: #60a5fa; font-size: 0.9rem; }
+        </style>
+        <div class="login-wrap">
+            <div class="login-icon">🚂</div>
+            <div class="login-title">AI EQMS Hub Pro</div>
+            <div class="login-sub">Indian Railways — Emergency Quota Management</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.container():
+            c1, c2, c3 = st.columns([1, 3, 1])
+            with c2:
+                username = st.text_input("👤 Enter Your Name", placeholder="Your full name", key="login_user")
+
+                # Admin password field (only for Sharique or if needed)
+                with st.expander("🔐 Admin Login", expanded=False):
+                    admin_pass = st.text_input("Admin Password", type="password", placeholder="Enter if admin", key="admin_pass_input")
+
+                if st.button("🚀 Join App", use_container_width=True, key="login_btn"):
+                    if not username or not username.strip():
+                        st.error("❌ Please enter your name.")
+                    else:
+                        username = username.strip()
+
+                        # ADMIN BYPASS: Sharique + password 1988 = instant admin
+                        admin_password = st.session_state.get('admin_pass_input', '')
+                        if username.lower() == 'sharique' and admin_password == '1988':
+                            st.session_state.authenticated = True
+                            st.session_state.username = username
+                            st.session_state.user_role = 'admin'
+                            st.session_state.user_status = 'active'
+                            save_user(username, 'admin', 'active')
+                            update_user_activity(username)
+                            components.html(f"""
+                            <script>
+                            window.parent.localStorage.setItem('eqms_user', '{username}');
+                            </script>
+                            """, height=0)
+                            st.success(f"✅ Welcome Admin, {username}! Redirecting...")
+                            time.sleep(0.5)
+                            st.rerun()
+
+                        role, status = get_user_status(username)
+
+                        if role is None:
+                            # New user — save as pending
+                            save_user(username, 'viewer', 'pending')
+                            st.session_state.username = username
+                            st.session_state.user_role = 'viewer'
+                            st.session_state.user_status = 'pending'
+                            st.info("⏳ Your request has been sent to Admin for approval. Please wait...")
+                            # Notify admin via chat
+                            try:
+                                post_system_alert(f"🆕 New user '{username}' is waiting for approval. Go to User Management in sidebar to approve.")
+                            except Exception:
+                                pass
+                        else:
+                            if str(status).lower() == 'active':
+                                st.session_state.authenticated = True
+                                st.session_state.username = username
+                                st.session_state.user_role = role
+                                update_user_activity(username)
+                                # Save to localStorage for auto-login
+                                components.html(f"""
+                                <script>
+                                window.parent.localStorage.setItem('eqms_user', '{username}');
+                                </script>
+                                """, height=0)
+                                st.success(f"✅ Welcome back, {username}! Redirecting...")
+                                time.sleep(0.5)
+                                st.rerun()
+                            elif str(status).lower() == 'pending':
+                                st.session_state.username = username
+                                st.session_state.user_role = role if role else 'viewer'
+                                st.session_state.user_status = 'pending'
+                                st.warning("⏳ Your account is pending admin approval. Please wait or contact admin.")
+                            else:
+                                st.error("❌ Your account has been deactivated. Contact admin.")
+
+                # Show pending/rejected message if applicable
+                if st.session_state.get('user_status') == 'pending' and st.session_state.get('username'):
+                    st.markdown(f"""
+                    <div class="pending-box">
+                        <div style="font-weight:700; font-size:1.1rem;">⏳ Hello {st.session_state.username}</div>
+                        <div style="margin-top:8px;">Your account is pending approval.</div>
+                        <div style="margin-top:8px; font-size:0.85rem;">Admin will review and assign your role soon.</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if st.button("🔄 Check Again", use_container_width=True, key="recheck_status"):
+                        st.rerun()
+        st.stop()
+    else:
+        # Update activity on every rerun while authenticated
+        update_user_activity(st.session_state.username)
+
     # BULLETPROOF: Initialize all pagination/session vars at top of main()
     if 'rows_per_page' not in st.session_state or not isinstance(st.session_state.get('rows_per_page'), int) or st.session_state.get('rows_per_page') <= 0:
         st.session_state.rows_per_page = 25
@@ -2331,7 +3009,67 @@ def main():
     </script>
     """, height=0)
 
-    # Solar System Background
+    # PWA + Mobile + Offline + Alert Sound
+    components.html("""
+    <script>
+    (function(){
+        var manifest={
+            name:"AI EQMS Hub Pro",
+            short_name:"EQMS Hub",
+            start_url:"/",
+            display:"standalone",
+            background_color:"#0a0a1a",
+            theme_color:"#075e54",
+            orientation: "any",
+            scope: "/",
+            icons:[
+                {src:"https://cdn-icons-png.flaticon.com/512/1042/1042381.png",sizes:"512x512",type:"image/png"},
+                {src:"https://cdn-icons-png.flaticon.com/512/1042/1042381.png",sizes:"192x192",type:"image/png"},
+                {src:"https://cdn-icons-png.flaticon.com/512/1042/1042381.png",sizes:"144x144",type:"image/png"},
+                {src:"https://cdn-icons-png.flaticon.com/512/1042/1042381.png",sizes:"96x96",type:"image/png"},
+                {src:"https://cdn-icons-png.flaticon.com/512/1042/1042381.png",sizes:"72x72",type:"image/png"},
+                {src:"https://cdn-icons-png.flaticon.com/512/1042/1042381.png",sizes:"48x48",type:"image/png"}
+            ]
+        };
+        var mb=new Blob([JSON.stringify(manifest)],{type:"application/json"});
+        var mu=URL.createObjectURL(mb);
+        var l=document.createElement("link");l.rel="manifest";l.href=mu;document.head.appendChild(l);
+        var swc='self.addEventListener("install",e=>e.waitUntil(self.skipWaiting()));self.addEventListener("fetch",e=>e.respondWith(fetch(e.request).catch(()=>new Response("Offline — AI EQMS Hub Pro requires internet.",{status:503,headers:{"Content-Type":"text/html"}}))));self.addEventListener("activate",e=>e.waitUntil(self.clients.claim()));';
+        var swb=new Blob([swc],{type:"application/javascript"});
+        var swu=URL.createObjectURL(swb);
+        if("serviceWorker" in navigator)navigator.serviceWorker.register(swu).catch(function(){});
+        var ob=document.createElement("div");
+        ob.id="eqms-offline-banner";
+        ob.style.cssText="position:fixed;top:0;left:0;width:100%;background:#dc2626;color:#fff;text-align:center;padding:8px;font-weight:700;z-index:9999999;display:none;font-family:inherit;";
+        ob.innerHTML="⚠️ You are offline — Some features may not work";
+        document.body.appendChild(ob);
+        function uos(){ob.style.display=navigator.onLine?"none":"block";}
+        window.addEventListener("online",uos);window.addEventListener("offline",uos);uos();
+        window.__eqmsAlertSound=function(){
+            try{var C=window.AudioContext||window.webkitAudioContext;var c=new C();
+            var o=c.createOscillator();var g=c.createGain();o.connect(g);g.connect(c.destination);
+            o.type="sine";o.frequency.setValueAtTime(523,c.currentTime);o.frequency.setValueAtTime(659,c.currentTime+0.1);o.frequency.setValueAtTime(784,c.currentTime+0.2);
+            g.gain.setValueAtTime(0.3,c.currentTime);g.gain.exponentialRampToValueAtTime(0.01,c.currentTime+0.5);
+            o.start(c.currentTime);o.stop(c.currentTime+0.5);}catch(e){}
+        };
+    })();
+    </script>
+    <meta name="theme-color" content="#075e54">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="EQMS Hub">
+    <style>
+    @media (max-width:768px){
+        .main .block-container{padding:0.3rem!important;}
+        [data-testid="stSidebar"]{min-width:280px!important;}
+        .train-count-card{min-width:60px!important;padding:6px 10px!important;}
+        .train-count-number{font-size:1.3rem!important;}
+        .metric-card h3{font-size:1.6rem!important;}
+        .weather-temp{font-size:2.5rem!important;}
+    }
+    </style>
+    """, height=0)
+        # Solar System Background
     bg_html = """
     <style>
     .eqms-bg {
@@ -2633,43 +3371,20 @@ def main():
         st.markdown(EARTH_BG_HTML, unsafe_allow_html=True)
     elif view_bg == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
         pass  # Weather bg rendered later
-    elif view_bg == "💬 Chat":
+        elif view_bg == "💬 Chat":
         st.markdown(AQUARIUM_BG_HTML, unsafe_allow_html=True)
-        # Force white text visibility for chat view
+        # Chat-specific white text ONLY for chat elements, NOT global
         st.markdown("""
         <style>
-        [data-testid="stMain"] h1, [data-testid="stMain"] h2, [data-testid="stMain"] h3,
-        [data-testid="stMain"] h4, [data-testid="stMain"] h5, [data-testid="stMain"] h6,
-        [data-testid="stMain"] .stMarkdown p, [data-testid="stMain"] .stMarkdown div,
-        [data-testid="stMain"] .stCaption, [data-testid="stMain"] .stCaption p,
-        [data-testid="stMain"] label, [data-testid="stMain"] .stWidgetLabel,
-        [data-testid="stMain"] .stRadio label, [data-testid="stMain"] .stCheckbox label,
-        [data-testid="stMain"] .streamlit-expanderHeader,
-        [data-testid="stMain"] .streamlit-expanderHeader p,
-        [data-testid="stMain"] .streamlit-expanderHeader span {
-            color: #ffffff !important;
-            -webkit-text-fill-color: #ffffff !important;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.5) !important;
-            font-weight: 600 !important;
-        }
-        [data-testid="stMain"] .stButton > button {
-            background: rgba(255,255,255,0.12) !important;
-            border: 1px solid rgba(255,255,255,0.25) !important;
-            color: #ffffff !important;
-            -webkit-text-fill-color: #ffffff !important;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
-        }
-        [data-testid="stMain"] .stButton > button:hover {
-            background: rgba(255,255,255,0.25) !important;
-            border-color: rgba(255,255,255,0.5) !important;
-        }
+        /* Chat messages on dark aquarium bg */
         [data-testid="stMain"] .stChatMessage {
             background: rgba(0,20,40,0.6) !important;
             border: 1px solid rgba(255,255,255,0.15) !important;
             backdrop-filter: blur(12px) !important;
         }
         [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] p,
-        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] div {
+        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] div,
+        [data-testid="stMain"] .stChatMessage [data-testid="stMarkdownContainer"] span {
             color: #ffffff !important;
             -webkit-text-fill-color: #ffffff !important;
             text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
@@ -2685,8 +3400,17 @@ def main():
         [data-testid="stMain"] .stChatInput input::placeholder {
             color: rgba(255,255,255,0.6) !important;
         }
+        /* Chat buttons only */
+        [data-testid="stMain"] .stChatMessage ~ .element-container .stButton > button,
+        [data-testid="stMain"] .element-container:has(.stChatMessage) ~ .element-container .stButton > button {
+            background: rgba(255,255,255,0.12) !important;
+            border: 1px solid rgba(255,255,255,0.25) !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+        }
         </style>
-        """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)e)
     else:
         st.markdown(bg_html, unsafe_allow_html=True)
 
@@ -2799,6 +3523,7 @@ def main():
         bg_style = ""
         elements = ""
         info_html = ""  # Initialize to prevent UnboundLocalError
+        weather_mode = 'day'  # Default
 
         if scene in ('rain', 'night-rain'):
             bg_style = "background: linear-gradient(180deg, #0d1b2a 0%, #1b263b 35%, #2d3a4a 70%, #1a2332 100%);"
@@ -2964,12 +3689,13 @@ def main():
             elements += '<div style="position:absolute;bottom:110px;left:60%;font-size:45px;z-index:5;opacity:0.6;animation:treeSway 6s ease-in-out 3s infinite;">🌲</div>'
             elements += '<div style="position:absolute;bottom:0;left:0;width:100%;height:15px;background:#455a64;z-index:6;"></div>'
 
-            loc_detail = city_name
-            if st.session_state.weather_data.get('state'):
-                loc_detail += f", {st.session_state.weather_data['state']}"
-            if st.session_state.weather_data.get('country'):
-                loc_detail += f", {st.session_state.weather_data['country']}"
-            info_html = f"""<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:100;pointer-events:none;"><div style="font-size:2.6rem;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);letter-spacing:2px;">{loc_detail}</div><div style="font-size:7rem;font-weight:900;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);line-height:1;margin:10px 0;">{temp}°</div><div style="font-size:1.6rem;font-weight:600;color:#ffffff;text-shadow:0 2px 8px rgba(0,0,0,0.9),0 0 20px rgba(0,0,0,0.5);text-transform:capitalize;">{desc}</div></div>"""
+        # Build weather info overlay for ALL scenes
+        loc_detail = city_name
+        if st.session_state.weather_data.get('state'):
+            loc_detail += f", {st.session_state.weather_data['state']}"
+        if st.session_state.weather_data.get('country'):
+            loc_detail += f", {st.session_state.weather_data['country']}"
+        info_html = f"""<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:100;pointer-events:none;"><div style="font-size:2.6rem;font-weight:800;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);letter-spacing:2px;">{loc_detail}</div><div style="font-size:7rem;font-weight:900;color:#ffffff;text-shadow:0 2px 10px rgba(0,0,0,0.9),0 0 30px rgba(0,0,0,0.5);line-height:1;margin:10px 0;">{temp}°</div><div style="font-size:1.6rem;font-weight:600;color:#ffffff;text-shadow:0 2px 8px rgba(0,0,0,0.9),0 0 20px rgba(0,0,0,0.5);text-transform:capitalize;">{desc}</div></div>"""
 
         weather_bg_html = f"""<style>@keyframes rainFall{{from{{transform:translateY(-20px);opacity:0;}}10%{{opacity:0.8;}}90%{{opacity:0.8;}}to{{transform:translateY(110vh);opacity:0;}}}}@keyframes snowFall{{from{{transform:translateY(-20px) rotate(0deg);opacity:0;}}10%{{opacity:1;}}90%{{opacity:1;}}to{{transform:translateY(110vh) rotate(360deg);opacity:0;}}}}@keyframes cloudDrift{{from{{transform:translateX(-300px);}}to{{transform:translateX(calc(100vw + 300px));}}}}@keyframes sunPulse{{0%,100%{{transform:scale(1);opacity:0.9;}}50%{{transform:scale(1.15);opacity:1;}}}}@keyframes raySpin{{from{{transform:translate(-50%,-50%) rotate(0deg);}}to{{transform:translate(-50%,-50%) rotate(360deg);}}}}@keyframes moonGlow{{0%,100%{{box-shadow:0 0 60px 20px rgba(245,245,220,0.3);}}50%{{box-shadow:0 0 80px 30px rgba(245,245,220,0.5);}}}}@keyframes twinkle{{0%,100%{{opacity:0.3;}}50%{{opacity:1;}}}}@keyframes treeSway{{0%,100%{{transform:rotate(-3deg);}}50%{{transform:rotate(3deg);}}}}@keyframes waterShimmer{{0%,100%{{opacity:0.3;transform:scaleX(1);}}50%{{opacity:0.7;transform:scaleX(1.2);}}}}@keyframes lightning{{0%,90%,100%{{opacity:0;}}91%{{opacity:0.3;}}92%{{opacity:0;}}93%{{opacity:0.6;}}94%{{opacity:0;}}}}@keyframes windowLight{{0%,100%{{opacity:0.6;}}50%{{opacity:1;}}}}@keyframes birdFly{{from{{transform:translateX(-50px);}}to{{transform:translateX(calc(100vw + 50px));}}}}@keyframes fogDrift{{from{{transform:translateX(-50%);}}to{{transform:translateX(0%);}}}}</style><div style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;overflow:hidden;{bg_style}">{elements}{info_html}</div>"""
 
@@ -3443,6 +4169,13 @@ def main():
                                             st.session_state.upload_success = True
                                             st.session_state.last_upload_time = format_time()
                                             log_activity(f"✅ {fname} → {save_res['saved']} records")
+                                            st.session_state.audit_log.append({
+                                                "timestamp": format_datetime(),
+                                                "user": st.session_state.username,
+                                                "role": st.session_state.user_role,
+                                                "action": f"📁 Drive Upload: {fname}",
+                                                "ip": "—"
+                                            })
                                         else:
                                             st.error(f"❌ Drive: {drive_res['error']}")
                                             log_activity(f"❌ Drive failed: {drive_res['error'][:40]}")
@@ -3450,6 +4183,13 @@ def main():
                                         st.session_state.upload_success = True
                                         st.session_state.last_upload_time = format_time()
                                         log_activity(f"✅ Text input → {save_res['saved']} records")
+                                        st.session_state.audit_log.append({
+                                            "timestamp": format_datetime(),
+                                            "user": st.session_state.username,
+                                            "role": st.session_state.user_role,
+                                            "action": f"📤 Sidebar Upload: {save_res['saved']} records",
+                                            "ip": "—"
+                                        })
                                     st.session_state.text_input_key += 1
                                     st.session_state.img_uploader_key += 1
                                     st.session_state.audio_uploader_key += 1
@@ -3495,11 +4235,16 @@ def main():
                     st.session_state.upload_success = False
                     st.rerun()
 
-        with st.expander("📋 Activity Log", expanded=False):
-            if st.session_state.activity_log:
-                for log in reversed(st.session_state.activity_log[-20:]):
-                    st.caption(f"{log.get('timestamp', '')} — {log.get('action', '')}")
-            else: st.caption("No activity yet")
+        with st.expander("📋 Activity & Audit Log", expanded=False):
+            # Merge activity_log + audit_log
+            all_logs = st.session_state.activity_log + st.session_state.audit_log
+            all_logs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+            if all_logs:
+                st.caption(f"Total entries: {len(all_logs)}")
+                log_df = pd.DataFrame(all_logs[-50:])
+                st.dataframe(log_df, use_container_width=True, height=250, hide_index=True)
+            else:
+                st.caption("No activity yet")
         st.markdown("---")
 
         st.markdown("### 📑 Select Sheet")
@@ -3554,7 +4299,184 @@ def main():
                 st.session_state.current_page = 1
                 st.rerun()
 
-            if st.button("🧹 Clear All Filters", use_container_width=True, key="clear_filters_btn"):
+            # Quick Date Buttons
+            st.markdown("<div style='font-size:0.8rem; color:#94a3b8; margin-bottom:4px;'>⚡ Quick Dates</div>", unsafe_allow_html=True)
+            qd1, qd2, qd3 = st.columns(3)
+            today_dt = datetime.now().date()
+            with qd1:
+                if st.button("📅 Today", use_container_width=True, key="sb_today"):
+                    st.session_state.from_val = today_dt
+                    st.session_state.to_val = today_dt
+                    st.session_state.current_page = 1
+                    st.rerun()
+            with qd2:
+                if st.button("📅 Tomorrow", use_container_width=True, key="sb_tomorrow"):
+                    st.session_state.from_val = today_dt + timedelta(days=1)
+                    st.session_state.to_val = today_dt + timedelta(days=1)
+                    st.session_state.current_page = 1
+                    st.rerun()
+            with qd3:
+                if st.button("📅 Day+2", use_container_width=True, key="sb_day2"):
+                    st.session_state.from_val = today_dt + timedelta(days=2)
+                    st.session_state.to_val = today_dt + timedelta(days=2)
+                    st.session_state.current_page = 1
+                    st.rerun()
+
+            # User info + Logout
+        st.markdown("---")
+
+        # Online Users Display
+        online_users = get_all_online_users()
+        st.markdown(f"""
+        <div style='text-align:center; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 12px; margin-bottom: 10px;'>
+            <div style='font-size:1.2rem;'>👤 <b>{st.session_state.username}</b></div>
+            <div style='font-size:0.8rem; color:#94a3b8;'>🛡️ Role: {st.session_state.user_role.upper()}</div>
+            <div style='font-size:0.75rem; color:#22c55e; margin-top:4px;'>🟢 You are online</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if online_users:
+            st.markdown("<div style='font-size:0.8rem; color:#94a3b8; margin-bottom:6px;'>🟢 Online Now</div>", unsafe_allow_html=True)
+            for uname, uinfo in list(online_users.items())[:10]:
+                if uname != st.session_state.username:
+                    role_icon = "👑" if uinfo['role'] == 'admin' else "✏️" if uinfo['role'] == 'editor' else "👁️"
+                    st.markdown(f"<div style='font-size:0.85rem; padding: 2px 0;'><span style='color:#22c55e;'>●</span> {role_icon} {uname}</div>", unsafe_allow_html=True)
+            if len(online_users) > 10:
+                st.caption(f"+{len(online_users)-10} more online")
+
+        # User Management — Admin Only
+        if st.session_state.user_role == 'admin':
+            st.markdown("---")
+            st.markdown("### 👥 User Management")
+            with st.expander("🛡️ Manage Users", expanded=False):
+                users_df = load_users()
+                if not users_df.empty:
+                    st.caption(f"Total users: {len(users_df)}")
+                    for idx, row in users_df.iterrows():
+                        name = str(row.get('NAME', '')).strip()
+                        role = str(row.get('ROLE', 'viewer')).strip()
+                        status = str(row.get('STATUS', 'pending')).strip()
+                        if not name:
+                            continue
+                        safe_key = re.sub(r'[^a-zA-Z0-9_]', '_', name)[:20]
+                        col_u1, col_u2, col_u3 = st.columns([2.5, 1.5, 1])
+                        with col_u1:
+                            status_icon = "🟢" if status.lower() == 'active' else "🟡" if status.lower() == 'pending' else "🔴"
+                            st.markdown(f"**{name}**<br><span style='font-size:0.75rem;'>{status_icon} {role} • {status}</span>", unsafe_allow_html=True)
+                        with col_u2:
+                            if status.lower() == 'pending':
+                                if st.button("✅ Approve", key=f"approve_{idx}_{safe_key}", use_container_width=True):
+                                    save_user(name, 'editor', 'active')
+                                    try:
+                                        post_system_alert(f"✅ User '{name}' has been approved as EDITOR by Admin {st.session_state.username}.")
+                                    except Exception:
+                                        pass
+                                    st.rerun()
+                            else:
+                                new_role = st.selectbox("Role", ['viewer', 'editor', 'admin'],
+                                    index=['viewer', 'editor', 'admin'].index(role) if role in ['viewer', 'editor', 'admin'] else 0,
+                                    key=f"role_sel_{idx}_{safe_key}", label_visibility="collapsed")
+                                if new_role != role:
+                                    if st.button("💾 Save", key=f"save_role_{idx}_{safe_key}", use_container_width=True):
+                                        save_user(name, new_role, 'active')
+                                        st.rerun()
+                        with col_u3:
+                            if name.lower() != st.session_state.username.lower():
+                                if st.button("🗑️", key=f"remove_{idx}_{safe_key}", use_container_width=True):
+                                    try:
+                                        gc = init_sheets()
+                                        sheet = gc.open_by_key(SHEET_ID).worksheet("USERS")
+                                        df2 = load_users()
+                                        if not df2.empty:
+                                            match = df2['NAME'].astype(str).str.lower().str.strip() == name.lower()
+                                            if match.any():
+                                                row_idx = match.idxmax() + 2
+                                                sheet.delete_rows(int(row_idx))
+                                                try:
+                                                    post_system_alert(f"🗑️ User '{name}' has been removed by Admin {st.session_state.username}.")
+                                                except Exception:
+                                                    pass
+                                                st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Error: {e}")
+                    st.caption("No users found in USERS sheet.")
+
+        # App Share Button
+        st.markdown("---")
+        st.markdown("### 📱 Share App")
+        # Detect current URL for sharing
+        share_app_url = "https://your-app-url.streamlit.app"  # Replace with your deployed URL
+        share_text = f"🚂 *AI EQMS Hub Pro* — Indian Railways Emergency Quota Management App\n\n👤 Join as: *{st.session_state.username}*\n\n📲 Open now: {share_app_url}\n\n✅ Add to Home Screen for app-like experience!"
+        wa_share_url = f"https://wa.me/?text={urllib.parse.quote(share_text)}"
+        st.markdown(f'<a href="{wa_share_url}" target="_blank" style="display:block; width:100%; padding:10px 16px; background:linear-gradient(135deg, #25D366, #128C7E); color:#fff; text-align:center; border-radius:10px; text-decoration:none; font-weight:700; margin-bottom:8px;">📤 Share on WhatsApp</a>', unsafe_allow_html=True)
+
+        # PWA Install Button
+        components.html("""
+        <div style="width:100%; margin-top:8px;">
+            <button id="eqms-install-btn" onclick="installPWA()" style="display:none; width:100%; padding:10px 16px; background:linear-gradient(135deg, #FF9933, #138808); color:#fff; text-align:center; border-radius:10px; text-decoration:none; font-weight:700; border:none; cursor:pointer; font-family:inherit; font-size:0.95rem;">
+                📲 Install App (Add to Home Screen)
+            </button>
+            <div id="eqms-install-hint" style="display:none; font-size:0.8rem; color:#94a3b8; text-align:center; margin-top:6px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 8px;">
+                📱 Tap browser menu → "Add to Home Screen" to install as app
+            </div>
+        </div>
+        <script>
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            var btn = document.getElementById('eqms-install-btn');
+            if (btn) btn.style.display = 'block';
+        });
+        function installPWA() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('PWA installed');
+                    }
+                    deferredPrompt = null;
+                });
+            } else {
+                var hint = document.getElementById('eqms-install-hint');
+                if (hint) {
+                    hint.style.display = 'block';
+                    setTimeout(() => { hint.style.display = 'none'; }, 8000);
+                }
+            }
+        }
+        if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+            console.log('Running as installed app');
+        }
+        </script>
+        """, height=100)
+        st.caption("💡 After sharing, tell users to tap 'Add to Home Screen' in their browser menu for app-like experience.")
+
+        st.markdown("---")
+        if st.button("🚪 Logout", use_container_width=True, key="logout_btn"):
+            # Clear localStorage
+            components.html("""
+            <script>
+            window.parent.localStorage.removeItem('eqms_user');
+            </script>
+            """, height=0)
+            st.session_state.audit_log.append({
+                "timestamp": format_datetime(),
+                "user": st.session_state.username,
+                "role": st.session_state.user_role,
+                "action": "🚪 Logout",
+                "ip": "—"
+            })
+            st.session_state.authenticated = False
+            st.session_state.username = ''
+            st.session_state.user_role = 'viewer'
+            st.session_state.user_status = ''
+            st.rerun()
+
+        # Mute alert toggle
+        st.session_state.data_alert_muted = st.checkbox("🔕 Mute New Data Alert", value=st.session_state.data_alert_muted, key="mute_alert")
+
+        if st.button("🧹 Clear All Filters", use_container_width=True, key="clear_filters_btn"):
                 st.session_state.pnr_val = ''
                 st.session_state.train_val = ''
                 st.session_state.class_val = ''
@@ -3565,6 +4487,24 @@ def main():
 
     # Load data for selected sheet
     df_raw = load_sheet_data_cached(sheet_choice, SHEET_ID)
+
+    # Data change detection + alert sound
+    current_count = len(df_raw) if not df_raw.empty else 0
+    if st.session_state.last_data_count > 0 and current_count > st.session_state.last_data_count:
+        new_records = current_count - st.session_state.last_data_count
+        if not st.session_state.data_alert_muted:
+            components.html(f"""
+            <script>if(window.__eqmsAlertSound)window.__eqmsAlertSound();</script>
+            <div style="position:fixed;top:60px;right:20px;z-index:999999;background:linear-gradient(135deg,#16a34a,#22c55e);
+            color:#fff;padding:12px 20px;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.3);
+            font-weight:700;animation:slideIn 0.5s ease-out;">
+            🔔 {new_records} new record(s) detected in {sheet_choice}!
+            </div>
+            <style>@keyframes slideIn{{from{{transform:translateX(100%);opacity:0;}}to{{transform:translateX(0);opacity:1;}}}}</style>
+            """, height=0)
+            st.toast(f"🔔 {new_records} new record(s) in {sheet_choice}!", icon="🚨")
+    st.session_state.last_data_count = current_count
+
     filtered_df = df_raw.copy() if not df_raw.empty else pd.DataFrame()
 
     # Apply filters (skip for NOTE sheet)
@@ -3747,6 +4687,35 @@ def main():
                     st.date_input("📅 From DOJ", value=st.session_state.from_val, key="adv_from_doj", format="DD-MM-YYYY")
                 with af7:
                     st.date_input("📅 To DOJ", value=st.session_state.to_val, key="adv_to_doj", format="DD-MM-YYYY")
+
+                # Quick Date Buttons in Advanced Filters
+                st.markdown("<div style='font-size:0.85rem; color:#64748b; margin:8px 0 4px 0;'>⚡ Quick Date Filters</div>", unsafe_allow_html=True)
+                qf1, qf2, qf3, qf4 = st.columns(4)
+                today_dt2 = datetime.now().date()
+                with qf1:
+                    if st.button("📅 Today", use_container_width=True, key="adv_today"):
+                        st.session_state.from_val = today_dt2
+                        st.session_state.to_val = today_dt2
+                        st.session_state.current_page = 1
+                        st.rerun()
+                with qf2:
+                    if st.button("📅 Tomorrow", use_container_width=True, key="adv_tomorrow"):
+                        st.session_state.from_val = today_dt2 + timedelta(days=1)
+                        st.session_state.to_val = today_dt2 + timedelta(days=1)
+                        st.session_state.current_page = 1
+                        st.rerun()
+                with qf3:
+                    if st.button("📅 Day After", use_container_width=True, key="adv_day2"):
+                        st.session_state.from_val = today_dt2 + timedelta(days=2)
+                        st.session_state.to_val = today_dt2 + timedelta(days=2)
+                        st.session_state.current_page = 1
+                        st.rerun()
+                with qf4:
+                    if st.button("🧹 Clear Dates", use_container_width=True, key="adv_clear_dates"):
+                        st.session_state.from_val = None
+                        st.session_state.to_val = None
+                        st.session_state.current_page = 1
+                        st.rerun()
 
                 if st.button("🚀 Apply Filters", use_container_width=True, key="adv_apply"):
                     st.rerun()
@@ -3955,75 +4924,101 @@ def main():
             st.markdown("**⚡ Quick Actions**")
             a1, a2, a3, a4, a5 = st.columns(5)
             with a1:
-                if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn"):
-                    try:
-                        gc = init_sheets()
-                        sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                        data_to_update = edited_page.drop(columns=["Select"], errors='ignore')
-                        data_list = data_to_update.values.tolist()
-                        if data_list and sheet_rows:
-                            for i, row_data in enumerate(data_list):
-                                sheet_row_num = sheet_rows[i]
-                                row_data = [str(x) if pd.notna(x) else '' for x in row_data]
-                                num_cols = len(row_data)
-                                col_letter = col_index_to_letter(num_cols)
-                                range_name = f"A{sheet_row_num}:{col_letter}{sheet_row_num}"
-                                sheet.update(range_name, [row_data])
-                            st.toast("✅ Saved!", icon="💾")
-                            log_activity(f"💾 Saved {len(data_list)} rows in {sheet_choice}")
-                            st.cache_data.clear()
-                            st.session_state.last_refresh = time.time()
-                            time.sleep(0.3)
-                            st.rerun()
-                        else: st.warning("Nothing to save")
-                    except Exception as e:
-                        if "429" in str(e): st.error("Write quota exceeded. Wait 1 minute.")
-                        else: st.error(f"Save error: {e}")
-                        log_activity(f"❌ Save: {str(e)[:40]}")
-            with a2:
-                if st.button("➕ Add Row", use_container_width=True, key="add_row_btn"):
-                    try:
-                        gc = init_sheets()
-                        sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                        all_data = sheet.get_all_values()
-                        config = SHEET_CONFIG[sheet_choice]
-                        start_row = config["start_row"]
-                        num_cols = len(all_data[0]) if all_data else 1
-                        blank_row = [''] * num_cols
-                        if len(all_data) >= start_row: blank_row[0] = len(all_data) - start_row + 2
-                        sheet.append_row(blank_row)
-                        st.toast("✅ Row added", icon="➕")
-                        log_activity(f"➕ Added row in {sheet_choice}")
-                        st.cache_data.clear()
-                        st.session_state.last_refresh = time.time()
-                        time.sleep(0.3)
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Add error: {e}")
-                        log_activity(f"❌ Add: {str(e)[:40]}")
-            with a3:
-                if selected_sheet_rows:
-                    if st.button("🗑️ Delete", use_container_width=True, key="delete_btn"):
-                        if not st.session_state.delete_confirm:
-                            st.session_state.delete_confirm = True
-                            st.warning("Confirm delete by clicking again.")
-                            st.rerun()
-                        else:
-                            try:
-                                gc = init_sheets()
-                                sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
-                                for row_num in sorted(selected_sheet_rows, reverse=True):
-                                    sheet.delete_rows(row_num)
-                                st.toast(f"✅ Deleted {len(selected_sheet_rows)}", icon="🗑️")
-                                log_activity(f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}")
-                                st.session_state.delete_confirm = False
+                can_edit = st.session_state.user_role in ['editor', 'admin']
+                if st.button("💾 Save Edits", use_container_width=True, key="save_edits_btn", disabled=not can_edit):
+                    if not can_edit:
+                        st.error("❌ You need EDITOR or ADMIN role to save edits.")
+                    else:
+                        try:
+                            gc = init_sheets()
+                            sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                            data_to_update = edited_page.drop(columns=["Select"], errors='ignore')
+                            data_list = data_to_update.values.tolist()
+                            if data_list and sheet_rows:
+                                for i, row_data in enumerate(data_list):
+                                    sheet_row_num = sheet_rows[i]
+                                    row_data = [str(x) if pd.notna(x) else '' for x in row_data]
+                                    num_cols = len(row_data)
+                                    col_letter = col_index_to_letter(num_cols)
+                                    range_name = f"A{sheet_row_num}:{col_letter}{sheet_row_num}"
+                                    sheet.update(range_name, [row_data])
+                                st.toast("✅ Saved!", icon="💾")
+                                log_activity(f"💾 Saved {len(data_list)} rows in {sheet_choice}")
+                                st.session_state.audit_log.append({
+                                    "timestamp": format_datetime(),
+                                    "user": st.session_state.username,
+                                    "role": st.session_state.user_role,
+                                    "action": f"💾 Saved {len(data_list)} rows in {sheet_choice}",
+                                    "ip": "—"
+                                })
                                 st.cache_data.clear()
                                 st.session_state.last_refresh = time.time()
                                 time.sleep(0.3)
                                 st.rerun()
-                            except Exception as e:
-                                st.error(f"Delete error: {e}")
-                                log_activity(f"❌ Delete: {str(e)[:40]}")
+                            else: st.warning("Nothing to save")
+                        except Exception as e:
+                            if "429" in str(e): st.error("Write quota exceeded. Wait 1 minute.")
+                            else: st.error(f"Save error: {e}")
+                            log_activity(f"❌ Save: {str(e)[:40]}")
+            with a2:
+                can_edit = st.session_state.user_role in ['editor', 'admin']
+                if st.button("➕ Add Row", use_container_width=True, key="add_row_btn", disabled=not can_edit):
+                    if not can_edit:
+                        st.error("❌ You need EDITOR or ADMIN role to add rows.")
+                    else:
+                        try:
+                            gc = init_sheets()
+                            sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                            all_data = sheet.get_all_values()
+                            config = SHEET_CONFIG[sheet_choice]
+                            start_row = config["start_row"]
+                            num_cols = len(all_data[0]) if all_data else 1
+                            blank_row = [''] * num_cols
+                            if len(all_data) >= start_row: blank_row[0] = len(all_data) - start_row + 2
+                            sheet.append_row(blank_row)
+                            st.toast("✅ Row added", icon="➕")
+                            log_activity(f"➕ Added row in {sheet_choice}")
+                            st.cache_data.clear()
+                            st.session_state.last_refresh = time.time()
+                            time.sleep(0.3)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Add error: {e}")
+                            log_activity(f"❌ Add: {str(e)[:40]}")
+            with a3:
+                can_edit = st.session_state.user_role in ['editor', 'admin']
+                if selected_sheet_rows:
+                    if st.button("🗑️ Delete", use_container_width=True, key="delete_btn", disabled=not can_edit):
+                        if not can_edit:
+                            st.error("❌ You need EDITOR or ADMIN role to delete.")
+                        else:
+                            if not st.session_state.delete_confirm:
+                                st.session_state.delete_confirm = True
+                                st.warning("Confirm delete by clicking again.")
+                                st.rerun()
+                            else:
+                                try:
+                                    gc = init_sheets()
+                                    sheet = gc.open_by_key(SHEET_ID).worksheet(sheet_choice)
+                                    for row_num in sorted(selected_sheet_rows, reverse=True):
+                                        sheet.delete_rows(row_num)
+                                    st.toast(f"✅ Deleted {len(selected_sheet_rows)}", icon="🗑️")
+                                    log_activity(f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}")
+                                    st.session_state.audit_log.append({
+                                        "timestamp": format_datetime(),
+                                        "user": st.session_state.username,
+                                        "role": st.session_state.user_role,
+                                        "action": f"🗑️ Deleted {len(selected_sheet_rows)} from {sheet_choice}",
+                                        "ip": "—"
+                                    })
+                                    st.session_state.delete_confirm = False
+                                    st.cache_data.clear()
+                                    st.session_state.last_refresh = time.time()
+                                    time.sleep(0.3)
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Delete error: {e}")
+                                    log_activity(f"❌ Delete: {str(e)[:40]}")
                 else:
                     st.button("🗑️ Delete", disabled=True, use_container_width=True, key="delete_disabled_btn")
                     st.session_state.delete_confirm = False
@@ -4485,158 +5480,297 @@ def main():
                     pass
 
     # =====================================================================
-        # VIEW: 💬 CHAT
+    # VIEW: 💬 CHAT — WhatsApp Group Style
     # =====================================================================
     elif view == "💬 Chat":
-        # ===== WhatsApp-Style Chat CSS + TTS =====
+        # ===== WhatsApp Group Chat CSS =====
         st.markdown("""
         <style>
-        /* WhatsApp Chat Container */
-        .whatsapp-chat-container {
-            max-width: 900px; margin: 0 auto;
-            background: linear-gradient(180deg, #0a0a1a 0%, #0f172a 100%);
-            border-radius: 16px; overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-        }
-        /* Chat Header */
-        .wa-header {
+        .wa-group-header {
             background: linear-gradient(135deg, #075e54, #128c7e);
-            padding: 14px 20px; display: flex; align-items: center; gap: 12px;
+            border-radius: 16px 16px 0 0;
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
             border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 0;
         }
-        .wa-header-icon { font-size: 2rem; }
-        .wa-header-title { color: #fff; font-weight: 700; font-size: 1.1rem; }
-        .wa-header-sub { color: rgba(255,255,255,0.7); font-size: 0.8rem; }
-        /* Chat Bubbles */
-        .stChatMessage {
-            background: transparent !important; border: none !important;
-            padding: 4px 16px !important; margin-bottom: 4px !important;
+        .wa-group-avatar {
+            width: 52px; height: 52px;
+            background: linear-gradient(135deg, #FF9933, #FF6B35);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.8rem;
+            box-shadow: 0 4px 15px rgba(255,107,53,0.4);
+            border: 2px solid rgba(255,255,255,0.2);
         }
-        .stChatMessage [data-testid="stMarkdownContainer"] {
-            background: #202c33 !important; color: #e9edef !important;
-            border-radius: 8px 8px 8px 0 !important;
-            padding: 10px 14px !important; max-width: 80%;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
-            font-size: 0.95rem !important; line-height: 1.5 !important;
+        .wa-group-info { flex: 1; }
+        .wa-group-name { color: #fff; font-weight: 700; font-size: 1.15rem; }
+        .wa-group-meta { color: rgba(255,255,255,0.75); font-size: 0.8rem; }
+        .wa-online-dot {
+            width: 10px; height: 10px; background: #22c55e;
+            border-radius: 50%; display: inline-block;
+            box-shadow: 0 0 8px #22c55e; animation: blink-dot 2s infinite;
         }
-        /* User messages - green like WhatsApp */
-        .stChatMessage[data-testid="stChatMessageUser"] [data-testid="stMarkdownContainer"] {
-            background: linear-gradient(135deg, #005c4b, #025144) !important;
-            color: #e9edef !important; border-radius: 8px 8px 0 8px !important;
-            margin-left: auto !important;
+        @keyframes blink-dot { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+        .wa-chat-container {
+            background: linear-gradient(180deg, #0a0a1a 0%, #0f172a 100%);
+            border-radius: 0 0 16px 16px;
+            padding: 16px;
+            max-height: 65vh;
+            overflow-y: auto;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-top: none;
         }
-        /* Assistant messages - dark grey */
-        .stChatMessage[data-testid="stChatMessageAssistant"] [data-testid="stMarkdownContainer"] {
-            background: #202c33 !important; color: #e9edef !important;
-            border-radius: 8px 8px 8px 0 !important;
+        .wa-msg-row { display: flex; margin-bottom: 10px; align-items: flex-end; }
+        .wa-msg-row.me { justify-content: flex-end; }
+        .wa-msg-row.admin { justify-content: flex-start; }
+        .wa-msg-row.system { justify-content: center; }
+        .wa-msg-bubble {
+            max-width: 75%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            font-size: 0.92rem;
+            line-height: 1.45;
+            word-wrap: break-word;
+            position: relative;
         }
-        .stChatMessage * { color: #e9edef !important; -webkit-text-fill-color: #e9edef !important; }
-        .stChatMessage [data-testid="stMarkdownContainer"] * {
-            color: #e9edef !important; -webkit-text-fill-color: #e9edef !important;
-            text-shadow: none !important;
+        .wa-msg-bubble.me {
+            background: linear-gradient(135deg, #005c4b, #025144);
+            color: #e9edef;
+            border-radius: 12px 12px 0 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
-        .stChatInput {
-            background: #202c33 !important; border: 1px solid rgba(255,255,255,0.1) !important;
-            border-radius: 24px !important; padding: 8px 16px !important;
+        .wa-msg-bubble.other {
+            background: #202c33;
+            color: #e9edef;
+            border-radius: 12px 12px 12px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
-        .stChatInput input {
-            color: #e9edef !important; -webkit-text-fill-color: #e9edef !important;
+        .wa-msg-bubble.admin {
+            background: linear-gradient(135deg, #1e3a5f, #2d5a87);
+            color: #fff;
+            border-radius: 12px 12px 12px 0;
+            border-left: 3px solid #FF9933;
+            box-shadow: 0 2px 12px rgba(37,99,235,0.3);
         }
-        .stChatInput input::placeholder { color: #8696a0 !important; }
-        /* TTS Button */
-        .tts-btn {
-            display: inline-flex; align-items: center; gap: 4px;
-            background: rgba(255,255,255,0.1); border: none;
-            color: #8696a0; font-size: 0.75rem; padding: 4px 8px;
-            border-radius: 12px; cursor: pointer; margin-top: 4px;
+        .wa-msg-bubble.system {
+            background: rgba(255,255,255,0.08);
+            color: #94a3b8;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            padding: 6px 16px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .wa-msg-sender {
+            font-size: 0.75rem;
+            font-weight: 700;
+            margin-bottom: 3px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .wa-msg-time {
+            font-size: 0.68rem;
+            opacity: 0.6;
+            text-align: right;
+            margin-top: 4px;
+        }
+        .wa-chat-input-wrap {
+            background: #202c33;
+            border-radius: 24px;
+            padding: 10px 16px;
+            margin-top: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .wa-attach-btn {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #8696a0;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.1rem;
             transition: all 0.2s;
         }
-        .tts-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
-        /* Attachment area */
-        .wa-attach-bar {
-            background: rgba(15,23,42,0.9); border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px; padding: 12px; margin: 10px 16px;
-            backdrop-filter: blur(12px);
+        .wa-attach-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
+        .wa-typing {
+            color: #8696a0;
+            font-size: 0.8rem;
+            font-style: italic;
+            padding: 4px 16px;
         }
+        .wa-pdf-card {
+            background: rgba(37,99,235,0.15);
+            border: 1px solid rgba(37,99,235,0.3);
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .wa-pdf-icon { font-size: 1.5rem; }
+        .wa-pdf-info { flex: 1; }
+        .wa-pdf-name { font-weight: 600; font-size: 0.85rem; }
+        .wa-pdf-size { font-size: 0.75rem; opacity: 0.7; }
         </style>
         """, unsafe_allow_html=True)
 
-        # TTS JavaScript Engine
-        components.html("""
-        <script>
-        (function(){
-            if (window.__waTTSInit) return;
-            window.__waTTSInit = true;
+        # ===== Load Shared Chat History =====
+        chat_history = load_chat_history(limit=200)
+        online_users = get_online_users()
+        current_user = st.session_state.username
+        current_role = st.session_state.user_role
 
-            function speak(text) {
-                if (!window.speechSynthesis) { alert('TTS not supported in this browser'); return; }
-                window.speechSynthesis.cancel();
-                var utter = new SpeechSynthesisUtterance(text);
-                utter.rate = 1.0; utter.pitch = 1.0; utter.volume = 1.0;
-                utter.lang = 'en-IN';
-                var voices = window.speechSynthesis.getVoices();
-                var hiVoice = voices.find(function(v){ return v.lang.includes('hi') || v.lang.includes('en-IN'); });
-                if (hiVoice) utter.voice = hiVoice;
-                window.speechSynthesis.speak(utter);
-            }
+        # ===== Post Sheet Alert if any =====
+        alert = check_sheet_alerts()
+        if alert:
+            save_chat_message('TSKEQ Bot', 'admin', alert, 'alert', '')
+            chat_history = load_chat_history(limit=200)
 
-            function addTTSButtons() {
-                var msgs = document.querySelectorAll('[data-testid="stChatMessageAssistant"]');
-                msgs.forEach(function(msg){
-                    var container = msg.querySelector('[data-testid="stMarkdownContainer"]');
-                    if (!container || container.querySelector('.tts-btn')) return;
-                    var text = container.innerText || container.textContent || '';
-                    if (text.length < 5) return;
-                    var btn = document.createElement('button');
-                    btn.className = 'tts-btn';
-                    btn.innerHTML = '🔊 Listen';
-                    btn.onclick = function(e){ e.stopPropagation(); speak(text); };
-                    container.appendChild(btn);
-                });
-            }
+        # ===== Post Time-Based Auto Message =====
+        post_time_based_auto_message()
+        # Reload to include auto-message
+        chat_history = load_chat_history(limit=200)
 
-            // Watch for new messages
-            var observer = new MutationObserver(function(){ addTTSButtons(); });
-            observer.observe(document.body, { childList: true, subtree: true });
-            setTimeout(addTTSButtons, 500);
-            setInterval(addTTSButtons, 1500);
-        })();
-        </script>
-        """, height=0)
+        # ===== Sheet Quick Stats for Chat Header =====
+        try:
+            quick_stats = get_sheet_quick_stats()
+            stats_badge = f"📊 EQ: {quick_stats['total']} | Today: {quick_stats['today']} | Top: {quick_stats['top_class']}"
+        except Exception:
+            stats_badge = "📊 Sheet data available"
 
-        # WhatsApp Header
-        st.markdown("""
-        <div class="wa-header">
-            <div class="wa-header-icon">🚂</div>
-            <div>
-                <div class="wa-header-title">TSKEQ Bot</div>
-                <div class="wa-header-sub">Online — Gemini AI Powered</div>
+        # ===== Time-Based Welcome Banner =====
+        hour = now_ist().hour
+        if 5 <= hour < 12:
+            welcome_emoji = "🌅"; welcome_text = "Good Morning"
+        elif 12 <= hour < 16:
+            welcome_emoji = "☀️"; welcome_text = "Good Afternoon"
+        elif 16 <= hour < 21:
+            welcome_emoji = "🌆"; welcome_text = "Good Evening"
+        else:
+            welcome_emoji = "🌙"; welcome_text = "Good Night"
+
+        welcome_banner = f"{welcome_emoji} {welcome_text}, {current_user}! {stats_badge}"
+
+        # ===== WhatsApp Group Header =====
+        online_count = len(online_users)
+        online_names = ", ".join(list(online_users.keys())[:5])
+        if len(online_users) > 5:
+            online_names += " +" + str(len(online_users) - 5) + " more"
+
+        st.markdown(f"""
+        <div class="wa-group-header">
+            <div class="wa-group-avatar">🚂</div>
+            <div class="wa-group-info">
+                <div class="wa-group-name">TSKEQ Team Group</div>
+                <div class="wa-group-meta">
+                    <span class="wa-online-dot"></span> {online_count} online · {online_names if online_names else 'Just you'}
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        st.caption("Ask about EQ data, trains, quota, PNR or anything else.")
+        # ===== Welcome Banner =====
+        st.markdown(f"""
+        <div style="background: linear-gradient(90deg, rgba(255,153,51,0.2), rgba(255,255,255,0.1), rgba(19,136,8,0.2)); 
+            border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 10px 16px; 
+            margin: 8px 0; text-align: center; backdrop-filter: blur(10px);
+            color: #ffffff !important; font-weight: 600; font-size: 0.95rem;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8) !important;
+            -webkit-text-fill-color: #ffffff !important;">
+            {welcome_banner}
+        </div>
+        """, unsafe_allow_html=True)
 
-        # ===== WhatsApp-style Attachment & Process =====
+        # ===== Chat Messages Container =====
+        st.markdown('<div class="wa-chat-container">', unsafe_allow_html=True)
+
+        for msg in chat_history:
+            sender = msg.get('username', 'Unknown')
+            msg_type = msg.get('type', 'user')
+            message_text = msg.get('message', '')
+            timestamp = msg.get('timestamp', '')
+            role = msg.get('role', 'viewer')
+            is_me = sender == current_user
+            is_admin = msg_type == 'admin' or sender == 'TSKEQ Bot'
+            is_alert = msg_type == 'alert' or msg_type == 'system'
+
+            if is_alert:
+                st.markdown(f"""
+                <div class="wa-msg-row system">
+                    <div class="wa-msg-bubble system">
+                        {message_text}<br>
+                        <span style="font-size:0.65rem;opacity:0.5;">{timestamp}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            elif is_admin:
+                st.markdown(f"""
+                <div class="wa-msg-row admin">
+                    <div class="wa-msg-bubble admin">
+                        <div class="wa-msg-sender">🚂 {sender}</div>
+                        {message_text}
+                        <div class="wa-msg-time">{timestamp}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            elif is_me:
+                st.markdown(f"""
+                <div class="wa-msg-row me">
+                    <div class="wa-msg-bubble me">
+                        <div class="wa-msg-sender" style="justify-content:flex-end;">You</div>
+                        {message_text}
+                        <div class="wa-msg-time">{timestamp}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div class="wa-msg-row">
+                    <div class="wa-msg-bubble other">
+                        <div class="wa-msg-sender">{sender}</div>
+                        {message_text}
+                        <div class="wa-msg-time">{timestamp}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # ===== Auto-refresh indicator =====
+        st.caption(f"🔄 Auto-syncing · {len(chat_history)} messages · Last updated: {format_time()}")
+
+        # ===== Attachment & Process Area =====
         with st.expander("📎 Attach & Process (Image / PDF / Audio / Text)", expanded=False):
             st.caption("📷 Image • 📄 PDF • 🎤 Voice • 📝 Text")
-            up_mode = st.radio("Type", ["📝 Text", "📷 Image / PDF", "🎤 Voice / Audio"], horizontal=True, label_visibility="collapsed", key="chat_up_mode")
+            up_mode = st.radio("Type", ["📝 Text", "📷 Image / PDF", "🎤 Voice / Audio"], 
+                horizontal=True, label_visibility="collapsed", key="chat_up_mode")
             up_file = None
             up_text = ""
             up_audio = None
             if up_mode == "📝 Text":
-                up_text = st.text_area("Paste messy railway text here...", height=120, placeholder="PNR, Train, DOJ, Name, Class, etc...", label_visibility="collapsed", key="chat_up_text")
+                up_text = st.text_area("Paste messy railway text here...", height=120, 
+                    placeholder="PNR, Train, DOJ, Name, Class, etc...", 
+                    label_visibility="collapsed", key="chat_up_text")
             elif up_mode == "📷 Image / PDF":
-                up_file = st.file_uploader("Drop image or PDF", type=["png","jpg","jpeg","pdf"], label_visibility="collapsed", key="chat_up_file")
+                up_file = st.file_uploader("Drop image or PDF", type=["png","jpg","jpeg","pdf"], 
+                    label_visibility="collapsed", key="chat_up_file")
             else:
                 up_audio = st.audio_input("Record voice", label_visibility="collapsed", key="chat_up_rec")
                 if not up_audio:
-                    up_file = st.file_uploader("Or upload audio file", type=["mp3","wav","ogg","m4a"], label_visibility="collapsed", key="chat_up_audio_file")
-                if up_audio:
-                    st.audio(up_audio, format='audio/wav')
-                elif up_file:
-                    st.audio(up_file, format='audio/mp3')
+                    up_file = st.file_uploader("Or upload audio file", type=["mp3","wav","ogg","m4a"], 
+                        label_visibility="collapsed", key="chat_up_audio_file")
+                if up_audio: st.audio(up_audio, format='audio/wav')
+                elif up_file: st.audio(up_file, format='audio/mp3')
+
             if st.button("🚀 Process & Save to Sheet", type="primary", use_container_width=True, key="chat_process_btn"):
                 if up_mode == "📝 Text" and not up_text.strip():
                     st.warning("Please enter text first.")
@@ -4647,14 +5781,14 @@ def main():
                         try:
                             if up_mode == "📝 Text":
                                 res = gemini_universal_parser(up_text, "text", None)
-                                fname = f"chat_text_{now_ist().strftime('%H%M%S')}.txt"
+                                fname = "chat_text_" + now_ist().strftime('%H%M%S') + ".txt"
                                 fbytes = up_text.encode()
                                 mime = "text/plain"
                             elif up_audio:
                                 fbytes = up_audio.getvalue()
                                 b64 = base64.b64encode(fbytes).decode()
                                 res = gemini_universal_parser(b64, "audio", "audio/wav")
-                                fname = f"chat_voice_{now_ist().strftime('%H%M%S')}.wav"
+                                fname = "chat_voice_" + now_ist().strftime('%H%M%S') + ".wav"
                                 mime = "audio/wav"
                             else:
                                 fbytes = up_file.read()
@@ -4663,70 +5797,347 @@ def main():
                                 res = gemini_universal_parser(b64, ftype, up_file.type)
                                 fname = up_file.name
                                 mime = up_file.type
+
                             if "error" in res:
-                                err_msg = f"❌ Extraction Error: {res['error']}"
-                                st.session_state.messages.append({"role": "assistant", "content": err_msg})
+                                err_msg = "❌ Extraction Error: " + res['error']
+                                save_chat_message(current_user, current_role, err_msg, 'user')
                                 st.error(res["error"])
                             else:
                                 rec_count = res.get('count', 0)
-                                success_msg = f"✅ Extracted **{rec_count}** record(s) from your upload."
-                                success_msg += chr(10) + chr(10)
-                                if res.get('records'):
-                                    preview_lines = []
-                                    for r in res['records'][:5]:
-                                        preview_lines.append(f"• PNR: `{r.get('PNR','')}` | Train: `{r.get('T_N','')}` | DOJ: `{r.get('DOJ','')}` | Name: `{r.get('PASS_NAME','')}` | Class: `{r.get('CLASS','')}`")
-                                    success_msg += "**Preview:**"
-                                    success_msg += chr(10) + chr(10)
-                                    success_msg += chr(10).join(preview_lines)
+                                records = res.get('records', [])
+                                detail_lines = []
+                                detail_lines.append("🎯 **Extraction Complete — " + str(rec_count) + " Record(s) Found**")
+                                detail_lines.append("")
+                                for idx, r in enumerate(records, 1):
+                                    detail_lines.append("📋 **Record #" + str(idx) + "**")
+                                    fields = []
+                                    if r.get('PNR'): fields.append("🔢 PNR: `" + r['PNR'] + "`")
+                                    if r.get('T_N'): fields.append("🚆 Train: `" + r['T_N'] + "`")
+                                    if r.get('CLASS'): fields.append("🎫 Class: `" + r['CLASS'] + "`")
+                                    if r.get('DOJ'): fields.append("📅 DOJ: `" + r['DOJ'] + "`")
+                                    if r.get('FROM'): fields.append("📍 From: `" + r['FROM'] + "`")
+                                    if r.get('TO'): fields.append("📍 To: `" + r['TO'] + "`")
+                                    if r.get('PASS_NAME'): fields.append("👤 Name: `" + r['PASS_NAME'] + "`")
+                                    if r.get('VIP_STATUS'): fields.append("⭐ VIP: `" + r['VIP_STATUS'] + "`")
+                                    detail_lines.append("  " + " | ".join(fields))
+                                    detail_lines.append("")
+
+                                success_msg = "\n".join(detail_lines)
+
+                                # Save to EQ Sheet
                                 try:
                                     gc = init_sheets()
                                     eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
-                                    save_res = save_to_sheet(eq_sheet, res['records'])
+                                    save_res = save_to_sheet(eq_sheet, records)
                                     if "error" in save_res:
-                                        success_msg += chr(10) + chr(10) + f"⚠️ **Sheet Save Error:** {save_res['error']}"
+                                        success_msg += "\n\n⚠️ **Sheet Save Error:** " + save_res['error']
                                     else:
-                                        success_msg += chr(10) + chr(10) + f"💾 **Saved to EQ Sheet:** {save_res['saved']} new, {save_res['skipped']} skipped"
+                                        success_msg += "\n\n💾 **Saved to EQ Sheet:** `" + str(save_res['saved']) + "` new records, `" + str(save_res['skipped']) + "` duplicates skipped"
                                         if up_mode != "📝 Text":
                                             drive_res = upload_to_drive(fbytes, fname, mime)
                                             if drive_res['success']:
-                                                success_msg += chr(10) + chr(10) + f"📁 **Drive:** [{fname}]({drive_res.get('view_url')})"
+                                                success_msg += "\n📁 **Drive File:** [" + fname + "](" + drive_res.get('view_url', '') + ")"
                                         st.cache_data.clear()
                                         st.session_state.last_refresh = time.time()
                                 except Exception as e:
-                                    success_msg += chr(10) + chr(10) + f"⚠️ **Sheet Error:** {str(e)}"
-                                st.session_state.messages.append({"role": "assistant", "content": success_msg})
-                                st.success(f"Processed {rec_count} records")
+                                    success_msg += "\n\n⚠️ **Sheet Error:** " + str(e)
+
+                                save_chat_message(current_user, current_role, success_msg, 'user')
+                                save_chat_message('TSKEQ Bot', 'admin', 
+                                    "✅ " + current_user + " processed " + str(rec_count) + " records and saved to EQ sheet.", 'admin')
+                                st.success("✅ Processed & Saved " + str(rec_count) + " records")
                                 time.sleep(0.5)
                                 st.rerun()
                         except Exception as e:
-                            err_msg = f"❌ Processing failed: {str(e)}"
-                            st.session_state.messages.append({"role": "assistant", "content": err_msg})
+                            err_msg = "❌ Processing failed: " + str(e)
+                            save_chat_message(current_user, current_role, err_msg, 'user')
                             st.error(str(e))
 
-        if prompt := st.chat_input("Type your question...", key="chat_input"):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"): st.markdown(prompt)
-            with st.chat_message("assistant"):
-                with st.spinner("Thinking..."):
-                    response = chat_with_gemini(prompt, st.session_state.messages)
-                    st.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            st.rerun()
-        for msg in st.session_state.messages:
-            with st.chat_message(msg["role"]): st.markdown(msg["content"])
-        st.markdown("**Quick Questions**")
-        sugg_cols = st.columns(3)
-        for i, suggestion in enumerate(st.session_state.chat_suggestions):
-            with sugg_cols[i % 3]:
-                if st.button(suggestion, key=f"sugg_{i}", use_container_width=True):
-                    st.session_state.messages.append({"role": "user", "content": suggestion})
-                    with st.spinner("Thinking..."):
-                        response = chat_with_gemini(suggestion, st.session_state.messages)
-                        st.session_state.messages.append({"role": "assistant", "content": response})
+        # ===== Chat Input =====
+        prompt = st.chat_input("Type your message or command...", key="chat_input")
+        if prompt:
+            # Save user message
+            save_chat_message(current_user, current_role, prompt, 'user')
+
+            # Parse command
+            cmd = parse_chat_command(prompt)
+            action = cmd.get('action', 'chat')
+
+            if action == 'pdf_train':
+                train_num = cmd.get('train', '')
+                with st.spinner("Generating PDF for train " + train_num + "..."):
+                    pdf_bytes, err = generate_train_pdf(train_num, "EQ")
+                    if pdf_bytes:
+                        # Save PDF info to chat
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "📄 PDF generated for Train " + train_num + ". Download below 👇", 'admin')
+                        st.session_state.chat_pdf_bytes = pdf_bytes
+                        st.session_state.chat_pdf_name = "Train_" + train_num + "_EQ.pdf"
+                    else:
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "❌ " + (err or "Could not generate PDF"), 'admin')
+                st.rerun()
+
+            elif action == 'pdf_today':
+                with st.spinner("Generating today's PDF..."):
+                    pdf_bytes, err = generate_today_pdf("EQ")
+                    if pdf_bytes:
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "📄 Today's PDF generated. Download below 👇", 'admin')
+                        st.session_state.chat_pdf_bytes = pdf_bytes
+                        st.session_state.chat_pdf_name = "Today_" + now_ist().strftime('%d%m%Y') + "_EQ.pdf"
+                    else:
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "❌ " + (err or "Could not generate PDF"), 'admin')
+                st.rerun()
+
+            elif action == 'pdf_full':
+                with st.spinner("Generating full EQ PDF..."):
+                    df = load_sheet_data_cached("EQ", SHEET_ID)
+                    if not df.empty:
+                        pdf_bytes = generate_pdf(df, "EQ Full Report", full=True)
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "📄 Full EQ PDF generated (" + str(len(df)) + " records). Download below 👇", 'admin')
+                        st.session_state.chat_pdf_bytes = pdf_bytes
+                        st.session_state.chat_pdf_name = "EQ_Full_Report_" + now_ist().strftime('%d%m%Y') + ".pdf"
+                    else:
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "❌ No data in EQ sheet to generate PDF.", 'admin')
+                st.rerun()
+
+            elif action == 'sheet_link':
+                link = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/edit"
+                save_chat_message('TSKEQ Bot', 'admin', 
+                    "🔗 **Sheet Link:**\n" + link + "\n\n📋 Copy and share with full access.", 'admin')
+                st.rerun()
+
+            elif action == 'eq_list':
+                train_num = cmd.get('train', '')
+                df = load_sheet_data_cached("EQ", SHEET_ID)
+                if not df.empty:
+                    config = SHEET_CONFIG.get("EQ", {})
+                    train_col_idx = config.get('train_col')
+                    if train_col_idx is not None and train_col_idx < len(df.columns):
+                        train_col = df.columns[train_col_idx]
+                        filtered = df[df[train_col].astype(str).str.contains(str(train_num), case=False, na=False)]
+                        if not filtered.empty:
+                            msg_lines = ["🚆 **Train " + train_num + " EQ List**\n"]
+                            msg_lines.append("| S/N | PNR | From | To | DOJ | Class | Name | Berths | VIP |")
+                            msg_lines.append("|-----|-----|------|-----|-----|-------|------|--------|-----|")
+                            for idx, row in filtered.head(20).iterrows():
+                                vals = [str(row.get(c, '-'))[:12] for c in filtered.columns[:9]]
+                                msg_lines.append("| " + " | ".join(vals) + " |")
+                            if len(filtered) > 20:
+                                msg_lines.append("\n... and " + str(len(filtered)-20) + " more records")
+                            save_chat_message('TSKEQ Bot', 'admin', "\n".join(msg_lines), 'admin')
+                        else:
+                            save_chat_message('TSKEQ Bot', 'admin', 
+                                "❌ No EQ records found for Train " + train_num, 'admin')
+                st.rerun()
+
+            elif action == 'chart_time':
+                train_num = cmd.get('train', '')
+                df = load_sheet_data_cached("EQ", SHEET_ID)
+                chart_results = []
+                if not df.empty:
+                    config = SHEET_CONFIG.get("EQ", {})
+                    train_col_idx = config.get('train_col')
+                    doj_col_idx = config.get('doj_col')
+                    if train_col_idx is not None and doj_col_idx is not None:
+                        train_col = df.columns[train_col_idx]
+                        doj_col = df.columns[doj_col_idx]
+                        filtered = df[df[train_col].astype(str).str.contains(str(train_num), case=False, na=False)]
+                        seen_doj = set()
+                        for _, row in filtered.iterrows():
+                            doj = str(row.get(doj_col, ''))
+                            if doj and doj not in seen_doj:
+                                seen_doj.add(doj)
+                                ct = get_charting_time(train_num, doj)
+                                chart_results.append("📅 DOJ: " + doj + " → " + ct)
+                if chart_results:
+                    save_chat_message('TSKEQ Bot', 'admin', 
+                        "⏰ **Charting Time for Train " + train_num + "**\n\n" + "\n".join(chart_results), 'admin')
+                else:
+                    save_chat_message('TSKEQ Bot', 'admin', 
+                        "⏰ **Charting Time for Train " + train_num + "**\nNo active EQ records found.", 'admin')
+                st.rerun()
+
+            elif action == 'pnr_status':
+                pnr = cmd.get('pnr', '')
+                if NTES_AVAILABLE:
+                    data = get_pnr_status(pnr)
+                    msg = format_pnr_result(data) if data else "❌ PNR not found"
+                else:
+                    msg = "🔍 [Check PNR " + pnr + " on ConfirmTkt](https://www.confirmtkt.com/pnr-status/" + pnr + ")"
+                save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
+                st.rerun()
+
+            elif action == 'live_train':
+                train_num = cmd.get('train', '')
+                if NTES_AVAILABLE:
+                    data = get_live_train_status(train_num)
+                    msg, _ = format_live_train_result(data) if data else ("❌ No data", None)
+                else:
+                    msg = "🚂 [Check Live Status for " + train_num + " on RailYatri](https://www.railyatri.in/live-train-status/" + train_num + ")"
+                save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
+                st.rerun()
+
+            elif action == 'weather':
+                city = cmd.get('city', 'Tinsukia')
+                data = get_weather(city)
+                if data and 'error' not in data:
+                    msg = "🌤️ **Weather in " + data.get('city', city) + "**\n\n"
+                    msg += "🌡️ Temp: " + str(data.get('temp', '--')) + "°C (feels like " + str(data.get('feels_like', '--')) + "°C)\n"
+                    msg += "📝 " + data.get('weather', 'N/A').title() + "\n"
+                    msg += "💧 Humidity: " + str(data.get('humidity', '--')) + "%\n"
+                    msg += "🌬️ Wind: " + str(data.get('wind_speed', '--')) + " m/s"
+                else:
+                    msg = "❌ Could not fetch weather for " + city
+                save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
+                st.rerun()
+
+            else:
+                # Regular chat - Gemini only responds when explicitly mentioned
+                if should_trigger_gemini(prompt):
+                    with st.spinner("TSKEQ Bot is typing..."):
+                        response = chat_with_gemini(prompt, chat_history)
+                        save_chat_message('TSKEQ Bot', 'admin', response, 'admin')
+                # If not mentioning Gemini, just a normal group message - no AI response
+                st.rerun()
+
+        # ===== PDF Download in Chat =====
+        if st.session_state.get('chat_pdf_bytes'):
+            st.markdown('<div class="wa-pdf-card">', unsafe_allow_html=True)
+            c1, c2 = st.columns([4, 1])
+            with c1:
+                st.markdown("📄 **" + st.session_state.chat_pdf_name + "** ready for download")
+            with c2:
+                st.download_button("⬇️ Download", data=st.session_state.chat_pdf_bytes,
+                    file_name=st.session_state.chat_pdf_name, mime="application/pdf",
+                    use_container_width=True, key="chat_pdf_download")
+            st.markdown('</div>', unsafe_allow_html=True)
+            # Clear after showing
+            if st.button("🗑️ Clear PDF", key="clear_chat_pdf"):
+                st.session_state.chat_pdf_bytes = None
+                st.session_state.chat_pdf_name = None
+                st.rerun()
+
+        # ===== Quick Command Suggestions =====
+        st.markdown("**⚡ Quick Commands**")
+        cmd_cols = st.columns(4)
+        quick_cmds = [
+            ("📄 Today's PDF", "today pdf"),
+            ("🚆 Train PDF", "pdf 15909"),
+            ("📋 Full PDF", "full pdf"),
+            ("🔗 Sheet Link", "sheet link"),
+            ("⏰ Chart Time", "chart time 15909"),
+            ("🔍 PNR Status", "pnr 6002236104"),
+            ("🚂 Live Train", "live 15909"),
+            ("🌤️ Weather", "weather Tinsukia"),
+        ]
+        for i, (label, cmd_text) in enumerate(quick_cmds):
+            with cmd_cols[i % 4]:
+                if st.button(label, use_container_width=True, key=f"cmd_{i}"):
+                    save_chat_message(current_user, current_role, cmd_text, 'user')
+                    # Trigger command processing
+                    cmd = parse_chat_command(cmd_text)
+                    action = cmd.get('action', 'chat')
+                    if action == 'pdf_today':
+                        pdf_bytes, err = generate_today_pdf("EQ")
+                        if pdf_bytes:
+                            save_chat_message('TSKEQ Bot', 'admin', "📄 Today's PDF generated. Download below 👇", 'admin')
+                            st.session_state.chat_pdf_bytes = pdf_bytes
+                            st.session_state.chat_pdf_name = "Today_" + now_ist().strftime('%d%m%Y') + "_EQ.pdf"
+                        else:
+                            save_chat_message('TSKEQ Bot', 'admin', "❌ " + (err or "Error"), 'admin')
+                    elif action == 'pdf_train':
+                        pdf_bytes, err = generate_train_pdf(cmd.get('train', ''), "EQ")
+                        if pdf_bytes:
+                            save_chat_message('TSKEQ Bot', 'admin', "📄 PDF generated. Download below 👇", 'admin')
+                            st.session_state.chat_pdf_bytes = pdf_bytes
+                            st.session_state.chat_pdf_name = "Train_" + cmd.get('train', '') + "_EQ.pdf"
+                        else:
+                            save_chat_message('TSKEQ Bot', 'admin', "❌ " + (err or "Error"), 'admin')
+                    elif action == 'pdf_full':
+                        df = load_sheet_data_cached("EQ", SHEET_ID)
+                        if not df.empty:
+                            pdf_bytes = generate_pdf(df, "EQ Full Report", full=True)
+                            save_chat_message('TSKEQ Bot', 'admin', "📄 Full PDF generated. Download below 👇", 'admin')
+                            st.session_state.chat_pdf_bytes = pdf_bytes
+                            st.session_state.chat_pdf_name = "EQ_Full_Report_" + now_ist().strftime('%d%m%Y') + ".pdf"
+                        else:
+                            save_chat_message('TSKEQ Bot', 'admin', "❌ No data", 'admin')
+                    elif action == 'sheet_link':
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "🔗 **Sheet Link:**\nhttps://docs.google.com/spreadsheets/d/" + SHEET_ID + "/edit", 'admin')
+                    elif action == 'chart_time':
+                        train_num = cmd.get('train', '')
+                        ct = get_charting_time(train_num, '')
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "⏰ Charting for Train " + train_num + ": " + ct, 'admin')
+                    elif action == 'pnr_status':
+                        pnr = cmd.get('pnr', '')
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "🔍 [Check PNR " + pnr + "](https://www.confirmtkt.com/pnr-status/" + pnr + ")", 'admin')
+                    elif action == 'live_train':
+                        train_num = cmd.get('train', '')
+                        save_chat_message('TSKEQ Bot', 'admin', 
+                            "🚂 [Check Live Status for " + train_num + "](https://www.railyatri.in/live-train-status/" + train_num + ")", 'admin')
+                    elif action == 'weather':
+                        city = cmd.get('city', 'Tinsukia')
+                        data = get_weather(city)
+                        if data and 'error' not in data:
+                            msg = "🌤️ **" + data.get('city', city) + "**: " + str(data.get('temp', '--')) + "°C, " + data.get('weather', '').title()
+                        else:
+                            msg = "❌ Weather not found"
+                        save_chat_message('TSKEQ Bot', 'admin', msg, 'admin')
                     st.rerun()
-        if st.button("🗑️ Clear Chat", use_container_width=True, key="clear_chat_btn"):
-            st.session_state.messages = []
-            st.rerun()
+
+        # ===== Clear Chat =====
+        if st.button("🗑️ Clear My Messages", use_container_width=True, key="clear_my_chat"):
+            # Note: In a real group chat, only admin can clear all. Users can only clear their view.
+            st.info("💡 Chat is shared. Messages remain for all users.")
+
+        # ===== TTS Engine =====
+        components.html("""
+        <script>
+        (function(){
+            if (window.__waTTSInit) return;
+            window.__waTTSInit = true;
+            function speak(text) {
+                if (!window.speechSynthesis) return;
+                window.speechSynthesis.cancel();
+                var utter = new SpeechSynthesisUtterance(text);
+                utter.rate = 1.0; utter.pitch = 1.0; utter.volume = 1.0;
+                utter.lang = 'en-IN';
+                var voices = window.speechSynthesis.getVoices();
+                var hiVoice = voices.find(function(v){ return v.lang.includes('hi') || v.lang.includes('en-IN'); });
+                if (hiVoice) utter.voice = hiVoice;
+                window.speechSynthesis.speak(utter);
+            }
+            function addTTSButtons() {
+                var msgs = document.querySelectorAll('.wa-msg-bubble.admin, .wa-msg-bubble.other');
+                msgs.forEach(function(msg){
+                    if (msg.querySelector('.tts-btn')) return;
+                    var text = msg.innerText || msg.textContent || '';
+                    if (text.length < 10) return;
+                    var btn = document.createElement('button');
+                    btn.className = 'tts-btn';
+                    btn.innerHTML = '🔊 Listen';
+                    btn.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.1);border:none;color:#8696a0;font-size:0.75rem;padding:4px 8px;border-radius:12px;cursor:pointer;margin-top:4px;transition:all 0.2s;';
+                    btn.onmouseenter = function(){ btn.style.background = 'rgba(255,255,255,0.2)'; btn.style.color = '#fff'; };
+                    btn.onmouseleave = function(){ btn.style.background = 'rgba(255,255,255,0.1)'; btn.style.color = '#8696a0'; };
+                    btn.onclick = function(e){ e.stopPropagation(); speak(text); };
+                    msg.appendChild(btn);
+                });
+            }
+            var observer = new MutationObserver(function(){ addTTSButtons(); });
+            observer.observe(document.body, { childList: true, subtree: true });
+            setTimeout(addTTSButtons, 500);
+            setInterval(addTTSButtons, 2000);
+        })();
+        </script>
+        """, height=0)
 # VIEW: 🚂 RAILWAY
     # =====================================================================
     elif view == "🚂 Railway":
