@@ -738,7 +738,7 @@ Instructions:
 
 Previous conversation:
 """
-        for msg in chat_history[-30:]:
+        for msg in chat_history[-10:]:
             if msg['role'] == 'user': system_prompt += f"User: {msg['content']}\n"
             else: system_prompt += f"Assistant: {msg['content']}\n"
         system_prompt += f"\nUser: {user_message}\nAssistant:"
@@ -2111,6 +2111,441 @@ def get_pnr_status_url(pnr):
 # Audio Engine & Earth Background
 # =====================================================================
 
+def render_audio_controls(current_scene):
+    """Render sidebar audio volume + Web Audio engine."""
+    scene_map = {
+        "📋 Data Table": "rail-engine",
+        "📊 Dashboard": "dashboard",
+        "💬 Chat": "solar",
+        "🚂 Railway": "rail-engine",
+        "🌤️ Weather": "weather-sunny"
+    }
+    scene = scene_map.get(current_scene, "solar")
+
+    if current_scene == "🌤️ Weather" and st.session_state.weather_data and 'error' not in st.session_state.weather_data:
+        weather_cond = str(st.session_state.weather_data.get('weather', '')).lower()
+        audio_time = 'day'
+        try:
+            now_ts = int(time.time())
+            sunrise = st.session_state.weather_data.get('sunrise')
+            sunset = st.session_state.weather_data.get('sunset')
+            if sunrise and sunset and str(sunrise) not in ['', 'N/A', 'None']:
+                if now_ts < int(sunrise) or now_ts > int(sunset):
+                    audio_time = 'night'
+        except:
+            pass
+        if 'rain' in weather_cond or 'drizz' in weather_cond:
+            scene = 'weather-rain'
+        elif 'thunder' in weather_cond or 'storm' in weather_cond:
+            scene = 'weather-thunder'
+        elif 'snow' in weather_cond or 'frost' in weather_cond or 'freez' in weather_cond:
+            scene = 'weather-snow'
+        elif 'mist' in weather_cond or 'fog' in weather_cond or 'haz' in weather_cond:
+            scene = 'weather-fog'
+        elif 'cloud' in weather_cond:
+            scene = 'weather-cloudy' if audio_time == 'day' else 'weather-night'
+        else:
+            scene = 'weather-night' if audio_time == 'night' else 'weather-sunny'
+
+    components.html(f"""
+    <div style="padding: 10px 0; font-family: inherit;">
+        <div style="color: #f1f5f9; font-weight: 600; margin-bottom: 6px; font-size: 0.95rem;">🔊 Ambient Sound</div>
+        <input type="range" id="eqms-vol" min="0" max="100" value="0" 
+               style="width: 100%; accent-color: #FF9933; cursor: pointer; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1);">
+        <div style="display: flex; justify-content: space-between; color: #94a3b8; font-size: 0.75rem; margin-top: 4px;">
+            <span>Off</span><span>Max</span>
+        </div>
+        <div id="eqms-sound-status" style="color: #64748b; font-size: 0.75rem; margin-top: 6px; font-style: italic;">
+            Move slider to enable sound
+        </div>
+    </div>
+    <script>
+    (function() {{
+        var P = window.parent;
+
+        class SoundEngine {{
+            constructor() {{
+                this.ctx = null;
+                this.master = null;
+                this.nodes = {{}};
+                this.volume = 0;
+                this.scene = null;
+                this.started = false;
+                this._thunderInterval = null;
+                this._chirpTimeout = null;
+                this._lastBrown = 0;
+            }}
+
+            init() {{
+                if (this.ctx) return;
+                var AudioContext = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioContext();
+                this.master = this.ctx.createGain();
+                this.master.gain.value = 0;
+                this.master.connect(this.ctx.destination);
+                this.started = true;
+            }}
+
+            setVolume(v) {{
+                this.volume = v / 100;
+                if (!this.ctx) this.init();
+                if (this.master) {{
+                    this.master.gain.setTargetAtTime(this.volume * 0.35, this.ctx.currentTime, 0.1);
+                }}
+                if (this.volume > 0 && this.ctx && this.ctx.state === 'suspended') {{
+                    this.ctx.resume();
+                }}
+            }}
+
+            stopAll() {{
+                for (var k in this.nodes) {{
+                    try {{ this.nodes[k].stop(); }} catch(e){{}}
+                    try {{ this.nodes[k].disconnect(); }} catch(e){{}}
+                }}
+                this.nodes = {{}};
+                if (this._thunderInterval) {{ clearInterval(this._thunderInterval); this._thunderInterval = null; }}
+                if (this._chirpTimeout) {{ clearTimeout(this._chirpTimeout); this._chirpTimeout = null; }}
+            }}
+
+            setScene(scene) {{
+                if (this.scene === scene) return;
+                this.scene = scene;
+                if (this.volume <= 0) return;
+                this.stopAll();
+                if (!this.ctx) this.init();
+                switch(scene) {{
+                    case 'rail-engine': this.playRailEngine(); break;
+                    case 'solar': this.playSolar(); break;
+                    case 'dashboard': this.playDashboard(); break;
+                    case 'weather-rain': this.playRain(); break;
+                    case 'weather-thunder': this.playThunder(); break;
+                    case 'weather-sunny': this.playSunny(); break;
+                    case 'weather-snow': this.playSnow(); break;
+                    case 'weather-cloudy': this.playCloudy(); break;
+                    case 'weather-night': this.playNight(); break;
+                    case 'weather-fog': this.playFog(); break;
+                    default: this.stopAll();
+                }}
+            }}
+
+            noiseBuffer() {{
+                var len = this.ctx.sampleRate * 2;
+                var buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+                var d = buf.getChannelData(0);
+                this._lastBrown = 0;
+                for (var i = 0; i < len; i++) {{
+                    var white = Math.random() * 2 - 1;
+                    this._lastBrown = (this._lastBrown || 0) + (white * 0.02);
+                    d[i] = this._lastBrown * 3.5;
+                }}
+                return buf;
+            }}
+
+            whiteNoiseBuffer() {{
+                var len = this.ctx.sampleRate * 2;
+                var buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+                var d = buf.getChannelData(0);
+                for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+                return buf;
+            }}
+
+            playRailEngine() {{
+                var osc1 = this.ctx.createOscillator();
+                osc1.type = 'sawtooth';
+                osc1.frequency.value = 200;
+                var g1 = this.ctx.createGain();
+                g1.gain.value = 0.35;
+                var filter1 = this.ctx.createBiquadFilter();
+                filter1.type = 'lowpass';
+                filter1.frequency.value = 450;
+                osc1.connect(filter1);
+                filter1.connect(g1);
+                g1.connect(this.master);
+                osc1.start();
+                this.nodes.osc1 = osc1;
+
+                var osc2 = this.ctx.createOscillator();
+                osc2.type = 'square';
+                osc2.frequency.value = 350;
+                var g2 = this.ctx.createGain();
+                g2.gain.value = 0.20;
+                var filter2 = this.ctx.createBiquadFilter();
+                filter2.type = 'lowpass';
+                filter2.frequency.value = 600;
+                osc2.connect(filter2);
+                filter2.connect(g2);
+                g2.connect(this.master);
+                osc2.start();
+                this.nodes.osc2 = osc2;
+
+                var noise = this.ctx.createBufferSource();
+                noise.buffer = this.whiteNoiseBuffer();
+                noise.loop = true;
+                var noiseFilter = this.ctx.createBiquadFilter();
+                noiseFilter.type = 'highpass';
+                noiseFilter.frequency.value = 1200;
+                var noiseGain = this.ctx.createGain();
+                noiseGain.gain.value = 0.10;
+                noise.connect(noiseFilter);
+                noiseFilter.connect(noiseGain);
+                noiseGain.connect(this.master);
+                noise.start();
+                this.nodes.noise = noise;
+
+                var lfo = this.ctx.createOscillator();
+                lfo.type = 'square';
+                lfo.frequency.value = 2.0;
+                var lfoGain = this.ctx.createGain();
+                lfoGain.gain.value = 0.15;
+                lfo.connect(lfoGain);
+                lfoGain.connect(g1.gain);
+                lfo.start();
+                this.nodes.lfo = lfo;
+
+                var lfo2 = this.ctx.createOscillator();
+                lfo2.type = 'sine';
+                lfo2.frequency.value = 1.0;
+                var lfo2Gain = this.ctx.createGain();
+                lfo2Gain.gain.value = 0.08;
+                lfo2.connect(lfo2Gain);
+                lfo2Gain.connect(g2.gain);
+                lfo2.start();
+                this.nodes.lfo2 = lfo2;
+            }}
+
+            playSolar() {{
+                var noise = this.ctx.createBufferSource();
+                noise.buffer = this.noiseBuffer();
+                noise.loop = true;
+                var noiseFilter = this.ctx.createBiquadFilter();
+                noiseFilter.type = 'lowpass';
+                noiseFilter.frequency.value = 180;
+                var noiseGain = this.ctx.createGain();
+                noiseGain.gain.value = 0.5;
+                noise.connect(noiseFilter);
+                noiseFilter.connect(noiseGain);
+                noiseGain.connect(this.master);
+                noise.start();
+                this.nodes.noise = noise;
+
+                var osc = this.ctx.createOscillator();
+                osc.type = 'sawtooth';
+                osc.frequency.value = 42;
+                var oscGain = this.ctx.createGain();
+                oscGain.gain.value = 0.3;
+                osc.connect(oscGain);
+                oscGain.connect(this.master);
+                osc.start();
+                this.nodes.osc = osc;
+
+                var lfo = this.ctx.createOscillator();
+                lfo.type = 'square';
+                lfo.frequency.value = 3.2;
+                var lfoGain = this.ctx.createGain();
+                lfoGain.gain.value = 0.18;
+                lfo.connect(lfoGain);
+                lfoGain.connect(oscGain.gain);
+                lfo.start();
+                this.nodes.lfo = lfo;
+            }}
+
+            playDashboard() {{
+                var osc = this.ctx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.value = 55;
+                var g = this.ctx.createGain();
+                g.gain.value = 0.35;
+                osc.connect(g);
+                g.connect(this.master);
+                osc.start();
+                this.nodes.osc = osc;
+
+                var osc2 = this.ctx.createOscillator();
+                osc2.type = 'sine';
+                osc2.frequency.value = 110;
+                var g2 = this.ctx.createGain();
+                g2.gain.value = 0.12;
+                osc2.connect(g2);
+                g2.connect(this.master);
+                osc2.start();
+                this.nodes.osc2 = osc2;
+
+                var osc3 = this.ctx.createOscillator();
+                osc3.type = 'triangle';
+                osc3.frequency.value = 220;
+                var g3 = this.ctx.createGain();
+                g3.gain.value = 0.05;
+                osc3.connect(g3);
+                g3.connect(this.master);
+                osc3.start();
+                this.nodes.osc3 = osc3;
+            }}
+
+            playRain() {{
+                var src = this.ctx.createBufferSource();
+                src.buffer = this.whiteNoiseBuffer();
+                src.loop = true;
+                var filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.value = 550;
+                var g = this.ctx.createGain();
+                g.gain.value = 0.3;
+                src.connect(filter);
+                filter.connect(g);
+                g.connect(this.master);
+                src.start();
+                this.nodes.rain = src;
+            }}
+
+            playThunder() {{
+                this.playRain();
+                var self = this;
+                var thunderInterval = setInterval(function() {{
+                    if (self.scene !== 'weather-thunder') {{ clearInterval(thunderInterval); return; }}
+                    var burst = self.ctx.createBufferSource();
+                    burst.buffer = self.whiteNoiseBuffer();
+                    var burstFilter = self.ctx.createBiquadFilter();
+                    burstFilter.type = 'lowpass';
+                    burstFilter.frequency.value = 120;
+                    var burstGain = self.ctx.createGain();
+                    burstGain.gain.setValueAtTime(0.55, self.ctx.currentTime);
+                    burstGain.gain.exponentialRampToValueAtTime(0.01, self.ctx.currentTime + 1.8);
+                    burst.connect(burstFilter);
+                    burstFilter.connect(burstGain);
+                    burstGain.connect(self.master);
+                    burst.start();
+                    burst.stop(self.ctx.currentTime + 1.8);
+                }}, 7000 + Math.random() * 8000);
+                this._thunderInterval = thunderInterval;
+            }}
+
+            playSunny() {{
+                var self = this;
+                var chirp = function() {{
+                    if (self.scene !== 'weather-sunny') return;
+                    var t = self.ctx.currentTime;
+                    var osc = self.ctx.createOscillator();
+                    osc.type = 'sine';
+                    var f = 2800 + Math.random() * 2500;
+                    osc.frequency.setValueAtTime(f, t);
+                    osc.frequency.exponentialRampToValueAtTime(f + 1200, t + 0.08);
+                    var g = self.ctx.createGain();
+                    g.gain.setValueAtTime(0.1, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+                    osc.connect(g);
+                    g.connect(self.master);
+                    osc.start(t);
+                    osc.stop(t + 0.15);
+                    self._chirpTimeout = setTimeout(chirp, 400 + Math.random() * 1800);
+                }};
+                chirp();
+            }}
+
+            playNight() {{
+                var self = this;
+                var chirp = function() {{
+                    if (self.scene !== 'weather-night') return;
+                    var t = self.ctx.currentTime;
+                    for (var i = 0; i < 3; i++) {{
+                        var osc = self.ctx.createOscillator();
+                        osc.type = 'sine';
+                        osc.frequency.value = 3200 + Math.random() * 600;
+                        var g = self.ctx.createGain();
+                        g.gain.setValueAtTime(0.07, t + i * 0.05);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.05 + 0.04);
+                        osc.connect(g);
+                        g.connect(self.master);
+                        osc.start(t + i * 0.05);
+                        osc.stop(t + i * 0.05 + 0.04);
+                    }}
+                    self._chirpTimeout = setTimeout(chirp, 250 + Math.random() * 900);
+                }};
+                chirp();
+            }}
+
+            playSnow() {{
+                var src = this.ctx.createBufferSource();
+                src.buffer = this.whiteNoiseBuffer();
+                src.loop = true;
+                var filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.value = 350;
+                filter.Q.value = 0.5;
+                var g = this.ctx.createGain();
+                g.gain.value = 0.18;
+                src.connect(filter);
+                filter.connect(g);
+                g.connect(this.master);
+                src.start();
+                this.nodes.snow = src;
+            }}
+
+            playCloudy() {{
+                var src = this.ctx.createBufferSource();
+                src.buffer = this.whiteNoiseBuffer();
+                src.loop = true;
+                var filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.value = 280;
+                var g = this.ctx.createGain();
+                g.gain.value = 0.14;
+                src.connect(filter);
+                filter.connect(g);
+                g.connect(this.master);
+                src.start();
+                this.nodes.cloudy = src;
+            }}
+
+            playFog() {{
+                var src = this.ctx.createBufferSource();
+                src.buffer = this.whiteNoiseBuffer();
+                src.loop = true;
+                var filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.value = 220;
+                var g = this.ctx.createGain();
+                g.gain.value = 0.22;
+                src.connect(filter);
+                filter.connect(g);
+                g.connect(this.master);
+                src.start();
+                this.nodes.fog = src;
+            }}
+        }}
+
+        if (!P.eqmsSoundEngine) {{
+            P.eqmsSoundEngine = new SoundEngine();
+        }}
+        var engine = P.eqmsSoundEngine;
+        var slider = document.getElementById('eqms-vol');
+        var status = document.getElementById('eqms-sound-status');
+
+        var savedVol = P.eqmsVolume || 0;
+        slider.value = savedVol;
+        if (savedVol > 0) {{
+            status.textContent = 'Scene: {scene} | Vol: ' + savedVol + '%';
+            engine.setVolume(savedVol);
+        }}
+
+        slider.addEventListener('input', function() {{
+            var v = parseInt(this.value);
+            P.eqmsVolume = v;
+            engine.setVolume(v);
+            status.textContent = 'Scene: {scene} | Vol: ' + v + '%';
+            if (v > 0) {{
+                engine.setScene('{scene}');
+            }} else {{
+                engine.stopAll();
+                status.textContent = 'Move slider to enable sound';
+            }}
+        }});
+
+        engine.setScene('{scene}');
+    }})();
+    </script>
+    """, height=120)
+
+
 EARTH_BG_HTML = """
 <style>
 .earth-bg-scene {
@@ -3269,9 +3704,39 @@ def main():
         now = now_ist()
         st.caption(f"📅 {format_date()}  •  🕐 {format_time()} IST")
 
+        # Audio Volume Control
+        render_audio_controls(st.session_state.view_mode)
 
         # Sidebar Train Engine Background
-        
+        st.markdown(f"""
+        <style>
+        [data-testid="stSidebar"] > div:first-child {{
+            background-image: url('{TRAIN_GIF_URL}') !important;
+            background-size: cover !important;
+            background-position: center !important;
+            background-repeat: no-repeat !important;
+            background-attachment: fixed !important;
+        }}
+        [data-testid="stSidebar"] > div:first-child::before {{
+            content: '' !important;
+            position: absolute !important;
+            inset: 0 !important;
+            background: rgba(15, 23, 42, 0.82) !important;
+            z-index: 0 !important;
+            pointer-events: none !important;
+        }}
+        [data-testid="stSidebar"] .stMarkdown,
+        [data-testid="stSidebar"] .stTextInput,
+        [data-testid="stSidebar"] .stSelectbox,
+        [data-testid="stSidebar"] .stButton,
+        [data-testid="stSidebar"] .stExpander,
+        [data-testid="stSidebar"] .stFileUploader {{
+            position: relative !important;
+            z-index: 1 !important;
+        }}
+        </style>
+        """, unsafe_allow_html=True)
+
         with st.expander("🌤️ Quick Weather", expanded=True):
             city = st.text_input("🏙️ City", value=st.session_state.weather_city, key="sidebar_weather_city", placeholder="Any city...")
             if city != st.session_state.weather_city: st.session_state.weather_city = city
@@ -4498,92 +4963,6 @@ def main():
         """, unsafe_allow_html=True)
         st.subheader("💬 Chat with TSKEQ Bot")
         st.caption("Ask about EQ data, trains, quota, PNR or anything else.")
-
-        # ===== WhatsApp-style Attachment & Process =====
-        with st.expander("📎 Attach & Process (Image / PDF / Audio / Text)", expanded=False):
-            st.caption("📷 Image • 📄 PDF • 🎤 Voice • 📝 Text")
-            up_mode = st.radio("Type", ["📝 Text", "📷 Image / PDF", "🎤 Voice / Audio"], horizontal=True, label_visibility="collapsed", key="chat_up_mode")
-            up_file = None
-            up_text = ""
-            up_audio = None
-            if up_mode == "📝 Text":
-                up_text = st.text_area("Paste messy railway text here...", height=120, placeholder="PNR, Train, DOJ, Name, Class, etc...", label_visibility="collapsed", key="chat_up_text")
-            elif up_mode == "📷 Image / PDF":
-                up_file = st.file_uploader("Drop image or PDF", type=["png","jpg","jpeg","pdf"], label_visibility="collapsed", key="chat_up_file")
-            else:
-                up_audio = st.audio_input("Record voice", label_visibility="collapsed", key="chat_up_rec")
-                if not up_audio:
-                    up_file = st.file_uploader("Or upload audio file", type=["mp3","wav","ogg","m4a"], label_visibility="collapsed", key="chat_up_audio_file")
-                if up_audio:
-                    st.audio(up_audio, format='audio/wav')
-                elif up_file:
-                    st.audio(up_file, format='audio/mp3')
-            if st.button("🚀 Process & Save to Sheet", type="primary", use_container_width=True, key="chat_process_btn"):
-                if up_mode == "📝 Text" and not up_text.strip():
-                    st.warning("Please enter text first.")
-                elif up_mode != "📝 Text" and not up_file and not up_audio:
-                    st.warning("Please upload a file first.")
-                else:
-                    with st.spinner("Processing with Gemini..."):
-                        try:
-                            if up_mode == "📝 Text":
-                                res = gemini_universal_parser(up_text, "text", None)
-                                fname = f"chat_text_{now_ist().strftime('%H%M%S')}.txt"
-                                fbytes = up_text.encode()
-                                mime = "text/plain"
-                            elif up_audio:
-                                fbytes = up_audio.getvalue()
-                                b64 = base64.b64encode(fbytes).decode()
-                                res = gemini_universal_parser(b64, "audio", "audio/wav")
-                                fname = f"chat_voice_{now_ist().strftime('%H%M%S')}.wav"
-                                mime = "audio/wav"
-                            else:
-                                fbytes = up_file.read()
-                                b64 = base64.b64encode(fbytes).decode()
-                                ftype = "pdf" if up_file.type == "application/pdf" else "image"
-                                res = gemini_universal_parser(b64, ftype, up_file.type)
-                                fname = up_file.name
-                                mime = up_file.type
-                            if "error" in res:
-                                err_msg = f"❌ Extraction Error: {res['error']}"
-                                st.session_state.messages.append({"role": "assistant", "content": err_msg})
-                                st.error(res["error"])
-                            else:
-                                rec_count = res.get('count', 0)
-                                success_msg = f"✅ Extracted **{rec_count}** record(s) from your upload."
-                                success_msg += chr(10) + chr(10)
-                                if res.get('records'):
-                                    preview_lines = []
-                                    for r in res['records'][:5]:
-                                        preview_lines.append(f"• PNR: `{r.get('PNR','')}` | Train: `{r.get('T_N','')}` | DOJ: `{r.get('DOJ','')}` | Name: `{r.get('PASS_NAME','')}` | Class: `{r.get('CLASS','')}`")
-                                    success_msg += "**Preview:**"
-                                    success_msg += chr(10) + chr(10)
-                                    success_msg += chr(10).join(preview_lines)
-                                try:
-                                    gc = init_sheets()
-                                    eq_sheet = gc.open_by_key(SHEET_ID).worksheet("EQ")
-                                    save_res = save_to_sheet(eq_sheet, res['records'])
-                                    if "error" in save_res:
-                                        success_msg += chr(10) + chr(10) + f"⚠️ **Sheet Save Error:** {save_res['error']}"
-                                    else:
-                                        success_msg += chr(10) + chr(10) + f"💾 **Saved to EQ Sheet:** {save_res['saved']} new, {save_res['skipped']} skipped"
-                                        if up_mode != "📝 Text":
-                                            drive_res = upload_to_drive(fbytes, fname, mime)
-                                            if drive_res['success']:
-                                                success_msg += chr(10) + chr(10) + f"📁 **Drive:** [{fname}]({drive_res.get('view_url')})"
-                                        st.cache_data.clear()
-                                        st.session_state.last_refresh = time.time()
-                                except Exception as e:
-                                    success_msg += chr(10) + chr(10) + f"⚠️ **Sheet Error:** {str(e)}"
-                                st.session_state.messages.append({"role": "assistant", "content": success_msg})
-                                st.success(f"Processed {rec_count} records")
-                                time.sleep(0.5)
-                                st.rerun()
-                        except Exception as e:
-                            err_msg = f"❌ Processing failed: {str(e)}"
-                            st.session_state.messages.append({"role": "assistant", "content": err_msg})
-                            st.error(str(e))
-
         if prompt := st.chat_input("Type your question...", key="chat_input"):
             st.session_state.messages.append({"role": "user", "content": prompt})
             with st.chat_message("user"): st.markdown(prompt)
