@@ -1,5 +1,6 @@
 flask
 gunicorn
-qrcode
-pillow
-baileys
+pywa
+google-genai
+gspread
+oauth2client
