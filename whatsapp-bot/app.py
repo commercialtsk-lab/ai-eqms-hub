@@ -45,7 +45,7 @@ key_last_used = {}
 key_rate_limit = {}
 
 # ==============================================
-# 3. GOOGLE SHEETS SETUP (DIRECT DICTIONARY FIX)
+# 3. GOOGLE SHEETS SETUP (CLEAN PRIVATE KEY FIX)
 # ==============================================
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
@@ -54,7 +54,36 @@ def get_google_credentials():
         "type": "service_account",
         "project_id": "railwaybotnew",
         "private_key_id": "527c52ddb3dd21e8d8431cd8eaf0966e0470436d",
-        "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDGJnjp28XqPj29\n9BuVrzb+aVuFZdIHBwz/qHOy6iZ5SGXs7E3W4rETj6utTsAIs23FkBG6gMy/WBoN\nrI2EBMzHW6mKr1XnaKbtfIBa0TWtJRtyIqujUJoZmvvyCKJAeIDbkcYANHr3Efla\nLzibAxsRAL1eV04nTxh5jbrOyH4AiAzz5EqTAgDy1SSPPBQGA8M2t+wqf0jf7W9v\nBRCbgyWbq6+bmyegGgNmB5z0lr7NmWu49WTUczk78sbGFNxk7qjvdS95Y0aJ8GCI\ngzFKdE1A26ZxnyEplxa5Ja8D9LxLt+5vsBV7XdMRm2tYA94wu4YGZRdvvT8J9Pnl\nqMDH5q2fAgMBAAECggEAFKj1Ps5Ajqxfq/sUQeFLdsT4cGpjNtgIMG3ZZmRd5OkP\YN/AkUZV7TKz1TWaoILzepULbCqQGTvv4iYazpLg4RZlu9qNNpFlpOmwHl1QNJXj\ntzJLOr4lhcRFlFZMczQSnLzQbBFiEs8SdHyWRn9RO/lw79xi1Ia9iAr8Lnb0FaI/\n//JQLZUzD74Z3FFsPX7gbgRaDgX/onSwiK5p3gDEVEH7CIPjOZ9K975d+rpoTiC3\nMW5e6xYbDwEZ7waAACPld12PXK0UxIpNXfiIjksXegiYTWOAyOGkMW4We0K6vWO7\nWobWOTrELKiUXi1mV9W8YqgHcQRlZBubCYDkf3cBkQKBgQD3L8lLNFvVi2OGheWu\niIYzNJAyHjaWMEeqlPnU1z3P9gED6JA6BeywbIRRFDSKsGxnPSeYJ75f+b9iiohh\OSJZxKcA2r6p90NHrWHBeg4JV2Mm5KakIGG6PAGni3DVlpiV/txgByArxdOHGO49\nXMSpciWmq3sPxfoVIoM5OSuWTwKBgQDNNxpcun3CRNOx8HaJ5WZP/frXf+c0IiHz\nex4TghXHpnEbvJL2786t+vrsk3+ha8tBO5ZwagGtI+YK4bY3Jjt0pyeeoqws3lbI\YoYwmXijPdTZBB7qAVsvWqgjUZT3V+y8Ct3u9ZY5B2FTZLniMcc8eRutWD+r9Yxx\nfjI2DZDvsQKBgQCz/1U6cT8qSl1H+TrelEX9BZq3FC81wKR/QAqJBc/aHs5wdSqJ\RgUsF2lmzSrRj1Tw/KRXdSF5LBlEfZKAEaXE7qGZyrAqfoa8rDHSPLn57WujR79d\nJsNjZQzjX3Pj5Mzp9POu7aFsnprA9tONVX9T0G5AZwCu5MCOIVqjEdF+mwKBgFbX\nC5PT4yXTZFX3MOJXrf0JuB17ZYZdL0rOfcK5mKfc2h5npTVT830SKR71p9vSNrfL\nFHVLlpwDBfTy4N3jkuNhXNW3du6hw82WS7zDJRbHMowHP2G84y5dyarwef5VObu1\nSYc2a7SEV/4nMLX0ZKBFi53GK2OETEM2qN7QzNVxAoGBAL+4ZjBHiAxW1Nkd3seb\nLrDik31RW8hAnRDHGN83lHrQyRHfCEKQs7XFyGFNznQhxbTqd/RJP5wC6OcasRDO\QX56gghGknWeHMkE2CC/ISDzipgSRmuYQir5v4IXk2XIw9TdXt9/eFQI2GVBd9dl\nTXDtJ5imgNrUV6j8JvArmcT/\n-----END PRIVATE KEY-----\n",
+        "private_key": (
+            "-----BEGIN PRIVATE KEY-----\n"
+            "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDGJnjp28XqPj29\n"
+            "9BuVrzb+aVuFZdIHBwz/qHOy6iZ5SGXs7E3W4rETj6utTsAIs23FkBG6gMy/WBoN\n"
+            "rI2EBMzHW6mKr1XnaKbtfIBa0TWtJRtyIqujUJoZmvvyCKJAeIDbkcYANHr3Efla\n"
+            "LzibAxsRAL1eV04nTxh5jbrOyH4AiAzz5EqTAgDy1SSPPBQGA8M2t+wqf0jf7W9v\n"
+            "BRCbgyWbq6+bmyegGgNmB5z0lr7NmWu49WTUczk78sbGFNxk7qjvdS95Y0aJ8GCI\n"
+            "gzFKdE1A26ZxnyEplxa5Ja8D9LxLt+5vsBV7XdMRm2tYA94wu4YGZRdvvT8J9Pnl\n"
+            "qMDH5q2fAgMBAAECggEAFKj1Ps5Ajqxfq/sUQeFLdsT4cGpjNtgIMG3ZZmRd5OkP\n"
+            "YN/AkUZV7TKz1TWaoILzepULbCqQGTvv4iYazpLg4RZlu9qNNpFlpOmwHl1QNJXj\n"
+            "tzJLOr4lhcRFlFZMczQSnLzQbBFiEs8SdHyWRn9RO/lw79xi1Ia9iAr8Lnb0FaI/\n"
+            "//JQLZUzD74Z3FFsPX7gbgRaDgX/onSwiK5p3gDEVEH7CIPjOZ9K975d+rpoTiC3\n"
+            "MW5e6xYbDwEZ7waAACPld12PXK0UxIpNXfiIjksXegiYTWOAyOGkMW4We0K6vWO7\n"
+            "WobWOTrELKiUXi1mV9W8YqgHcQRlZBubCYDkf3cBkQKBgQD3L8lLNFvVi2OGheWu\n"
+            "iIYzNJAyHjaWMEeqlPnU1z3P9gED6JA6BeywbIRRFDSKsGxnPSeYJ75f+b9iiohh\n"
+            "OSJZxKcA2r6p90NHrWHBeg4JV2Mm5KakIGG6PAGni3DVlpiV/txgByArxdOHGO49\n"
+            "XMSpciWmq3sPxfoVIoM5OSuWTwKBgQDNNxpcun3CRNOx8HaJ5WZP/frXf+c0IiHz\n"
+            "ex4TghXHpnEbvJL2786t+vrsk3+ha8tBO5ZwagGtI+YK4bY3Jjt0pyeeoqws3lbI\n"
+            "YoYwmXijPdTZBB7qAVsvWqgjUZT3V+y8Ct3u9ZY5B2FTZLniMcc8eRutWD+r9Yxx\n"
+            "fjI2DZDvsQKBgQCz/1U6cT8qSl1H+TrelEX9BZq3FC81wKR/QAqJBc/aHs5wdSqJ\n"
+            "RgUsF2lmzSrRj1Tw/KRXdSF5LBlEfZKAEaXE7qGZyrAqfoa8rDHSPLn57WujR79d\n"
+            "JsNjZQzjX3Pj5Mzp9POu7aFsnprA9tONVX9T0G5AZwCu5MCOIVqjEdF+mwKBgFbX\n"
+            "C5PT4yXTZFX3MOJXrf0JuB17ZYZdL0rOfcK5mKfc2h5npTVT830SKR71p9vSNrfL\n"
+            "FHVLlpwDBfTy4N3jkuNhXNW3du6hw82WS7zDJRbHMowHP2G84y5dyarwef5VObu1\n"
+            "SYc2a7SEV/4nMLX0ZKBFi53GK2OETEM2qN7QzNVxAoGBAL+4ZjBHiAxW1Nkd3seb\n"
+            "LrDik31RW8hAnRDHGN83lHrQyRHfCEKQs7XFyGFNznQhxbTqd/RJP5wC6OcasRDO\n"
+            "QX56gghGknWeHMkE2CC/ISDzipgSRmuYQir5v4IXk2XIw9TdXt9/eFQI2GVBd9dl\n"
+            "TXDtJ5imgNrUV6j8JvArmcT/\n"
+            "-----END PRIVATE KEY-----\n"
+        ),
         "client_email": "bot-new@railwaybotnew.iam.gserviceaccount.com",
         "client_id": "110610138242104288410",
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
