@@ -15,7 +15,8 @@ app = Flask(__name__)
 # ==============================================
 # 2. CONFIGURATION
 # ==============================================
-CONFIG_SHEET_NAME = os.environ.get('GOOGLE_SHEET_NAME', 'UTS&PRS')
+SPREADSHEET_NAME = "Commercial Position TSK Div NEW"
+WORKSHEET_NAME = "UTS&PRS"
 GEMINI_MODEL = "gemini-2.5-flash"
 
 gemini_keys_str = os.environ.get('GEMINI_KEYS', '')
@@ -222,7 +223,6 @@ JSON ONLY:"""
             if match: txt = match.group(0)
             parsed = json.loads(txt)
             
-            # Clean station codes (remove spaces/newlines)
             prs_clean = {}
             for k, v in parsed.get('prs', {}).items():
                 prs_clean[k.strip().upper()] = v
@@ -265,11 +265,8 @@ def apply_post_processing(data, msg):
 def update_sheet(data):
     if not data: return "❌ No data"
     try:
-        sh = gc.open(CONFIG_SHEET_NAME)
-        try:
-            sheet = sh.worksheet(CONFIG_SHEET_NAME)
-        except:
-            sheet = sh.sheet1
+        sh = gc.open(SPREADSHEET_NAME)
+        sheet = sh.worksheet(WORKSHEET_NAME)
     except Exception as e: 
         print(f"Sheet Access Error: {e}")
         return "❌ Sheet not found"
@@ -284,17 +281,14 @@ def update_sheet(data):
         station_code = station_code.upper().strip()
         for idx, row in enumerate(all_rows):
             row_num = idx + 1
-            # Row 3 to 30: Column B (Index 1)
             if 3 <= row_num <= 30 and len(row) > 1:
                 val = str(row[1]).upper().strip()
                 if val == station_code or station_code in val:
                     return {'row': row_num, 'name_col': 'B'}
-            # Row 31 to 47: Column M (Index 12)
             if 31 <= row_num <= 47 and len(row) > 12:
                 val = str(row[12]).upper().strip()
                 if val == station_code or station_code in val:
                     return {'row': row_num, 'name_col': 'M'}
-            # Row 32 to 47: Column C (Index 2)
             if 32 <= row_num <= 47 and len(row) > 2:
                 val = str(row[2]).upper().strip()
                 if val == station_code or station_code in val:
@@ -395,3 +389,4 @@ def handle_webhook():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+    
