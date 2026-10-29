@@ -188,28 +188,43 @@ def get_working_key():
     return GEMINI_API_KEYS[0] if GEMINI_API_KEYS else None
 
 def call_gemini(msg):
-    prompt = f"""You are an expert railway data extractor. Extract station names and numbers from this message accurately.
-STATIONS LIST: {", ".join(ALL_STATIONS)}
+    prompt = f"""You are a railway data entry expert. Extract numbers from this message EXACTLY as specified.
 
-FIELD MAPPING (PRS): 
-- TKT, PASS, C/TKT, C/PASS, VCH, POS
-- REF = sum of all refunds (e.g. "Cash REF-5620", "POS Ref", "UPI REF-7810" -> sum all as REF).
-- NET = AMT (Net amount as stated, do NOT subtract anything).
-- UPI = UPI amount (e.g., "UPI -101770").
+STATIONS: {", ".join(ALL_STATIONS)}
 
-FIELD MAPPING (UTS): TKT, PASS, NET, UPI, PF, MR, MR AMT
+FIELD MAPPING (PRS):
+- TKT = T/TKT, TKT, TKTs
+- PASS = T/Pass, PASS
+- C/TKT = C/TKT, CANTKT, C/T
+- C/PASS = C/PASS, CANPASS, C/P
+- NET = Net Cash, NETCASH, AMT, NET. KEEP AS STATED — do NOT subtract.
+- REF = sum of REFUND + UPIREFUND + Digi REFUND + e-Refund + POS REF + RFD + UPI RFD
+- UPI = UPI, QR, Digi CASH, E-Cash, E/CASH, D/CASH
+- VCH = VOUCHER, VCH, VOU
+- POS = POS
+
+FIELD MAPPING (UTS):
+- TKT = TKT, TKTs, J/TKT (NOT "PLATFORM TKT")
+- PASS = PASS, J/Pass
+- NET = AMOUNT, J/Amount, NET CASH, Cash. KEEP AS STATED — do NOT subtract.
+- UPI = UPI, QR, ECASH, E/CASH, D/CASH, E cas, E-Cash
+- PF = ONLY from explicit PF line: "PF TKT-82", "P/TKT=267", "PF Qty-52", "PF-60", "PF. NIL"
+- MR = MR count ("MR 16=17570" -> MR=16, MR AMT=17570)
+- MR AMT = MR amount
 
 RULES:
-1. Identify station code strictly from list: {", ".join(ALL_STATIONS)}.
-2. IGNORE PLATFORM TKT.
-3. REF = Total sum of all types of refunds mentioned.
-4. Return ONLY JSON in this exact format:
-{{"prs": {{"STATION_CODE": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}}}, "uts": {{"STATION_CODE": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}}}}}
+1. PLATFORM TKT and PLATFORMAMT — IGNORE COMPLETELY. Not PF, not TKT.
+2. If station's UTS has NO "PF"/"P/TKT" line -> PF = 0.
+3. NET = amount exactly as stated. NEVER subtract E/CASH, UPI, ECASH.
+4. SUM all refund types into REF.
+5. Return ONLY this JSON (no markdown):
+{{"prs": {{"STATION": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}}}, "uts": {{"STATION": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}}}}}
 
 MESSAGE:
 {msg}
 
 JSON ONLY:"""
+
     key = get_working_key()
     if not key: return None
     try:
@@ -223,12 +238,8 @@ JSON ONLY:"""
             if match: txt = match.group(0)
             parsed = json.loads(txt)
             
-            prs_clean = {}
-            for k, v in parsed.get('prs', {}).items():
-                prs_clean[k.strip().upper()] = v
-            uts_clean = {}
-            for k, v in parsed.get('uts', {}).items():
-                uts_clean[k.strip().upper()] = v
+            prs_clean = {k.strip().upper(): v for k, v in parsed.get('prs', {}).items()}
+            uts_clean = {k.strip().upper(): v for k, v in parsed.get('uts', {}).items()}
                 
             return {'prs': prs_clean, 'uts': uts_clean}
     except Exception as e:
@@ -236,7 +247,7 @@ JSON ONLY:"""
     return None
 
 # ==============================================
-# 6. POST PROCESSING & OPTIMIZED SHEET UPDATE
+# 6. POST PROCESSING & SHEET UPDATE
 # ==============================================
 def apply_post_processing(data, msg):
     if not data: return data
@@ -277,28 +288,32 @@ def update_sheet(data):
         print(f"Error fetching sheet values: {e}")
         return "❌ Fetch Error"
 
-    def find_row_in_memory(station_code):
+    def find_station_row_exact(station_code):
         station_code = station_code.upper().strip()
-        for idx, row in enumerate(all_rows):
-            row_num = idx + 1
-            if 3 <= row_num <= 30 and len(row) > 1:
-                val = str(row[1]).upper().strip()
-                if val == station_code or station_code in val:
-                    return {'row': row_num, 'name_col': 'B'}
-            if 31 <= row_num <= 47 and len(row) > 12:
-                val = str(row[12]).upper().strip()
-                if val == station_code or station_code in val:
-                    return {'row': row_num, 'name_col': 'M'}
-            if 32 <= row_num <= 47 and len(row) > 2:
-                val = str(row[2]).upper().strip()
-                if val == station_code or station_code in val:
-                    return {'row': row_num, 'name_col': 'C'}
+        # Row 3 to 30: Column B (Index 1)
+        for idx in range(2, 30):
+            if idx < len(all_rows) and len(all_rows[idx]) > 1:
+                val = str(all_rows[idx][1]).upper().strip()
+                if val == station_code:
+                    return {'row': idx + 1, 'name_col': 'B'}
+        # Row 31 to 47: Column M (Index 12)
+        for idx in range(30, 47):
+            if idx < len(all_rows) and len(all_rows[idx]) > 12:
+                val = str(all_rows[idx][12]).upper().strip()
+                if val == station_code:
+                    return {'row': idx + 1, 'name_col': 'M'}
+        # Row 32 to 47: Column C (Index 2)
+        for idx in range(31, 47):
+            if idx < len(all_rows) and len(all_rows[idx]) > 2:
+                val = str(all_rows[idx][2]).upper().strip()
+                if val == station_code:
+                    return {'row': idx + 1, 'name_col': 'C'}
         return None
 
     station_order = list(set(list(data.get('prs', {}).keys()) + list(data.get('uts', {}).keys())))
     
     for st in station_order:
-        info = find_row_in_memory(st)
+        info = find_station_row_exact(st)
         if not info:
             print(f"Station {st} row not found in sheet memory")
             continue
