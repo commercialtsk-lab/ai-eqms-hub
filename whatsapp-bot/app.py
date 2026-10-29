@@ -45,40 +45,12 @@ key_last_used = {}
 key_rate_limit = {}
 
 # ==============================================
-# 3. GOOGLE SHEETS SETUP (ULTRA-ROBUST FIX)
+# 3. GOOGLE SHEETS SETUP (ENVIRONMENT VARIABLE)
 # ==============================================
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
 def get_google_credentials():
-    # 1. Check Render Secret File path
-    paths = ['/etc/secrets/creds.json', 'creds.json', 'credentials.json']
-    for path in paths:
-        if os.path.exists(path):
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    raw_content = f.read()
-                
-                try:
-                    creds_dict = json.loads(raw_content)
-                except json.JSONDecodeError:
-                    cleaned_content = raw_content.replace('\n', '\\n').replace('\\\\n', '\\n')
-                    creds_dict = json.loads(cleaned_content, strict=False)
-                    
-                return Credentials.from_service_account_info(creds_dict, scopes=scope)
-            except Exception as e:
-                print(f"Error loading from {path}: {e}")
-
-    # 2. Check Environment Variables fallback
-    base64_creds = os.environ.get('GOOGLE_CREDS_BASE64')
-    if base64_creds:
-        try:
-            padded_base64 = base64_creds + '=' * (-len(base64_creds) % 4)
-            decoded_bytes = base64.b64decode(padded_base64)
-            creds_dict = json.loads(decoded_bytes.decode('utf-8'))
-            return Credentials.from_service_account_info(creds_dict, scopes=scope)
-        except Exception as e:
-            print(f"Base64 Error: {e}")
-
+    # Direct Environment Variable se JSON uthayenge
     raw_json = os.environ.get('GOOGLE_CREDS_JSON')
     if raw_json:
         try:
@@ -86,9 +58,14 @@ def get_google_credentials():
             creds_dict = json.loads(raw_json_clean, strict=False)
             return Credentials.from_service_account_info(creds_dict, scopes=scope)
         except Exception as e:
-            print(f"Raw JSON Error: {e}")
+            print(f"JSON Parse Error: {e}")
+            
+    # Local testing ke liye file fallback
+    for path in ['creds.json', 'credentials.json']:
+        if os.path.exists(path):
+            return Credentials.from_service_account_file(path, scopes=scope)
 
-    raise ValueError("Google Credentials not found or invalid format.")
+    raise ValueError("Google Credentials not found in environment variables.")
 
 creds = get_google_credentials()
 gc = gspread.authorize(creds)
@@ -331,4 +308,4 @@ def handle_webhook():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-            
+    
