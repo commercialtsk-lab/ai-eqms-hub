@@ -4,8 +4,7 @@ import re
 import time
 import base64
 import requests
-from flask import Flask
-from pywa import WhatsApp
+from flask import Flask, request, jsonify
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -20,7 +19,6 @@ app = Flask(__name__)
 CONFIG_SHEET_NAME = os.environ.get('GOOGLE_SHEET_NAME', 'UTS&PRS')
 GEMINI_MODEL = "gemini-2.5-flash"
 
-# Gemini Keys (Sirf Gemini use hoga)
 gemini_keys_str = os.environ.get('GEMINI_KEYS', '')
 GEMINI_API_KEYS = [k.strip() for k in gemini_keys_str.split(',')] if gemini_keys_str else [os.environ.get('GEMINI_KEY', '')]
 
@@ -47,38 +45,43 @@ key_last_used = {}
 key_rate_limit = {}
 
 # ==============================================
-# 3. WHATSAPP & GOOGLE SHEETS SETUP
+# 3. GOOGLE SHEETS SETUP (ROBUST DECODER)
 # ==============================================
-wa = WhatsApp(
-    phone_id=os.environ.get('PHONE_ID'),
-    token=os.environ.get('META_TOKEN'),
-    server=app,
-    verify_token=os.environ.get('VERIFY_TOKEN')
-)
-
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
-# --- GOOGLE CREDENTIALS FIX (Base64 Method) ---
-# Pehle check karein ki Base64 variable mojood hai ya nahi
-base64_creds = os.environ.get('GOOGLE_CREDS_BASE64')
+def get_google_credentials():
+    # Method 1: Base64 Decoded JSON
+    base64_creds = os.environ.get('GOOGLE_CREDS_BASE64')
+    if base64_creds:
+        try:
+            # Fix padding if needed and decode
+            padded_base64 = base64_creds + '=' * (-len(base64_creds) % 4)
+            decoded_bytes = base64.b64decode(padded_base64)
+            decoded_str = decoded_bytes.decode('utf-8')
+            creds_dict = json.loads(decoded_str)
+            return Credentials.from_service_account_info(creds_dict, scopes=scope)
+        except Exception as e:
+            print(f"Base64 Creds Parsing Error: {e}")
 
-if base64_creds:
-    try:
-        decoded_json = base64.b64decode(base64_creds).decode('utf-8')
-        creds_dict = json.loads(decoded_json)
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-    except Exception as e:
-        print(f"Base64 Decode Error: {e}")
-        raise e
-elif os.path.exists('/etc/secrets/creds.json'):
-    # Render Secret File fallback
-    creds = Credentials.from_service_account_file('/etc/secrets/creds.json', scopes=scope)
-elif os.path.exists('creds.json'):
-    # Local testing fallback
-    creds = Credentials.from_service_account_file('creds.json', scopes=scope)
-else:
-    raise ValueError("Google Credentials not found. Please set GOOGLE_CREDS_BASE64.")
+    # Method 2: Direct Raw JSON String in Environment Variable
+    raw_json = os.environ.get('GOOGLE_CREDS_JSON')
+    if raw_json:
+        try:
+            # Fix escape characters like \n in private_key
+            raw_json_clean = raw_json.replace('\\n', '\n')
+            creds_dict = json.loads(raw_json_clean, strict=False)
+            return Credentials.from_service_account_info(creds_dict, scopes=scope)
+        except Exception as e:
+            print(f"Raw JSON Creds Parsing Error: {e}")
 
+    # Method 3: File fallbacks
+    for path in ['/etc/secrets/creds.json', 'creds.json', 'credentials.json']:
+        if os.path.exists(path):
+            return Credentials.from_service_account_file(path, scopes=scope)
+
+    raise ValueError("Google Credentials not found or invalid format.")
+
+creds = get_google_credentials()
 gc = gspread.authorize(creds)
 
 # ==============================================
@@ -245,7 +248,10 @@ def apply_post_processing(data, msg):
 def update_sheet(data):
     if not data: return "❌ No data"
     try: sheet = gc.open(CONFIG_SHEET_NAME).sheet1
-    except: return "❌ Sheet not found"
+    except Exception as e: 
+        print(f"Sheet Error: {e}")
+        return "❌ Sheet not found"
+        
     station_order = list(set(list(data.get('prs', {}).keys()) + list(data.get('uts', {}).keys())))
     for st in station_order:
         info = get_station_row(sheet, st)
@@ -275,27 +281,45 @@ def update_sheet(data):
     return "Updated"
 
 # ==============================================
-# 7. WHATSAPP MESSAGE HANDLER (NO REPLY)
+# 7. WEBHOOK HANDLER FOR META
 # ==============================================
-@wa.on_message()
-def handle_message(client_wa, msg):
-    if msg.type != 'text': return
-    
-    incoming_text = msg.text
+@app.route('/webhook', methods=['GET'])
+def verify_webhook():
+    mode = request.args.get('hub.mode')
+    token = request.args.get('hub.verify_token')
+    challenge = request.args.get('hub.challenge')
+    verify_token = os.environ.get('VERIFY_TOKEN')
+
+    if mode and token:
+        if mode == 'subscribe' and token == verify_token:
+            return challenge, 200
+        return 'Forbidden', 403
+    return 'Webhook Active', 200
+
+@app.route('/webhook', methods=['POST'])
+def handle_webhook():
+    data = request.get_json()
     try:
-        data = call_gemini(incoming_text)
-        
-        if not data or (len(data.get('prs', {})) == 0 and len(data.get('uts', {})) == 0):
-            return
-            
-        data = apply_post_processing(data, incoming_text)
-        update_sheet(data)
-        
+        if data.get('entry'):
+            for entry in data['entry']:
+                for change in entry.get('changes', []):
+                    value = change.get('value', {})
+                    messages = value.get('messages', [])
+                    for msg in messages:
+                        if msg.get('type') == 'text':
+                            text_body = msg['text']['body']
+                            extracted = call_gemini(text_body)
+                            if extracted:
+                                processed = apply_post_processing(extracted, text_body)
+                                update_sheet(processed)
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error handling webhook: {e}")
+    return jsonify({'status': 'success'}), 200
 
 # ==============================================
 # 8. MAIN
 # ==============================================
 if __name__ == '__main__':
-    app.run(port=5000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
+                        
