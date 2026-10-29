@@ -45,7 +45,7 @@ key_last_used = {}
 key_rate_limit = {}
 
 # ==============================================
-# 3. GOOGLE SHEETS SETUP (ENVIRONMENT VARIABLE)
+# 3. GOOGLE SHEETS SETUP (JSON ENV VARIABLE)
 # ==============================================
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
