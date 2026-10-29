@@ -2,7 +2,6 @@ import os
 import json
 import re
 import time
-import base64
 import requests
 from flask import Flask, request, jsonify
 import gspread
@@ -45,7 +44,7 @@ key_last_used = {}
 key_rate_limit = {}
 
 # ==============================================
-# 3. GOOGLE SHEETS SETUP (CLEAN PRIVATE KEY FIX)
+# 3. GOOGLE SHEETS SETUP
 # ==============================================
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
@@ -89,7 +88,7 @@ def get_google_credentials():
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
         "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/bot-new%40railwaybotnew.iam.gserviceaccount.com",
+        "client_x509_cert_url": "https://www.googleapis.com/robot/v1_metadata/x509/bot-new%40railwaybotnew.iam.gserviceaccount.com",
         "universe_domain": "googleapis.com"
     }
     return Credentials.from_service_account_info(creds_dict, scopes=scope)
@@ -260,15 +259,23 @@ def apply_post_processing(data, msg):
 
 def update_sheet(data):
     if not data: return "❌ No data"
-    try: sheet = gc.open(CONFIG_SHEET_NAME).sheet1
+    try:
+        # OPEN SHEET SAFELY BY NAME OR WORKSHEET NAME
+        sh = gc.open(CONFIG_SHEET_NAME)
+        try:
+            sheet = sh.worksheet(CONFIG_SHEET_NAME)
+        except:
+            sheet = sh.sheet1
     except Exception as e: 
-        print(f"Sheet Error: {e}")
+        print(f"Sheet Access Error: {e}")
         return "❌ Sheet not found"
         
     station_order = list(set(list(data.get('prs', {}).keys()) + list(data.get('uts', {}).keys())))
     for st in station_order:
         info = get_station_row(sheet, st)
-        if not info: continue
+        if not info:
+            print(f"Station {st} row not found in sheet")
+            continue
         if st in data.get('prs', {}):
             for fld, val in data['prs'][st].items():
                 val = float(val or 0)
@@ -277,6 +284,7 @@ def update_sheet(data):
                     curr = sheet.cell(info['row'], col).value
                     curr = float(curr) if curr and str(curr).replace('.','',1).isdigit() else 0
                     sheet.update_cell(info['row'], col, curr + val)
+                    print(f"Updated PRS {st} {fld}: +{val}")
         if st in data.get('uts', {}):
             for fld, val in data['uts'][st].items():
                 val = float(val or 0)
@@ -291,6 +299,7 @@ def update_sheet(data):
                         curr = sheet.cell(info['row'], col).value
                         curr = float(curr) if curr and str(curr).replace('.','',1).isdigit() else 0
                         sheet.update_cell(info['row'], col, curr + val)
+                        print(f"Updated UTS {st} {fld}: +{val}")
     return "Updated"
 
 # ==============================================
@@ -312,6 +321,7 @@ def verify_webhook():
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
     data = request.get_json()
+    print("Received Webhook Payload:", json.dumps(data))  # Debugging log
     try:
         if data.get('entry'):
             for entry in data['entry']:
@@ -321,10 +331,12 @@ def handle_webhook():
                     for msg in messages:
                         if msg.get('type') == 'text':
                             text_body = msg['text']['body']
+                            print(f"Processing Incoming Text: {text_body}")
                             extracted = call_gemini(text_body)
                             if extracted:
                                 processed = apply_post_processing(extracted, text_body)
-                                update_sheet(processed)
+                                res = update_sheet(processed)
+                                print(f"Sheet Update Result: {res}")
     except Exception as e:
         print(f"Error handling webhook: {e}")
     return jsonify({'status': 'success'}), 200
