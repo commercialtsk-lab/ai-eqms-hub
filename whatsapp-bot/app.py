@@ -88,7 +88,7 @@ def get_google_credentials():
         "auth_uri": "https://accounts.google.com/o/oauth2/auth",
         "token_uri": "https://oauth2.googleapis.com/token",
         "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        "client_x509_cert_url": "https://www.googleapis.com/robot/v1_metadata/x509/bot-new%40railwaybotnew.iam.gserviceaccount.com",
+        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/bot-new%40railwaybotnew.iam.gserviceaccount.com",
         "universe_domain": "googleapis.com"
     }
     return Credentials.from_service_account_info(creds_dict, scopes=scope)
@@ -141,7 +141,8 @@ def split_message_by_station(msg):
     blocks = {}
     if not msg: return blocks
     matches = []
-    for m in re.finditer(r'(?:REVENUE\s+OF|EARNINGS\s+OF|REVENUE\s+of|Earnings\s+Of|UTS\s+OF|PRS\s+OF|UTS\s+of|PRS\s+of)\s+(?:UTS\/|PRS\/)?([A-Z]{2,6})', msg, re.I):
+    # Smart matching for STN- DBRG, STN: DBRG, REVENUE OF DBRG, etc.
+    for m in re.finditer(r'(?:REVENUE\s+OF|EARNINGS\s+OF|REVENUE\s+of|Earnings\s+Of|UTS\s+OF|PRS\s+OF|UTS\s+of|PRS\s+of|STN\s*[-:]?)\s*(?:UTS\/|PRS\/)?([A-Z]{2,6})', msg, re.I):
         st = m.group(1).upper()
         if st in ALL_STATIONS: matches.append({'station': st, 'index': m.start()})
     for m in re.finditer(r'\b(?:UTS|PRS)\/([A-Z]{2,6})\b', msg, re.I):
@@ -175,7 +176,7 @@ def get_station_row(sheet, station):
     return None
 
 # ==============================================
-# 5. GEMINI API CALLS
+# 5. GEMINI API CALLS (Smart Prompt)
 # ==============================================
 def get_working_key():
     now = time.time()
@@ -197,19 +198,27 @@ def get_working_key():
     return get_working_key()
 
 def call_gemini(msg):
-    prompt = f"""You are a railway data entry expert. Extract numbers from this message EXACTLY as specified.
-STATIONS: {", ".join(ALL_STATIONS)}
-FIELD MAPPING (PRS): TKT, PASS, C/TKT, C/PASS, REF, NET, VCH, POS, UPI
+    prompt = f"""You are an expert railway data extractor. Extract station names and numbers from this message accurately, regardless of format (e.g., STN- DBRG, PRS OF DBRG, etc.).
+STATIONS LIST: {", ".join(ALL_STATIONS)}
+
+FIELD MAPPING (PRS): 
+- TKT, PASS, C/TKT, C/PASS, VCH, POS
+- REF = sum of all refunds (e.g., "Cash REF-5620", "POS Ref", "UPI REF-7810" sabhi refunds ko jodkar 'REF' mein daalein).
+- NET = AMT (Net amount as stated, do NOT subtract anything).
+- UPI = UPI, UPI amount (e.g., "UPI -101770").
+
 FIELD MAPPING (UTS): TKT, PASS, NET, UPI, PF, MR, MR AMT
+
 RULES:
-1. IGNORE PLATFORM TKT.
-2. If no "PF" line → PF = 0.
-3. "PF TKT-82" → PF = 82.
-4. "PF-60" → PF = 6.
-5. NET = exact amount. Do NOT subtract anything.
-6. Multi-station: separate entries.
-Return ONLY JSON: {{"prs": {{"STATION": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}}}, "uts": {{"STATION": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}}}}}
-MESSAGE: {msg}
+1. Identify the station name correctly (e.g. from 'STN- DBRG' or 'STN: DBRG').
+2. IGNORE PLATFORM TKT.
+3. REF = Total sum of all types of refunds mentioned.
+4. Return ONLY JSON in this exact format:
+{{"prs": {{"STATION_CODE": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}}}, "uts": {{"STATION_CODE": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}}}}}
+
+MESSAGE:
+{msg}
+
 JSON ONLY:"""
     key = get_working_key()
     if not key: return None
@@ -260,7 +269,6 @@ def apply_post_processing(data, msg):
 def update_sheet(data):
     if not data: return "❌ No data"
     try:
-        # OPEN SHEET SAFELY BY NAME OR WORKSHEET NAME
         sh = gc.open(CONFIG_SHEET_NAME)
         try:
             sheet = sh.worksheet(CONFIG_SHEET_NAME)
@@ -321,7 +329,7 @@ def verify_webhook():
 @app.route('/webhook', methods=['POST'])
 def handle_webhook():
     data = request.get_json()
-    print("Received Webhook Payload:", json.dumps(data))  # Debugging log
+    print("Received Webhook Payload:", json.dumps(data))
     try:
         if data.get('entry'):
             for entry in data['entry']:
@@ -347,3 +355,4 @@ def handle_webhook():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+        
