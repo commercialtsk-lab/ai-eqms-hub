@@ -9,7 +9,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # ==============================================
-# 1. APP SETUP (Sabse pehle yeh hona zaroori hai)
+# 1. APP SETUP
 # ==============================================
 app = Flask(__name__)
 
@@ -19,7 +19,6 @@ app = Flask(__name__)
 CONFIG_SHEET_NAME = os.environ.get('GOOGLE_SHEET_NAME', 'UTS&PRS')
 GEMINI_MODEL = "gemini-2.5-flash"
 
-# Gemini Keys (Comma separated string from env)
 gemini_keys_str = os.environ.get('GEMINI_KEYS', '')
 GEMINI_API_KEYS = [k.strip() for k in gemini_keys_str.split(',')] if gemini_keys_str else [os.environ.get('GEMINI_KEY', '')]
 
@@ -68,7 +67,7 @@ else:
 gc = gspread.authorize(creds)
 
 # ==============================================
-# 4. EXTRACTION LOGIC (JS se Python mein converted)
+# 4. EXTRACTION LOGIC
 # ==============================================
 def extract_pf_quantity(value, context):
     if value is None: return 0
@@ -170,26 +169,16 @@ def get_working_key():
 def call_gemini(msg):
     prompt = f"""You are a railway data entry expert. Extract numbers from this message EXACTLY as specified.
 STATIONS: {", ".join(ALL_STATIONS)}
-FIELD MAPPING (PRS section):
-- TKT, PASS, C/TKT, C/PASS, REF, NET, VCH, POS, UPI
-FIELD MAPPING (UTS section):
-- TKT, PASS, NET, UPI, PF, MR, MR AMT
-CRITICAL RULES:
-1. PLATFORM TKT and PLATFORMAMT are platform tickets — IGNORE THEM COMPLETELY.
-2. PLATFORM TKT=52 does NOT mean PF=52.
-3. If a station's UTS section has NO "PF" or "P/TKT" line → PF = 0.
-4. "PF TKT-82" or "P/TKT=267" → PF = 82 or 267 (count, no division).
-5. "PF-60" or "PF AMT-60" → PF = 6 (rupees ÷ 10).
-6. NET = amount exactly as stated. NEVER subtract E/CASH, D/CASH, UPI, Digi, or ECASH from NET.
-7. SUM all refund types into REF for PRS.
-8. Ignore nil, null, zero, blank.
-9. Multi-station: separate PRS and UTS entry per station, each with independent PF.
-
-Return ONLY this JSON (no markdown, no extra text):
-{{
-  "prs": {{"STATION": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}}},
-  "uts": {{"STATION": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}}}
-}}
+FIELD MAPPING (PRS): TKT, PASS, C/TKT, C/PASS, REF, NET, VCH, POS, UPI
+FIELD MAPPING (UTS): TKT, PASS, NET, UPI, PF, MR, MR AMT
+RULES:
+1. IGNORE PLATFORM TKT.
+2. If no "PF" line → PF = 0.
+3. "PF TKT-82" → PF = 82.
+4. "PF-60" → PF = 6.
+5. NET = exact amount. Do NOT subtract anything.
+6. Multi-station: separate entries.
+Return ONLY JSON: {{"prs": {{"STATION": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}}}, "uts": {{"STATION": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}}}}}
 MESSAGE: {msg}
 JSON ONLY:"""
     key = get_working_key()
@@ -207,14 +196,12 @@ JSON ONLY:"""
             parsed['prs'] = parsed.get('prs', {})
             parsed['uts'] = parsed.get('uts', {})
             return parsed
-    except Exception as e:
-        print("Gemini Error:", e)
+    except: pass
     return None
 
 def call_grok(msg):
     if not GROK_API_KEY: return None
-    prompt = f"""Extract railway numbers exactly.
-Stations: {", ".join(ALL_STATIONS)}
+    prompt = f"""Extract railway numbers exactly. Stations: {", ".join(ALL_STATIONS)}
 Return JSON: {{"prs":{{"STATION":{{"TKT":0,"PASS":0,"C/TKT":0,"C/PASS":0,"REF":0,"NET":0,"VCH":0,"POS":0,"UPI":0}}}},"uts":{{"STATION":{{"TKT":0,"PASS":0,"NET":0,"UPI":0,"PF":0,"MR":0,"MR AMT":0}}}}}}
 Message: {msg}
 JSON:"""
@@ -230,8 +217,93 @@ JSON:"""
             parsed['prs'] = parsed.get('prs', {})
             parsed['uts'] = parsed.get('uts', {})
             return parsed
+    except: pass
+    return None
+
+# ==============================================
+# 6. POST PROCESSING & SHEET UPDATE
+# ==============================================
+def apply_post_processing(data, msg):
+    if not data: return data
+    station_blocks = split_message_by_station(msg)
+    for st in data.get('uts', {}):
+        block = station_blocks.get(st)
+        if not block:
+            data['uts'][st]['PF'] = extract_pf_quantity(data['uts'][st].get('PF'), None)
+        else:
+            pf_from_block = extract_pf_from_message(block)
+            data['uts'][st]['PF'] = 0 if pf_from_block is None else pf_from_block
+    for st in data.get('uts', {}):
+        block = station_blocks.get(st)
+        if block and message_has_digital_cash(block):
+            dc = extract_digital_cash(block)
+            cur = float(data['uts'][st].get('UPI', 0) or 0)
+            if dc > 0 and cur < dc: data['uts'][st]['UPI'] = cur + dc
+    for st in data.get('prs', {}):
+        block = station_blocks.get(st)
+        if block and message_has_digital_cash(block):
+            dc = extract_digital_cash(block)
+            cur = float(data['prs'][st].get('UPI', 0) or 0)
+            if dc > 0 and cur < dc: data['prs'][st]['UPI'] = cur + dc
+    return data
+
+def update_sheet(data):
+    if not data: return "❌ No data"
+    try: sheet = gc.open(CONFIG_SHEET_NAME).sheet1
+    except: return "❌ Sheet not found"
+    station_order = list(set(list(data.get('prs', {}).keys()) + list(data.get('uts', {}).keys())))
+    for st in station_order:
+        info = get_station_row(sheet, st)
+        if not info: continue
+        if st in data.get('prs', {}):
+            for fld, val in data['prs'][st].items():
+                val = float(val or 0)
+                if val > 0 and fld in PRS_COLS:
+                    col = PRS_COLS[fld]
+                    curr = sheet.cell(info['row'], col).value
+                    curr = float(curr) if curr and str(curr).replace('.','',1).isdigit() else 0
+                    sheet.update_cell(info['row'], col, curr + val)
+        if st in data.get('uts', {}):
+            for fld, val in data['uts'][st].items():
+                val = float(val or 0)
+                if fld == "PF" and val == 0: continue
+                if val > 0:
+                    col = None
+                    if info['name_col'] == 'C':
+                        col_map = {"TKT":4, "PASS":5, "NET":9, "UPI":12, "PF":8, "MR":9, "MR AMT":10}
+                        col = col_map.get(fld)
+                    else: col = UTS_COLS_NU.get(fld)
+                    if col:
+                        curr = sheet.cell(info['row'], col).value
+                        curr = float(curr) if curr and str(curr).replace('.','',1).isdigit() else 0
+                        sheet.update_cell(info['row'], col, curr + val)
+    return "Updated"
+
+# ==============================================
+# 7. WHATSAPP MESSAGE HANDLER (NO REPLY)
+# ==============================================
+@wa.on_message()
+def handle_message(client_wa, msg):
+    if msg.type != 'text': return
+    incoming_text = msg.text
+    try:
+        data = call_gemini(incoming_text)
+        if not data or (len(data.get('prs', {})) == 0 and len(data.get('uts', {})) == 0):
+            data = call_grok(incoming_text)
+        if not data:
+            return # Chupchaap return ho jayega, koi reply nahi jayega
+            
+        data = apply_post_processing(data, incoming_text)
+        update_sheet(data) # Sheet update ho jayegi
+        
     except Exception as e:
-        print("Grok Error:", e)
+        print(f"Error: {e}") # Sirf terminal/Render logs mein error aayega, WhatsApp par nahi
+
+# ==============================================
+# 8. MAIN
+# ==============================================
+if __name__ == '__main__':
+    app.run(port=5000)  print("Grok Error:", e)
     return None
 
 # ==============================================
