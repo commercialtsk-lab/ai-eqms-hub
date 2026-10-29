@@ -19,7 +19,10 @@ CONFIG_SHEET_NAME = os.environ.get('GOOGLE_SHEET_NAME', 'UTS&PRS')
 GEMINI_MODEL = "gemini-2.5-flash"
 
 gemini_keys_str = os.environ.get('GEMINI_KEYS', '')
-GEMINI_API_KEYS = [k.strip() for k in gemini_keys_str.split(',')] if gemini_keys_str else [os.environ.get('GEMINI_KEY', '')]
+GEMINI_API_KEYS = [k.strip() for k in gemini_keys_str.split(',')] if gemini_keys_str else []
+single_key = os.environ.get('GEMINI_KEY', '')
+if single_key and single_key not in GEMINI_API_KEYS:
+    GEMINI_API_KEYS.append(single_key)
 
 ALL_STATIONS = [
     "DBRT","DBRG","NTSK","TSK","MXN","JTTN","SRTN","SLGR","GLGT","MRHT",
@@ -161,26 +164,29 @@ def split_message_by_station(msg):
     return blocks
 
 # ==============================================
-# 5. GEMINI API CALLS
+# 5. GEMINI API CALLS (Safe & Non-Recursive)
 # ==============================================
 def get_working_key():
+    if not GEMINI_API_KEYS:
+        print("ERROR: No Gemini API keys found in environment variables!")
+        return None
     now = time.time()
     for key in GEMINI_API_KEYS:
         if not key: continue
         if now < key_rate_limit.get(key, 0): continue
-        if now - key_last_used.get(key, 0) >= 2:
+        if now - key_last_used.get(key, 0) >= 1:
             try:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={key}"
                 res = requests.post(url, json={"contents":[{"parts":[{"text":"ok"}]}], "generationConfig":{"maxOutputTokens":1}}, timeout=5)
                 if res.status_code == 200:
                     key_last_used[key] = now
-                    key_rate_limit[key] = now + 2
+                    key_rate_limit[key] = now + 1
                     return key
                 elif res.status_code == 429:
-                    key_rate_limit[key] = now + 60
+                    key_rate_limit[key] = now + 30
             except: pass
-    time.sleep(3)
-    return get_working_key()
+    # Fallback to the first available key instead of recursion
+    return GEMINI_API_KEYS[0] if GEMINI_API_KEYS else None
 
 def call_gemini(msg):
     prompt = f"""You are an expert railway data extractor. Extract station names and numbers from this message accurately, regardless of format (e.g., STN- DBRG, PRS OF DBRG, etc.).
@@ -371,4 +377,4 @@ def handle_webhook():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-    
+        
