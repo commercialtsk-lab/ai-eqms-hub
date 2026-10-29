@@ -2,6 +2,7 @@ import os
 import json
 import re
 import time
+import base64
 import requests
 from flask import Flask, request, jsonify
 import gspread
@@ -17,8 +18,9 @@ app = Flask(__name__)
 # ==============================================
 CONFIG_SHEET_NAME = os.environ.get('GOOGLE_SHEET_NAME', 'UTS&PRS')
 GEMINI_MODEL = "gemini-2.5-flash"
-GEMINI_API_KEY = os.environ.get('GEMINI_KEY', '')
-VERIFY_TOKEN = os.environ.get('VERIFY_TOKEN', 'Sharique786')
+
+gemini_keys_str = os.environ.get('GEMINI_KEYS', '')
+GEMINI_API_KEYS = [k.strip() for k in gemini_keys_str.split(',')] if gemini_keys_str else [os.environ.get('GEMINI_KEY', '')]
 
 ALL_STATIONS = [
     "DBRT","DBRG","NTSK","TSK","MXN","JTTN","SRTN","SLGR","GLGT","MRHT",
@@ -30,17 +32,20 @@ ALL_STATIONS = [
 ]
 
 PRS_COLS = { 
-    "TKT": 4, "PASS": 5, "C/TKT": 6, "C/PASS": 7, 
-    "REF": 8, "NET": 9, "VCH": 10, "POS": 11, "UPI": 12 
+    "TKT":4, "PASS":5, "C/TKT":6, "C/PASS":7, 
+    "REF":8, "NET":9, "VCH":10, "POS":11, "UPI":12 
 }
 
 UTS_COLS_NU = { 
-    "PF": 14, "TKT": 16, "PASS": 17, "NET": 18, 
-    "MR": 19, "MR AMT": 20, "UPI": 21 
+    "PF":14, "TKT":16, "PASS":17, "NET":18, 
+    "MR":19, "MR AMT":20, "UPI":21 
 }
 
+key_last_used = {}
+key_rate_limit = {}
+
 # ==============================================
-# 3. GOOGLE SHEETS CREDENTIALS FIX
+# 3. GOOGLE SHEETS SETUP (CLEAN PRIVATE KEY FIX)
 # ==============================================
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
@@ -89,11 +94,8 @@ def get_google_credentials():
     }
     return Credentials.from_service_account_info(creds_dict, scopes=scope)
 
-try:
-    creds = get_google_credentials()
-    gc = gspread.authorize(creds)
-except Exception as e:
-    print(f"GSpread Init Warning: {e}")
+creds = get_google_credentials()
+gc = gspread.authorize(creds)
 
 # ==============================================
 # 4. EXTRACTION LOGIC
@@ -162,31 +164,40 @@ def split_message_by_station(msg):
 def get_station_row(sheet, station):
     if not station: return None
     station = station.upper().strip()
-    try:
-        col_b_vals = sheet.range("B3:B30")
-        for cell in col_b_vals:
-            if cell.value and str(cell.value).upper().strip() == station:
-                return {'row': cell.row, 'name_col': 'B'}
-        col_m_vals = sheet.range("M31:M47")
-        for cell in col_m_vals:
-            if cell.value and str(cell.value).upper().strip() == station:
-                return {'row': cell.row, 'name_col': 'M'}
-        col_c_vals = sheet.range("C32:C47")
-        for cell in col_c_vals:
-            if cell.value and str(cell.value).upper().strip() == station:
-                return {'row': cell.row, 'name_col': 'C'}
-    except Exception as e:
-        print(f"Cell search error: {e}")
+    for r in range(3, 31):
+        val = sheet.cell(r, 2).value
+        if val and str(val).upper().strip() == station: return {'row': r, 'name_col': 'B'}
+    for r in range(31, 48):
+        val = sheet.cell(r, 13).value
+        if val and str(val).upper().strip() == station: return {'row': r, 'name_col': 'M'}
+    for r in range(32, 48):
+        val = sheet.cell(r, 3).value
+        if val and str(val).upper().strip() == station: return {'row': r, 'name_col': 'C'}
     return None
 
 # ==============================================
-# 5. GEMINI API CALL
+# 5. GEMINI API CALLS
 # ==============================================
+def get_working_key():
+    now = time.time()
+    for key in GEMINI_API_KEYS:
+        if not key: continue
+        if now < key_rate_limit.get(key, 0): continue
+        if now - key_last_used.get(key, 0) >= 2:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={key}"
+                res = requests.post(url, json={"contents":[{"parts":[{"text":"ok"}]}], "generationConfig":{"maxOutputTokens":1}}, timeout=5)
+                if res.status_code == 200:
+                    key_last_used[key] = now
+                    key_rate_limit[key] = now + 2
+                    return key
+                elif res.status_code == 429:
+                    key_rate_limit[key] = now + 60
+            except: pass
+    time.sleep(3)
+    return get_working_key()
+
 def call_gemini(msg):
-    if not GEMINI_API_KEY:
-        print("Error: GEMINI_KEY missing")
-        return None
-        
     prompt = f"""You are a railway data entry expert. Extract numbers from this message EXACTLY as specified.
 STATIONS: {", ".join(ALL_STATIONS)}
 FIELD MAPPING (PRS): TKT, PASS, C/TKT, C/PASS, REF, NET, VCH, POS, UPI
@@ -201,9 +212,10 @@ RULES:
 Return ONLY JSON: {{"prs": {{"STATION": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}}}, "uts": {{"STATION": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}}}}}
 MESSAGE: {msg}
 JSON ONLY:"""
-
+    key = get_working_key()
+    if not key: return None
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={key}"
         res = requests.post(url, json={"contents":[{"parts":[{"text":prompt}]}], "generationConfig":{"temperature":0.1, "maxOutputTokens":4096}}, timeout=30)
         if res.status_code == 200:
             txt = res.json()['candidates'][0]['content']['parts'][0]['text']
@@ -248,17 +260,10 @@ def apply_post_processing(data, msg):
 
 def update_sheet(data):
     if not data: return "❌ No data"
-    try:
-        # Open Worksheet safely
-        spreadsheet = gc.open(CONFIG_SHEET_NAME)
-        sheet = spreadsheet.worksheet(CONFIG_SHEET_NAME)
+    try: sheet = gc.open(CONFIG_SHEET_NAME).sheet1
     except Exception as e: 
         print(f"Sheet Error: {e}")
-        try:
-            sheet = gc.open(CONFIG_SHEET_NAME).sheet1
-        except Exception as ex:
-            print(f"Fallback Sheet Error: {ex}")
-            return "❌ Sheet not found"
+        return "❌ Sheet not found"
         
     station_order = list(set(list(data.get('prs', {}).keys()) + list(data.get('uts', {}).keys())))
     for st in station_order:
@@ -291,18 +296,15 @@ def update_sheet(data):
 # ==============================================
 # 7. WEBHOOK HANDLER FOR META
 # ==============================================
-@app.route('/', methods=['GET'])
-def home():
-    return "Railway Bot Server is Running!", 200
-
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
     mode = request.args.get('hub.mode')
     token = request.args.get('hub.verify_token')
     challenge = request.args.get('hub.challenge')
+    verify_token = os.environ.get('VERIFY_TOKEN')
 
     if mode and token:
-        if mode == 'subscribe' and token == VERIFY_TOKEN:
+        if mode == 'subscribe' and token == verify_token:
             return challenge, 200
         return 'Forbidden', 403
     return 'Webhook Active', 200
@@ -333,4 +335,3 @@ def handle_webhook():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-    
