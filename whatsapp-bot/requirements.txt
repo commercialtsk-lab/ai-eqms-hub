@@ -1,4 +1,6 @@
-Flask
-requests
+flask
+gunicorn
+pywa
+google-genai
 gspread
-google-auth
+oauth2client
