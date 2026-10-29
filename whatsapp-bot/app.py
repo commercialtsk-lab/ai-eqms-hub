@@ -2,6 +2,7 @@ import os
 import json
 import re
 import time
+import base64
 import requests
 from flask import Flask
 from pywa import WhatsApp
@@ -19,6 +20,7 @@ app = Flask(__name__)
 CONFIG_SHEET_NAME = os.environ.get('GOOGLE_SHEET_NAME', 'UTS&PRS')
 GEMINI_MODEL = "gemini-2.5-flash"
 
+# Gemini Keys (Sirf Gemini use hoga)
 gemini_keys_str = os.environ.get('GEMINI_KEYS', '')
 GEMINI_API_KEYS = [k.strip() for k in gemini_keys_str.split(',')] if gemini_keys_str else [os.environ.get('GEMINI_KEY', '')]
 
@@ -54,23 +56,28 @@ wa = WhatsApp(
     verify_token=os.environ.get('VERIFY_TOKEN')
 )
 
-# --- GOOGLE CREDENTIALS FIX ---
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
-# Render ke Secret File ka path check karein
-creds_path = '/etc/secrets/creds.json'
+# --- GOOGLE CREDENTIALS FIX (Base64 Method) ---
+# Pehle check karein ki Base64 variable mojood hai ya nahi
+base64_creds = os.environ.get('GOOGLE_CREDS_BASE64')
 
-if os.path.exists(creds_path):
-    creds = Credentials.from_service_account_file(creds_path, scopes=scope)
+if base64_creds:
+    try:
+        decoded_json = base64.b64decode(base64_creds).decode('utf-8')
+        creds_dict = json.loads(decoded_json)
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    except Exception as e:
+        print(f"Base64 Decode Error: {e}")
+        raise e
+elif os.path.exists('/etc/secrets/creds.json'):
+    # Render Secret File fallback
+    creds = Credentials.from_service_account_file('/etc/secrets/creds.json', scopes=scope)
 elif os.path.exists('creds.json'):
+    # Local testing fallback
     creds = Credentials.from_service_account_file('creds.json', scopes=scope)
 else:
-    # Fallback: Environment variable se JSON load karein
-    creds_json = os.environ.get('GOOGLE_CREDS_JSON')
-    if creds_json:
-        creds = Credentials.from_service_account_info(json.loads(creds_json), scopes=scope)
-    else:
-        raise ValueError("Credentials not found. Please add Secret File or GOOGLE_CREDS_JSON env variable.")
+    raise ValueError("Google Credentials not found. Please set GOOGLE_CREDS_BASE64.")
 
 gc = gspread.authorize(creds)
 
