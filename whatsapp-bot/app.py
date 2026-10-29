@@ -19,8 +19,8 @@ CONFIG_SHEET_NAME = os.environ.get('GOOGLE_SHEET_NAME', 'UTS&PRS')
 GEMINI_MODEL = "gemini-2.5-flash"
 
 gemini_keys_str = os.environ.get('GEMINI_KEYS', '')
-GEMINI_API_KEYS = [k.strip() for k in gemini_keys_str.split(',')] if gemini_keys_str else []
-single_key = os.environ.get('GEMINI_KEY', '')
+GEMINI_API_KEYS = [k.strip() for k in gemini_keys_str.split(',') if k.strip()] if gemini_keys_str else []
+single_key = os.environ.get('GEMINI_KEY', '').strip()
 if single_key and single_key not in GEMINI_API_KEYS:
     GEMINI_API_KEYS.append(single_key)
 
@@ -164,11 +164,10 @@ def split_message_by_station(msg):
     return blocks
 
 # ==============================================
-# 5. GEMINI API CALLS (Safe & Non-Recursive)
+# 5. GEMINI API CALLS
 # ==============================================
 def get_working_key():
     if not GEMINI_API_KEYS:
-        print("ERROR: No Gemini API keys found in environment variables!")
         return None
     now = time.time()
     for key in GEMINI_API_KEYS:
@@ -185,23 +184,22 @@ def get_working_key():
                 elif res.status_code == 429:
                     key_rate_limit[key] = now + 30
             except: pass
-    # Fallback to the first available key instead of recursion
     return GEMINI_API_KEYS[0] if GEMINI_API_KEYS else None
 
 def call_gemini(msg):
-    prompt = f"""You are an expert railway data extractor. Extract station names and numbers from this message accurately, regardless of format (e.g., STN- DBRG, PRS OF DBRG, etc.).
+    prompt = f"""You are an expert railway data extractor. Extract station names and numbers from this message accurately.
 STATIONS LIST: {", ".join(ALL_STATIONS)}
 
 FIELD MAPPING (PRS): 
 - TKT, PASS, C/TKT, C/PASS, VCH, POS
-- REF = sum of all refunds (e.g., "Cash REF-5620", "POS Ref", "UPI REF-7810" sabhi refunds ko jodkar 'REF' mein daalein).
+- REF = sum of all refunds (e.g. "Cash REF-5620", "POS Ref", "UPI REF-7810" -> sum all as REF).
 - NET = AMT (Net amount as stated, do NOT subtract anything).
-- UPI = UPI, UPI amount (e.g., "UPI -101770").
+- UPI = UPI amount (e.g., "UPI -101770").
 
 FIELD MAPPING (UTS): TKT, PASS, NET, UPI, PF, MR, MR AMT
 
 RULES:
-1. Identify the station name correctly (e.g. from 'STN- DBRG' or 'STN: DBRG').
+1. Identify station code strictly from list: {", ".join(ALL_STATIONS)}.
 2. IGNORE PLATFORM TKT.
 3. REF = Total sum of all types of refunds mentioned.
 4. Return ONLY JSON in this exact format:
@@ -223,9 +221,16 @@ JSON ONLY:"""
             match = re.search(r'\{[\s\S]*\}', txt)
             if match: txt = match.group(0)
             parsed = json.loads(txt)
-            parsed['prs'] = parsed.get('prs', {})
-            parsed['uts'] = parsed.get('uts', {})
-            return parsed
+            
+            # Clean station codes (remove spaces/newlines)
+            prs_clean = {}
+            for k, v in parsed.get('prs', {}).items():
+                prs_clean[k.strip().upper()] = v
+            uts_clean = {}
+            for k, v in parsed.get('uts', {}).items():
+                uts_clean[k.strip().upper()] = v
+                
+            return {'prs': prs_clean, 'uts': uts_clean}
     except Exception as e:
         print("Gemini Error:", e)
     return None
@@ -279,12 +284,21 @@ def update_sheet(data):
         station_code = station_code.upper().strip()
         for idx, row in enumerate(all_rows):
             row_num = idx + 1
-            if 3 <= row_num <= 30 and len(row) > 1 and str(row[1]).upper().strip() == station_code:
-                return {'row': row_num, 'name_col': 'B'}
-            if 31 <= row_num <= 47 and len(row) > 12 and str(row[12]).upper().strip() == station_code:
-                return {'row': row_num, 'name_col': 'M'}
-            if 32 <= row_num <= 47 and len(row) > 2 and str(row[2]).upper().strip() == station_code:
-                return {'row': row_num, 'name_col': 'C'}
+            # Row 3 to 30: Column B (Index 1)
+            if 3 <= row_num <= 30 and len(row) > 1:
+                val = str(row[1]).upper().strip()
+                if val == station_code or station_code in val:
+                    return {'row': row_num, 'name_col': 'B'}
+            # Row 31 to 47: Column M (Index 12)
+            if 31 <= row_num <= 47 and len(row) > 12:
+                val = str(row[12]).upper().strip()
+                if val == station_code or station_code in val:
+                    return {'row': row_num, 'name_col': 'M'}
+            # Row 32 to 47: Column C (Index 2)
+            if 32 <= row_num <= 47 and len(row) > 2:
+                val = str(row[2]).upper().strip()
+                if val == station_code or station_code in val:
+                    return {'row': row_num, 'name_col': 'C'}
         return None
 
     station_order = list(set(list(data.get('prs', {}).keys()) + list(data.get('uts', {}).keys())))
@@ -335,12 +349,16 @@ def update_sheet(data):
 # ==============================================
 # 7. WEBHOOK HANDLER FOR META
 # ==============================================
+@app.route('/', methods=['GET'])
+def home():
+    return "Railway Bot Active", 200
+
 @app.route('/webhook', methods=['GET'])
 def verify_webhook():
     mode = request.args.get('hub.mode')
     token = request.args.get('hub.verify_token')
     challenge = request.args.get('hub.challenge')
-    verify_token = os.environ.get('VERIFY_TOKEN')
+    verify_token = os.environ.get('VERIFY_TOKEN', 'Sharique786')
 
     if mode and token:
         if mode == 'subscribe' and token == verify_token:
@@ -377,4 +395,3 @@ def handle_webhook():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-        
