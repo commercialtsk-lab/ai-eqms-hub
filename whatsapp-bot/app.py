@@ -55,11 +55,16 @@ wa = WhatsApp(
     verify_token=os.environ.get('VERIFY_TOKEN')
 )
 
+# --- GOOGLE CREDENTIALS FIX ---
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-if os.environ.get('GOOGLE_CREDS_JSON'):
-    creds_dict = json.loads(os.environ.get('GOOGLE_CREDS_JSON'))
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+
+# Render ki Secret File ka path check karein
+creds_path = '/etc/secrets/creds.json'
+
+if os.path.exists(creds_path):
+    creds = Credentials.from_service_account_file(creds_path, scopes=scope)
 else:
+    # Agar local (Termux/PC) par test kar rahe hain
     creds = Credentials.from_service_account_file('creds.json', scopes=scope)
 
 gc = gspread.authorize(creds)
