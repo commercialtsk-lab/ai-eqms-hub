@@ -45,27 +45,25 @@ key_last_used = {}
 key_rate_limit = {}
 
 # ==============================================
-# 3. GOOGLE SHEETS SETUP (JSON ENV VARIABLE)
+# 3. GOOGLE SHEETS SETUP (DIRECT DICTIONARY FIX)
 # ==============================================
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
 def get_google_credentials():
-    # Direct Environment Variable se JSON uthayenge
-    raw_json = os.environ.get('GOOGLE_CREDS_JSON')
-    if raw_json:
-        try:
-            raw_json_clean = raw_json.replace('\\n', '\n')
-            creds_dict = json.loads(raw_json_clean, strict=False)
-            return Credentials.from_service_account_info(creds_dict, scopes=scope)
-        except Exception as e:
-            print(f"JSON Parse Error: {e}")
-            
-    # Local testing ke liye file fallback
-    for path in ['creds.json', 'credentials.json']:
-        if os.path.exists(path):
-            return Credentials.from_service_account_file(path, scopes=scope)
-
-    raise ValueError("Google Credentials not found in environment variables.")
+    creds_dict = {
+        "type": "service_account",
+        "project_id": "railwaybotnew",
+        "private_key_id": "527c52ddb3dd21e8d8431cd8eaf0966e0470436d",
+        "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDGJnjp28XqPj29\n9BuVrzb+aVuFZdIHBwz/qHOy6iZ5SGXs7E3W4rETj6utTsAIs23FkBG6gMy/WBoN\nrI2EBMzHW6mKr1XnaKbtfIBa0TWtJRtyIqujUJoZmvvyCKJAeIDbkcYANHr3Efla\nLzibAxsRAL1eV04nTxh5jbrOyH4AiAzz5EqTAgDy1SSPPBQGA8M2t+wqf0jf7W9v\nBRCbgyWbq6+bmyegGgNmB5z0lr7NmWu49WTUczk78sbGFNxk7qjvdS95Y0aJ8GCI\ngzFKdE1A26ZxnyEplxa5Ja8D9LxLt+5vsBV7XdMRm2tYA94wu4YGZRdvvT8J9Pnl\nqMDH5q2fAgMBAAECggEAFKj1Ps5Ajqxfq/sUQeFLdsT4cGpjNtgIMG3ZZmRd5OkP\YN/AkUZV7TKz1TWaoILzepULbCqQGTvv4iYazpLg4RZlu9qNNpFlpOmwHl1QNJXj\ntzJLOr4lhcRFlFZMczQSnLzQbBFiEs8SdHyWRn9RO/lw79xi1Ia9iAr8Lnb0FaI/\n//JQLZUzD74Z3FFsPX7gbgRaDgX/onSwiK5p3gDEVEH7CIPjOZ9K975d+rpoTiC3\nMW5e6xYbDwEZ7waAACPld12PXK0UxIpNXfiIjksXegiYTWOAyOGkMW4We0K6vWO7\nWobWOTrELKiUXi1mV9W8YqgHcQRlZBubCYDkf3cBkQKBgQD3L8lLNFvVi2OGheWu\niIYzNJAyHjaWMEeqlPnU1z3P9gED6JA6BeywbIRRFDSKsGxnPSeYJ75f+b9iiohh\OSJZxKcA2r6p90NHrWHBeg4JV2Mm5KakIGG6PAGni3DVlpiV/txgByArxdOHGO49\nXMSpciWmq3sPxfoVIoM5OSuWTwKBgQDNNxpcun3CRNOx8HaJ5WZP/frXf+c0IiHz\nex4TghXHpnEbvJL2786t+vrsk3+ha8tBO5ZwagGtI+YK4bY3Jjt0pyeeoqws3lbI\YoYwmXijPdTZBB7qAVsvWqgjUZT3V+y8Ct3u9ZY5B2FTZLniMcc8eRutWD+r9Yxx\nfjI2DZDvsQKBgQCz/1U6cT8qSl1H+TrelEX9BZq3FC81wKR/QAqJBc/aHs5wdSqJ\RgUsF2lmzSrRj1Tw/KRXdSF5LBlEfZKAEaXE7qGZyrAqfoa8rDHSPLn57WujR79d\nJsNjZQzjX3Pj5Mzp9POu7aFsnprA9tONVX9T0G5AZwCu5MCOIVqjEdF+mwKBgFbX\nC5PT4yXTZFX3MOJXrf0JuB17ZYZdL0rOfcK5mKfc2h5npTVT830SKR71p9vSNrfL\nFHVLlpwDBfTy4N3jkuNhXNW3du6hw82WS7zDJRbHMowHP2G84y5dyarwef5VObu1\nSYc2a7SEV/4nMLX0ZKBFi53GK2OETEM2qN7QzNVxAoGBAL+4ZjBHiAxW1Nkd3seb\nLrDik31RW8hAnRDHGN83lHrQyRHfCEKQs7XFyGFNznQhxbTqd/RJP5wC6OcasRDO\QX56gghGknWeHMkE2CC/ISDzipgSRmuYQir5v4IXk2XIw9TdXt9/eFQI2GVBd9dl\nTXDtJ5imgNrUV6j8JvArmcT/\n-----END PRIVATE KEY-----\n",
+        "client_email": "bot-new@railwaybotnew.iam.gserviceaccount.com",
+        "client_id": "110610138242104288410",
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/bot-new%40railwaybotnew.iam.gserviceaccount.com",
+        "universe_domain": "googleapis.com"
+    }
+    return Credentials.from_service_account_info(creds_dict, scopes=scope)
 
 creds = get_google_credentials()
 gc = gspread.authorize(creds)
@@ -308,4 +306,4 @@ def handle_webhook():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-    
+        
