@@ -101,7 +101,7 @@ creds = get_google_credentials()
 gc = gspread.authorize(creds)
 
 # ==============================================
-# 4. EXTRACTION LOGIC
+# 4. EXTRACTION & FALLBACK LOGIC
 # ==============================================
 def extract_pf_quantity(value, context):
     if value is None: return 0
@@ -165,7 +165,7 @@ def split_message_by_station(msg):
     return blocks
 
 # ==============================================
-# 5. GEMINI API CALLS
+# 5. GEMINI API & SMART FALLBACK EXTRACTION
 # ==============================================
 def get_working_key():
     if not GEMINI_API_KEYS:
@@ -187,45 +187,16 @@ def get_working_key():
             except: pass
     return GEMINI_API_KEYS[0] if GEMINI_API_KEYS else None
 
-def call_gemini(msg):
+def call_gemini_api(msg):
     prompt = f"""You are a railway data entry expert. Extract numbers from this message EXACTLY as specified.
-
 STATIONS: {", ".join(ALL_STATIONS)}
-
-FIELD MAPPING (PRS):
-- TKT = T/TKT, TKT, TKTs
-- PASS = T/Pass, PASS
-- C/TKT = C/TKT, CANTKT, C/T, C/T-
-- C/PASS = C/PASS, CANPASS, C/P, C/P-
-- NET = Net Cash, NETCASH, AMT, AMT-, NET. KEEP AS STATED — do NOT subtract.
-- REF = sum of REFUND + UPIREFUND + Digi REFUND + e-Refund + POS REF + RFD + UPI RFD + Cash REF
-- UPI = UPI, QR, Digi CASH, E-Cash, E/CASH, D/CASH
-- VCH = VOUCHER, VCH, VOU, Vou-
-- POS = POS, POS-
-
-FIELD MAPPING (UTS):
-- TKT = TKT, TKTs, J/TKT (NOT "PLATFORM TKT")
-- PASS = PASS, J/Pass
-- NET = AMOUNT, J/Amount, NET CASH, Cash. KEEP AS STATED — do NOT subtract.
-- UPI = UPI, QR, ECASH, E/CASH, D/CASH, E cas, E-Cash
-- PF = ONLY from explicit PF line: "PF TKT-82", "P/TKT=267", "PF Qty-52", "PF-60", "PF. NIL"
-- MR = MR count ("MR 16=17570" -> MR=16, MR AMT=17570)
-- MR AMT = MR amount
-
-RULES:
-1. Identify station code strictly from list: {", ".join(ALL_STATIONS)}. If given like "STN- DBRG", station is DBRG.
-2. PLATFORM TKT and PLATFORMAMT — IGNORE COMPLETELY. Not PF, not TKT.
-3. If station's UTS has NO "PF"/"P/TKT" line -> PF = 0.
-4. NET = amount exactly as stated. NEVER subtract E/CASH, UPI, ECASH.
-5. SUM all refund types into REF (e.g., Cash REF, POS Ref, UPI REF).
-6. Return ONLY this JSON format (no markdown):
-{{"prs": {{"STATION_CODE": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}}}, "uts": {{"STATION_CODE": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}}}}}
-
+FIELD MAPPING (PRS): TKT, PASS, C/TKT, C/PASS, REF (sum all refunds), NET (AMT), VCH, POS, UPI
+FIELD MAPPING (UTS): TKT, PASS, NET (AMT/CASH), UPI (E/CASH), PF, MR, MR AMT
+Return ONLY JSON format:
+{{"prs": {{"STATION": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}}}, "uts": {{"STATION": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}}}}}
 MESSAGE:
 {msg}
-
 JSON ONLY:"""
-
     key = get_working_key()
     if not key: return None
     try:
@@ -238,14 +209,71 @@ JSON ONLY:"""
             match = re.search(r'\{[\s\S]*\}', txt)
             if match: txt = match.group(0)
             parsed = json.loads(txt)
-            
-            prs_clean = {k.strip().upper(): v for k, v in parsed.get('prs', {}).items()}
-            uts_clean = {k.strip().upper(): v for k, v in parsed.get('uts', {}).items()}
-                
-            return {'prs': prs_clean, 'uts': uts_clean}
+            return {
+                'prs': {k.strip().upper(): v for k, v in parsed.get('prs', {}).items()},
+                'uts': {k.strip().upper(): v for k, v in parsed.get('uts', {}).items()}
+            }
     except Exception as e:
-        print("Gemini Error:", e)
+        print("Gemini API Error:", e)
     return None
+
+def call_gemini(msg):
+    # 1. Try Gemini API first
+    parsed = call_gemini_api(msg)
+    if parsed and (parsed.get('prs') or parsed.get('uts')):
+        return parsed
+        
+    print("⚠️ Gemini API returned null. Using Smart Fallback Extractor...")
+    
+    # 2. Smart Fallback if Gemini fails
+    res = {"prs": {}, "uts": {}}
+    msg_upper = msg.upper()
+    
+    found_st = None
+    for st in ALL_STATIONS:
+        if st in msg_upper:
+            found_st = st
+            break
+            
+    if not found_st:
+        return res
+        
+    is_uts = "UTS" in msg_upper or "TTL" in msg_upper or "PSG" in msg_upper or "CASH" in msg_upper
+    target_key = "uts" if is_uts else "prs"
+    
+    fields = {}
+    for line in msg.split('\n'):
+        parts = re.split(r'[:=-]', line)
+        if len(parts) >= 2:
+            key_name = parts[0].strip().upper()
+            nums = re.findall(r'[\d,]+(?:\.\d+)?', parts[1])
+            if nums:
+                val = float(nums[0].replace(',', ''))
+                if "TTL" in key_name or "TKT" in key_name: fields["TKT"] = val
+                elif "PSG" in key_name or "PASS" in key_name: fields["PASS"] = val
+                elif "CASH" in key_name and "E" not in key_name: fields["NET"] = val
+                elif "AMT" in key_name and "NET" not in fields: fields["NET"] = val
+                elif "E/CASH" in key_name or "ECASH" in key_name or "UPI" in key_name: fields["UPI"] = val
+                elif "TOTAL" in key_name and "NET" not in fields: fields["NET"] = val
+
+    if is_uts:
+        res["uts"][found_st] = {
+            "TKT": fields.get("TKT", 0),
+            "PASS": fields.get("PASS", 0),
+            "NET": fields.get("NET", 0),
+            "UPI": fields.get("UPI", 0),
+            "PF": 0, "MR": 0, "MR AMT": 0
+        }
+    else:
+        res["prs"][found_st] = {
+            "TKT": fields.get("TKT", 0),
+            "PASS": fields.get("PASS", 0),
+            "C/TKT": 0, "C/PASS": 0, "REF": 0,
+            "NET": fields.get("NET", 0),
+            "VCH": 0, "POS": 0, "UPI": fields.get("UPI", 0)
+        }
+        
+    return res
 
 # ==============================================
 # 6. POST PROCESSING & SHEET UPDATE
@@ -291,19 +319,16 @@ def update_sheet(data):
 
     def find_station_row(station_code):
         station_code = station_code.upper().strip()
-        # Row 3 to 30: Column B (Index 1)
         for idx in range(2, 30):
             if idx < len(all_rows) and len(all_rows[idx]) > 1:
                 val = str(all_rows[idx][1]).upper().strip()
                 if station_code == val or station_code in val:
                     return {'row': idx + 1, 'name_col': 'B'}
-        # Row 31 to 47: Column M (Index 12)
         for idx in range(30, 47):
             if idx < len(all_rows) and len(all_rows[idx]) > 12:
                 val = str(all_rows[idx][12]).upper().strip()
                 if station_code == val or station_code in val:
                     return {'row': idx + 1, 'name_col': 'M'}
-        # Row 32 to 47: Column C (Index 2)
         for idx in range(31, 47):
             if idx < len(all_rows) and len(all_rows[idx]) > 2:
                 val = str(all_rows[idx][2]).upper().strip()
@@ -393,7 +418,7 @@ def handle_webhook():
                             text_body = msg['text']['body']
                             print(f"Processing Incoming Text:\n{text_body}")
                             extracted = call_gemini(text_body)
-                            print(f"Extracted JSON: {json.dumps(extracted)}")
+                            print(f"Extracted Data: {json.dumps(extracted)}")
                             if extracted:
                                 processed = apply_post_processing(extracted, text_body)
                                 res = update_sheet(processed)
@@ -408,4 +433,4 @@ def handle_webhook():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-                            
+    
