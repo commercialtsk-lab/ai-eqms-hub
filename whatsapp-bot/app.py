@@ -195,13 +195,13 @@ STATIONS: {", ".join(ALL_STATIONS)}
 FIELD MAPPING (PRS):
 - TKT = T/TKT, TKT, TKTs
 - PASS = T/Pass, PASS
-- C/TKT = C/TKT, CANTKT, C/T
-- C/PASS = C/PASS, CANPASS, C/P
-- NET = Net Cash, NETCASH, AMT, NET. KEEP AS STATED — do NOT subtract.
-- REF = sum of REFUND + UPIREFUND + Digi REFUND + e-Refund + POS REF + RFD + UPI RFD
+- C/TKT = C/TKT, CANTKT, C/T, C/T-
+- C/PASS = C/PASS, CANPASS, C/P, C/P-
+- NET = Net Cash, NETCASH, AMT, AMT-, NET. KEEP AS STATED — do NOT subtract.
+- REF = sum of REFUND + UPIREFUND + Digi REFUND + e-Refund + POS REF + RFD + UPI RFD + Cash REF
 - UPI = UPI, QR, Digi CASH, E-Cash, E/CASH, D/CASH
-- VCH = VOUCHER, VCH, VOU
-- POS = POS
+- VCH = VOUCHER, VCH, VOU, Vou-
+- POS = POS, POS-
 
 FIELD MAPPING (UTS):
 - TKT = TKT, TKTs, J/TKT (NOT "PLATFORM TKT")
@@ -213,12 +213,13 @@ FIELD MAPPING (UTS):
 - MR AMT = MR amount
 
 RULES:
-1. PLATFORM TKT and PLATFORMAMT — IGNORE COMPLETELY. Not PF, not TKT.
-2. If station's UTS has NO "PF"/"P/TKT" line -> PF = 0.
-3. NET = amount exactly as stated. NEVER subtract E/CASH, UPI, ECASH.
-4. SUM all refund types into REF.
-5. Return ONLY this JSON (no markdown):
-{{"prs": {{"STATION": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}}}, "uts": {{"STATION": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}}}}}
+1. Identify station code strictly from list: {", ".join(ALL_STATIONS)}. If given like "STN- DBRG", station is DBRG.
+2. PLATFORM TKT and PLATFORMAMT — IGNORE COMPLETELY. Not PF, not TKT.
+3. If station's UTS has NO "PF"/"P/TKT" line -> PF = 0.
+4. NET = amount exactly as stated. NEVER subtract E/CASH, UPI, ECASH.
+5. SUM all refund types into REF (e.g., Cash REF, POS Ref, UPI REF).
+6. Return ONLY this JSON format (no markdown):
+{{"prs": {{"STATION_CODE": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}}}, "uts": {{"STATION_CODE": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}}}}}
 
 MESSAGE:
 {msg}
@@ -288,41 +289,43 @@ def update_sheet(data):
         print(f"Error fetching sheet values: {e}")
         return "❌ Fetch Error"
 
-    def find_station_row_flexible(station_code):
+    def find_station_row(station_code):
         station_code = station_code.upper().strip()
         # Row 3 to 30: Column B (Index 1)
         for idx in range(2, 30):
             if idx < len(all_rows) and len(all_rows[idx]) > 1:
                 val = str(all_rows[idx][1]).upper().strip()
-                if station_code in val or val in station_code:
+                if station_code == val or station_code in val:
                     return {'row': idx + 1, 'name_col': 'B'}
         # Row 31 to 47: Column M (Index 12)
         for idx in range(30, 47):
             if idx < len(all_rows) and len(all_rows[idx]) > 12:
                 val = str(all_rows[idx][12]).upper().strip()
-                if station_code in val or val in station_code:
+                if station_code == val or station_code in val:
                     return {'row': idx + 1, 'name_col': 'M'}
         # Row 32 to 47: Column C (Index 2)
         for idx in range(31, 47):
             if idx < len(all_rows) and len(all_rows[idx]) > 2:
                 val = str(all_rows[idx][2]).upper().strip()
-                if station_code in val or val in station_code:
+                if station_code == val or station_code in val:
                     return {'row': idx + 1, 'name_col': 'C'}
         return None
 
-    station_order = list(set(list(data.get('prs', {}).keys()) + list(data.get('uts', {}).keys())))
-    
+    prs_data = data.get('prs', {})
+    uts_data = data.get('uts', {})
+    station_order = list(set(list(prs_data.keys()) + list(uts_data.keys())))
+
     for st in station_order:
-        info = find_station_row_flexible(st)
+        info = find_station_row(st)
         if not info:
-            print(f"Station {st} row not found in sheet memory")
+            print(f"⚠️ Station {st} row not found in sheet memory")
             continue
             
         r_idx = info['row']
         
         # --- PRS UPDATE ---
-        if st in data.get('prs', {}):
-            for fld, val in data['prs'][st].items():
+        if st in prs_data:
+            for fld, val in prs_data[st].items():
                 val = float(val or 0)
                 if val > 0 and fld in PRS_COLS:
                     col_idx = PRS_COLS[fld]
@@ -331,11 +334,11 @@ def update_sheet(data):
                     new_val = curr + val
                     sheet.update_cell(r_idx, col_idx, new_val)
                     all_rows[r_idx - 1][col_idx - 1] = str(new_val)
-                    print(f"Updated PRS {st} {fld}: +{val} -> Total: {new_val}")
+                    print(f"✅ Updated PRS {st} {fld}: +{val} -> Total: {new_val}")
                     
         # --- UTS UPDATE ---
-        if st in data.get('uts', {}):
-            for fld, val in data['uts'][st].items():
+        if st in uts_data:
+            for fld, val in uts_data[st].items():
                 val = float(val or 0)
                 if fld == "PF" and val == 0: continue
                 if val > 0:
@@ -351,7 +354,7 @@ def update_sheet(data):
                         new_val = curr + val
                         sheet.update_cell(r_idx, col, new_val)
                         all_rows[r_idx - 1][col - 1] = str(new_val)
-                        print(f"Updated UTS {st} {fld}: +{val} -> Total: {new_val}")
+                        print(f"✅ Updated UTS {st} {fld}: +{val} -> Total: {new_val}")
                         
     return "Updated"
 
@@ -390,15 +393,14 @@ def handle_webhook():
                             text_body = msg['text']['body']
                             print(f"Processing Incoming Text:\n{text_body}")
                             extracted = call_gemini(text_body)
+                            print(f"Extracted JSON: {json.dumps(extracted)}")
                             if extracted:
                                 processed = apply_post_processing(extracted, text_body)
                                 res = update_sheet(processed)
                                 print(f"Sheet Update Result: {res}")
-                            else:
-                                print("❌ Gemini extraction failed.")
     except Exception as e:
         print(f"Error handling webhook: {e}")
-    return jsonify({'status': 'success'}), 250
+    return jsonify({'status': 'success'}), 200
 
 # ==============================================
 # 8. MAIN
