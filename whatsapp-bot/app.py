@@ -19,7 +19,6 @@ app = Flask(__name__)
 CONFIG_SHEET_NAME = os.environ.get('GOOGLE_SHEET_NAME', 'UTS&PRS')
 GEMINI_MODEL = "gemini-2.5-flash"
 
-# Gemini Keys (Sirf Gemini use hoga)
 gemini_keys_str = os.environ.get('GEMINI_KEYS', '')
 GEMINI_API_KEYS = [k.strip() for k in gemini_keys_str.split(',')] if gemini_keys_str else [os.environ.get('GEMINI_KEY', '')]
 
@@ -58,14 +57,20 @@ wa = WhatsApp(
 # --- GOOGLE CREDENTIALS FIX ---
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 
-# Render ki Secret File ka path check karein
+# Render ke Secret File ka path check karein
 creds_path = '/etc/secrets/creds.json'
 
 if os.path.exists(creds_path):
     creds = Credentials.from_service_account_file(creds_path, scopes=scope)
-else:
-    # Agar local (Termux/PC) par test kar rahe hain
+elif os.path.exists('creds.json'):
     creds = Credentials.from_service_account_file('creds.json', scopes=scope)
+else:
+    # Fallback: Environment variable se JSON load karein
+    creds_json = os.environ.get('GOOGLE_CREDS_JSON')
+    if creds_json:
+        creds = Credentials.from_service_account_info(json.loads(creds_json), scopes=scope)
+    else:
+        raise ValueError("Credentials not found. Please add Secret File or GOOGLE_CREDS_JSON env variable.")
 
 gc = gspread.authorize(creds)
 
@@ -267,22 +272,20 @@ def update_sheet(data):
 # ==============================================
 @wa.on_message()
 def handle_message(client_wa, msg):
-    # Sirf text messages padhega (forward ya copy-paste dono text hi hote hain)
     if msg.type != 'text': return
     
     incoming_text = msg.text
     try:
-        # Sirf Gemini call hoga
         data = call_gemini(incoming_text)
         
         if not data or (len(data.get('prs', {})) == 0 and len(data.get('uts', {})) == 0):
-            return # Agar kuch samajh nahi aaya, toh chupchaap rha jayega
+            return
             
         data = apply_post_processing(data, incoming_text)
-        update_sheet(data) # Data sheet mein update ho jayega
+        update_sheet(data)
         
     except Exception as e:
-        print(f"Error: {e}") # Error sirf Render logs mein dikhega
+        print(f"Error: {e}")
 
 # ==============================================
 # 8. MAIN
