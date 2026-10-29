@@ -288,32 +288,32 @@ def update_sheet(data):
         print(f"Error fetching sheet values: {e}")
         return "❌ Fetch Error"
 
-    def find_station_row_exact(station_code):
+    def find_station_row_flexible(station_code):
         station_code = station_code.upper().strip()
         # Row 3 to 30: Column B (Index 1)
         for idx in range(2, 30):
             if idx < len(all_rows) and len(all_rows[idx]) > 1:
                 val = str(all_rows[idx][1]).upper().strip()
-                if val == station_code:
+                if station_code in val or val in station_code:
                     return {'row': idx + 1, 'name_col': 'B'}
         # Row 31 to 47: Column M (Index 12)
         for idx in range(30, 47):
             if idx < len(all_rows) and len(all_rows[idx]) > 12:
                 val = str(all_rows[idx][12]).upper().strip()
-                if val == station_code:
+                if station_code in val or val in station_code:
                     return {'row': idx + 1, 'name_col': 'M'}
         # Row 32 to 47: Column C (Index 2)
         for idx in range(31, 47):
             if idx < len(all_rows) and len(all_rows[idx]) > 2:
                 val = str(all_rows[idx][2]).upper().strip()
-                if val == station_code:
+                if station_code in val or val in station_code:
                     return {'row': idx + 1, 'name_col': 'C'}
         return None
 
     station_order = list(set(list(data.get('prs', {}).keys()) + list(data.get('uts', {}).keys())))
     
     for st in station_order:
-        info = find_station_row_exact(st)
+        info = find_station_row_flexible(st)
         if not info:
             print(f"Station {st} row not found in sheet memory")
             continue
@@ -388,15 +388,17 @@ def handle_webhook():
                     for msg in messages:
                         if msg.get('type') == 'text':
                             text_body = msg['text']['body']
-                            print(f"Processing Incoming Text: {text_body}")
+                            print(f"Processing Incoming Text:\n{text_body}")
                             extracted = call_gemini(text_body)
                             if extracted:
                                 processed = apply_post_processing(extracted, text_body)
                                 res = update_sheet(processed)
                                 print(f"Sheet Update Result: {res}")
+                            else:
+                                print("❌ Gemini extraction failed.")
     except Exception as e:
         print(f"Error handling webhook: {e}")
-    return jsonify({'status': 'success'}), 200
+    return jsonify({'status': 'success'}), 250
 
 # ==============================================
 # 8. MAIN
@@ -404,4 +406,4 @@ def handle_webhook():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-    
+                            
