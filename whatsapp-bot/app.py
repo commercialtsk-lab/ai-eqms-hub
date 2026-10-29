@@ -141,7 +141,6 @@ def split_message_by_station(msg):
     blocks = {}
     if not msg: return blocks
     matches = []
-    # Smart matching for STN- DBRG, STN: DBRG, REVENUE OF DBRG, etc.
     for m in re.finditer(r'(?:REVENUE\s+OF|EARNINGS\s+OF|REVENUE\s+of|Earnings\s+Of|UTS\s+OF|PRS\s+OF|UTS\s+of|PRS\s+of|STN\s*[-:]?)\s*(?:UTS\/|PRS\/)?([A-Z]{2,6})', msg, re.I):
         st = m.group(1).upper()
         if st in ALL_STATIONS: matches.append({'station': st, 'index': m.start()})
@@ -161,22 +160,8 @@ def split_message_by_station(msg):
         blocks[st] = blocks.get(st, "") + "\n" + block
     return blocks
 
-def get_station_row(sheet, station):
-    if not station: return None
-    station = station.upper().strip()
-    for r in range(3, 31):
-        val = sheet.cell(r, 2).value
-        if val and str(val).upper().strip() == station: return {'row': r, 'name_col': 'B'}
-    for r in range(31, 48):
-        val = sheet.cell(r, 13).value
-        if val and str(val).upper().strip() == station: return {'row': r, 'name_col': 'M'}
-    for r in range(32, 48):
-        val = sheet.cell(r, 3).value
-        if val and str(val).upper().strip() == station: return {'row': r, 'name_col': 'C'}
-    return None
-
 # ==============================================
-# 5. GEMINI API CALLS (Smart Prompt)
+# 5. GEMINI API CALLS
 # ==============================================
 def get_working_key():
     now = time.time()
@@ -240,7 +225,7 @@ JSON ONLY:"""
     return None
 
 # ==============================================
-# 6. POST PROCESSING & SHEET UPDATE
+# 6. POST PROCESSING & OPTIMIZED SHEET UPDATE
 # ==============================================
 def apply_post_processing(data, msg):
     if not data: return data
@@ -278,21 +263,48 @@ def update_sheet(data):
         print(f"Sheet Access Error: {e}")
         return "❌ Sheet not found"
         
+    try:
+        all_rows = sheet.get_all_values()
+    except Exception as e:
+        print(f"Error fetching sheet values: {e}")
+        return "❌ Fetch Error"
+
+    def find_row_in_memory(station_code):
+        station_code = station_code.upper().strip()
+        for idx, row in enumerate(all_rows):
+            row_num = idx + 1
+            if 3 <= row_num <= 30 and len(row) > 1 and str(row[1]).upper().strip() == station_code:
+                return {'row': row_num, 'name_col': 'B'}
+            if 31 <= row_num <= 47 and len(row) > 12 and str(row[12]).upper().strip() == station_code:
+                return {'row': row_num, 'name_col': 'M'}
+            if 32 <= row_num <= 47 and len(row) > 2 and str(row[2]).upper().strip() == station_code:
+                return {'row': row_num, 'name_col': 'C'}
+        return None
+
     station_order = list(set(list(data.get('prs', {}).keys()) + list(data.get('uts', {}).keys())))
+    
     for st in station_order:
-        info = get_station_row(sheet, st)
+        info = find_row_in_memory(st)
         if not info:
-            print(f"Station {st} row not found in sheet")
+            print(f"Station {st} row not found in sheet memory")
             continue
+            
+        r_idx = info['row']
+        
+        # --- PRS UPDATE ---
         if st in data.get('prs', {}):
             for fld, val in data['prs'][st].items():
                 val = float(val or 0)
                 if val > 0 and fld in PRS_COLS:
-                    col = PRS_COLS[fld]
-                    curr = sheet.cell(info['row'], col).value
-                    curr = float(curr) if curr and str(curr).replace('.','',1).isdigit() else 0
-                    sheet.update_cell(info['row'], col, curr + val)
-                    print(f"Updated PRS {st} {fld}: +{val}")
+                    col_idx = PRS_COLS[fld]
+                    curr_val_str = all_rows[r_idx - 1][col_idx - 1] if len(all_rows[r_idx - 1]) >= col_idx else "0"
+                    curr = float(curr_val_str) if curr_val_str and str(curr_val_str).replace('.','',1).isdigit() else 0
+                    new_val = curr + val
+                    sheet.update_cell(r_idx, col_idx, new_val)
+                    all_rows[r_idx - 1][col_idx - 1] = str(new_val)
+                    print(f"Updated PRS {st} {fld}: +{val} -> Total: {new_val}")
+                    
+        # --- UTS UPDATE ---
         if st in data.get('uts', {}):
             for fld, val in data['uts'][st].items():
                 val = float(val or 0)
@@ -302,12 +314,16 @@ def update_sheet(data):
                     if info['name_col'] == 'C':
                         col_map = {"TKT":4, "PASS":5, "NET":9, "UPI":12, "PF":8, "MR":9, "MR AMT":10}
                         col = col_map.get(fld)
-                    else: col = UTS_COLS_NU.get(fld)
+                    else: 
+                        col = UTS_COLS_NU.get(fld)
                     if col:
-                        curr = sheet.cell(info['row'], col).value
-                        curr = float(curr) if curr and str(curr).replace('.','',1).isdigit() else 0
-                        sheet.update_cell(info['row'], col, curr + val)
-                        print(f"Updated UTS {st} {fld}: +{val}")
+                        curr_val_str = all_rows[r_idx - 1][col - 1] if len(all_rows[r_idx - 1]) >= col else "0"
+                        curr = float(curr_val_str) if curr_val_str and str(curr_val_str).replace('.','',1).isdigit() else 0
+                        new_val = curr + val
+                        sheet.update_cell(r_idx, col, new_val)
+                        all_rows[r_idx - 1][col - 1] = str(new_val)
+                        print(f"Updated UTS {st} {fld}: +{val} -> Total: {new_val}")
+                        
     return "Updated"
 
 # ==============================================
@@ -355,4 +371,4 @@ def handle_webhook():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-        
+    
