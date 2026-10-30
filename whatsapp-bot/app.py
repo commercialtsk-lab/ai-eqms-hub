@@ -15,7 +15,7 @@ app = Flask(__name__)
 # ENVIRONMENT VARIABLES
 # ==============================================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-SHEET_NAME = os.environ.get("GOOGLE_SHEET_NAME", "") or os.environ.get("SHEET_NAME", "UTS&PRS")
+SHEET_NAME = os.environ.get("GOOGLE_SHEET_NAME", "") or os.environ.get("SHEET_NAME", "Commercial Position TSK Div NEW")
 
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "") or os.environ.get("SECRET_TOKEN", "")
 WHATSAPP_TOKEN = (os.environ.get("META_TOKEN") or os.environ.get("WHATSAPP_TOKEN")
@@ -61,7 +61,7 @@ def already_processed(msg_id):
     return False
 
 # ==============================================
-# CREDENTIALS LOADING (with private_key fix)
+# CREDENTIALS LOADING
 # ==============================================
 def _fix_newlines_inside_strings(s: str) -> str:
     out, in_str, esc = [], False, False
@@ -81,7 +81,6 @@ def _fix_newlines_inside_strings(s: str) -> str:
 def load_credentials_dict():
     errors = []
 
-    # --- Option 1: base64 ---
     if GOOGLE_CREDENTIALS_B64:
         try:
             s = GOOGLE_CREDENTIALS_B64.strip().strip("'\"")
@@ -100,7 +99,6 @@ def load_credentials_dict():
         except Exception as e:
             errors.append(f"B64 failed: {e}")
 
-    # --- Option 2: raw JSON ---
     raw = (GOOGLE_CREDENTIALS_STR or "").strip()
     if raw:
         candidates = [raw]
@@ -141,11 +139,17 @@ def get_sheet():
                   "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         gc = gspread.authorize(creds)
+
+        # Spreadsheet open karo
         sh = gc.open(SHEET_NAME)
+
+        # Andar se "UTS&PRS" tab open karo
         try:
-            _SHEET = sh.worksheet(SHEET_NAME)
+            _SHEET = sh.worksheet("UTS&PRS")
         except gspread.WorksheetNotFound:
+            print("⚠️ 'UTS&PRS' tab nahi mili, sheet1 use kar rahe hain")
             _SHEET = sh.sheet1
+
         print(f"✅ Google Sheet connected: '{sh.title}' / tab: '{_SHEET.title}'")
         return _SHEET
     except Exception as e:
@@ -158,38 +162,33 @@ def get_station_map(sheet):
         return _STATION_MAP
     m = {}
 
-    # Column B (rows 3 to 30)
     try:
-        col_b = sheet.get("B3:B30")
-        for i, row in enumerate(col_b, start=3):
-            val = row[0] if row else ""
-            if val:
-                m.setdefault(str(val).upper().strip(), {"row": i, "nameCol": "B"})
+        all_values = sheet.get_all_values()
     except Exception as e:
-        print(f"⚠️ Error reading column B: {e}")
+        print(f"❌ Error reading full sheet: {e}")
+        _STATION_MAP = m
+        return m
 
-    # Column M (rows 31 to 47)
-    try:
-        col_m = sheet.get("M31:M47")
-        for i, row in enumerate(col_m, start=31):
-            val = row[0] if row else ""
-            if val:
-                m.setdefault(str(val).upper().strip(), {"row": i, "nameCol": "M"})
-    except Exception as e:
-        print(f"⚠️ Error reading column M: {e}")
+    # Column B (index 1) → rows 3 to 30
+    for i in range(2, min(30, len(all_values))):
+        val = all_values[i][1] if len(all_values[i]) > 1 else ""
+        if val:
+            m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "B"})
 
-    # Column C (rows 32 to 48)
-    try:
-        col_c = sheet.get("C32:C48")
-        for i, row in enumerate(col_c, start=32):
-            val = row[0] if row else ""
-            if val:
-                m.setdefault(str(val).upper().strip(), {"row": i, "nameCol": "C"})
-    except Exception as e:
-        print(f"⚠️ Error reading column C: {e}")
+    # Column M (index 12) → rows 31 to 47
+    for i in range(30, min(47, len(all_values))):
+        val = all_values[i][12] if len(all_values[i]) > 12 else ""
+        if val:
+            m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "M"})
+
+    # Column C (index 2) → rows 32 to 48
+    for i in range(31, min(48, len(all_values))):
+        val = all_values[i][2] if len(all_values[i]) > 2 else ""
+        if val:
+            m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "C"})
 
     _STATION_MAP = m
-    print(f"✅ Station map ready: {len(m)} stations")
+    print(f"✅ Station map ready: {len(m)} stations → {list(m.keys())[:10]}")
     return m
 
 # ==============================================
@@ -338,7 +337,7 @@ def update_google_sheet(data):
         return False
     smap = get_station_map(sheet)
     try:
-        matrix = sheet.get("A1:U60")
+        matrix = sheet.get_all_values()
     except Exception as e:
         print(f"❌ Sheet read error: {e}")
         return False
@@ -346,10 +345,10 @@ def update_google_sheet(data):
     def current(r, c):
         try:
             v = matrix[r - 1][c - 1]
-        except IndexError:
+        except (IndexError, TypeError):
             return 0.0
         try:
-            return float(v)
+            return float(str(v).replace(",", ""))
         except (TypeError, ValueError):
             return 0.0
 
@@ -372,7 +371,7 @@ def update_google_sheet(data):
                 col = PRS_COLS[fld]
                 new_val = current(row, col) + v
                 queue(row, col, new_val)
-                print(f"✅ Updated PRS {st} {fld}: +{v} -> Total: {new_val}")
+                print(f"✅ Updated PRS {st} {fld}: +{v} → Total: {new_val}")
 
     for st, uts_vals in data.get("uts", {}).items():
         info = smap.get(str(st).upper().strip())
@@ -396,7 +395,7 @@ def update_google_sheet(data):
                 if col:
                     new_val = current(row, col) + v
                     queue(row, col, new_val)
-                    print(f"✅ Updated UTS {st} {fld}: +{v} -> Total: {new_val}")
+                    print(f"✅ Updated UTS {st} {fld}: +{v} → Total: {new_val}")
 
     if not updates:
         print("⚠️ Sheet update skipped: zero updates queued.")
@@ -468,10 +467,10 @@ def webhook():
                         continue
 
                     if already_processed(msg_id):
-                        print(f"⏭️ Duplicate message {msg_id}, skipped (no Gemini call)")
+                        print(f"⏭️ Duplicate message {msg_id}, skipped")
                         continue
 
-                    print(f"📩 New message from {from_number}: {incoming_msg[:80]}...")
+                    print(f"📩 New message from {from_number}: {incoming_msg[:100]}...")
                     data = call_gemini(incoming_msg)
 
                     if not data:
@@ -491,7 +490,7 @@ def webhook():
         print(f"❌ Webhook processing error: {e}")
 
     if not found_any:
-        print("ℹ️ POST received but no messages array (status update etc.)")
+        print("ℹ️ POST received but no messages array")
     return jsonify({"status": "ok"}), 200
 
 # ==============================================
@@ -501,9 +500,9 @@ def webhook():
 def test_sheet():
     sheet = get_sheet()
     if not sheet:
-        return jsonify({"ok": False, "error": "Sheet connection failed. Upar wale logs dekho."}), 200
+        return jsonify({"ok": False, "error": "Sheet connection failed"}), 200
     smap = get_station_map(sheet)
-    sample = {k: v for k, v in list(smap.items())[:5]}
+    sample = {k: v for k, v in list(smap.items())[:8]}
     return jsonify({"ok": True, "sheet": sheet.title, "stations_found": len(smap), "sample": sample}), 200
 
 @app.route("/test-gemini", methods=["GET"])
