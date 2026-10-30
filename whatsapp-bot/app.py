@@ -2,12 +2,13 @@ import os
 import re
 import json
 import requests
+import gspread
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
 # ==============================================
-# ENVIRONMENT VARIABLES (RENDER ENV SE FETCH HOGA)
+# ENVIRONMENT VARIABLES (RENDER ENV)
 # ==============================================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 SHEET_NAME = os.environ.get("SHEET_NAME", "UTS&PRS")
@@ -25,22 +26,51 @@ ALL_STATIONS = [
     "CMA","KXL","BBGN","BLMR","NMGY","KRHT"
 ]
 
-# ==============================================
-# PF EXTRACTION — STRICT (NO DIVISION BY 10)
-# ==============================================
-def extract_pf_quantity(value, context):
-    if value is None:
-        return 0
-    str_val = str(value).strip()
-    if str_val == "" or re.match(r'^(nil|null|0)$', str_val, re.IGNORECASE):
-        return 0
-    numbers = re.findall(r'\d+', str_val)
-    if not numbers:
-        return 0
-    first_num = int(numbers[0])
-    # Exact quantity direct bitha do, /10 nahi karna hai
-    return first_num
+PRS_COLS = { 
+    "TKT": 4, "PASS": 5, "C/TKT": 6, "C/PASS": 7, 
+    "REF": 8, "NET": 9, "VCH": 10, "POS": 11, "UPI": 12 
+}
 
+UTS_COLS_NU = { 
+    "PF": 14, "TKT": 16, "PASS": 17, "NET": 18, 
+    "MR": 19, "MR AMT": 20, "UPI": 21 
+}
+
+# ==============================================
+# GOOGLE SHEETS CONNECTION SETUP
+# ==============================================
+def get_sheet_connection():
+    try:
+        # Render par agar creds.json file ke roop mein uploaded hai
+        gc = gspread.service_account(filename="creds.json")
+        sheet = gc.open(SHEET_NAME).worksheet(SHEET_NAME)
+        return sheet
+    except Exception as e:
+        print(f"Google Sheet Connection Error: {e}")
+        return None
+
+def find_station_row(sheet, station):
+    station = station.upper().strip()
+    # Search in Column B (Rows 3 to 30)
+    for r in range(3, 31):
+        val = sheet.cell(r, 2).value
+        if val and str(val).upper().strip() == station:
+            return {"row": r, "nameCol": "B"}
+    # Search in Column M (Rows 31 to 47)
+    for r in range(31, 48):
+        val = sheet.cell(r, 13).value
+        if val and str(val).upper().strip() == station:
+            return {"row": r, "nameCol": "M"}
+    # Search in Column C (Rows 32 to 47)
+    for r in range(32, 48):
+        val = sheet.cell(r, 3).value
+        if val and str(val).upper().strip() == station:
+            return {"row": r, "nameCol": "C"}
+    return None
+
+# ==============================================
+# PF & DIGITAL CASH EXTRACTION
+# ==============================================
 def extract_pf_from_message(msg):
     if not msg:
         return None
@@ -58,9 +88,6 @@ def extract_pf_from_message(msg):
         return int(m3.group(1))
     return None
 
-# ==============================================
-# DIGITAL CASH EXTRACTION
-# ==============================================
 def message_has_digital_cash(msg):
     return bool(re.search(r'(?:E/CASH|D/CASH|ECASH|DCASH|E-CASH|E\s*CASH|DIGI\s*CASH|E\s*cas)', msg or "", re.IGNORECASE))
 
@@ -77,14 +104,11 @@ def extract_digital_cash_from_message(msg):
             pass
     return total
 
-# ==============================================
-# SPLIT MESSAGE INTO PER-STATION BLOCKS
-# ==============================================
 def split_message_by_station(msg):
     blocks = {}
     if not msg:
         return blocks
-    header_regex = re.compile(r'(?:REVENUE\s+OF|EARNINGS\s+OF|REVENUE\s+of|Earnings\s+Of|UTS\s+OF|PRS\s+OF|UTS\s+of|PRS\s+of)\s+(?:UTS/|PRS/)?([A-Z]{2,6})', re.IGNORECASE)
+    header_regex = re.compile(r'(?:REVENUE\s+OF|EARNINGS\s+OF|UTS\s+OF|PRS\s+OF)\s+(?:UTS/|PRS/)?([A-Z]{2,6})', re.IGNORECASE)
     matches = []
     for m in header_regex.finditer(msg):
         st = m.group(1).upper()
@@ -112,63 +136,30 @@ def split_message_by_station(msg):
     return blocks
 
 # ==============================================
-# DETAILED GEMINI PROMPT (NATURAL & PRECISE)
+# GEMINI API CALL
 # ==============================================
 def call_gemini(msg):
     if not GEMINI_API_KEY:
-        print("❌ GEMINI_API_KEY environment variable missing!")
+        print("❌ GEMINI_API_KEY missing!")
         return None
         
-    prompt = f"""You are an expert railway data extraction and parsing assistant. Your task is to accurately read incoming railway earnings and revenue messages (which can be pasted, forwarded, single-station, or multi-station) and extract numeric values into a strict JSON format.
-
+    prompt = f"""You are an expert railway data extraction assistant. Extract numbers into strict JSON.
 ALL VALID STATION CODES: {', '.join(ALL_STATIONS)}
 
-DETAILED FIELD MAPPING INSTRUCTIONS:
+RULES:
+- Map PRS & UTS fields correctly.
+- NET = amount as stated. Never subtract digital payments.
+- PF = exact count from explicit line. Ignore PLATFORM TKT.
 
-1. PRS SECTION MAPPING:
-- TKT: Map from T/TKT, TKT, TKTs, Total Tickets.
-- PASS: Map from T/Pass, PASS, Passengers.
-- C/TKT: Map from C/TKT, CANTKT, C/T, Cancelled Tickets.
-- C/PASS: Map from C/PASS, CANPASS, C/P, Cancelled Passengers.
-- NET: Map from Net Cash, NETCASH, AMT, NET, Cash. KEEP AS STATED — do NOT subtract digital payments from net.
-- REF: Sum of all refund types including REFUND, UPIREFUND, Digi REFUND, e-Refund, POS REF, RFD, UPI RFD.
-- UPI: Map from UPI, QR, Digi CASH, E-Cash, E/CASH, D/CASH.
-- VCH: Map from VOUCHER, VCH, VOU.
-- POS: Map from POS.
-
-2. UTS SECTION MAPPING:
-- TKT: Map from TKT, TKTs, J/TKT, TTL (EXCLUDE "PLATFORM TKT").
-- PASS: Map from PASS, J/Pass, PsgF.
-- NET: Map from AMOUNT, J/Amount, NET CASH, Cash, Total. KEEP AS STATED — do NOT subtract digital payments.
-- UPI: Map from UPI, QR, ECASH, E/CASH, D/CASH, E cas, E-Cash.
-- PF: Extract ONLY from explicit platform fee lines like "PF TKT-82", "P/TKT=267", "PF Qty-52", "PF-60", "PF. NIL". Keep count as exact quantity (NO division by 10).
-- MR: Map MR count (e.g., "MR 16=17570" → MR=16).
-- MR AMT: Map MR amount (e.g., "MR 16=17570" → MR AMT=17570).
-
-CRITICAL EXTRACTION RULES:
-1. PLATFORM TKT and PLATFORMAMT must be completely ignored. They are NOT Platform Fees and NOT Tickets.
-2. NET must be taken exactly as stated in the message. Never subtract E/CASH, UPI, or digital cash.
-3. If a station contains only PRS data, do not include an empty UTS block for it, and vice versa.
-4. Handle flexible formatting, typos, varying spacing, and shorthand notations seamlessly.
-
-Return ONLY a valid JSON object matching this exact structure (no markdown fences, no extra text):
+Return ONLY valid JSON (no markdown):
 {{
-  "prs": {{
-    "STATION_NAME": {{
-      "TKT": 0, "PASS": 0, "C/TKT": 0, "C/PASS": 0, "REF": 0, "NET": 0, "VCH": 0, "POS": 0, "UPI": 0
-    }}
-  }},
-  "uts": {{
-    "STATION_NAME": {{
-      "TKT": 0, "PASS": 0, "NET": 0, "UPI": 0, "PF": 0, "MR": 0, "MR AMT": 0
-    }}
-  }}
+  "prs": {{"STATION": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}}},
+  "uts": {{"STATION": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}}}
 }}
 
-INCOMING MESSAGE TO PARSE:
+MESSAGE:
 {msg}
-
-JSON OUTPUT ONLY:"""
+JSON ONLY:"""
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
@@ -195,9 +186,6 @@ JSON OUTPUT ONLY:"""
         print(f"Gemini API Error: {e}")
     return None
 
-# ==============================================
-# POST-PROCESSING (RE-VERIFICATION)
-# ==============================================
 def apply_post_processing(data, msg):
     if not data:
         return data
@@ -225,6 +213,53 @@ def apply_post_processing(data, msg):
     return data
 
 # ==============================================
+# UPDATE GOOGLE SHEET FUNCTION
+# ==============================================
+def update_google_sheet(data):
+    sheet = get_sheet_connection()
+    if not sheet:
+        print("❌ Could not connect to Google Sheet.")
+        return False
+
+    for st, prs_vals in data.get("prs", {}).items():
+        info = find_station_row(sheet, st)
+        if not info:
+            print(f"⚠️ Station {st} not found in sheet!")
+            continue
+        row = info["row"]
+        for fld, val in prs_vals.items():
+            if val > 0 and fld in PRS_COLS:
+                col = PRS_COLS[fld]
+                curr_val = sheet.cell(row, col).value
+                new_val = (float(curr_val) if curr_val not in ["", None] else 0) + float(val)
+                sheet.update_cell(row, col, new_val)
+                print(f"✅ Updated PRS {st} {fld}: +{val} -> Total: {new_val}")
+
+    for st, uts_vals in data.get("uts", {}).items():
+        info = find_station_row(sheet, st)
+        if not info:
+            print(f"⚠️ Station {st} not found in sheet!")
+            continue
+        row = info["row"]
+        for fld, val in uts_vals.items():
+            if fld == "PF" and val == 0:
+                continue
+            if val > 0:
+                col = None
+                if info["nameCol"] == "C":
+                    col_map = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12, "PF": 8, "MR": 9, "MR AMT": 10}
+                    col = col_map.get(fld)
+                else:
+                    col = UTS_COLS_NU.get(fld)
+                
+                if col:
+                    curr_val = sheet.cell(row, col).value
+                    new_val = (float(curr_val) if curr_val not in ["", None] else 0) + float(val)
+                    sheet.update_cell(row, col, new_val)
+                    print(f"✅ Updated UTS {st} {fld}: +{val} -> Total: {new_val}")
+    return True
+
+# ==============================================
 # WEBHOOK ENDPOINT
 # ==============================================
 @app.route("/webhook", methods=["GET", "POST"])
@@ -233,7 +268,6 @@ def webhook():
         return "Webhook Live and Running!", 200
 
     payload = request.get_json(silent=True) or {}
-    
     incoming_msg = ""
     try:
         entries = payload.get("entry", [])
@@ -243,7 +277,7 @@ def webhook():
                 messages = val.get("messages", [])
                 for m in messages:
                     if m.get("type") == "text":
-                        incoming_msg += m.get("text", {}).get("body", "") + "\n"
+                        incoming_msg += m.get("text", {}).get( "body", "") + "\n"
     except Exception as e:
         print("Parsing Error:", e)
 
@@ -252,14 +286,16 @@ def webhook():
         return jsonify({"status": "ignored", "reason": "No text body found"}), 200
 
     print("Processing incoming message with Gemini...")
-
-    # Sirf ek hi bar Gemini API call hoga
     data = call_gemini(incoming_msg)
 
     if data:
         data = apply_post_processing(data, incoming_msg)
         print("Successfully Extracted Data:", json.dumps(data))
-        return jsonify({"status": "success", "extracted": data}), 200
+        
+        # Google Sheet Update Call
+        success = update_google_sheet(data)
+        
+        return jsonify({"status": "success", "sheet_updated": success, "extracted": data}), 200
     else:
         print("⚠️ Gemini returned null.")
         return jsonify({"status": "failed", "message": "Gemini returned null"}), 200
