@@ -3,6 +3,7 @@ import re
 import json
 import requests
 import gspread
+from google.oauth2.service_account import Credentials
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -14,6 +15,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 SHEET_NAME = os.environ.get("SHEET_NAME", "UTS&PRS")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHAT_ID = os.environ.get("CHAT_ID", "")
+GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 
 GEMINI_MODEL = "gemini-2.5-flash"
 
@@ -37,12 +39,20 @@ UTS_COLS_NU = {
 }
 
 # ==============================================
-# GOOGLE SHEETS CONNECTION SETUP
+# GOOGLE SHEETS CONNECTION SETUP (ESCAPE SAFE)
 # ==============================================
 def get_sheet_connection():
     try:
-        # Render par agar creds.json file ke roop mein uploaded hai
-        gc = gspread.service_account(filename="creds.json")
+        if GOOGLE_CREDENTIALS_STR:
+            # Handle JSON string from Render Environment variable securely
+            creds_dict = json.loads(GOOGLE_CREDENTIALS_STR)
+            scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+            creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+            gc = gspread.authorize(creds)
+        else:
+            # Fallback to local creds.json file if present
+            gc = gspread.service_account(filename="creds.json")
+            
         sheet = gc.open(SHEET_NAME).worksheet(SHEET_NAME)
         return sheet
     except Exception as e:
@@ -136,7 +146,7 @@ def split_message_by_station(msg):
     return blocks
 
 # ==============================================
-# GEMINI API CALL
+# GEMINI API CALL (EXACTLY 1 CALL)
 # ==============================================
 def call_gemini(msg):
     if not GEMINI_API_KEY:
@@ -277,7 +287,7 @@ def webhook():
                 messages = val.get("messages", [])
                 for m in messages:
                     if m.get("type") == "text":
-                        incoming_msg += m.get("text", {}).get( "body", "") + "\n"
+                        incoming_msg += m.get("text", {}).get("body", "") + "\n"
     except Exception as e:
         print("Parsing Error:", e)
 
@@ -303,4 +313,3 @@ def webhook():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-    
