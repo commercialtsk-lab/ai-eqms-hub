@@ -1,8 +1,10 @@
 import os
 import re
 import json
+import base64
 import requests
 import gspread
+from gspread.utils import rowcol_to_a1
 from google.oauth2.service_account import Credentials
 from flask import Flask, request, jsonify
 
@@ -15,6 +17,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 SHEET_NAME = os.environ.get("SHEET_NAME", "UTS&PRS")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHAT_ID = os.environ.get("CHAT_ID", "")
+GOOGLE_CREDENTIALS_B64 = os.environ.get("GOOGLE_CREDENTIALS_B64", "")
 GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 
 GEMINI_MODEL = "gemini-2.5-flash"
@@ -28,61 +31,119 @@ ALL_STATIONS = [
     "CMA","KXL","BBGN","BLMR","NMGY","KRHT"
 ]
 
-PRS_COLS = { 
-    "TKT": 4, "PASS": 5, "C/TKT": 6, "C/PASS": 7, 
-    "REF": 8, "NET": 9, "VCH": 10, "POS": 11, "UPI": 12 
+PRS_COLS = {
+    "TKT": 4, "PASS": 5, "C/TKT": 6, "C/PASS": 7,
+    "REF": 8, "NET": 9, "VCH": 10, "POS": 11, "UPI": 12
 }
 
-UTS_COLS_NU = { 
-    "PF": 14, "TKT": 16, "PASS": 17, "NET": 18, 
-    "MR": 19, "MR AMT": 20, "UPI": 21 
+UTS_COLS_NU = {
+    "PF": 14, "TKT": 16, "PASS": 17, "NET": 18,
+    "MR": 19, "MR AMT": 20, "UPI": 21
 }
 
 # ==============================================
-# GOOGLE SHEETS CONNECTION SETUP (ESCAPE SAFE)
+# CREDENTIALS LOADING (RENDER-SAFE)
 # ==============================================
-def get_sheet_connection():
-    try:
-        if GOOGLE_CREDENTIALS_STR:
-            cleaned_creds = GOOGLE_CREDENTIALS_STR.strip()
-            if cleaned_creds.startswith("'") and cleaned_creds.endswith("'"):
-                cleaned_creds = cleaned_creds[1:-1]
-            if cleaned_creds.startswith('"') and cleaned_creds.endswith('"'):
-                cleaned_creds = cleaned_creds[1:-1]
-            
-            try:
-                creds_dict = json.loads(cleaned_creds)
-            except Exception:
-                fixed_str = cleaned_creds.replace('\n', '\\n').replace('\\\\n', '\\n')
-                creds_dict = json.loads(fixed_str)
-
-            scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-            creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-            gc = gspread.authorize(creds)
+def _fix_newlines_inside_strings(s: str) -> str:
+    """Sirf string values ke ANDAR ke real newlines ko \\n escape me badlo.
+    Structural newlines (fields ke beech) ko chhoo mat — warna JSON aur tootega."""
+    out, in_str, esc = [], False, False
+    for ch in s:
+        if esc:
+            out.append(ch)
+            esc = False
+        elif ch == "\\":
+            out.append(ch)
+            esc = True
+        elif ch == '"':
+            out.append(ch)
+            in_str = not in_str
+        elif ch == "\n" and in_str:
+            out.append("\\n")
         else:
-            gc = gspread.service_account(filename="creds.json")
-            
-        sheet = gc.open(SHEET_NAME).worksheet(SHEET_NAME)
-        return sheet
+            out.append(ch)
+    return "".join(out)
+
+
+def load_credentials_dict():
+    # Option 1 (recommended): base64 single-line env var — escaping impossible to break
+    if GOOGLE_CREDENTIALS_B64:
+        try:
+            return json.loads(base64.b64decode(GOOGLE_CREDENTIALS_B64).decode("utf-8"))
+        except Exception as e:
+            print(f"❌ GOOGLE_CREDENTIALS_B64 decode failed: {e}")
+            return None
+
+    # Option 2: raw JSON env var
+    raw = (GOOGLE_CREDENTIALS_STR or "").strip()
+    if not raw:
+        print("❌ No Google credentials found in env vars!")
+        return None
+
+    candidates = [raw]
+    if len(raw) > 1 and raw[0] in "'\"" and raw[-1] == raw[0]:
+        candidates.append(raw[1:-1])  # user ne poora JSON quotes me paste kar diya ho
+
+    for cand in candidates:
+        try:
+            return json.loads(cand)
+        except json.JSONDecodeError:
+            pass
+        try:
+            return json.loads(_fix_newlines_inside_strings(cand))
+        except json.JSONDecodeError:
+            pass
+
+    print("❌ GOOGLE_CREDENTIALS JSON parse failed. Base64 wala tareeka use karo.")
+    return None
+
+
+# ==============================================
+# GOOGLE SHEETS CONNECTION (CACHED)
+# ==============================================
+_SHEET = None
+_STATION_MAP = None
+
+def get_sheet():
+    global _SHEET
+    if _SHEET:
+        return _SHEET
+    creds_dict = load_credentials_dict()
+    if not creds_dict:
+        return None
+    try:
+        scopes = ["https://www.googleapis.com/auth/spreadsheets",
+                  "https://www.googleapis.com/auth/drive"]
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        gc = gspread.authorize(creds)
+        sh = gc.open(SHEET_NAME)
+        try:
+            _SHEET = sh.worksheet(SHEET_NAME)
+        except gspread.WorksheetNotFound:
+            _SHEET = sh.sheet1  # agar tab ka naam alag ho to pehli sheet
+        return _SHEET
     except Exception as e:
         print(f"Google Sheet Connection Error: {e}")
         return None
 
-def find_station_row(sheet, station):
-    station = station.upper().strip()
-    for r in range(3, 31):
-        val = sheet.cell(r, 2).value
-        if val and str(val).upper().strip() == station:
-            return {"row": r, "nameCol": "B"}
-    for r in range(31, 48):
-        val = sheet.cell(r, 13).value
-        if val and str(val).upper().strip() == station:
-            return {"row": r, "nameCol": "M"}
-    for r in range(32, 48):
-        val = sheet.cell(r, 3).value
-        if val and str(val).upper().strip() == station:
-            return {"row": r, "nameCol": "C"}
-    return None
+
+def get_station_map(sheet):
+    """Ek baar me poore station→row map banao (3 API calls total, har request me nahi)."""
+    global _STATION_MAP
+    if _STATION_MAP:
+        return _STATION_MAP
+    m = {}
+    for idx, val in enumerate(sheet.col_values(2), start=1):   # Column B, rows 3-30
+        if 3 <= idx <= 30 and val:
+            m.setdefault(str(val).upper().strip(), {"row": idx, "nameCol": "B"})
+    for idx, val in enumerate(sheet.col_values(13), start=1):  # Column M, rows 31-47
+        if 31 <= idx <= 47 and val:
+            m.setdefault(str(val).upper().strip(), {"row": idx, "nameCol": "M"})
+    for idx, val in enumerate(sheet.col_values(3), start=1):   # Column C, rows 32-48
+        if 32 <= idx <= 48 and val:
+            m.setdefault(str(val).upper().strip(), {"row": idx, "nameCol": "C"})
+    _STATION_MAP = m
+    return m
 
 # ==============================================
 # PF & DIGITAL CASH EXTRACTION
@@ -130,18 +191,18 @@ def split_message_by_station(msg):
         st = m.group(1).upper()
         if st in ALL_STATIONS:
             matches.append({"station": st, "index": m.start()})
-            
+
     bare_regex = re.compile(r'\b(?:UTS|PRS)/([A-Z]{2,6})\b', re.IGNORECASE)
     for m in bare_regex.finditer(msg):
         st = m.group(1).upper()
         if st in ALL_STATIONS:
             if not any(abs(x["index"] - m.start()) < 5 for x in matches):
                 matches.append({"station": st, "index": m.start()})
-                
+
     first_line = msg.split('\n')[0].strip().upper()
     if first_line in ALL_STATIONS and not matches:
         matches.append({"station": first_line, "index": 0})
-        
+
     matches.sort(key=lambda x: x["index"])
     for i in range(len(matches)):
         start = matches[i]["index"]
@@ -158,7 +219,7 @@ def call_gemini(msg):
     if not GEMINI_API_KEY:
         print("❌ GEMINI_API_KEY missing!")
         return None
-        
+
     prompt = f"""You are an expert railway data extraction assistant. Extract numbers into strict JSON.
 ALL VALID STATION CODES: {', '.join(ALL_STATIONS)}
 
@@ -183,7 +244,7 @@ JSON ONLY:"""
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.1, "maxOutputTokens": 4096}
     }
-    
+
     try:
         res = requests.post(url, json=payload, headers=headers, timeout=20)
         if res.status_code == 200:
@@ -198,6 +259,8 @@ JSON ONLY:"""
             parsed["prs"] = parsed.get("prs", {})
             parsed["uts"] = parsed.get("uts", {})
             return parsed
+        else:
+            print(f"Gemini HTTP {res.status_code}: {res.text[:300]}")
     except Exception as e:
         print(f"Gemini API Error: {e}")
     return None
@@ -206,7 +269,7 @@ def apply_post_processing(data, msg):
     if not data:
         return data
     station_blocks = split_message_by_station(msg)
-    
+
     for st, uts_dict in data.get("uts", {}).items():
         block = station_blocks.get(st)
         if block:
@@ -229,50 +292,83 @@ def apply_post_processing(data, msg):
     return data
 
 # ==============================================
-# UPDATE GOOGLE SHEET FUNCTION
+# UPDATE GOOGLE SHEET (1 READ + 1 BATCH WRITE)
 # ==============================================
 def update_google_sheet(data):
-    sheet = get_sheet_connection()
+    sheet = get_sheet()
     if not sheet:
         print("❌ Could not connect to Google Sheet.")
         return False
 
+    smap = get_station_map(sheet)
+
+    try:
+        matrix = sheet.get("A1:U60")  # sirf 1 read call
+    except Exception as e:
+        print(f"Sheet read error: {e}")
+        return False
+
+    def current(r, c):
+        try:
+            v = matrix[r - 1][c - 1]
+        except IndexError:
+            return 0.0
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
+    updates = []
+    def queue(r, c, val):
+        updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
+
     for st, prs_vals in data.get("prs", {}).items():
-        info = find_station_row(sheet, st)
+        info = smap.get(st.upper().strip())
         if not info:
             print(f"⚠️ Station {st} not found in sheet!")
             continue
         row = info["row"]
         for fld, val in prs_vals.items():
-            if val > 0 and fld in PRS_COLS:
+            try:
+                v = float(val)
+            except (TypeError, ValueError):
+                continue
+            if v > 0 and fld in PRS_COLS:
                 col = PRS_COLS[fld]
-                curr_val = sheet.cell(row, col).value
-                new_val = (float(curr_val) if curr_val not in ["", None] else 0) + float(val)
-                sheet.update_cell(row, col, new_val)
-                print(f"✅ Updated PRS {st} {fld}: +{val} -> Total: {new_val}")
+                new_val = current(row, col) + v
+                queue(row, col, new_val)
+                print(f"✅ Updated PRS {st} {fld}: +{v} -> Total: {new_val}")
 
     for st, uts_vals in data.get("uts", {}).items():
-        info = find_station_row(sheet, st)
+        info = smap.get(st.upper().strip())
         if not info:
             print(f"⚠️ Station {st} not found in sheet!")
             continue
         row = info["row"]
         for fld, val in uts_vals.items():
-            if fld == "PF" and val == 0:
+            if fld == "PF" and not val:
                 continue
-            if val > 0:
-                col = None
+            try:
+                v = float(val)
+            except (TypeError, ValueError):
+                continue
+            if v > 0:
                 if info["nameCol"] == "C":
-                    col_map = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12, "PF": 8, "MR": 9, "MR AMT": 10}
-                    col = col_map.get(fld)
+                    col = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12,
+                           "PF": 8, "MR": 9, "MR AMT": 10}.get(fld)
                 else:
                     col = UTS_COLS_NU.get(fld)
-                
                 if col:
-                    curr_val = sheet.cell(row, col).value
-                    new_val = (float(curr_val) if curr_val not in ["", None] else 0) + float(val)
-                    sheet.update_cell(row, col, new_val)
-                    print(f"✅ Updated UTS {st} {fld}: +{val} -> Total: {new_val}")
+                    new_val = current(row, col) + v
+                    queue(row, col, new_val)
+                    print(f"✅ Updated UTS {st} {fld}: +{v} -> Total: {new_val}")
+
+    if updates:
+        try:
+            sheet.batch_update(updates)  # sirf 1 write call
+        except Exception as e:
+            print(f"Sheet batch update error: {e}")
+            return False
     return True
 
 # ==============================================
@@ -307,10 +403,8 @@ def webhook():
     if data:
         data = apply_post_processing(data, incoming_msg)
         print("Successfully Extracted Data:", json.dumps(data))
-        
-        # Google Sheet Update Call
+
         success = update_google_sheet(data)
-        
         return jsonify({"status": "success", "sheet_updated": success, "extracted": data}), 200
     else:
         print("⚠️ Gemini returned null.")
@@ -319,4 +413,4 @@ def webhook():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-            
+    
