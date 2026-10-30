@@ -12,7 +12,7 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 # ==============================================
-# ENVIRONMENT VARIABLES (aapke exact names ke hisaab se)
+# ENVIRONMENT VARIABLES
 # ==============================================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 SHEET_NAME = os.environ.get("GOOGLE_SHEET_NAME", "") or os.environ.get("SHEET_NAME", "UTS&PRS")
@@ -61,7 +61,7 @@ def already_processed(msg_id):
     return False
 
 # ==============================================
-# CREDENTIALS LOADING
+# CREDENTIALS LOADING (with private_key fix)
 # ==============================================
 def _fix_newlines_inside_strings(s: str) -> str:
     out, in_str, esc = [], False, False
@@ -91,6 +91,11 @@ def load_credentials_dict():
                 d = json.loads(base64.b64decode(s).decode("utf-8"))
             except Exception:
                 d = json.loads(base64.urlsafe_b64decode(s).decode("utf-8"))
+            
+            # private_key clean
+            if "private_key" in d:
+                d["private_key"] = d["private_key"].replace("\\n", "\n")
+            
             print("✅ Credentials loaded via GOOGLE_CREDENTIALS_B64")
             return d
         except Exception as e:
@@ -106,6 +111,12 @@ def load_credentials_dict():
             for fixed in (cand, _fix_newlines_inside_strings(cand)):
                 try:
                     d = json.loads(fixed)
+                    
+                    # ========== IMPORTANT FIX ==========
+                    if "private_key" in d:
+                        d["private_key"] = d["private_key"].replace("\\n", "\n")
+                    # ==================================
+                    
                     print("✅ Credentials loaded via GOOGLE_CREDENTIALS (raw JSON)")
                     return d
                 except json.JSONDecodeError:
