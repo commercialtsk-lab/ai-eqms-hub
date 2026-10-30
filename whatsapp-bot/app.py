@@ -3,7 +3,6 @@ import re
 import json
 import requests
 import gspread
-from google.oauth2.service_account import Credentials
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
@@ -39,29 +38,17 @@ UTS_COLS_NU = {
 }
 
 # ==============================================
-# GOOGLE SHEETS CONNECTION SETUP (ESCAPE SAFE)
+# GOOGLE SHEETS CONNECTION SETUP (BULLETPROOF)
 # ==============================================
 def get_sheet_connection():
     try:
         if GOOGLE_CREDENTIALS_STR:
-            cleaned_creds = GOOGLE_CREDENTIALS_STR.strip()
-            if cleaned_creds.startswith("'") and cleaned_creds.endswith("'"):
-                cleaned_creds = cleaned_creds[1:-1]
-            if cleaned_creds.startswith('"') and cleaned_creds.endswith('"'):
-                cleaned_creds = cleaned_creds[1:-1]
-            
-            try:
-                creds_dict = json.loads(cleaned_creds)
-            except Exception:
-                fixed_str = cleaned_creds.encode().decode('unicode-escape')
-                creds_dict = json.loads(fixed_str)
-
-            scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-            creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-            gc = gspread.authorize(creds)
-        else:
-            gc = gspread.service_account(filename="creds.json")
-            
+            # Render env variable ko direct creds.json file mein write kar do 
+            # taaki escape sequence ya json.loads ka koi error na aaye
+            with open("creds.json", "w") as f:
+                f.write(GOOGLE_CREDENTIALS_STR)
+                
+        gc = gspread.service_account(filename="creds.json")
         sheet = gc.open(SHEET_NAME).worksheet(SHEET_NAME)
         return sheet
     except Exception as e:
@@ -319,3 +306,4 @@ def webhook():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+    
