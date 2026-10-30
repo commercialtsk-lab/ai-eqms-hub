@@ -45,17 +45,15 @@ def get_sheet_connection():
     try:
         if GOOGLE_CREDENTIALS_STR:
             cleaned_creds = GOOGLE_CREDENTIALS_STR.strip()
-            # Remove leading/trailing quotes if accidentally added
             if cleaned_creds.startswith("'") and cleaned_creds.endswith("'"):
                 cleaned_creds = cleaned_creds[1:-1]
             if cleaned_creds.startswith('"') and cleaned_creds.endswith('"'):
                 cleaned_creds = cleaned_creds[1:-1]
             
-            # Safe JSON loading handling escape sequences in private key
             try:
                 creds_dict = json.loads(cleaned_creds)
-            except json.JSONDecodeError:
-                fixed_str = cleaned_creds.replace('\\\\n', '\\n').replace('\\n', '\n')
+            except Exception:
+                fixed_str = cleaned_creds.encode().decode('unicode-escape')
                 creds_dict = json.loads(fixed_str)
 
             scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -95,13 +93,13 @@ def extract_pf_from_message(msg):
     clean_msg = re.sub(r'PLATFORM\s*(?:TKT|AMT|AMOUNT)?', ' ', msg, flags=re.IGNORECASE)
     if re.search(r'\b(?:P/TKT|PF)\b[^\n]*?(?:NIL|NIL\.)', clean_msg, flags=re.IGNORECASE):
         return 0
-    m = re.search(r'\b(?:P/TKT|PF\s*(?:TKT|QTY|QUANTITY|NO\.?|COUNT)?)\s*\.?\s*[-:=]?\s*(\d+)', clean_msg, re.IGNORECASE)
+    m = re.search(r'\b(?:P/TKT|PF\s*(?:TKT|QTY|QUANTITY|NO\.?|COUNT)?)\s*\.?\s*[-:=]?\s*(\d+)', clean_msg, flags=re.IGNORECASE)
     if m:
         return int(m.group(1))
-    m2 = re.search(r'\bPF\s*(?:AMT|AMOUNT)\s*\.?\s*[-:=]?\s*(\d+)', clean_msg, re.IGNORECASE)
+    m2 = re.search(r'\bPF\s*(?:AMT|AMOUNT)\s*\.?\s*[-:=]?\s*(\d+)', clean_msg, flags=re.IGNORECASE)
     if m2:
         return int(m2.group(1))
-    m3 = re.search(r'\bPF\b\s*\.?\s*[-:=]?\s*(\d+)', clean_msg, re.IGNORECASE)
+    m3 = re.search(r'\bPF\b\s*\.?\s*[-:=]?\s*(\d+)', clean_msg, flags=re.IGNORECASE)
     if m3:
         return int(m3.group(1))
     return None
@@ -321,4 +319,3 @@ def webhook():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-                       
