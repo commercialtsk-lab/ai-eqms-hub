@@ -27,14 +27,72 @@ GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 
 GEMINI_MODEL = "gemini-2.5-flash"
 
-ALL_STATIONS = [
-    "DBRT","DBRG","NTSK","TSK","MXN","JTTN","SRTN","SLGR","GLGT","MRHT",
-    "NAM","NHK","FKG","AGI","DJG","LEDO","MRG","DBY","MJN","TTB","BOJ",
-    "BFD","SPK","CHB","SPTR","DMC","MZS","NLP","LBI","BGND","LMY","SRPN",
-    "SMCP","TQM","GOM","BDLN","CKW","LHL","DKM","PNT","TII","LXA","SFR",
-    "SLX","NMT","ROING","TEZU","CGF","DMGN","TNGN","NSBG","KOWN","NCH",
-    "CMA","KXL","BBGN","BLMR","NMGY","KRHT"
-]
+# ==============================================
+# STATION ALIASES (Short + Full + Common mistakes)
+# ==============================================
+STATION_ALIASES = {
+    "DBRT": ["DBRT", "DIBRUGARH TOWN", "DIBRUGARHTOWN"],
+    "DBRG": ["DBRG", "DIBRUGARH", "DIBRU GARH"],
+    "NTSK": ["NTSK", "NEW TINSUKIA", "NEWTINSUKIA", "NEW TINSUKIA JN", "NEW TINSUKIA JUNCTION"],
+    "TSK": ["TSK", "TINSUKIA", "TIN SUKIA"],
+    "MXN": ["MXN", "MARIANI", "MARIANI JN"],
+    "JTTN": ["JTTN", "JORHAT TOWN", "JORHATTOWN", "JORHAT"],
+    "SRTN": ["SRTN", "SIVASAGAR", "SIVASAGAR TOWN", "SIBSAGAR", "SIVASAGARTOWN"],
+    "SLGR": ["SLGR", "SIMALUGURI", "SIMALUGURI JN"],
+    "GLGT": ["GLGT", "GOLAGHAT", "GOLAGHAT TOWN"],
+    "MRHT": ["MRHT", "MORANHAT", "MORAN HAT"],
+    "NAM": ["NAM", "NAMRUP"],
+    "NHK": ["NHK", "NAHARKATIYA", "NAHARKATIA"],
+    "FKG": ["FKG", "FURKATING", "FURKATING JN"],
+    "AGI": ["AGI", "AMGURI"],
+    "DJG": ["DJG", "DULIAJAN"],
+    "LEDO": ["LEDO"],
+    "MRG": ["MRG", "MARGHERITA"],
+    "DBY": ["DBY", "DIGBOI"],
+    "MJN": ["MJN", "MAKUM", "MAKUM JN"],
+    "TTB": ["TTB", "TINSUKIA TOWN"],
+    "BOJ": ["BOJ", "BORHAT"],
+    "BFD": ["BFD", "BORDUBI ROAD"],
+    "SPK": ["SPK", "SAPEKHATI"],
+    "CHB": ["CHB", "CHABUA"],
+    "SPTR": ["SPTR", "SILAPATHAR"],
+    "DMC": ["DMC", "DHEMAJI"],
+    "MZS": ["MZS", "MURKONGSELEK", "MURKONG SELEK", "MURKONGSELEK"],
+    "NLP": ["NLP", "NORTH LAKHIMPUR", "N LAKHIMPUR", "NORTHLAKHIMPUR"],
+    "LBI": ["LBI", "LAKHIMPUR"],
+    "BGND": ["BGND", "BAGINADI"],
+    "LMY": ["LMY", "LAIMEKURI"],
+    "SRPN": ["SRPN", "SORBHOG"],
+    "SMCP": ["SMCP", "SIMALUGURI"],
+    "TQM": ["TQM", "TEZPUR"],
+    "GOM": ["GOM", "GOHPUR"],
+    "BDLN": ["BDLN", "BORDALAN"],
+    "CKW": ["CKW", "CHAKARBHETI"],
+    "LHL": ["LHL", "LAHOLAL"],
+    "DKM": ["DKM", "DHEKIAJULI"],
+    "PNT": ["PNT", "PANITOLA"],
+    "TII": ["TII", "TINGRAI"],
+    "LXA": ["LXA", "LAKWA"],
+    "SFR": ["SFR", "SAFRAI"],
+    "SLX": ["SLX", "SILAPATHAR"],
+    "NMT": ["NMT", "NAMTI"],
+    "ROING": ["ROING"],
+    "TEZU": ["TEZU"],
+    "CGF": ["CGF", "CHAGALAM"],
+    "DMGN": ["DMGN", "DANGORI"],
+    "TNGN": ["TNGN", "TANGANI"],
+    "NSBG": ["NSBG"],
+    "KOWN": ["KOWN"],
+    "NCH": ["NCH"],
+    "CMA": ["CMA", "CHUMUKEDIMA"],
+    "KXL": ["KXL"],
+    "BBGN": ["BBGN", "BOKAJAN"],
+    "BLMR": ["BLMR", "BALIMARA"],
+    "NMGY": ["NMGY"],
+    "KRHT": ["KRHT", "KARIMGANJ"]
+}
+
+ALL_STATIONS = list(STATION_ALIASES.keys())
 
 PRS_COLS = {
     "TKT": 4, "PASS": 5, "C/TKT": 6, "C/PASS": 7,
@@ -61,7 +119,7 @@ def already_processed(msg_id):
     return False
 
 # ==============================================
-# CREDENTIALS LOADING
+# CREDENTIALS
 # ==============================================
 def _fix_newlines_inside_strings(s: str) -> str:
     out, in_str, esc = [], False, False
@@ -90,10 +148,8 @@ def load_credentials_dict():
                 d = json.loads(base64.b64decode(s).decode("utf-8"))
             except Exception:
                 d = json.loads(base64.urlsafe_b64decode(s).decode("utf-8"))
-            
             if "private_key" in d:
                 d["private_key"] = d["private_key"].replace("\\n", "\n")
-            
             print("✅ Credentials loaded via GOOGLE_CREDENTIALS_B64")
             return d
         except Exception as e:
@@ -108,21 +164,19 @@ def load_credentials_dict():
             for fixed in (cand, _fix_newlines_inside_strings(cand)):
                 try:
                     d = json.loads(fixed)
-                    
                     if "private_key" in d:
                         d["private_key"] = d["private_key"].replace("\\n", "\n")
-                    
                     print("✅ Credentials loaded via GOOGLE_CREDENTIALS (raw JSON)")
                     return d
                 except json.JSONDecodeError:
                     pass
         errors.append("RAW JSON failed")
 
-    print(f"❌ Credentials load failed: {' | '.join(errors) if errors else 'No credentials found in env'}")
+    print(f"❌ Credentials load failed: {' | '.join(errors) if errors else 'No credentials found'}")
     return None
 
 # ==============================================
-# GOOGLE SHEETS CONNECTION
+# GOOGLE SHEETS
 # ==============================================
 _SHEET = None
 _STATION_MAP = None
@@ -139,17 +193,12 @@ def get_sheet():
                   "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         gc = gspread.authorize(creds)
-
-        # Spreadsheet open karo
         sh = gc.open(SHEET_NAME)
-
-        # Andar se "UTS&PRS" tab open karo
         try:
             _SHEET = sh.worksheet("UTS&PRS")
         except gspread.WorksheetNotFound:
-            print("⚠️ 'UTS&PRS' tab nahi mili, sheet1 use kar rahe hain")
+            print("⚠️ 'UTS&PRS' tab nahi mili → sheet1 use kar rahe hain")
             _SHEET = sh.sheet1
-
         print(f"✅ Google Sheet connected: '{sh.title}' / tab: '{_SHEET.title}'")
         return _SHEET
     except Exception as e:
@@ -161,132 +210,120 @@ def get_station_map(sheet):
     if _STATION_MAP:
         return _STATION_MAP
     m = {}
-
     try:
         all_values = sheet.get_all_values()
     except Exception as e:
-        print(f"❌ Error reading full sheet: {e}")
+        print(f"❌ Error reading sheet: {e}")
         _STATION_MAP = m
         return m
 
-    # Column B (index 1) → rows 3 to 30
+    # Column B (rows 3-30)
     for i in range(2, min(30, len(all_values))):
         val = all_values[i][1] if len(all_values[i]) > 1 else ""
         if val:
             m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "B"})
 
-    # Column M (index 12) → rows 31 to 47
+    # Column M (rows 31-47)
     for i in range(30, min(47, len(all_values))):
         val = all_values[i][12] if len(all_values[i]) > 12 else ""
         if val:
             m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "M"})
 
-    # Column C (index 2) → rows 32 to 48
+    # Column C (rows 32-48)
     for i in range(31, min(48, len(all_values))):
         val = all_values[i][2] if len(all_values[i]) > 2 else ""
         if val:
             m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "C"})
 
     _STATION_MAP = m
-    print(f"✅ Station map ready: {len(m)} stations → {list(m.keys())[:10]}")
+    print(f"✅ Station map ready: {len(m)} stations")
     return m
 
 # ==============================================
-# PF & DIGITAL CASH EXTRACTION
+# SMART STATION RESOLVER
 # ==============================================
-def extract_pf_from_message(msg):
-    if not msg:
+def resolve_station(name):
+    if not name:
         return None
-    clean_msg = re.sub(r'PLATFORM\s*(?:TKT|AMT|AMOUNT)?', ' ', msg, flags=re.IGNORECASE)
-    if re.search(r'\b(?:P/TKT|PF)\b[^\n]*?(?:NIL|NIL\.)', clean_msg, flags=re.IGNORECASE):
-        return 0
-    m = re.search(r'\b(?:P/TKT|PF\s*(?:TKT|QTY|QUANTITY|NO\.?|COUNT)?)\s*\.?\s*[-:=]?\s*(\d+)', clean_msg, flags=re.IGNORECASE)
-    if m:
-        return int(m.group(1))
-    m2 = re.search(r'\bPF\s*(?:AMT|AMOUNT)\s*\.?\s*[-:=]?\s*(\d+)', clean_msg, flags=re.IGNORECASE)
-    if m2:
-        return int(m2.group(1))
-    m3 = re.search(r'\bPF\b\s*\.?\s*[-:=]?\s*(\d+)', clean_msg, flags=re.IGNORECASE)
-    if m3:
-        return int(m3.group(1))
+    name = str(name).upper().strip()
+    name = re.sub(r'[^A-Z0-9 ]', '', name)
+
+    if name in STATION_ALIASES:
+        return name
+
+    for code, aliases in STATION_ALIASES.items():
+        for alias in aliases:
+            if name == alias or name in alias or alias in name:
+                return code
+
+    clean = name.replace(" ", "")
+    for code, aliases in STATION_ALIASES.items():
+        for alias in aliases:
+            if clean == alias.replace(" ", ""):
+                return code
     return None
 
-def message_has_digital_cash(msg):
-    return bool(re.search(r'(?:E/CASH|D/CASH|ECASH|DCASH|E-CASH|E\s*CASH|DIGI\s*CASH|E\s*cas)', msg or "", re.IGNORECASE))
-
-def extract_digital_cash_from_message(msg):
-    if not msg:
-        return 0.0
-    total = 0.0
-    matches = re.finditer(r'(?:E/CASH|D/CASH|ECASH|DCASH|E-CASH|E\s*CASH|DIGI\s*CASH|E\s*cas)\s*[-:=]?\s*([\d,]+(?:\.\d+)?)', msg, re.IGNORECASE)
-    for m in matches:
-        try:
-            total += float(m.group(1).replace(',', ''))
-        except ValueError:
-            pass
-    return total
-
-def split_message_by_station(msg):
-    blocks = {}
-    if not msg:
-        return blocks
-    header_regex = re.compile(r'(?:REVENUE\s+OF|EARNINGS\s+OF|UTS\s+OF|PRS\s+OF)\s+(?:UTS/|PRS/)?([A-Z]{2,6})', re.IGNORECASE)
-    matches = []
-    for m in header_regex.finditer(msg):
-        st = m.group(1).upper()
-        if st in ALL_STATIONS:
-            matches.append({"station": st, "index": m.start()})
-    bare_regex = re.compile(r'\b(?:UTS|PRS)/([A-Z]{2,6})\b', re.IGNORECASE)
-    for m in bare_regex.finditer(msg):
-        st = m.group(1).upper()
-        if st in ALL_STATIONS:
-            if not any(abs(x["index"] - m.start()) < 5 for x in matches):
-                matches.append({"station": st, "index": m.start()})
-    first_line = msg.split('\n')[0].strip().upper()
-    if first_line in ALL_STATIONS and not matches:
-        matches.append({"station": first_line, "index": 0})
-    matches.sort(key=lambda x: x["index"])
-    for i in range(len(matches)):
-        start = matches[i]["index"]
-        end = matches[i+1]["index"] if i + 1 < len(matches) else len(msg)
-        st = matches[i]["station"]
-        blocks[st] = blocks.get(st, "") + "\n" + msg[start:end]
-    return blocks
-
 # ==============================================
-# GEMINI API CALL
+# GEMINI (Final Smart Prompt)
 # ==============================================
 def call_gemini(msg):
     if not GEMINI_API_KEY:
         print("❌ GEMINI_API_KEY missing!")
         return None
 
-    prompt = f"""You are an expert railway data extraction assistant. Extract numbers into strict JSON.
-ALL VALID STATION CODES: {', '.join(ALL_STATIONS)}
+    prompt = f"""You are an expert Indian Railway PRS & UTS data extraction engine.
+Extract numbers into STRICT JSON only. No explanation, no markdown.
 
-RULES:
-- Map PRS & UTS fields correctly.
-- NET = amount as stated. Never subtract digital payments.
-- PF = exact count from explicit line. Ignore PLATFORM TKT.
-- Use ONLY station codes from the list above, in UPPERCASE.
+VALID STATION CODES (use only these):
+{', '.join(ALL_STATIONS)}
 
-Return ONLY valid JSON (no markdown):
+=== MAPPING RULES (FOLLOW 100%) ===
+
+PRS:
+- TKT / Tickets / No of Tickets          → TKT
+- PASS / Passenger / Pax                 → PASS
+- C/T , C/TKT , Cancel Ticket            → C/TKT
+- C/P , C/PASS , Cancel Passenger        → C/PASS
+- NET / AMT / Amount / Total             → NET
+- REF / Refund / Cash REF / UPI REF / any refund → REF
+- VCH / Voucher                          → VCH
+- POS (only when the word "POS" is written) → POS
+- QR / UPI / PhonePe / GPay / Paytm / Card / Digital / E-Cash / any other digital payment → UPI
+
+UTS:
+- TKT, PASS, NET, UPI, PF (Platform tickets), MR, MR AMT
+
+CRITICAL:
+1. Any refund (even if it says UPI REF) always goes to REF column.
+2. Only explicit word "POS" goes to POS column.
+3. QR and all other digital payments go to UPI column.
+4. Station can be short code or full name (even with spelling mistakes). Always convert to correct short code.
+5. Nil / NIL / - / blank / empty = 0
+6. If multiple stations in one message → extract all of them.
+7. Return ONLY pure JSON.
+
+Required JSON format:
 {{
-  "prs": {{"STATION": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}}},
-  "uts": {{"STATION": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}}}
+  "prs": {{
+    "STATION": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}
+  }},
+  "uts": {{
+    "STATION": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}
+  }}
 }}
 
 MESSAGE:
 {msg}
+
 JSON ONLY:"""
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 4096}
+        "generationConfig": {"temperature": 0.05, "maxOutputTokens": 4096}
     }
     try:
-        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=25)
+        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
         if res.status_code == 200:
             txt = res.json()['candidates'][0]['content']['parts'][0]['text']
             txt = re.sub(r'```json\n?', '', txt, flags=re.IGNORECASE)
@@ -297,43 +334,42 @@ JSON ONLY:"""
                 parsed["prs"] = parsed.get("prs") or {}
                 parsed["uts"] = parsed.get("uts") or {}
                 return parsed
-            print("⚠️ Gemini: no JSON block in response")
+            print("⚠️ Gemini returned no JSON")
         else:
-            print(f"❌ Gemini HTTP {res.status_code}: {res.text[:300]}")
+            print(f"❌ Gemini HTTP {res.status_code}: {res.text[:250]}")
     except Exception as e:
-        print(f"❌ Gemini API Error: {e}")
+        print(f"❌ Gemini Error: {e}")
     return None
 
 def apply_post_processing(data, msg):
     if not data:
         return data
-    station_blocks = split_message_by_station(msg)
-    for st, uts_dict in list(data.get("uts", {}).items()):
-        block = station_blocks.get(st)
-        if block:
-            pf_val = extract_pf_from_message(block)
-            data["uts"][st]["PF"] = pf_val if pf_val is not None else 0
-            if message_has_digital_cash(block):
-                dc = extract_digital_cash_from_message(block)
-                cur_upi = float(data["uts"][st].get("UPI", 0) or 0)
-                if dc > 0 and cur_upi < dc:
-                    data["uts"][st]["UPI"] = cur_upi + dc
-    for st, prs_dict in list(data.get("prs", {}).items()):
-        block = station_blocks.get(st)
-        if block and message_has_digital_cash(block):
-            dc = extract_digital_cash_from_message(block)
-            cur_upi = float(data["prs"][st].get("UPI", 0) or 0)
-            if dc > 0 and cur_upi < dc:
-                data["prs"][st]["UPI"] = cur_upi + dc
+
+    # Normalize station codes
+    new_prs = {}
+    for st, vals in data.get("prs", {}).items():
+        code = resolve_station(st)
+        if code:
+            new_prs[code] = vals
+        else:
+            print(f"⚠️ Unknown station skipped: {st}")
+    data["prs"] = new_prs
+
+    new_uts = {}
+    for st, vals in data.get("uts", {}).items():
+        code = resolve_station(st)
+        if code:
+            new_uts[code] = vals
+    data["uts"] = new_uts
+
     return data
 
 # ==============================================
-# UPDATE GOOGLE SHEET
+# UPDATE SHEET
 # ==============================================
 def update_google_sheet(data):
     sheet = get_sheet()
     if not sheet:
-        print("❌ Could not connect to Google Sheet.")
         return False
     smap = get_station_map(sheet)
     try:
@@ -344,90 +380,66 @@ def update_google_sheet(data):
 
     def current(r, c):
         try:
-            v = matrix[r - 1][c - 1]
-        except (IndexError, TypeError):
-            return 0.0
-        try:
-            return float(str(v).replace(",", ""))
-        except (TypeError, ValueError):
+            return float(str(matrix[r-1][c-1]).replace(",", ""))
+        except:
             return 0.0
 
     updates = []
     def queue(r, c, val):
         updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
 
-    for st, prs_vals in data.get("prs", {}).items():
-        info = smap.get(str(st).upper().strip())
+    for st, vals in data.get("prs", {}).items():
+        info = smap.get(st)
         if not info:
-            print(f"⚠️ Station {st} not found in sheet!")
+            print(f"⚠️ Station {st} not found in sheet map")
             continue
         row = info["row"]
-        for fld, val in (prs_vals or {}).items():
+        for fld, val in (vals or {}).items():
             try:
                 v = float(val)
-            except (TypeError, ValueError):
+            except:
                 continue
             if v > 0 and fld in PRS_COLS:
                 col = PRS_COLS[fld]
                 new_val = current(row, col) + v
                 queue(row, col, new_val)
-                print(f"✅ Updated PRS {st} {fld}: +{v} → Total: {new_val}")
+                print(f"✅ PRS {st} {fld}: +{v} → {new_val}")
 
-    for st, uts_vals in data.get("uts", {}).items():
-        info = smap.get(str(st).upper().strip())
+    for st, vals in data.get("uts", {}).items():
+        info = smap.get(st)
         if not info:
-            print(f"⚠️ Station {st} not found in sheet!")
             continue
         row = info["row"]
-        for fld, val in (uts_vals or {}).items():
+        for fld, val in (vals or {}).items():
             if fld == "PF" and not val:
                 continue
             try:
                 v = float(val)
-            except (TypeError, ValueError):
+            except:
                 continue
             if v > 0:
                 if info["nameCol"] == "C":
-                    col = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12,
-                           "PF": 8, "MR": 9, "MR AMT": 10}.get(fld)
+                    col = {"TKT":4,"PASS":5,"NET":9,"UPI":12,"PF":8,"MR":9,"MR AMT":10}.get(fld)
                 else:
                     col = UTS_COLS_NU.get(fld)
                 if col:
                     new_val = current(row, col) + v
                     queue(row, col, new_val)
-                    print(f"✅ Updated UTS {st} {fld}: +{v} → Total: {new_val}")
+                    print(f"✅ UTS {st} {fld}: +{v} → {new_val}")
 
     if not updates:
-        print("⚠️ Sheet update skipped: zero updates queued.")
+        print("⚠️ No cells to update")
         return True
     try:
         sheet.batch_update(updates)
-        print(f"✅ Sheet batch update done ({len(updates)} cells)")
+        print(f"✅ Batch update successful ({len(updates)} cells)")
         return True
     except Exception as e:
-        print(f"❌ Sheet batch update error: {e}")
+        print(f"❌ Batch update failed: {e}")
         return False
 
 # ==============================================
-# WHATSAPP REPLY
-# ==============================================
-def send_whatsapp_reply(to_number, text):
-    if not WHATSAPP_TOKEN or not PHONE_NUMBER_ID:
-        print("⚠️ WhatsApp reply skipped: Token or Phone Number ID missing")
-        return
-    try:
-        url = f"https://graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages"
-        headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
-        payload = {"messaging_product": "whatsapp", "to": to_number, "type": "text",
-                   "text": {"body": text}}
-        r = requests.post(url, json=payload, headers=headers, timeout=10)
-        if r.status_code != 200:
-            print(f"⚠️ WhatsApp reply failed: {r.status_code} {r.text[:200]}")
-    except Exception as e:
-        print(f"⚠️ WhatsApp reply error: {e}")
-
-# ==============================================
-# WEBHOOK ENDPOINT
+# WEBHOOK (No reply)
 # ==============================================
 @app.route("/", methods=["GET"])
 def home():
@@ -438,90 +450,50 @@ def webhook_verify():
     mode = request.args.get("hub.mode")
     token = request.args.get("hub.verify_token")
     challenge = request.args.get("hub.challenge")
-    if mode == "subscribe" and challenge:
-        if token == VERIFY_TOKEN:
-            print("✅ Meta webhook verified successfully")
-            return challenge, 200
-        print(f"❌ Webhook verify FAILED. Env VERIFY_TOKEN: '{VERIFY_TOKEN}', Meta bheja: '{token}'")
-        return "Verification token mismatch", 403
-    return "Webhook Live and Running!", 200
+    if mode == "subscribe" and challenge and token == VERIFY_TOKEN:
+        print("✅ Webhook verified")
+        return challenge, 200
+    return "Forbidden", 403
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
     payload = request.get_json(silent=True) or {}
-    found_any = False
-
     try:
-        entries = payload.get("entry", [])
-        for entry in entries:
+        for entry in payload.get("entry", []):
             for change in entry.get("changes", []):
-                val = change.get("value", {})
-                for m in val.get("messages", []):
-                    found_any = True
+                for m in change.get("value", {}).get("messages", []):
                     if m.get("type") != "text":
                         continue
                     msg_id = m.get("id", "")
-                    from_number = m.get("from", "")
-                    incoming_msg = (m.get("text", {}) or {}).get("body", "").strip()
-                    if not incoming_msg:
-                        continue
-
                     if already_processed(msg_id):
-                        print(f"⏭️ Duplicate message {msg_id}, skipped")
                         continue
 
-                    print(f"📩 New message from {from_number}: {incoming_msg[:100]}...")
-                    data = call_gemini(incoming_msg)
+                    text = (m.get("text") or {}).get("body", "").strip()
+                    if not text:
+                        continue
 
+                    print(f"\n📩 Incoming:\n{text[:300]}...")
+                    data = call_gemini(text)
                     if not data:
-                        send_whatsapp_reply(from_number, "❌ Data samajh nahi aaya. Format check karke dobara bhejo.")
+                        print("❌ Extraction failed")
                         continue
 
-                    data = apply_post_processing(data, incoming_msg)
-                    print("Successfully Extracted Data:", json.dumps(data))
-
-                    ok = update_google_sheet(data)
-                    if ok:
-                        stns = ", ".join(sorted(set(list(data.get("prs", {})) + list(data.get("uts", {})))))
-                        send_whatsapp_reply(from_number, f"✅ Sheet update ho gaya: {stns}")
-                    else:
-                        send_whatsapp_reply(from_number, "❌ Sheet update failed. Baad me try karo.")
+                    data = apply_post_processing(data, text)
+                    print("✅ Final Data:", json.dumps(data))
+                    update_google_sheet(data)
     except Exception as e:
-        print(f"❌ Webhook processing error: {e}")
+        print(f"❌ Webhook Error: {e}")
 
-    if not found_any:
-        print("ℹ️ POST received but no messages array")
     return jsonify({"status": "ok"}), 200
 
 # ==============================================
-# TEST ENDPOINTS
-# ==============================================
-@app.route("/test-sheet", methods=["GET"])
-def test_sheet():
-    sheet = get_sheet()
-    if not sheet:
-        return jsonify({"ok": False, "error": "Sheet connection failed"}), 200
-    smap = get_station_map(sheet)
-    sample = {k: v for k, v in list(smap.items())[:8]}
-    return jsonify({"ok": True, "sheet": sheet.title, "stations_found": len(smap), "sample": sample}), 200
-
-@app.route("/test-gemini", methods=["GET"])
-def test_gemini():
-    q = request.args.get("msg", "PRS OF DBRG TKT 10 PASS 12 NET 5000")
-    data = call_gemini(q)
-    return jsonify({"ok": data is not None, "result": data}), 200
-
-# ==============================================
-# STARTUP SELF-CHECK
+# STARTUP
 # ==============================================
 def startup_check():
     print("========== STARTUP CHECK ==========")
-    print(f"SHEET_NAME: {SHEET_NAME}")
-    print(f"VERIFY_TOKEN set: {bool(VERIFY_TOKEN)}")
-    print(f"WHATSAPP_TOKEN set: {bool(WHATSAPP_TOKEN)}")
-    print(f"PHONE_NUMBER_ID set: {bool(PHONE_NUMBER_ID)}")
-    print(f"GEMINI_API_KEY set: {bool(GEMINI_API_KEY)}")
-    print(f"GOOGLE_CREDENTIALS set: {bool(GOOGLE_CREDENTIALS_STR)}")
+    print(f"SHEET_NAME     : {SHEET_NAME}")
+    print(f"GEMINI_API_KEY : {bool(GEMINI_API_KEY)}")
+    print(f"CREDENTIALS    : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
     get_sheet()
     print("===================================")
 
