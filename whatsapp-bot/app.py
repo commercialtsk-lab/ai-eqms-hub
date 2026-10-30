@@ -345,9 +345,10 @@ def apply_post_processing(data, msg):
     for st, vals in data.get("prs", {}).items():
         code = resolve_station(st)
         if code:
-            new_prs[code] = vals
-            if code != st.upper().strip():
-                print(f"🔄 Station resolved: {st} → {code}")
+            if code not in new_prs:
+                new_prs[code] = vals
+            else:
+                print(f"⚠️ Duplicate PRS station '{code}' in same message → keeping first")
         else:
             print(f"❌ Station skipped (not resolved): {st}")
     data["prs"] = new_prs
@@ -356,7 +357,10 @@ def apply_post_processing(data, msg):
     for st, vals in data.get("uts", {}).items():
         code = resolve_station(st)
         if code:
-            new_uts[code] = vals
+            if code not in new_uts:
+                new_uts[code] = vals
+            else:
+                print(f"⚠️ Duplicate UTS station '{code}' in same message → keeping first")
         else:
             print(f"❌ UTS Station skipped: {st}")
     data["uts"] = new_uts
@@ -364,18 +368,22 @@ def apply_post_processing(data, msg):
     return data
 
 # ==============================================
-# UPDATE SHEET  (STRICT EMPTY CHECK)
+# UPDATE SHEET  (STRICT — NO OVERWRITE, NO ADD)
 # ==============================================
 def is_cell_empty(value):
+    """
+    Sirf truly blank / nil / null / '-' ko empty maano.
+    0 ko VALID value maano → overwrite mat karo.
+    """
     if value is None:
         return True
     s = str(value).strip().replace(",", "").replace(" ", "")
-    if s == "" or s == "-" or s.lower() in ("nil", "none", "null"):
+    if s == "" or s == "-":
         return True
-    try:
-        return abs(float(s)) < 0.001   # 0 or 0.0 or 0.00
-    except:
+    if s.lower() in ("nil", "none", "null", "n/a", "na"):
         return True
+    # 0 / 0.0 / 0.00 ko EMPTY nahi maanenge — ye valid data hai
+    return False
 
 def update_google_sheet(data):
     sheet = get_sheet()
@@ -398,9 +406,17 @@ def update_google_sheet(data):
             return ""
 
     updates = []
+    queued = set()   # 🔒 duplicate queue prevention (same batch me same cell do baar na jaye)
+
     def queue(r, c, val):
+        key = (r, c)
+        if key in queued:
+            print(f"⏭️ Cell {rowcol_to_a1(r,c)} already queued in this batch, skipping duplicate")
+            return
+        queued.add(key)
         updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
 
+    # -------- PRS --------
     for st, vals in data.get("prs", {}).items():
         info = smap.get(st)
         if not info:
@@ -412,7 +428,7 @@ def update_google_sheet(data):
                 v = float(val)
             except:
                 continue
-            if v <= 0 or fld not in PRS_COLS:
+            if v < 0 or fld not in PRS_COLS:
                 continue
 
             col = PRS_COLS[fld]
@@ -424,6 +440,7 @@ def update_google_sheet(data):
             else:
                 print(f"⏭️ PRS {st} {fld}: SKIPPED (already has → '{existing_raw}')")
 
+    # -------- UTS --------
     for st, vals in data.get("uts", {}).items():
         info = smap.get(st)
         if not info:
@@ -436,7 +453,7 @@ def update_google_sheet(data):
                 v = float(val)
             except:
                 continue
-            if v <= 0:
+            if v < 0:
                 continue
 
             if info["nameCol"] == "C":
