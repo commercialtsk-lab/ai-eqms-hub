@@ -28,16 +28,16 @@ GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 GEMINI_MODEL = "gemini-2.5-flash"
 
 # ==============================================
-# STATION ALIASES (short code + full names)
+# STATION ALIASES
 # ==============================================
 STATION_ALIASES = {
     "DBRT": ["DBRT", "DIBRUGARH TOWN", "DIBRUGARHTOWN"],
     "DBRG": ["DBRG", "DIBRUGARH", "DIBRU GARH"],
-    "NTSK": ["NTSK", "NEW TINSUKIA", "NEWTINSUKIA", "NEW TINSUKIA JN"],
+    "NTSK": ["NTSK", "NEW TINSUKIA", "NEWTINSUKIA", "NEW TINSUKIA JN", "NEW TINSUKIA JUNCTION"],
     "TSK": ["TSK", "TINSUKIA", "TIN SUKIA"],
     "MXN": ["MXN", "MARIANI", "MARIANI JN"],
-    "JTTN": ["JTTN", "JORHAT TOWN", "JORHATTOWN"],
-    "SRTN": ["SRTN", "SIVASAGAR", "SIVASAGAR TOWN", "SIBSAGAR"],
+    "JTTN": ["JTTN", "JORHAT TOWN", "JORHATTOWN", "JORHAT"],
+    "SRTN": ["SRTN", "SIVASAGAR", "SIVASAGAR TOWN", "SIBSAGAR", "SIVASAGARTOWN"],
     "SLGR": ["SLGR", "SIMALUGURI", "SIMALUGURI JN"],
     "GLGT": ["GLGT", "GOLAGHAT", "GOLAGHAT TOWN"],
     "MRHT": ["MRHT", "MORANHAT", "MORAN HAT"],
@@ -57,8 +57,8 @@ STATION_ALIASES = {
     "CHB": ["CHB", "CHABUA"],
     "SPTR": ["SPTR", "SILAPATHAR"],
     "DMC": ["DMC", "DHEMAJI"],
-    "MZS": ["MZS", "MURKONGSELEK", "MURKONG SELEK"],
-    "NLP": ["NLP", "NORTH LAKHIMPUR", "N LAKHIMPUR"],
+    "MZS": ["MZS", "MURKONGSELEK", "MURKONG SELEK", "MURKONGSELEK"],
+    "NLP": ["NLP", "NORTH LAKHIMPUR", "N LAKHIMPUR", "NORTHLAKHIMPUR"],
     "LBI": ["LBI", "LAKHIMPUR"],
     "BGND": ["BGND", "BAGINADI"],
     "LMY": ["LMY", "LAIMEKURI"],
@@ -81,44 +81,27 @@ STATION_ALIASES = {
     "CGF": ["CGF", "CHAGALAM"],
     "DMGN": ["DMGN", "DANGORI"],
     "TNGN": ["TNGN", "TANGANI"],
-    "NSBG": ["NSBG", "NISBG"],
-    "KOWN": ["KOWN", "KOWNO"],
-    "NCH": ["NCH", "NACHANI"],
+    "NSBG": ["NSBG"],
+    "KOWN": ["KOWN"],
+    "NCH": ["NCH"],
     "CMA": ["CMA", "CHUMUKEDIMA"],
-    "KXL": ["KXL", "KOKILA"],
+    "KXL": ["KXL"],
     "BBGN": ["BBGN", "BOKAJAN"],
     "BLMR": ["BLMR", "BALIMARA"],
-    "NMGY": ["NMGY", "NAMGONG"],
+    "NMGY": ["NMGY"],
     "KRHT": ["KRHT", "KARIMGANJ"]
 }
 
 ALL_STATIONS = list(STATION_ALIASES.keys())
 
-# ==============================================
-# COLUMN MAPS (per block)
-# ==============================================
-# Block 1 (Col B, rows 3-30)  : PRS + UTS
-# Block 2 (Col M, rows 31-47) : UTS only (same cols as B1 UTS)
-# Block 3 (Col C, rows 32-47) : UTS only (PRS-style cols)
-
-B1_PRS_COLS = {
+PRS_COLS = {
     "TKT": 4, "PASS": 5, "C/TKT": 6, "C/PASS": 7,
     "REF": 8, "NET": 9, "VCH": 10, "POS": 11, "UPI": 12
 }
 
-B1_UTS_COLS = {
+UTS_COLS_NU = {
     "PF": 14, "TKT": 16, "PASS": 17, "NET": 18,
     "MR": 19, "MR AMT": 20, "UPI": 21
-}
-
-B2_UTS_COLS = {
-    "PF": 14, "TKT": 16, "PASS": 17, "NET": 18,
-    "MR": 19, "MR AMT": 20, "UPI": 21
-}
-
-B3_UTS_COLS = {
-    "TKT": 4, "PASS": 5, "PF": 8, "NET": 9,
-    "MR": 9, "MR AMT": 10, "UPI": 12
 }
 
 # ==============================================
@@ -136,7 +119,7 @@ def already_processed(msg_id):
     return False
 
 # ==============================================
-# CREDENTIALS LOADING
+# CREDENTIALS
 # ==============================================
 def _fix_newlines_inside_strings(s: str) -> str:
     out, in_str, esc = [], False, False
@@ -155,6 +138,7 @@ def _fix_newlines_inside_strings(s: str) -> str:
 
 def load_credentials_dict():
     errors = []
+
     if GOOGLE_CREDENTIALS_B64:
         try:
             s = GOOGLE_CREDENTIALS_B64.strip().strip("'\"")
@@ -213,7 +197,7 @@ def get_sheet():
         try:
             _SHEET = sh.worksheet("UTS&PRS")
         except gspread.WorksheetNotFound:
-            print("⚠️ 'UTS&PRS' tab nahi mili, sheet1 use kar rahe hain")
+            print("⚠️ 'UTS&PRS' tab nahi mili → sheet1 use kar rahe hain")
             _SHEET = sh.sheet1
         print(f"✅ Google Sheet connected: '{sh.title}' / tab: '{_SHEET.title}'")
         return _SHEET
@@ -222,7 +206,6 @@ def get_sheet():
         return None
 
 def get_station_map(sheet):
-    """Scan all 3 blocks. Returns {STATION: {row, nameCol, block}}."""
     global _STATION_MAP
     if _STATION_MAP:
         return _STATION_MAP
@@ -230,134 +213,117 @@ def get_station_map(sheet):
     try:
         all_values = sheet.get_all_values()
     except Exception as e:
-        print(f"❌ Error reading full sheet: {e}")
+        print(f"❌ Error reading sheet: {e}")
         _STATION_MAP = m
         return m
 
-    def _clean(v):
-        return str(v).upper().strip() if v else ""
-
-    # Block 1: Column B (index 1), rows 3-30 → sheet index 2-29
     for i in range(2, min(30, len(all_values))):
-        row = all_values[i]
-        val = _clean(row[1] if len(row) > 1 else "")
-        if val and val not in m:
-            m[val] = {"row": i + 1, "nameCol": "B", "block": "B1"}
+        val = all_values[i][1] if len(all_values[i]) > 1 else ""
+        if val:
+            m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "B"})
 
-    # Block 2: Column M (index 12), rows 31-47 → sheet index 30-46
     for i in range(30, min(47, len(all_values))):
-        row = all_values[i]
-        val = _clean(row[12] if len(row) > 12 else "")
-        if val and val not in m:
-            m[val] = {"row": i + 1, "nameCol": "M", "block": "B2"}
+        val = all_values[i][12] if len(all_values[i]) > 12 else ""
+        if val:
+            m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "M"})
 
-    # Block 3: Column C (index 2), rows 32-47 → sheet index 31-46
     for i in range(31, min(48, len(all_values))):
-        row = all_values[i]
-        val = _clean(row[2] if len(row) > 2 else "")
-        if val and val not in m:
-            m[val] = {"row": i + 1, "nameCol": "C", "block": "B3"}
+        val = all_values[i][2] if len(all_values[i]) > 2 else ""
+        if val:
+            m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "C"})
 
     _STATION_MAP = m
     print(f"✅ Station map ready: {len(m)} stations")
-    # print(f"   B1: {sum(1 for v in m.values() if v['block']=='B1')} | "
-    #       f"B2: {sum(1 for v in m.values() if v['block']=='B2')} | "
-    #       f"B3: {sum(1 for v in m.values() if v['block']=='B3')}")
     return m
 
 # ==============================================
-# SMART STATION RESOLVER
+# STRICT STATION RESOLVER
 # ==============================================
 def resolve_station(name):
     if not name:
         return None
-    name = str(name).upper().strip()
-    name = re.sub(r'[^A-Z0-9 ]', '', name)
+    original = str(name).upper().strip()
+    name = re.sub(r'[^A-Z0-9 ]', '', original)
+    name_clean = name.replace(" ", "")
 
+    # Exact short code
     if name in STATION_ALIASES:
         return name
+    if name_clean in STATION_ALIASES:
+        return name_clean
 
+    # Exact alias match
     for code, aliases in STATION_ALIASES.items():
         for alias in aliases:
-            if name == alias or name in alias or alias in name:
+            if name == alias or name_clean == alias.replace(" ", ""):
                 return code
 
-    clean = name.replace(" ", "")
+    # Very confident partial match only
     for code, aliases in STATION_ALIASES.items():
         for alias in aliases:
-            if clean == alias.replace(" ", ""):
+            if len(name) >= 4 and (name in alias or alias in name):
                 return code
+
+    print(f"⚠️ Could not resolve station: '{original}'")
     return None
 
 # ==============================================
-# GEMINI CALL (Perfect mapping prompt)
+# GEMINI
 # ==============================================
 def call_gemini(msg):
     if not GEMINI_API_KEY:
         print("❌ GEMINI_API_KEY missing!")
         return None
 
-    prompt = f"""You are an expert Indian Railway PRS/UTS data extraction system.
-Extract data into STRICT JSON only.
+    prompt = f"""You are an expert Indian Railway PRS & UTS data extraction engine.
+Extract numbers into STRICT JSON only. No explanation, no markdown.
 
-VALID STATIONS (use ONLY these short codes):
+VALID STATION CODES (use ONLY these exact short codes):
 {', '.join(ALL_STATIONS)}
 
-═══════════════════════════════
-PRS FIELD MAPPING
-═══════════════════════════════
-- TKT      = T/TKT, TKT, TKTs, Total Tickets
-- PASS     = T/Pass, PASS, Passengers
-- C/TKT    = C/TKT, CANTKT, C/T, Cancelled Tickets
-- C/PASS   = C/PASS, CANPASS, C/P, Cancelled Passengers
-- NET      = Net Cash, NETCASH, NET CASH, AMT, NET (as stated — NEVER subtract)
-- REF      = SUM of all refunds: REFUND + UPIREFUND + UPI RFD + Digi REFUND + Digi REF + e-Refund + POS REF + RFD + any REF
-- UPI      = UPI, QR, Digi CASH, E-Cash, E/CASH, D/CASH (all digital)
-- VCH      = VOUCHER, VCH, VOU
-- POS      = POS
+=== MAPPING RULES (FOLLOW 100%) ===
 
-═══════════════════════════════
-UTS FIELD MAPPING
-═══════════════════════════════
-- TKT      = TKT, TKTs, J/TKT, T/jrny — NEVER "PLATFORM TKT"
-- PASS     = PASS, J/Pass
-- NET      = AMOUNT, J/Amount, J AMOUNT, NET CASH, Cash, Ttl (as stated — NEVER subtract)
-- UPI      = UPI, QR, ECASH, E/CASH, D/CASH, E cas, E-Cash, Digi CASH
-- PF       = ONLY from explicit PF line:
-             * "PF TKT-82" / "PF Tkts-82" / "PF Qty-82" / "P/TKT=267" → use number AS-IS (82, 267) — COUNT
-             * "PF-60" / "PF AMT-60" / "PF Amount=60" → divide by 10 → 6 (rupees)
-             * "PF NIL" / "PF TKTs - NIL" / "PF. NIL" → 0
-             * No PF line at all → 0
-- MR       = MR count (e.g. "MR 16=17570" → MR=16, MR AMT=17570)
-- MR AMT   = MR amount
+PRS:
+- TKT / Tickets / No of Tickets          → TKT
+- PASS / Passenger / Pax                 → PASS
+- C/T , C/TKT , Cancel Ticket            → C/TKT
+- C/P , C/PASS , Cancel Passenger        → C/PASS
+- NET / AMT / Amount / Total             → NET
+- REF / Refund / Cash REF / UPI REF / any refund → REF
+- VCH / Voucher                          → VCH
+- POS (only when the word "POS" is written) → POS
+- QR / UPI / PhonePe / GPay / Paytm / Card / Digital / E-Cash / ECASH / any other digital payment → UPI
 
-═══════════════════════════════
-CRITICAL RULES
-═══════════════════════════════
-1. PLATFORM TKT and PLATFORMAMT are platform tickets — IGNORE COMPLETELY. NOT PF, NOT TKT.
-2. "PLATFORM TKT=52" does NOT mean PF=52.
-3. No "PF"/"P/TKT" line in UTS → PF = 0.
-4. "PF NIL" / "PF TKTs - NIL" / "PF. NIL" → PF = 0.
-5. "PF TKT-82" / "P/TKT=267" → 82 / 267 (count, no divide).
-6. "PF-60" / "PF AMT-60" → 6 (÷10).
-7. NET = amount EXACTLY as stated. NEVER subtract E/CASH, UPI, ECASH, Digi from NET.
-8. SUM all refund types into REF for PRS.
-9. Ignore nil, null, zero, blank, "-".
-10. Multi-station: separate PRS and UTS per station, each PF independent.
-11. ONLY include a section if it EXISTS for that station:
-    - No PRS → do NOT include under "prs"
-    - No UTS → do NOT include under "uts"
-12. Station can be short code (MZS) or full name (Murkongselek). Always convert to short code.
-13. Spelling mistakes in station names should be corrected intelligently.
-14. Return ONLY pure JSON, no markdown, no explanation.
+UTS:
+- TKT, PASS, NET, UPI, PF (Platform tickets), MR, MR AMT
 
-Return format:
+STATION RULES (VERY STRICT):
+- Always return the official short code only
+- "BGND STATION" or "BGND" → BGND
+- "ROING" → ROING
+- Never confuse similar looking stations
+- If station is not clearly identifiable, skip it
+- Full name examples:
+  BGND = Baginadi
+  MZS = Murkongselek
+  NTSK = New Tinsukia
+  DBRG = Dibrugarh
+
+OTHER RULES:
+1. Any refund always goes to REF column
+2. Only explicit "POS" goes to POS column
+3. QR + all digital payments go to UPI
+4. Nil / NIL / - / blank = 0
+5. Multiple stations in one message → extract all
+6. Return ONLY pure JSON
+
+Required JSON format:
 {{
   "prs": {{
-    "STATION_CODE": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}
+    "STATION": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}
   }},
   "uts": {{
-    "STATION_CODE": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}
+    "STATION": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}
   }}
 }}
 
@@ -383,142 +349,45 @@ JSON ONLY:"""
                 parsed["prs"] = parsed.get("prs") or {}
                 parsed["uts"] = parsed.get("uts") or {}
                 return parsed
-            print("⚠️ Gemini: no JSON block")
+            print("⚠️ Gemini returned no JSON")
         else:
-            print(f"❌ Gemini HTTP {res.status_code}: {res.text[:300]}")
+            print(f"❌ Gemini HTTP {res.status_code}: {res.text[:250]}")
     except Exception as e:
-        print(f"❌ Gemini API Error: {e}")
-    return None
-
-# ==============================================
-# POST PROCESSING (station normalize + PF strict)
-# ==============================================
-def split_message_by_station(msg):
-    """Split bulk message into per-station blocks (for PF extraction)."""
-    blocks = {}
-    if not msg:
-        return blocks
-
-    header_re = re.compile(
-        r'(?:REVENUE\s+OF|EARNINGS\s+OF|REVENUE\s+of|Earnings\s+Of|UTS\s+OF|PRS\s+OF|UTS\s+of|PRS\s+of)\s+(?:UTS/|PRS/)?([A-Z]{{2,6}})',
-        re.IGNORECASE
-    )
-    matches = []
-    for m in header_re.finditer(msg):
-        st = m.group(1).upper()
-        code = resolve_station(st)
-        if code:
-            matches.append({"station": code, "index": m.start()})
-
-    bare_re = re.compile(r'\b(?:UTS|PRS)/([A-Z]{2,6})\b', re.IGNORECASE)
-    for m in bare_re.finditer(msg):
-        st = m.group(1).upper()
-        code = resolve_station(st)
-        if code:
-            close_dup = any(abs(x["index"] - m.start()) < 5 for x in matches)
-            if not close_dup:
-                matches.append({"station": code, "index": m.start()})
-
-    # First-line standalone station
-    first_line = msg.split("\n")[0].strip().upper()
-    code = resolve_station(first_line)
-    if code and not matches:
-        matches.append({"station": code, "index": 0})
-
-    matches.sort(key=lambda x: x["index"])
-    for i, mt in enumerate(matches):
-        start = mt["index"]
-        end = matches[i + 1]["index"] if i + 1 < len(matches) else len(msg)
-        block = msg[start:end]
-        st = mt["station"]
-        blocks[st] = blocks.get(st, "") + "\n" + block
-    return blocks
-
-def extract_pf_from_message(text):
-    """Returns PF count from explicit PF line, or 0 if NIL, or None if no PF line."""
-    if not text:
-        return None
-    clean = re.sub(r'PLATFORM\s*(?:TKT|AMT|AMOUNT)?', ' ', text, flags=re.IGNORECASE)
-
-    if re.search(r'\b(?:P/TKT|PF)\b[^\n]*?(?:NIL|NIL\.)', clean, re.IGNORECASE):
-        return 0
-
-    m = re.search(
-        r'\b(?:P/TKT|PF\s*(?:TKT|QTY|QUANTITY|NO\.?|COUNT))\s*\.?\s*[-:=]?\s*(\d+)',
-        clean, re.IGNORECASE
-    )
-    if m:
-        return int(m.group(1))
-
-    m2 = re.search(r'\bPF\s*(?:AMT|AMOUNT)\s*\.?\s*[-:=]?\s*(\d+)', clean, re.IGNORECASE)
-    if m2:
-        return round(int(m2.group(1)) / 10)
-
-    m3 = re.search(r'\bPF\b\s*\.?\s*[-:=]?\s*(\d+)', clean, re.IGNORECASE)
-    if m3:
-        n = int(m3.group(1))
-        return round(n / 10) if n >= 10 else n
-
+        print(f"❌ Gemini Error: {e}")
     return None
 
 def apply_post_processing(data, msg):
     if not data:
         return data
 
-    # ---- Station code normalize ----
     new_prs = {}
     for st, vals in data.get("prs", {}).items():
         code = resolve_station(st)
         if code:
-            # Merge if duplicate
-            if code in new_prs:
-                for k, v in (vals or {}).items():
-                    try:
-                        new_prs[code][k] = new_prs[code].get(k, 0) + float(v or 0)
-                    except:
-                        pass
-            else:
-                new_prs[code] = dict(vals or {})
+            new_prs[code] = vals
+            if code != st.upper().strip():
+                print(f"🔄 Station resolved: {st} → {code}")
+        else:
+            print(f"❌ Station skipped (not resolved): {st}")
     data["prs"] = new_prs
 
     new_uts = {}
     for st, vals in data.get("uts", {}).items():
         code = resolve_station(st)
         if code:
-            if code in new_uts:
-                for k, v in (vals or {}).items():
-                    try:
-                        new_uts[code][k] = new_uts[code].get(k, 0) + float(v or 0)
-                    except:
-                        pass
-            else:
-                new_uts[code] = dict(vals or {})
+            new_uts[code] = vals
+        else:
+            print(f"❌ UTS Station skipped: {st}")
     data["uts"] = new_uts
-
-    # ---- Per-station PF override (strict) ----
-    station_blocks = split_message_by_station(msg)
-    for st in list(data["uts"].keys()):
-        block = station_blocks.get(st)
-        if not block:
-            # No block → clean AI value
-            try:
-                v = float(data["uts"][st].get("PF", 0) or 0)
-                data["uts"][st]["PF"] = int(v) if v < 10 else round(v / 10)
-            except:
-                data["uts"][st]["PF"] = 0
-            continue
-        pf = extract_pf_from_message(block)
-        data["uts"][st]["PF"] = 0 if pf is None else pf
 
     return data
 
 # ==============================================
-# UPDATE GOOGLE SHEET (block-aware, manual-safe)
+# UPDATE SHEET
 # ==============================================
 def update_google_sheet(data):
     sheet = get_sheet()
     if not sheet:
-        print("❌ Could not connect to Google Sheet.")
         return False
     smap = get_station_map(sheet)
     try:
@@ -529,40 +398,125 @@ def update_google_sheet(data):
 
     def current(r, c):
         try:
-            v = matrix[r - 1][c - 1]
-            return float(str(v).replace(",", ""))
+            return float(str(matrix[r-1][c-1]).replace(",", ""))
         except:
             return 0.0
-
-    def is_formula(r, c):
-        try:
-            v = matrix[r - 1][c - 1]
-            return isinstance(v, str) and v.startswith("=")
-        except:
-            return False
 
     updates = []
     def queue(r, c, val):
         updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
 
-    # ---------- PRS ----------
-    for st, prs_vals in data.get("prs", {}).items():
+    for st, vals in data.get("prs", {}).items():
         info = smap.get(st)
         if not info:
-            print(f"⚠️ Station {st} not found in sheet (PRS)")
-            continue
-        if info["block"] != "B1":
-            print(f"⚠️ {st} is {info['block']} (UTS-only) — PRS data skipped")
+            print(f"⚠️ Station {st} not found in sheet map")
             continue
         row = info["row"]
-        for fld, val in (prs_vals or {}).items():
+        for fld, val in (vals or {}).items():
             try:
                 v = float(val)
             except:
                 continue
-            if v > 0 and fld in B1_PRS_COLS:
-                col = B1_PRS_COLS[fld]
-                if is_formula(row, col):
-                    print(f"⏭️ Skip formula PRS {st} {fld} @ {rowcol_to_a1(row, col)}")
-                    continue
-                new_val = current(row, c
+            if v > 0 and fld in PRS_COLS:
+                col = PRS_COLS[fld]
+                new_val = current(row, col) + v
+                queue(row, col, new_val)
+                print(f"✅ PRS {st} {fld}: +{v} → {new_val}")
+
+    for st, vals in data.get("uts", {}).items():
+        info = smap.get(st)
+        if not info:
+            continue
+        row = info["row"]
+        for fld, val in (vals or {}).items():
+            if fld == "PF" and not val:
+                continue
+            try:
+                v = float(val)
+            except:
+                continue
+            if v > 0:
+                if info["nameCol"] == "C":
+                    col = {"TKT":4,"PASS":5,"NET":9,"UPI":12,"PF":8,"MR":9,"MR AMT":10}.get(fld)
+                else:
+                    col = UTS_COLS_NU.get(fld)
+                if col:
+                    new_val = current(row, col) + v
+                    queue(row, col, new_val)
+                    print(f"✅ UTS {st} {fld}: +{v} → {new_val}")
+
+    if not updates:
+        print("⚠️ No cells to update")
+        return True
+    try:
+        sheet.batch_update(updates)
+        print(f"✅ Batch update successful ({len(updates)} cells)")
+        return True
+    except Exception as e:
+        print(f"❌ Batch update failed: {e}")
+        return False
+
+# ==============================================
+# WEBHOOK
+# ==============================================
+@app.route("/", methods=["GET"])
+def home():
+    return "Bot is running ✅", 200
+
+@app.route("/webhook", methods=["GET"])
+def webhook_verify():
+    mode = request.args.get("hub.mode")
+    token = request.args.get("hub.verify_token")
+    challenge = request.args.get("hub.challenge")
+    if mode == "subscribe" and challenge and token == VERIFY_TOKEN:
+        print("✅ Webhook verified")
+        return challenge, 200
+    return "Forbidden", 403
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    payload = request.get_json(silent=True) or {}
+    try:
+        for entry in payload.get("entry", []):
+            for change in entry.get("changes", []):
+                for m in change.get("value", {}).get("messages", []):
+                    if m.get("type") != "text":
+                        continue
+                    msg_id = m.get("id", "")
+                    if already_processed(msg_id):
+                        continue
+
+                    text = (m.get("text") or {}).get("body", "").strip()
+                    if not text:
+                        continue
+
+                    print(f"\n📩 Incoming:\n{text[:400]}...")
+                    data = call_gemini(text)
+                    if not data:
+                        print("❌ Extraction failed")
+                        continue
+
+                    data = apply_post_processing(data, text)
+                    print("✅ Final Data:", json.dumps(data))
+                    update_google_sheet(data)
+    except Exception as e:
+        print(f"❌ Webhook Error: {e}")
+
+    return jsonify({"status": "ok"}), 200
+
+# ==============================================
+# STARTUP
+# ==============================================
+def startup_check():
+    print("========== STARTUP CHECK ==========")
+    print(f"SHEET_NAME     : {SHEET_NAME}")
+    print(f"GEMINI_API_KEY : {bool(GEMINI_API_KEY)}")
+    print(f"CREDENTIALS    : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
+    get_sheet()
+    print("===================================")
+
+startup_check()
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
