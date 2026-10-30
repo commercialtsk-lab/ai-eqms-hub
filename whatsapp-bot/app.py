@@ -297,7 +297,7 @@ UTS:
 STATION RULES (VERY STRICT):
 - Always return the official short code only
 - "BGND STATION" or "BGND" → BGND
-- "ROING" → ROING
+- "TEZU" → TEZU
 - Never confuse similar looking stations
 - If station is not clearly identifiable, skip it
 
@@ -375,24 +375,37 @@ def apply_post_processing(data, msg):
     return data
 
 # ==============================================
-# UPDATE SHEET  (NO DOUBLE COUNTING)
+# UPDATE SHEET  (STRICT: only write if empty)
 # ==============================================
+def is_cell_empty(value):
+    """Return True only if cell is truly empty or zero"""
+    if value is None:
+        return True
+    s = str(value).strip().replace(",", "")
+    if s == "" or s == "-" or s.lower() == "nil":
+        return True
+    try:
+        return float(s) == 0
+    except:
+        return True
+
 def update_google_sheet(data):
     sheet = get_sheet()
     if not sheet:
         return False
     smap = get_station_map(sheet)
     try:
+        # Always fetch fresh data
         matrix = sheet.get_all_values()
     except Exception as e:
         print(f"❌ Sheet read error: {e}")
         return False
 
-    def current(r, c):
+    def get_current(r, c):
         try:
-            return float(str(matrix[r-1][c-1]).replace(",", ""))
+            return matrix[r-1][c-1]
         except:
-            return 0.0
+            return ""
 
     updates = []
     def queue(r, c, val):
@@ -409,17 +422,17 @@ def update_google_sheet(data):
                 v = float(val)
             except:
                 continue
-            if v > 0 and fld in PRS_COLS:
-                col = PRS_COLS[fld]
-                existing = current(row, col)
+            if v <= 0 or fld not in PRS_COLS:
+                continue
 
-                # ========== IMPORTANT: NO OVERWRITE / NO ADD ==========
-                if existing == 0:
-                    queue(row, col, v)
-                    print(f"✅ PRS {st} {fld}: wrote {v} (was empty)")
-                else:
-                    print(f"⏭️ PRS {st} {fld}: skipped (already has {existing})")
-                # ======================================================
+            col = PRS_COLS[fld]
+            existing_raw = get_current(row, col)
+
+            if is_cell_empty(existing_raw):
+                queue(row, col, v)
+                print(f"✅ PRS {st} {fld}: wrote {v} (was empty)")
+            else:
+                print(f"⏭️ PRS {st} {fld}: SKIPPED (already has → {existing_raw})")
 
     for st, vals in data.get("uts", {}).items():
         info = smap.get(st)
@@ -433,22 +446,28 @@ def update_google_sheet(data):
                 v = float(val)
             except:
                 continue
-            if v > 0:
-                if info["nameCol"] == "C":
-                    col = {"TKT":4,"PASS":5,"NET":9,"UPI":12,"PF":8,"MR":9,"MR AMT":10}.get(fld)
-                else:
-                    col = UTS_COLS_NU.get(fld)
-                if col:
-                    existing = current(row, col)
-                    if existing == 0:
-                        queue(row, col, v)
-                        print(f"✅ UTS {st} {fld}: wrote {v} (was empty)")
-                    else:
-                        print(f"⏭️ UTS {st} {fld}: skipped (already has {existing})")
+            if v <= 0:
+                continue
+
+            if info["nameCol"] == "C":
+                col = {"TKT":4,"PASS":5,"NET":9,"UPI":12,"PF":8,"MR":9,"MR AMT":10}.get(fld)
+            else:
+                col = UTS_COLS_NU.get(fld)
+
+            if not col:
+                continue
+
+            existing_raw = get_current(row, col)
+            if is_cell_empty(existing_raw):
+                queue(row, col, v)
+                print(f"✅ UTS {st} {fld}: wrote {v} (was empty)")
+            else:
+                print(f"⏭️ UTS {st} {fld}: SKIPPED (already has → {existing_raw})")
 
     if not updates:
-        print("⚠️ No cells to update (all already filled or zero)")
+        print("⚠️ No cells updated (all already filled)")
         return True
+
     try:
         sheet.batch_update(updates)
         print(f"✅ Batch update successful ({len(updates)} cells)")
