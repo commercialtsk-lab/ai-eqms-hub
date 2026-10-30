@@ -176,15 +176,9 @@ def load_credentials_dict():
     return None
 
 # ==============================================
-# GOOGLE SHEETS
+# GOOGLE SHEETS  (NO CACHE)
 # ==============================================
-_SHEET = None
-_STATION_MAP = None
-
 def get_sheet():
-    global _SHEET
-    if _SHEET:
-        return _SHEET
     creds_dict = load_credentials_dict()
     if not creds_dict:
         return None
@@ -195,26 +189,22 @@ def get_sheet():
         gc = gspread.authorize(creds)
         sh = gc.open(SHEET_NAME)
         try:
-            _SHEET = sh.worksheet("UTS&PRS")
+            sheet = sh.worksheet("UTS&PRS")
         except gspread.WorksheetNotFound:
             print("⚠️ 'UTS&PRS' tab nahi mili → sheet1 use kar rahe hain")
-            _SHEET = sh.sheet1
-        print(f"✅ Google Sheet connected: '{sh.title}' / tab: '{_SHEET.title}'")
-        return _SHEET
+            sheet = sh.sheet1
+        print(f"✅ Google Sheet connected: '{sh.title}' / tab: '{sheet.title}'")
+        return sheet
     except Exception as e:
         print(f"❌ Google Sheet Connection Error: {e}")
         return None
 
 def get_station_map(sheet):
-    global _STATION_MAP
-    if _STATION_MAP:
-        return _STATION_MAP
     m = {}
     try:
         all_values = sheet.get_all_values()
     except Exception as e:
         print(f"❌ Error reading sheet: {e}")
-        _STATION_MAP = m
         return m
 
     for i in range(2, min(30, len(all_values))):
@@ -232,7 +222,6 @@ def get_station_map(sheet):
         if val:
             m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "C"})
 
-    _STATION_MAP = m
     print(f"✅ Station map ready: {len(m)} stations")
     return m
 
@@ -375,17 +364,16 @@ def apply_post_processing(data, msg):
     return data
 
 # ==============================================
-# UPDATE SHEET  (STRICT: only write if empty)
+# UPDATE SHEET  (STRICT EMPTY CHECK)
 # ==============================================
 def is_cell_empty(value):
-    """Return True only if cell is truly empty or zero"""
     if value is None:
         return True
-    s = str(value).strip().replace(",", "")
-    if s == "" or s == "-" or s.lower() == "nil":
+    s = str(value).strip().replace(",", "").replace(" ", "")
+    if s == "" or s == "-" or s.lower() in ("nil", "none", "null"):
         return True
     try:
-        return float(s) == 0
+        return abs(float(s)) < 0.001   # 0 or 0.0 or 0.00
     except:
         return True
 
@@ -393,13 +381,15 @@ def update_google_sheet(data):
     sheet = get_sheet()
     if not sheet:
         return False
-    smap = get_station_map(sheet)
+
+    # Always fresh read
     try:
-        # Always fetch fresh data
         matrix = sheet.get_all_values()
     except Exception as e:
         print(f"❌ Sheet read error: {e}")
         return False
+
+    smap = get_station_map(sheet)
 
     def get_current(r, c):
         try:
@@ -432,7 +422,7 @@ def update_google_sheet(data):
                 queue(row, col, v)
                 print(f"✅ PRS {st} {fld}: wrote {v} (was empty)")
             else:
-                print(f"⏭️ PRS {st} {fld}: SKIPPED (already has → {existing_raw})")
+                print(f"⏭️ PRS {st} {fld}: SKIPPED (already has → '{existing_raw}')")
 
     for st, vals in data.get("uts", {}).items():
         info = smap.get(st)
@@ -462,7 +452,7 @@ def update_google_sheet(data):
                 queue(row, col, v)
                 print(f"✅ UTS {st} {fld}: wrote {v} (was empty)")
             else:
-                print(f"⏭️ UTS {st} {fld}: SKIPPED (already has → {existing_raw})")
+                print(f"⏭️ UTS {st} {fld}: SKIPPED (already has → '{existing_raw}')")
 
     if not updates:
         print("⚠️ No cells updated (all already filled)")
