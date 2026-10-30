@@ -246,19 +246,16 @@ def resolve_station(name):
     name = re.sub(r'[^A-Z0-9 ]', '', original)
     name_clean = name.replace(" ", "")
 
-    # Exact short code
     if name in STATION_ALIASES:
         return name
     if name_clean in STATION_ALIASES:
         return name_clean
 
-    # Exact alias match
     for code, aliases in STATION_ALIASES.items():
         for alias in aliases:
             if name == alias or name_clean == alias.replace(" ", ""):
                 return code
 
-    # Very confident partial match only
     for code, aliases in STATION_ALIASES.items():
         for alias in aliases:
             if len(name) >= 4 and (name in alias or alias in name):
@@ -303,11 +300,6 @@ STATION RULES (VERY STRICT):
 - "ROING" → ROING
 - Never confuse similar looking stations
 - If station is not clearly identifiable, skip it
-- Full name examples:
-  BGND = Baginadi
-  MZS = Murkongselek
-  NTSK = New Tinsukia
-  DBRG = Dibrugarh
 
 OTHER RULES:
 1. Any refund always goes to REF column
@@ -383,7 +375,7 @@ def apply_post_processing(data, msg):
     return data
 
 # ==============================================
-# UPDATE SHEET
+# UPDATE SHEET  (NO DOUBLE COUNTING)
 # ==============================================
 def update_google_sheet(data):
     sheet = get_sheet()
@@ -419,9 +411,15 @@ def update_google_sheet(data):
                 continue
             if v > 0 and fld in PRS_COLS:
                 col = PRS_COLS[fld]
-                new_val = current(row, col) + v
-                queue(row, col, new_val)
-                print(f"✅ PRS {st} {fld}: +{v} → {new_val}")
+                existing = current(row, col)
+
+                # ========== IMPORTANT: NO OVERWRITE / NO ADD ==========
+                if existing == 0:
+                    queue(row, col, v)
+                    print(f"✅ PRS {st} {fld}: wrote {v} (was empty)")
+                else:
+                    print(f"⏭️ PRS {st} {fld}: skipped (already has {existing})")
+                # ======================================================
 
     for st, vals in data.get("uts", {}).items():
         info = smap.get(st)
@@ -441,12 +439,15 @@ def update_google_sheet(data):
                 else:
                     col = UTS_COLS_NU.get(fld)
                 if col:
-                    new_val = current(row, col) + v
-                    queue(row, col, new_val)
-                    print(f"✅ UTS {st} {fld}: +{v} → {new_val}")
+                    existing = current(row, col)
+                    if existing == 0:
+                        queue(row, col, v)
+                        print(f"✅ UTS {st} {fld}: wrote {v} (was empty)")
+                    else:
+                        print(f"⏭️ UTS {st} {fld}: skipped (already has {existing})")
 
     if not updates:
-        print("⚠️ No cells to update")
+        print("⚠️ No cells to update (all already filled or zero)")
         return True
     try:
         sheet.batch_update(updates)
