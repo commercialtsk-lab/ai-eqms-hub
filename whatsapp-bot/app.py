@@ -104,6 +104,9 @@ UTS_COLS_NU = {
     "MR": 19, "MR AMT": 20, "UPI": 21
 }
 
+# Negative allow karne wale fields (sirf NET, kyunki net cash negative ho sakta hai)
+NEGATIVE_ALLOWED_FIELDS = {"NET"}
+
 # ==============================================
 # META RETRY PROTECTION
 # ==============================================
@@ -267,38 +270,57 @@ Extract numbers into STRICT JSON only. No explanation, no markdown.
 VALID STATION CODES (use ONLY these exact short codes):
 {', '.join(ALL_STATIONS)}
 
+=== UNDERSTAND THE MESSAGE NATURALLY ===
+Messages can be in ANY format (WhatsApp, typed, mixed English/Hindi, broken lines, typos).
+Read the entire message and extract each numeric field for the mentioned station(s).
+A single message may contain both UTS and PRS sections — extract both separately.
+A single message may mention multiple stations — extract ALL of them.
+
 === MAPPING RULES (FOLLOW 100%) ===
 
 PRS:
-- TKT / Tickets / No of Tickets          → TKT
-- PASS / Passenger / Pax                 → PASS
-- C/T , C/TKT , Cancel Ticket            → C/TKT
-- C/P , C/PASS , Cancel Passenger        → C/PASS
-- NET / AMT / Amount / Total             → NET
-- REF / Refund / Cash REF / UPI REF / any refund → REF
-- VCH / Voucher                          → VCH
-- POS (only when the word "POS" is written) → POS
+- TKT / Tickets / No of Tickets / Ticket Count     → TKT
+- PASS / Passenger / Pax / Passenger Count         → PASS
+- C/T , C/TKT , Cancel Ticket , Cancelled Ticket   → C/TKT
+- C/P , C/PASS , Cancel Passenger                  → C/PASS
+- NET / AMT / Amount / Total / Net Amount / Net Cash → NET
+- REF / Refund / Cash REF / UPI REF / Refund Amt   → REF
+- Digi RF / Digital Refund / Online Refund         → REF
+- VCH / Voucher                                    → VCH
+- POS (only when the word "POS" is written)        → POS
 - QR / UPI / PhonePe / GPay / Paytm / Card / Digital / E-Cash / ECASH / any other digital payment → UPI
 
 UTS:
-- TKT, PASS, NET, UPI, PF (Platform tickets), MR, MR AMT
+- TKT, PASS, NET (Amount), UPI, PF (Platform tickets), MR, MR AMT
 
-STATION RULES (VERY STRICT):
+=== CRITICAL RULES FOR MISSING NUMBERS (VERY IMPORTANT) ===
+
+1. If a field is mentioned BUT NO NUMBER is given (e.g. "Net cash me amount ata wo nhi aya", "Net amount not received", "amount missing", "amount nahi aya"), then DO NOT include that field in the JSON at all. OMIT IT COMPLETELY. Do NOT put 0.
+2. Only include a field in JSON if you actually see a NUMERIC VALUE for it in the message.
+3. "Nil" / "NIL" / "-" / "not received" / "not available" / "nahi aya" → treat as MISSING → OMIT the field.
+4. Do NOT guess. Do NOT invent numbers. Only extract what is literally written.
+5. If a field is completely absent from the message, OMIT it.
+
+=== NEGATIVE NUMBERS ===
+If you see a negative number (e.g. "AMOUNT :- -865", "Net: -500"), preserve the negative sign and output it as negative (e.g. -865). DO NOT convert to positive.
+
+=== STATION RULES ===
 - Always return the official short code only
 - "BGND STATION" or "BGND" → BGND
 - "TEZU" → TEZU
 - Never confuse similar looking stations
-- If station is not clearly identifiable, skip it
+- If station is not clearly identifiable, skip that station entirely
 
-OTHER RULES:
+=== OTHER RULES ===
 1. Any refund always goes to REF column
 2. Only explicit "POS" goes to POS column
 3. QR + all digital payments go to UPI
-4. Nil / NIL / - / blank = 0
-5. Multiple stations in one message → extract all
-6. Return ONLY pure JSON
+4. Multiple stations in one message → extract all
+5. Return ONLY pure JSON — no explanation, no markdown
+6. If a section (PRS/UTS) is not present in the message, return empty object {{}} for it
+7. If a field has no numeric value in the message, OMIT it from the station object
 
-Required JSON format:
+Required JSON format (only include fields that have actual numbers):
 {{
   "prs": {{
     "STATION": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}
@@ -307,6 +329,28 @@ Required JSON format:
     "STATION": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}
   }}
 }}
+
+EXAMPLE (message where NET amount is missing):
+Input:
+"EARNINGS OF SPK
+PRS
+TKT:-8
+PASS:-9
+C/TKT:-1
+C/PASS:-3
+Ref-2340
+Digi RF -nil
+Net cash me amount ata wo nhi aya
+UPI:-11575"
+
+Correct Output:
+{{
+  "prs": {{
+    "SPK": {{"TKT":8, "PASS":9, "C/TKT":1, "C/PASS":3, "REF":2340, "UPI":11575}}
+  }},
+  "uts": {{}}
+}}
+(NOTICE: NET is OMITTED, Digi RF nil is OMITTED, no invented numbers)
 
 MESSAGE:
 {msg}
@@ -384,17 +428,30 @@ def is_cell_empty(value):
         return True
     return False
 
-def _has_any_positive(vals):
-    """Check karo ki dict me kam se kam ek positive number hai ya nahi."""
+def _has_any_nonzero(vals):
+    """Check karo ki dict me kam se kam ek non-zero number hai ya nahi."""
     if not vals:
         return False
     for v in vals.values():
         try:
-            if float(v) > 0:
+            if float(v) != 0:
                 return True
         except:
             continue
     return False
+
+def _is_field_allowed(v, fld):
+    """
+    Field-specific validation:
+    - NET: negative allowed (net cash negative ho sakta hai)
+    - Baaki sab: sirf positive (> 0)
+    - 0 always skip
+    """
+    if v == 0:
+        return False
+    if fld in NEGATIVE_ALLOWED_FIELDS:
+        return True  # NET me negative bhi allowed
+    return v > 0
 
 def update_google_sheet(data):
     sheet = get_sheet()
@@ -434,9 +491,9 @@ def update_google_sheet(data):
             print(f"⚠️ Station {st} not found in sheet map")
             continue
 
-        # 🔴 Agar saare fields 0 hain → station skip (kuch mat likho)
-        if not _has_any_positive(vals):
-            print(f"⏭️ PRS {st}: all values are 0 → SKIPPED (nothing to write)")
+        # 🔴 Agar saare fields 0/missing hain → station skip
+        if not _has_any_nonzero(vals):
+            print(f"⏭️ PRS {st}: all values are 0/missing → SKIPPED (nothing to write)")
             continue
 
         row = info["row"]
@@ -446,8 +503,12 @@ def update_google_sheet(data):
             except:
                 continue
 
-            # 🔴 0 / negative skip — cell ko chhedo mat
-            if v <= 0 or fld not in PRS_COLS:
+            if fld not in PRS_COLS:
+                continue
+
+            # 🔴 Field-specific validation (NET negative allowed, baaki positive)
+            if not _is_field_allowed(v, fld):
+                print(f"⏭️ PRS {st} {fld}: value {v} not allowed (0 or wrong sign) → SKIPPED")
                 continue
 
             col = PRS_COLS[fld]
@@ -465,9 +526,9 @@ def update_google_sheet(data):
         if not info:
             continue
 
-        # 🔴 Agar saare fields 0 hain → station skip (kuch mat likho)
-        if not _has_any_positive(vals):
-            print(f"⏭️ UTS {st}: all values are 0 → SKIPPED (nothing to write)")
+        # 🔴 Agar saare fields 0/missing hain → station skip
+        if not _has_any_nonzero(vals):
+            print(f"⏭️ UTS {st}: all values are 0/missing → SKIPPED (nothing to write)")
             continue
 
         row = info["row"]
@@ -479,8 +540,9 @@ def update_google_sheet(data):
             except:
                 continue
 
-            # 🔴 0 / negative skip — cell ko chhedo mat
-            if v <= 0:
+            # 🔴 Field-specific validation (NET negative allowed, baaki positive)
+            if not _is_field_allowed(v, fld):
+                print(f"⏭️ UTS {st} {fld}: value {v} not allowed (0 or wrong sign) → SKIPPED")
                 continue
 
             if info["nameCol"] == "C":
@@ -522,55 +584,4 @@ def webhook_verify():
     mode = request.args.get("hub.mode")
     token = request.args.get("hub.verify_token")
     challenge = request.args.get("hub.challenge")
-    if mode == "subscribe" and challenge and token == VERIFY_TOKEN:
-        print("✅ Webhook verified")
-        return challenge, 200
-    return "Forbidden", 403
-
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    payload = request.get_json(silent=True) or {}
-    try:
-        for entry in payload.get("entry", []):
-            for change in entry.get("changes", []):
-                for m in change.get("value", {}).get("messages", []):
-                    if m.get("type") != "text":
-                        continue
-                    msg_id = m.get("id", "")
-                    if already_processed(msg_id):
-                        continue
-
-                    text = (m.get("text") or {}).get("body", "").strip()
-                    if not text:
-                        continue
-
-                    print(f"\n📩 Incoming:\n{text[:400]}...")
-                    data = call_gemini(text)
-                    if not data:
-                        print("❌ Extraction failed")
-                        continue
-
-                    data = apply_post_processing(data, text)
-                    print("✅ Final Data:", json.dumps(data))
-                    update_google_sheet(data)
-    except Exception as e:
-        print(f"❌ Webhook Error: {e}")
-
-    return jsonify({"status": "ok"}), 200
-
-# ==============================================
-# STARTUP
-# ==============================================
-def startup_check():
-    print("========== STARTUP CHECK ==========")
-    print(f"SHEET_NAME     : {SHEET_NAME}")
-    print(f"GEMINI_API_KEY : {bool(GEMINI_API_KEY)}")
-    print(f"CREDENTIALS    : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
-    get_sheet()
-    print("===================================")
-
-startup_check()
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    if mode == "sub
