@@ -62,7 +62,7 @@ def already_processed(msg_id):
     return False
 
 # ==============================================
-# CREDENTIALS LOADING (RENDER-SAFE)
+# CREDENTIALS LOADING (RENDER-SAFE) - UPDATED
 # ==============================================
 def _fix_newlines_inside_strings(s: str) -> str:
     out, in_str, esc = [], False, False
@@ -80,39 +80,40 @@ def _fix_newlines_inside_strings(s: str) -> str:
     return "".join(out)
 
 def load_credentials_dict():
+    errors = []
+
+    # --- Option 1: base64 ---
     if GOOGLE_CREDENTIALS_B64:
         try:
-            d = json.loads(base64.b64decode(GOOGLE_CREDENTIALS_B64).decode("utf-8"))
+            s = GOOGLE_CREDENTIALS_B64.strip().strip("'\"")
+            s = re.sub(r"\s+", "", s)          # spaces/newlines hatao
+            s += "=" * (-len(s) % 4)           # missing padding add karo
+            try:
+                d = json.loads(base64.b64decode(s).decode("utf-8"))
+            except Exception:
+                d = json.loads(base64.urlsafe_b64decode(s).decode("utf-8"))
             print("✅ Credentials loaded via GOOGLE_CREDENTIALS_B64")
             return d
         except Exception as e:
-            print(f"❌ GOOGLE_CREDENTIALS_B64 decode failed: {e}")
-            return None
+            errors.append(f"B64 failed: {e}")
 
+    # --- Option 2: raw JSON (fallback) ---
     raw = (GOOGLE_CREDENTIALS_STR or "").strip()
-    if not raw:
-        print("❌ No Google credentials in env vars!")
-        return None
+    if raw:
+        candidates = [raw]
+        if len(raw) > 1 and raw[0] in "'\"" and raw[-1] == raw[0]:
+            candidates.append(raw[1:-1])
+        for cand in candidates:
+            for fixed in (cand, _fix_newlines_inside_strings(cand)):
+                try:
+                    d = json.loads(fixed)
+                    print("✅ Credentials loaded via GOOGLE_CREDENTIALS (raw JSON)")
+                    return d
+                except json.JSONDecodeError:
+                    pass
+        errors.append("RAW JSON failed")
 
-    candidates = [raw]
-    if len(raw) > 1 and raw[0] in "'\"" and raw[-1] == raw[0]:
-        candidates.append(raw[1:-1])
-
-    for cand in candidates:
-        try:
-            d = json.loads(cand)
-            print("✅ Credentials loaded via GOOGLE_CREDENTIALS")
-            return d
-        except json.JSONDecodeError:
-            pass
-        try:
-            d = json.loads(_fix_newlines_inside_strings(cand))
-            print("✅ Credentials loaded via GOOGLE_CREDENTIALS (newline-fixed)")
-            return d
-        except json.JSONDecodeError:
-            pass
-
-    print("❌ GOOGLE_CREDENTIALS JSON parse failed.")
+    print(f"❌ Credentials load failed: {' | '.join(errors)}")
     return None
 
 # ==============================================
@@ -504,4 +505,3 @@ startup_check()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-    
