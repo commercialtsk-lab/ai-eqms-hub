@@ -44,13 +44,24 @@ UTS_COLS_NU = {
 def get_sheet_connection():
     try:
         if GOOGLE_CREDENTIALS_STR:
-            # Handle JSON string from Render Environment variable securely
-            creds_dict = json.loads(GOOGLE_CREDENTIALS_STR)
+            cleaned_creds = GOOGLE_CREDENTIALS_STR.strip()
+            # Remove leading/trailing quotes if accidentally added
+            if cleaned_creds.startswith("'") and cleaned_creds.endswith("'"):
+                cleaned_creds = cleaned_creds[1:-1]
+            if cleaned_creds.startswith('"') and cleaned_creds.endswith('"'):
+                cleaned_creds = cleaned_creds[1:-1]
+            
+            # Safe JSON loading handling escape sequences in private key
+            try:
+                creds_dict = json.loads(cleaned_creds)
+            except json.JSONDecodeError:
+                fixed_str = cleaned_creds.replace('\\\\n', '\\n').replace('\\n', '\n')
+                creds_dict = json.loads(fixed_str)
+
             scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
             creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
             gc = gspread.authorize(creds)
         else:
-            # Fallback to local creds.json file if present
             gc = gspread.service_account(filename="creds.json")
             
         sheet = gc.open(SHEET_NAME).worksheet(SHEET_NAME)
@@ -61,17 +72,14 @@ def get_sheet_connection():
 
 def find_station_row(sheet, station):
     station = station.upper().strip()
-    # Search in Column B (Rows 3 to 30)
     for r in range(3, 31):
         val = sheet.cell(r, 2).value
         if val and str(val).upper().strip() == station:
             return {"row": r, "nameCol": "B"}
-    # Search in Column M (Rows 31 to 47)
     for r in range(31, 48):
         val = sheet.cell(r, 13).value
         if val and str(val).upper().strip() == station:
             return {"row": r, "nameCol": "M"}
-    # Search in Column C (Rows 32 to 47)
     for r in range(32, 48):
         val = sheet.cell(r, 3).value
         if val and str(val).upper().strip() == station:
@@ -313,3 +321,4 @@ def webhook():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+                       
