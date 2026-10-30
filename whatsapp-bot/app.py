@@ -12,13 +12,13 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 
 # ==============================================
-# ENVIRONMENT VARIABLES (RENDER ENV)
+# ENVIRONMENT VARIABLES (aapke exact names ke hisaab se)
 # ==============================================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-SHEET_NAME = os.environ.get("SHEET_NAME", "UTS&PRS")
+SHEET_NAME = os.environ.get("GOOGLE_SHEET_NAME", "") or os.environ.get("SHEET_NAME", "UTS&PRS")
 
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "") or os.environ.get("SECRET_TOKEN", "")
-WHATSAPP_TOKEN = (os.environ.get("WHATSAPP_TOKEN") or os.environ.get("META_TOKEN")
+WHATSAPP_TOKEN = (os.environ.get("META_TOKEN") or os.environ.get("WHATSAPP_TOKEN")
                   or os.environ.get("BOT_TOKEN") or "")
 PHONE_NUMBER_ID = (os.environ.get("PHONE_NUMBER_ID") or os.environ.get("WHATSAPP_PHONE_NUMBER_ID") or "")
 
@@ -47,13 +47,12 @@ UTS_COLS_NU = {
 }
 
 # ==============================================
-# META RETRY PROTECTION: ek message = 1 Gemini call
+# META RETRY PROTECTION
 # ==============================================
 PROCESSED_MSG_IDS = {}
 
 def already_processed(msg_id):
     now = time.time()
-    # purane entries (10 min se zyada purane) saaf karo
     for k in [k for k, t in PROCESSED_MSG_IDS.items() if now - t > 600]:
         del PROCESSED_MSG_IDS[k]
     if msg_id in PROCESSED_MSG_IDS:
@@ -62,7 +61,7 @@ def already_processed(msg_id):
     return False
 
 # ==============================================
-# CREDENTIALS LOADING (RENDER-SAFE) - UPDATED
+# CREDENTIALS LOADING
 # ==============================================
 def _fix_newlines_inside_strings(s: str) -> str:
     out, in_str, esc = [], False, False
@@ -86,8 +85,8 @@ def load_credentials_dict():
     if GOOGLE_CREDENTIALS_B64:
         try:
             s = GOOGLE_CREDENTIALS_B64.strip().strip("'\"")
-            s = re.sub(r"\s+", "", s)          # spaces/newlines hatao
-            s += "=" * (-len(s) % 4)           # missing padding add karo
+            s = re.sub(r"\s+", "", s)
+            s += "=" * (-len(s) % 4)
             try:
                 d = json.loads(base64.b64decode(s).decode("utf-8"))
             except Exception:
@@ -97,7 +96,7 @@ def load_credentials_dict():
         except Exception as e:
             errors.append(f"B64 failed: {e}")
 
-    # --- Option 2: raw JSON (fallback) ---
+    # --- Option 2: raw JSON ---
     raw = (GOOGLE_CREDENTIALS_STR or "").strip()
     if raw:
         candidates = [raw]
@@ -113,11 +112,11 @@ def load_credentials_dict():
                     pass
         errors.append("RAW JSON failed")
 
-    print(f"❌ Credentials load failed: {' | '.join(errors)}")
+    print(f"❌ Credentials load failed: {' | '.join(errors) if errors else 'No credentials found in env'}")
     return None
 
 # ==============================================
-# GOOGLE SHEETS CONNECTION (CACHED)
+# GOOGLE SHEETS CONNECTION
 # ==============================================
 _SHEET = None
 _STATION_MAP = None
@@ -226,7 +225,7 @@ def split_message_by_station(msg):
     return blocks
 
 # ==============================================
-# GEMINI API CALL (EXACTLY 1 CALL PER MESSAGE)
+# GEMINI API CALL
 # ==============================================
 def call_gemini(msg):
     if not GEMINI_API_KEY:
@@ -300,7 +299,7 @@ def apply_post_processing(data, msg):
     return data
 
 # ==============================================
-# UPDATE GOOGLE SHEET (1 READ + 1 BATCH WRITE)
+# UPDATE GOOGLE SHEET
 # ==============================================
 def update_google_sheet(data):
     sheet = get_sheet()
@@ -381,10 +380,11 @@ def update_google_sheet(data):
         return False
 
 # ==============================================
-# WHATSAPP REPLY (CONFIRMATION)
+# WHATSAPP REPLY
 # ==============================================
 def send_whatsapp_reply(to_number, text):
     if not WHATSAPP_TOKEN or not PHONE_NUMBER_ID:
+        print("⚠️ WhatsApp reply skipped: Token or Phone Number ID missing")
         return
     try:
         url = f"https://graph.facebook.com/v21.0/{PHONE_NUMBER_ID}/messages"
@@ -406,7 +406,6 @@ def home():
 
 @app.route("/webhook", methods=["GET"])
 def webhook_verify():
-    # Meta webhook verification
     mode = request.args.get("hub.mode")
     token = request.args.get("hub.verify_token")
     challenge = request.args.get("hub.challenge")
@@ -428,7 +427,6 @@ def webhook():
         for entry in entries:
             for change in entry.get("changes", []):
                 val = change.get("value", {})
-                # statuses (sent/delivered/read) skip karo
                 for m in val.get("messages", []):
                     found_any = True
                     if m.get("type") != "text":
@@ -439,13 +437,12 @@ def webhook():
                     if not incoming_msg:
                         continue
 
-                    # META RETRY? -> already processed -> sirf 200, NO gemini call
                     if already_processed(msg_id):
                         print(f"⏭️ Duplicate message {msg_id}, skipped (no Gemini call)")
                         continue
 
                     print(f"📩 New message from {from_number}: {incoming_msg[:80]}...")
-                    data = call_gemini(incoming_msg)  # SIRF 1 CALL
+                    data = call_gemini(incoming_msg)
 
                     if not data:
                         send_whatsapp_reply(from_number, "❌ Data samajh nahi aaya. Format check karke dobara bhejo.")
@@ -463,13 +460,12 @@ def webhook():
     except Exception as e:
         print(f"❌ Webhook processing error: {e}")
 
-    # Meta ko hamesha 200 bhejo taaki retry storm na ho
     if not found_any:
         print("ℹ️ POST received but no messages array (status update etc.)")
     return jsonify({"status": "ok"}), 200
 
 # ==============================================
-# TEST ENDPOINTS (debugging ke liye)
+# TEST ENDPOINTS
 # ==============================================
 @app.route("/test-sheet", methods=["GET"])
 def test_sheet():
@@ -496,7 +492,7 @@ def startup_check():
     print(f"WHATSAPP_TOKEN set: {bool(WHATSAPP_TOKEN)}")
     print(f"PHONE_NUMBER_ID set: {bool(PHONE_NUMBER_ID)}")
     print(f"GEMINI_API_KEY set: {bool(GEMINI_API_KEY)}")
-    print(f"GOOGLE_CREDENTIALS_B64 set: {bool(GOOGLE_CREDENTIALS_B64)}")
+    print(f"GOOGLE_CREDENTIALS set: {bool(GOOGLE_CREDENTIALS_STR)}")
     get_sheet()
     print("===================================")
 
