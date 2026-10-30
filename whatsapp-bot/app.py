@@ -382,7 +382,18 @@ def is_cell_empty(value):
         return True
     if s.lower() in ("nil", "none", "null", "n/a", "na"):
         return True
-    # 0 / 0.0 / 0.00 ko EMPTY nahi maanenge — ye valid data hai
+    return False
+
+def _has_any_positive(vals):
+    """Check karo ki dict me kam se kam ek positive number hai ya nahi."""
+    if not vals:
+        return False
+    for v in vals.values():
+        try:
+            if float(v) > 0:
+                return True
+        except:
+            continue
     return False
 
 def update_google_sheet(data):
@@ -406,12 +417,12 @@ def update_google_sheet(data):
             return ""
 
     updates = []
-    queued = set()   # 🔒 duplicate queue prevention (same batch me same cell do baar na jaye)
+    queued = set()   # 🔒 duplicate queue prevention
 
     def queue(r, c, val):
         key = (r, c)
         if key in queued:
-            print(f"⏭️ Cell {rowcol_to_a1(r,c)} already queued in this batch, skipping duplicate")
+            print(f"⏭️ Cell {rowcol_to_a1(r,c)} already queued, skipping duplicate")
             return
         queued.add(key)
         updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
@@ -422,6 +433,12 @@ def update_google_sheet(data):
         if not info:
             print(f"⚠️ Station {st} not found in sheet map")
             continue
+
+        # 🔴 Agar saare fields 0 hain → station skip (kuch mat likho)
+        if not _has_any_positive(vals):
+            print(f"⏭️ PRS {st}: all values are 0 → SKIPPED (nothing to write)")
+            continue
+
         row = info["row"]
         for fld, val in (vals or {}).items():
             try:
@@ -447,6 +464,12 @@ def update_google_sheet(data):
         info = smap.get(st)
         if not info:
             continue
+
+        # 🔴 Agar saare fields 0 hain → station skip (kuch mat likho)
+        if not _has_any_positive(vals):
+            print(f"⏭️ UTS {st}: all values are 0 → SKIPPED (nothing to write)")
+            continue
+
         row = info["row"]
         for fld, val in (vals or {}).items():
             if fld == "PF" and not val:
