@@ -92,7 +92,6 @@ def load_credentials_dict():
             except Exception:
                 d = json.loads(base64.urlsafe_b64decode(s).decode("utf-8"))
             
-            # private_key clean
             if "private_key" in d:
                 d["private_key"] = d["private_key"].replace("\\n", "\n")
             
@@ -112,10 +111,8 @@ def load_credentials_dict():
                 try:
                     d = json.loads(fixed)
                     
-                    # ========== IMPORTANT FIX ==========
                     if "private_key" in d:
                         d["private_key"] = d["private_key"].replace("\\n", "\n")
-                    # ==================================
                     
                     print("✅ Credentials loaded via GOOGLE_CREDENTIALS (raw JSON)")
                     return d
@@ -160,15 +157,37 @@ def get_station_map(sheet):
     if _STATION_MAP:
         return _STATION_MAP
     m = {}
-    for idx, val in enumerate(sheet.col_values(2), start=1):
-        if 3 <= idx <= 30 and val:
-            m.setdefault(str(val).upper().strip(), {"row": idx, "nameCol": "B"})
-    for idx, val in enumerate(sheet.col_values(13), start=1):
-        if 31 <= idx <= 47 and val:
-            m.setdefault(str(val).upper().strip(), {"row": idx, "nameCol": "M"})
-    for idx, val in enumerate(sheet.col_values(3), start=1):
-        if 32 <= idx <= 48 and val:
-            m.setdefault(str(val).upper().strip(), {"row": idx, "nameCol": "C"})
+
+    # Column B (rows 3 to 30)
+    try:
+        col_b = sheet.get("B3:B30")
+        for i, row in enumerate(col_b, start=3):
+            val = row[0] if row else ""
+            if val:
+                m.setdefault(str(val).upper().strip(), {"row": i, "nameCol": "B"})
+    except Exception as e:
+        print(f"⚠️ Error reading column B: {e}")
+
+    # Column M (rows 31 to 47)
+    try:
+        col_m = sheet.get("M31:M47")
+        for i, row in enumerate(col_m, start=31):
+            val = row[0] if row else ""
+            if val:
+                m.setdefault(str(val).upper().strip(), {"row": i, "nameCol": "M"})
+    except Exception as e:
+        print(f"⚠️ Error reading column M: {e}")
+
+    # Column C (rows 32 to 48)
+    try:
+        col_c = sheet.get("C32:C48")
+        for i, row in enumerate(col_c, start=32):
+            val = row[0] if row else ""
+            if val:
+                m.setdefault(str(val).upper().strip(), {"row": i, "nameCol": "C"})
+    except Exception as e:
+        print(f"⚠️ Error reading column C: {e}")
+
     _STATION_MAP = m
     print(f"✅ Station map ready: {len(m)} stations")
     return m
