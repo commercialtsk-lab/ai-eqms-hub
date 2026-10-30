@@ -368,7 +368,7 @@ def apply_post_processing(data, msg):
     return data
 
 # ==============================================
-# UPDATE SHEET  (STRICT — NO OVERWRITE, NO ADD)
+# UPDATE SHEET  (STRICT — NO OVERWRITE, NO ADD, NO ZERO)
 # ==============================================
 def is_cell_empty(value):
     """
@@ -428,7 +428,9 @@ def update_google_sheet(data):
                 v = float(val)
             except:
                 continue
-            if v < 0 or fld not in PRS_COLS:
+
+            # 🔴 0 / negative skip — cell ko chhedo mat
+            if v <= 0 or fld not in PRS_COLS:
                 continue
 
             col = PRS_COLS[fld]
@@ -453,7 +455,9 @@ def update_google_sheet(data):
                 v = float(val)
             except:
                 continue
-            if v < 0:
+
+            # 🔴 0 / negative skip — cell ko chhedo mat
+            if v <= 0:
                 continue
 
             if info["nameCol"] == "C":
@@ -472,7 +476,7 @@ def update_google_sheet(data):
                 print(f"⏭️ UTS {st} {fld}: SKIPPED (already has → '{existing_raw}')")
 
     if not updates:
-        print("⚠️ No cells updated (all already filled)")
+        print("⚠️ No cells updated (all already filled or values were 0)")
         return True
 
     try:
