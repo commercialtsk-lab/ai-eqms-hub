@@ -28,23 +28,23 @@ GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 GEMINI_MODEL = "gemini-2.5-flash"
 
 # ==============================================
-# STATION ALIASES
+# STATION ALIASES  (code bhi, full name bhi, "JN" suffix ke sath bhi)
 # ==============================================
 STATION_ALIASES = {
     "DBRT": ["DBRT", "DIBRUGARH TOWN", "DIBRUGARHTOWN"],
-    "DBRG": ["DBRG", "DIBRUGARH", "DIBRU GARH"],
+    "DBRG": ["DBRG", "DIBRUGARH", "DIBRU GARH", "DIBRUGARH JN"],
     "NTSK": ["NTSK", "NEW TINSUKIA", "NEWTINSUKIA", "NEW TINSUKIA JN", "NEW TINSUKIA JUNCTION"],
-    "TSK": ["TSK", "TINSUKIA", "TIN SUKIA"],
-    "MXN": ["MXN", "MARIANI", "MARIANI JN"],
+    "TSK": ["TSK", "TINSUKIA", "TIN SUKIA", "TINSUKIA JN"],
+    "MXN": ["MXN", "MARIANI", "MARIANI JN", "MARIANI JUNCTION"],
     "JTTN": ["JTTN", "JORHAT TOWN", "JORHATTOWN", "JORHAT"],
     "SRTN": ["SRTN", "SIVASAGAR", "SIVASAGAR TOWN", "SIBSAGAR", "SIVASAGARTOWN"],
-    "SLGR": ["SLGR", "SIMALUGURI", "SIMALUGURI JN"],
+    "SLGR": ["SLGR", "SIMALUGURI", "SIMALUGURI JN", "SIMALUGURI JUNCTION"],
     "GLGT": ["GLGT", "GOLAGHAT", "GOLAGHAT TOWN"],
     "MRHT": ["MRHT", "MORANHAT", "MORAN HAT"],
     "NAM": ["NAM", "NAMRUP"],
     "NHK": ["NHK", "NAHARKATIYA", "NAHARKATIA"],
     "FKG": ["FKG", "FURKATING", "FURKATING JN"],
-    "AGI": ["AGI", "AMGURI", "AMGURI JN", "AMGURI JUNCTION", "AMGURI TOWN"],
+    "AGI": ["AGI", "AMGURI", "AMGURI JN", "AMGURI JUNCTION"],
     "DJG": ["DJG", "DULIAJAN"],
     "LEDO": ["LEDO"],
     "MRG": ["MRG", "MARGHERITA"],
@@ -53,11 +53,11 @@ STATION_ALIASES = {
     "TTB": ["TTB", "TINSUKIA TOWN"],
     "BOJ": ["BOJ", "BORHAT"],
     "BFD": ["BFD", "BORDUBI ROAD"],
-    "SPK": ["SPK", "SAPEKHATI", "SAPEKHATI JN"],
+    "SPK": ["SPK", "SAPEKHATI"],
     "CHB": ["CHB", "CHABUA"],
     "SPTR": ["SPTR", "SILAPATHAR"],
     "DMC": ["DMC", "DHEMAJI"],
-    "MZS": ["MZS", "MURKONGSELEK", "MURKONG SELEK", "MURKONGSELEK"],
+    "MZS": ["MZS", "MURKONGSELEK", "MURKONG SELEK"],
     "NLP": ["NLP", "NORTH LAKHIMPUR", "N LAKHIMPUR", "NORTHLAKHIMPUR"],
     "LBI": ["LBI", "LAKHIMPUR"],
     "BGND": ["BGND", "BAGINADI"],
@@ -105,6 +105,58 @@ UTS_COLS_NU = {
 }
 
 NEGATIVE_ALLOWED_FIELDS = {"NET"}
+
+# ==============================================
+# STATION RESOLUTION HELPERS  (FULL NAME / JN / STATION sab handle karta hai)
+# ==============================================
+SUFFIX_RE = re.compile(r'\b(STATION|STN|JUNCTION|JN|RAILWAY|RLY)\b')
+
+def _norm_station(s):
+    s = re.sub(r'[^A-Z0-9 ]', ' ', str(s).upper())
+    s = re.sub(r'\s+', ' ', s).strip()
+    s = SUFFIX_RE.sub(' ', s)
+    return re.sub(r'\s+', ' ', s).strip()
+
+_alias_index = {}
+for _code, _aliases in STATION_ALIASES.items():
+    for _a in _aliases:
+        _alias_index[_norm_station(_a)] = _code
+        _alias_index[_norm_station(_a).replace(' ', '')] = _code
+
+def resolve_station(name):
+    """
+    Code ho ya full name, 'Jn'/'Station'/'Junction' ke sath ho — sab official code me resolve hota hai.
+    'AMGURI JN' -> AGI, 'Tinsukia' -> TSK, 'New Tinsukia Jn' -> NTSK
+    """
+    if not name:
+        return None
+    original = str(name).upper().strip()
+    n = re.sub(r'[^A-Z0-9 ]', ' ', original)
+    n = re.sub(r'\s+', ' ', n).strip()
+
+    if n in STATION_ALIASES:
+        return n
+    if n.replace(' ', '') in STATION_ALIASES:
+        return n.replace(' ', '')
+
+    n2 = _norm_station(n)
+    if n2 in STATION_ALIASES:
+        return n2
+    if n2 in _alias_index:
+        return _alias_index[n2]
+    if n2.replace(' ', '') in _alias_index:
+        return _alias_index[n2.replace(' ', '')]
+
+    # substring fallback (len>=4)
+    n2_clean = n2.replace(' ', '')
+    for code, aliases in STATION_ALIASES.items():
+        for alias in aliases:
+            a_clean = alias.replace(' ', '')
+            if len(n2_clean) >= 4 and (n2_clean in a_clean or a_clean in n2_clean):
+                return code
+
+    print(f"⚠️ Could not resolve station: '{original}'")
+    return None
 
 # ==============================================
 # META RETRY PROTECTION
@@ -178,7 +230,7 @@ def load_credentials_dict():
     return None
 
 # ==============================================
-# GOOGLE SHEETS
+# GOOGLE SHEETS  (NO CACHE)
 # ==============================================
 def get_sheet():
     creds_dict = load_credentials_dict()
@@ -228,170 +280,135 @@ def get_station_map(sheet):
     return m
 
 # ==============================================
-# STRICT STATION RESOLVER
-# ==============================================
-def resolve_station(name):
-    if not name:
-        return None
-    original = str(name).upper().strip()
-    name = re.sub(r'[^A-Z0-9 ]', '', original)
-    name_clean = name.replace(" ", "")
-
-    if name in STATION_ALIASES:
-        return name
-    if name_clean in STATION_ALIASES:
-        return name_clean
-
-    for code, aliases in STATION_ALIASES.items():
-        for alias in aliases:
-            if name == alias or name_clean == alias.replace(" ", ""):
-                return code
-
-    for code, aliases in STATION_ALIASES.items():
-        for alias in aliases:
-            if len(name) >= 4 and (name in alias or alias in name):
-                return code
-
-    print(f"⚠️ Could not resolve station: '{original}'")
-    return None
-
-# ==============================================
-# GEMINI (Deployment-safe)
+# GEMINI
 # ==============================================
 def call_gemini(msg):
     if not GEMINI_API_KEY:
         print("❌ GEMINI_API_KEY missing!")
         return None
 
-    station_list = ", ".join(ALL_STATIONS)
+    prompt = f"""You are an expert Indian Railway PRS & UTS data extraction engine.
+Extract numbers into STRICT JSON only. No explanation, no markdown.
 
-    prompt = (
-        "You are an expert Indian Railway PRS & UTS EARNINGS extraction engine.\n"
-        "Read the ENTIRE message naturally, then extract numbers into STRICT JSON.\n"
-        "Return ONLY pure JSON. No explanation, no markdown.\n\n"
-        "VALID STATION CODES (use ONLY these):\n"
-        + station_list + "\n\n"
-        "==========================================================\n"
-        "STEP 1 — DETECT SECTION\n"
-        "==========================================================\n"
-        "Message may have TWO sections labelled:\n"
-        "- 'PRS EARNINGS' / 'PRS' -> PRS section\n"
-        "- 'UTS EARNINGS' / 'UTS' -> UTS section\n"
-        "Extract each section SEPARATELY. A station may appear in BOTH.\n"
-        "A message may mention MULTIPLE stations -> extract ALL.\n"
-        "Station names may be written any way:\n"
-        "- 'AMGURI JN', 'AMGURI', 'AMGURI JUNCTION', 'AGI' -> AGI\n"
-        "- 'NEW TINSUKIA', 'NTSK' -> NTSK\n"
-        "ALWAYS output the SHORT CODE.\n\n"
-        "==========================================================\n"
-        "STEP 2 — PRS MAPPING (STRICT)\n"
-        "==========================================================\n"
-        "- TKT / Tickets / No of Tickets                 -> TKT\n"
-        "- PASS / Passenger / Pax                        -> PASS\n"
-        "- C/TKT / C TKT / Cancel Ticket / CST            -> C/TKT (only if NUMBER present)\n"
-        "- C/PASS / C PASS / Cancel Passenger            -> C/PASS (only if NUMBER present)\n"
-        "- N/I / NI / N I                                -> IGNORE (do not map anywhere)\n"
-        "- N/I AMOUNT / N I AMOUNT                       -> IGNORE\n"
-        "- NETCASH / NET CASH / NET AMOUNT / AMOUNT / TOTAL / CASH -> NET\n"
-        "  ⚠️ NET = NETCASH value ONLY. NEVER add UPI/DIGI/POS to NET.\n"
-        "- REFUND / REF / REFUND AMOUNT / CASH REFUND    -> REF\n"
-        "- DIGI REFUND / DIGI RF / DIGITAL REFUND        -> REF\n"
-        "- POS REFUND / POS RF                           -> REF\n"
-        "- UPI REFUND / QR REFUND                        -> REF\n"
-        "  ⚠️ ALL refunds (REFUND + DIGI REFUND + POS REFUND + UPI REFUND) -> SUM them ALL into REF.\n"
-        "  Example: REFUND 560 + DIGI REFUND 1055 = REF 1615.\n"
-        "- DIGI CASH / DIGI / DIGITAL CASH / QR CASH / ONLINE CASH -> UPI\n"
-        "- UPI / QR / PhonePe / GPay / Paytm / Card / E-Cash       -> UPI\n"
-        "- POS (only when NUMBER present)                -> POS\n"
-        "- VCH / VOUCHER                                 -> VCH\n\n"
-        "==========================================================\n"
-        "STEP 3 — UTS MAPPING (STRICT)\n"
-        "==========================================================\n"
-        "- TKT / Tickets                                 -> TKT\n"
-        "- JOURNEY TKT / J TKT                           -> IGNORE (do NOT map to TKT)\n"
-        "  ⚠️ If both 'TKT' and 'JOURNEY TKT' appear, use ONLY 'TKT' value.\n"
-        "- PASS / Passenger / Pax                        -> PASS\n"
-        "- NETCASH / NET CASH / AMOUNT / NET AMOUNT / TOTAL -> NET\n"
-        "  ⚠️ NET = NETCASH value ONLY. NEVER add UPI to NET.\n"
-        "  ⚠️ If NETCASH=22290 and UPI=4360, then NET=22290 and UPI=4360. NEVER NET=26650.\n"
-        "- UPI / QR / DIGI CASH / DIGITAL CASH / UPI CASH / ONLINE -> UPI\n"
-        "- REFUND / DIGI REFUND / UPI REFUND / QR REFUND -> REF (SUM ALL refunds)\n"
-        "- PF / P/TKT / PLATFORM TICKET                  -> PF\n"
-        "- MR / MR AMT                                   -> MR / MR AMT\n"
-        "- CST / VOUCHER / RTC / N/I / N/I AMOUNT / N/I PASS -> IGNORE (unless NUMBER clearly maps)\n\n"
-        "==========================================================\n"
-        "STEP 4 — CRITICAL RULES (NEVER BREAK)\n"
-        "==========================================================\n"
-        "1. NET = NETCASH value ONLY. NEVER add UPI/DIGI/POS to NET.\n"
-        "2. ALL refunds (REFUND + DIGI REFUND + POS REFUND + UPI REFUND) -> SUM into REF.\n"
-        "3. DIGI CASH / DIGITAL CASH / QR CASH -> UPI, NOT NET.\n"
-        "4. UPI CASH -> UPI, NOT NET.\n"
-        "5. If a field is mentioned BUT NO NUMBER is given (e.g. 'POS----NIL', 'VOUCHER-----NIL', 'N/I----NIL'), OMIT it completely. Do NOT put 0.\n"
-        "6. Negative numbers are preserved with sign (e.g. -865 stays -865).\n"
-        "7. If a field has no numeric value, OMIT it.\n"
-        "8. 'NIL' / 'nil' / '-' / 'NA' / 'not available' = missing -> OMIT.\n"
-        "9. Do NOT invent numbers. Do NOT add fields together unless rule explicitly says so (only REF refunds get summed).\n"
-        "10. 'RS 4000/-' -> 4000. Strip 'RS', '/-', commas.\n"
-        "11. Empty PRS or UTS section -> output {} for that section.\n"
-        "12. Return ONLY pure JSON.\n\n"
-        "==========================================================\n"
-        "STEP 5 — EXAMPLE\n"
-        "==========================================================\n"
-        "Input:\n"
-        "AMGURI JN PRS EARNINGS FOR 30/10/26\n"
-        "TKT-----16\n"
-        "PASS-----21\n"
-        "NETCASH---RS 4000/-\n"
-        "REFUND----RS 560/-\n"
-        "DIGI CASH-----RS 36390 /-\n"
-        "DIGI REFUND---RS 1055 /-\n"
-        "POS----NIL\n"
-        "POS REFUND---NIL\n"
-        "CST --NIL\n"
-        "VOUCHER------NIL\n"
-        "C/TKT-----03\n"
-        "C/PASS----------03\n"
-        "N/I----NIL\n"
-        "N/I AMOUNT--RS NIL\n\n"
-        "AMGURI JN UTS EARNINGS FOR 30/10/26\n"
-        "TKT--281\n"
-        "JOURNEY TKT---278\n"
-        "PASS----458\n"
-        "NETCASH---RS 22290/-\n"
-        "UPI CASH-----RS 4360 /-\n"
-        "REFUND ---RS NIL/-\n"
-        "UPI REFUND---RS NIL/-\n\n"
-        "Correct Output:\n"
-        "{\"prs\":{\"AGI\":{\"TKT\":16,\"PASS\":21,\"NET\":4000,\"REF\":1615,\"UPI\":36390,\"C/TKT\":3,\"C/PASS\":3}},"
-        "\"uts\":{\"AGI\":{\"TKT\":281,\"PASS\":458,\"NET\":22290,\"UPI\":4360}}}\n\n"
-        "Explanation:\n"
-        "- PRS NET = 4000 (NETCASH only, NOT 4000+36390)\n"
-        "- PRS UPI = 36390 (DIGI CASH -> UPI)\n"
-        "- PRS REF = 560 + 1055 = 1615\n"
-        "- UTS TKT = 281 (JOURNEY TKT 278 IGNORED)\n"
-        "- UTS NET = 22290 (NETCASH only, NOT 22290+4360)\n"
-        "- UTS UPI = 4360 (UPI CASH -> UPI)\n\n"
-        "==========================================================\n"
-        "STEP 6 — JSON FORMAT\n"
-        "==========================================================\n"
-        "Required format (only include fields with actual numbers):\n"
-        "{\"prs\":{\"STATION\":{\"TKT\":0,\"PASS\":0,\"C/TKT\":0,\"C/PASS\":0,\"REF\":0,\"NET\":0,\"VCH\":0,\"POS\":0,\"UPI\":0}},"
-        "\"uts\":{\"STATION\":{\"TKT\":0,\"PASS\":0,\"NET\":0,\"UPI\":0,\"PF\":0,\"MR\":0,\"MR AMT\":0}}}\n\n"
-        "MESSAGE:\n"
-        + msg +
-        "\n\nJSON ONLY:"
-    )
+VALID STATION CODES (use ONLY these exact short codes):
+{', '.join(ALL_STATIONS)}
+
+=== UNDERSTAND THE MESSAGE NATURALLY ===
+Messages can be in ANY format (WhatsApp, typed, mixed English/Hindi, broken lines, typos).
+Read the entire message and extract each numeric field for the mentioned station(s).
+A single message may contain both UTS and PRS sections — extract both separately.
+A single message may mention multiple stations — extract ALL of them.
+
+=== STATION RULES (100% MANDATORY — READ CAREFULLY) ===
+1. ALWAYS output the OFFICIAL SHORT CODE as the key — even if the message uses the FULL STATION NAME.
+2. Full name ho ya code, dono ko same station samjho:
+   "AMGURI JN", "AMGURI", "Amguri Junction", "AGI" → ALL mean "AGI"
+   "TINSUKIA" → "TSK" | "NEW TINSUKIA" → "NTSK" | "DIBRUGARH TOWN" → "DBRT" | "DIBRUGARH" → "DBRG"
+   "FURKATING JN" → "FKG" | "MARIANI" → "MXN" | "NORTH LAKHIMPUR" → "NLP" | "TEZU" → "TEZU"
+3. Agar station clearly identifiable nahi hai, us station ko skip karo.
+
+=== STRICT PRS MAPPING (100% MANDATORY) ===
+- "NET" = SIRF "NETCASH" / "NET CASH" / "Net cash" ki value. KABHI BHI Digi Cash / QR / UPI / digital cash NET me ADD MAT KARO.
+- ALL digital cash amounts (DIGI CASH, Digi Cash, QR, UPI CASH, UPI, PhonePe, GPay, Paytm, Card, online payment) → "UPI" field me jaate hain. NET me NAHI.
+- POS = sirf tab jab message me explicitly "POS" likha ho. POS cash ko POS column me rakho (UPI me nahi).
+- "REF" = SUM of ALL refund amounts in the message. Cash Refund + Digi Refund + UPI Refund + POS Refund — SAB KO ADD KARO aur ek hi REF number do.
+  Example: REFUND 560 + DIGI REFUND 1055 → "REF": 1615
+- TKT / Tickets → TKT ; PASS / Passenger → PASS
+- C/TKT / Cancelled Ticket → C/TKT ; C/PASS / Cancelled Passenger → C/PASS
+- VOUCHER / VCH → VCH
+- N/I, CST, POS REFUND (as separate refund) → refunds ke total me include karo (POS refund REF me jata hai)
+
+=== STRICT UTS MAPPING (100% MANDATORY) ===
+- "NET" = SIRF "NETCASH" value. UPI CASH ya digital cash NET me ADD MAT KARO.
+  VERY IMPORTANT EXAMPLE: "NETCASH 22290" aur "UPI CASH 4360" → NET=22290, UPI=4360.
+  NET=26650 KABHI MAT DO (ye UPI add karne se aata hai — GALAT HAI).
+- UPI CASH / QR / digital → UPI
+- REF = sum of all refunds (UPI REFUND + REFUND etc. — jo NIL ho usko skip karo)
+- TKT = total tickets. Agar "TKT 281" aur "JOURNEY TKT 278" dono hain → TKT = 281 (total wala).
+- PASS = total passengers ; PF = platform tickets ; MR = miscellaneous receipt count ; MR AMT = MR amount
+
+=== CRITICAL RULES FOR MISSING NUMBERS ===
+1. Field mentioned but NO NUMBER (e.g. "amount nahi aya", "nil", "-", "not received") → OMIT that field completely. Do NOT put 0.
+2. Only include a field if a NUMERIC VALUE is literally written.
+3. Do NOT guess. Do NOT invent numbers.
+4. Agar ek section (PRS/UTS) message me nahi hai → empty object {{}}
+
+=== NEGATIVE NUMBERS ===
+Negative number dikhe (e.g. "AMOUNT :- -865") → negative sign preserve karo. Positive mat karo.
+
+Required JSON format (only include fields that have actual numbers):
+{{
+  "prs": {{
+    "STATION_CODE": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}
+  }},
+  "uts": {{
+    "STATION_CODE": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}
+  }}
+}}
+
+=== EXAMPLE 1 (refunds added, digi cash NOT added to net) ===
+Input:
+"EARNINGS OF SPK
+PRS
+TKT:-8 PASS:-9 C/TKT:-1 C/PASS:-3
+Ref-560
+Digi RF-1055
+Net cash me amount ata wo nhi aya
+UPI:-11575"
+
+Output:
+{{
+  "prs": {{
+    "SPK": {{"TKT": 8, "PASS": 9, "C/TKT": 1, "C/PASS": 3, "REF": 1615, "UPI": 11575}}
+  }},
+  "uts": {{}}
+}}
+(NOTICE: REF = 560 + 1055 = 1615. NET omitted kyunki number nahi tha.)
+
+=== EXAMPLE 2 (full name station + digi cash NOT in net) ===
+Input:
+"AMGURI JN PRS EARNINGS FOR 30/10/26
+TKT-----16
+PASS-----21
+NETCASH---RS 4000/-
+REFUND----RS 560/-
+DIGI CASH-----RS 36390/-
+DIGI REFUND---RS 1055/-
+POS----NIL
+VOUCHER------NIL
+C/TKT-----03
+C/PASS----------03
+
+AMGURI JN UTS EARNINGS FOR 30/10/26
+TKT--281
+PASS----458
+NETCASH---RS 22290/-
+UPI CASH-----RS 4360/-
+REFUND ---RS NIL/-"
+
+Output:
+{{
+  "prs": {{
+    "AGI": {{"TKT": 16, "PASS": 21, "NET": 4000, "REF": 1615, "UPI": 36390, "C/TKT": 3, "C/PASS": 3}}
+  }},
+  "uts": {{
+    "AGI": {{"TKT": 281, "PASS": 458, "NET": 22290, "UPI": 4360}}
+  }}
+}}
+(NOTICE: "AMGURI JN" → "AGI". PRS NET=4000 sirf netcash, DIGI CASH 36390 → UPI. REF=560+1055=1615. UTS NET=22290 sirf netcash, UPI=4360 — 26650 BILKUL NAHI.)
+
+MESSAGE:
+{msg}
+
+JSON ONLY:"""
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature": 0.1,
-            "maxOutputTokens": 2048
-        }
+        "generationConfig": {"temperature": 0.05, "maxOutputTokens": 4096}
     }
     try:
-        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=60)
+        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
         if res.status_code == 200:
             txt = res.json()['candidates'][0]['content']['parts'][0]['text']
             txt = re.sub(r'```json\n?', '', txt, flags=re.IGNORECASE)
@@ -420,7 +437,7 @@ def apply_post_processing(data, msg):
             if code not in new_prs:
                 new_prs[code] = vals
             else:
-                print(f"⚠️ Duplicate PRS station '{code}' → keeping first")
+                print(f"⚠️ Duplicate PRS station '{code}' in same message → keeping first")
         else:
             print(f"❌ Station skipped (not resolved): {st}")
     data["prs"] = new_prs
@@ -432,7 +449,7 @@ def apply_post_processing(data, msg):
             if code not in new_uts:
                 new_uts[code] = vals
             else:
-                print(f"⚠️ Duplicate UTS station '{code}' → keeping first")
+                print(f"⚠️ Duplicate UTS station '{code}' in same message → keeping first")
         else:
             print(f"❌ UTS Station skipped: {st}")
     data["uts"] = new_uts
@@ -440,7 +457,7 @@ def apply_post_processing(data, msg):
     return data
 
 # ==============================================
-# UPDATE SHEET
+# UPDATE SHEET  (STRICT — NO OVERWRITE, NO ADD, NO ZERO)
 # ==============================================
 def is_cell_empty(value):
     if value is None:
@@ -495,7 +512,7 @@ def update_google_sheet(data):
     def queue(r, c, val):
         key = (r, c)
         if key in queued:
-            print(f"⏭️ Cell {rowcol_to_a1(r,c)} already queued, skipping")
+            print(f"⏭️ Cell {rowcol_to_a1(r,c)} already queued, skipping duplicate")
             return
         queued.add(key)
         updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
@@ -508,7 +525,7 @@ def update_google_sheet(data):
             continue
 
         if not _has_any_nonzero(vals):
-            print(f"⏭️ PRS {st}: all values 0/missing → SKIPPED")
+            print(f"⏭️ PRS {st}: all values are 0/missing → SKIPPED (nothing to write)")
             continue
 
         row = info["row"]
@@ -518,4 +535,134 @@ def update_google_sheet(data):
             except:
                 continue
 
-            if fld
+            if fld not in PRS_COLS:
+                continue
+
+            if not _is_field_allowed(v, fld):
+                print(f"⏭️ PRS {st} {fld}: value {v} not allowed (0 or wrong sign) → SKIPPED")
+                continue
+
+            col = PRS_COLS[fld]
+            existing_raw = get_current(row, col)
+
+            if is_cell_empty(existing_raw):
+                queue(row, col, v)
+                print(f"✅ PRS {st} {fld}: wrote {v} (was empty)")
+            else:
+                print(f"⏭️ PRS {st} {fld}: SKIPPED (already has → '{existing_raw}')")
+
+    # -------- UTS --------
+    for st, vals in data.get("uts", {}).items():
+        info = smap.get(st)
+        if not info:
+            continue
+
+        if not _has_any_nonzero(vals):
+            print(f"⏭️ UTS {st}: all values are 0/missing → SKIPPED (nothing to write)")
+            continue
+
+        row = info["row"]
+        for fld, val in (vals or {}).items():
+            if fld == "PF" and not val:
+                continue
+            try:
+                v = float(val)
+            except:
+                continue
+
+            if not _is_field_allowed(v, fld):
+                print(f"⏭️ UTS {st} {fld}: value {v} not allowed (0 or wrong sign) → SKIPPED")
+                continue
+
+            if info["nameCol"] == "C":
+                # ⚠️ NOTE: NET aur MR yaha same column 9 par hain — apne sheet layout verify kar lena
+                col = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12, "PF": 8, "MR": 19, "MR AMT": 20}.get(fld)
+            else:
+                col = UTS_COLS_NU.get(fld)
+
+            if not col:
+                continue
+
+            existing_raw = get_current(row, col)
+            if is_cell_empty(existing_raw):
+                queue(row, col, v)
+                print(f"✅ UTS {st} {fld}: wrote {v} (was empty)")
+            else:
+                print(f"⏭️ UTS {st} {fld}: SKIPPED (already has → '{existing_raw}')")
+
+    if not updates:
+        print("⚠️ No cells updated (all already filled or values were 0)")
+        return True
+
+    try:
+        sheet.batch_update(updates)
+        print(f"✅ Batch update successful ({len(updates)} cells)")
+        return True
+    except Exception as e:
+        print(f"❌ Batch update failed: {e}")
+        return False
+
+# ==============================================
+# WEBHOOK
+# ==============================================
+@app.route("/", methods=["GET"])
+def home():
+    return "Bot is running ✅", 200
+
+@app.route("/webhook", methods=["GET"])
+def webhook_verify():
+    mode = request.args.get("hub.mode")
+    token = request.args.get("hub.verify_token")
+    challenge = request.args.get("hub.challenge")
+    if mode == "subscribe" and challenge and token == VERIFY_TOKEN:
+        print("✅ Webhook verified")
+        return challenge, 200
+    return "Forbidden", 403
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    payload = request.get_json(silent=True) or {}
+    try:
+        for entry in payload.get("entry", []):
+            for change in entry.get("changes", []):
+                for m in change.get("value", {}).get("messages", []):
+                    if m.get("type") != "text":
+                        continue
+                    msg_id = m.get("id", "")
+                    if already_processed(msg_id):
+                        continue
+
+                    text = (m.get("text") or {}).get("body", "").strip()
+                    if not text:
+                        continue
+
+                    print(f"\n📩 Incoming:\n{text[:400]}...")
+                    data = call_gemini(text)
+                    if not data:
+                        print("❌ Extraction failed")
+                        continue
+
+                    data = apply_post_processing(data, text)
+                    print("✅ Final Data:", json.dumps(data))
+                    update_google_sheet(data)
+    except Exception as e:
+        print(f"❌ Webhook Error: {e}")
+
+    return jsonify({"status": "ok"}), 200
+
+# ==============================================
+# STARTUP
+# ==============================================
+def startup_check():
+    print("========== STARTUP CHECK ==========")
+    print(f"SHEET_NAME     : {SHEET_NAME}")
+    print(f"GEMINI_API_KEY : {bool(GEMINI_API_KEY)}")
+    print(f"CREDENTIALS    : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
+    get_sheet()
+    print("===================================")
+
+startup_check()
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
