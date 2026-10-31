@@ -28,7 +28,7 @@ GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 GEMINI_MODEL = "gemini-2.5-flash"
 
 # ==============================================
-# STATION ALIASES (AMGURI JN added)
+# STATION ALIASES
 # ==============================================
 STATION_ALIASES = {
     "DBRT": ["DBRT", "DIBRUGARH TOWN", "DIBRUGARHTOWN"],
@@ -104,7 +104,6 @@ UTS_COLS_NU = {
     "MR": 19, "MR AMT": 20, "UPI": 21
 }
 
-# Negative allow karne wale fields (sirf NET, kyunki net cash negative ho sakta hai)
 NEGATIVE_ALLOWED_FIELDS = {"NET"}
 
 # ==============================================
@@ -257,191 +256,139 @@ def resolve_station(name):
     return None
 
 # ==============================================
-# GEMINI — CRYSTAL CLEAR RULES
+# GEMINI (Deployment-safe)
 # ==============================================
 def call_gemini(msg):
     if not GEMINI_API_KEY:
         print("❌ GEMINI_API_KEY missing!")
         return None
 
-    prompt = f"""You are an expert Indian Railway PRS & UTS EARNINGS extraction engine.
-Read the ENTIRE message naturally, understand it, then extract numbers into STRICT JSON.
-No explanation, no markdown. Only pure JSON.
+    station_list = ", ".join(ALL_STATIONS)
 
-VALID STATION CODES (use ONLY these exact short codes):
-{', '.join(ALL_STATIONS)}
-
-==========================================================
-STEP 1 — DETECT SECTION
-==========================================================
-Message may have TWO sections clearly labelled:
-- "PRS EARNINGS" / "PRS" → PRS section
-- "UTS EARNINGS" / "UTS" → UTS section
-Extract each section SEPARATELY into its own object.
-A station may appear in BOTH PRS and UTS.
-A message may mention MULTIPLE stations — extract ALL.
-
-Station names may be written in any form:
-- "AMGURI JN", "AMGURI", "AMGURI JUNCTION", "AGI" → AGI
-- "NEW TINSUKIA", "NTSK" → NTSK
-- "SPK", "SAPEKHATI" → SPK
-→ ALWAYS output the SHORT CODE.
-
-==========================================================
-STEP 2 — PRS MAPPING (STRICT)
-==========================================================
-- TKT / Tickets / No of Tickets / Ticket Count             → TKT
-- PASS / Passenger / Pax / Passenger Count                 → PASS
-- C/TKT / C TKT / Cancel Ticket / Cancelled Ticket / CST   → C/TKT
-   (CST = Cancelled Ticket = C/TKT ONLY when it contains a NUMBER)
-- C/PASS / C PASS / Cancel Passenger / Cancelled Pass      → C/PASS
-- N/I / NI / N I                                           → C/TKT / C/PASS / etc. — only if NUMBER present, else OMIT
-- NETCASH / NET CASH / NET AMOUNT / AMOUNT / TOTAL / CASH  → NET
-   ⚠️ NET = NETCASH value ONLY. NEVER add UPI/DIGI to NET.
-- REFUND / REF / REFUND AMOUNT / CASH REFUND               → REF
-- DIGI REFUND / DIGI RF / DIGITAL REFUND / ONLINE REFUND   → REF
-- POS REFUND / POS RF                                      → REF
-- UPI REFUND / QR REFUND                                   → REF
-   ⚠️ ALL refunds (REFUND + DIGI REFUND + POS REFUND + UPI REFUND) → SUM them ALL into REF.
-   Example: REFUND 560 + DIGI REFUND 1055 + POS REFUND 0 + UPI REFUND 0 = REF 1615
-- DIGI CASH / DIGI / DIGITAL CASH / QR CASH / ONLINE CASH  → UPI
-- UPI / QR / PhonePe / GPay / Paytm / Card / E-Cash        → UPI
-- POS (only when NUMBER present)                            → POS
-- VCH / VOUCHER                                             → VCH
-- N/I AMOUNT / N I AMOUNT                                   → IGNORE (do not map anywhere)
-
-==========================================================
-STEP 3 — UTS MAPPING (STRICT)
-==========================================================
-- TKT / Tickets                                             → TKT
-- JOURNEY TKT / J TKT                                       → IGNORE (do NOT map to TKT)
-   ⚠️ If both "TKT" and "JOURNEY TKT" appear, use ONLY "TKT" value.
-- PASS / Passenger / Pax                                    → PASS
-- NETCASH / NET CASH / AMOUNT / NET AMOUNT / TOTAL          → NET
-   ⚠️ NET = NETCASH value ONLY. NEVER add UPI to NET.
-   ⚠️ If NETCASH=22290 and UPI=4360, then NET=22290 and UPI=4360. NEVER NET=26650.
-- UPI / QR / DIGI CASH / DIGITAL CASH / UPI CASH / ONLINE   → UPI
-- REFUND / DIGI REFUND / UPI REFUND / QR REFUND             → REF (SUM ALL refunds)
-- PF / P/TKT / PLATFORM TICKET                              → PF
-- P/PASS / PLATFORM PASS                                    → (ignore or PF as applicable — only if number present)
-- MR / MR AMT                                               → MR / MR AMT
-- CST / VOUCHER / RTC / N/I / N/I AMOUNT / N/I PASS         → IGNORE (unless NUMBER and clearly maps)
-- POS (only when NUMBER present)                            → POS (rare in UTS)
-
-==========================================================
-STEP 4 — CRITICAL RULES (NEVER BREAK)
-==========================================================
-1. NET = NETCASH value ONLY. NEVER add UPI/DIGI/POS to NET.
-2. ALL refunds (REFUND + DIGI REFUND + POS REFUND + UPI REFUND) → SUM them into REF.
-3. DIGI CASH / DIGITAL CASH / QR CASH → UPI, NOT NET.
-4. UPI CASH → UPI, NOT NET.
-5. If a field is mentioned BUT NO NUMBER is given (e.g. "POS----NIL", "VOUCHER-----NIL", "N/I----NIL", "CST --NIL", "RTC-----NIL"), OMIT that field completely. Do NOT put 0.
-6. Negative numbers are preserved with sign (e.g. -865 stays -865).
-7. If a field has no numeric value, OMIT it from the station object.
-8. "NIL" / "nil" / "-" / "NA" / "not available" = missing → OMIT.
-9. Do NOT invent numbers. Do NOT add fields together unless the rule explicitly says so (only REF refunds get summed).
-10. "RS 4000/-" → 4000. "RS 36390 /-" → 36390. Strip "RS", "/-", commas.
-11. Empty PRS or UTS section → output {{}} for that section.
-12. Return ONLY pure JSON.
-
-==========================================================
-STEP 5 — EXAMPLE (STUDY CAREFULLY)
-==========================================================
-Input:
-"AMGURI JN PRS EARNINGS FOR 30/10/26
-TKT-----16
-PASS-----21
-NETCASH---RS 4000/-
-REFUND----RS 560/-
-DIGI CASH-----RS 36390 /-
-DIGI REFUND---RS 1055 /-
-POS----NIL
-POS REFUND---NIL
-CST --NIL
-VOUCHER------NIL
-C/TKT-----03
-C/PASS----------03
-N/I----NIL
-N/I AMOUNT--RS NIL
-N/I PASS----------NIL
-
-AMGURI JN UTS EARNINGS FOR 30/10/26
-TKT--281
-JOURNEY TKT---278
-PASS----458
-NETCASH---RS 22290/-
-UPI CASH-----RS 4360 /-
-REFUND ---RS NIL/-
-UPI REFUND---RS NIL/-
-P/TKT-----NIL
-P/PASS----------NIL
-CST----NIL
-VOUCHER------NIL
-RTC-----NIL
-C/TKT-----NIL
-C/PASS----------NIL
-N/I----NIL
-N/I AMOUNT --RS NIL /-
-N/I PASS----------NIL"
-
-Correct Output:
-{{
-  "prs": {{
-    "AGI": {{
-      "TKT": 16,
-      "PASS": 21,
-      "NET": 4000,
-      "REF": 1615,
-      "UPI": 36390,
-      "C/TKT": 3,
-      "C/PASS": 3
-    }}
-  }},
-  "uts": {{
-    "AGI": {{
-      "TKT": 281,
-      "PASS": 458,
-      "NET": 22290,
-      "UPI": 4360
-    }}
-  }}
-}}
-
-EXPLANATION of example:
-- PRS NET = 4000 (NETCASH only, NOT 4000+36390)
-- PRS UPI = 36390 (DIGI CASH → UPI)
-- PRS REF = 560 + 1055 = 1615 (REFUND + DIGI REFUND; POS REFUND NIL ignored)
-- PRS POS = omitted (NIL)
-- PRS C/TKT = 3, C/PASS = 3
-- PRS CST NIL → ignored (no CST field exists separately, maps to C/TKT but NIL so omit)
-- UTS TKT = 281 (JOURNEY TKT 278 IGNORED)
-- UTS NET = 22290 (NETCASH only, NOT 22290+4360)
-- UTS UPI = 4360 (UPI CASH → UPI)
-- UTS REFUND NIL → REF omitted
-- All NIL fields → omitted
-
-==========================================================
-STEP 6 — JSON FORMAT
-==========================================================
-Required JSON format (only include fields with actual numbers):
-{{
-  "prs": {{
-    "STATION": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}
-  }},
-  "uts": {{
-    "STATION": {{"TKT":0, "PASS":0, "NET":0, "UPI":0, "PF":0, "MR":0, "MR AMT":0}}
-  }}
-}}
-
-MESSAGE:
-{msg}
-
-JSON ONLY:"""
+    prompt = (
+        "You are an expert Indian Railway PRS & UTS EARNINGS extraction engine.\n"
+        "Read the ENTIRE message naturally, then extract numbers into STRICT JSON.\n"
+        "Return ONLY pure JSON. No explanation, no markdown.\n\n"
+        "VALID STATION CODES (use ONLY these):\n"
+        + station_list + "\n\n"
+        "==========================================================\n"
+        "STEP 1 — DETECT SECTION\n"
+        "==========================================================\n"
+        "Message may have TWO sections labelled:\n"
+        "- 'PRS EARNINGS' / 'PRS' -> PRS section\n"
+        "- 'UTS EARNINGS' / 'UTS' -> UTS section\n"
+        "Extract each section SEPARATELY. A station may appear in BOTH.\n"
+        "A message may mention MULTIPLE stations -> extract ALL.\n"
+        "Station names may be written any way:\n"
+        "- 'AMGURI JN', 'AMGURI', 'AMGURI JUNCTION', 'AGI' -> AGI\n"
+        "- 'NEW TINSUKIA', 'NTSK' -> NTSK\n"
+        "ALWAYS output the SHORT CODE.\n\n"
+        "==========================================================\n"
+        "STEP 2 — PRS MAPPING (STRICT)\n"
+        "==========================================================\n"
+        "- TKT / Tickets / No of Tickets                 -> TKT\n"
+        "- PASS / Passenger / Pax                        -> PASS\n"
+        "- C/TKT / C TKT / Cancel Ticket / CST            -> C/TKT (only if NUMBER present)\n"
+        "- C/PASS / C PASS / Cancel Passenger            -> C/PASS (only if NUMBER present)\n"
+        "- N/I / NI / N I                                -> IGNORE (do not map anywhere)\n"
+        "- N/I AMOUNT / N I AMOUNT                       -> IGNORE\n"
+        "- NETCASH / NET CASH / NET AMOUNT / AMOUNT / TOTAL / CASH -> NET\n"
+        "  ⚠️ NET = NETCASH value ONLY. NEVER add UPI/DIGI/POS to NET.\n"
+        "- REFUND / REF / REFUND AMOUNT / CASH REFUND    -> REF\n"
+        "- DIGI REFUND / DIGI RF / DIGITAL REFUND        -> REF\n"
+        "- POS REFUND / POS RF                           -> REF\n"
+        "- UPI REFUND / QR REFUND                        -> REF\n"
+        "  ⚠️ ALL refunds (REFUND + DIGI REFUND + POS REFUND + UPI REFUND) -> SUM them ALL into REF.\n"
+        "  Example: REFUND 560 + DIGI REFUND 1055 = REF 1615.\n"
+        "- DIGI CASH / DIGI / DIGITAL CASH / QR CASH / ONLINE CASH -> UPI\n"
+        "- UPI / QR / PhonePe / GPay / Paytm / Card / E-Cash       -> UPI\n"
+        "- POS (only when NUMBER present)                -> POS\n"
+        "- VCH / VOUCHER                                 -> VCH\n\n"
+        "==========================================================\n"
+        "STEP 3 — UTS MAPPING (STRICT)\n"
+        "==========================================================\n"
+        "- TKT / Tickets                                 -> TKT\n"
+        "- JOURNEY TKT / J TKT                           -> IGNORE (do NOT map to TKT)\n"
+        "  ⚠️ If both 'TKT' and 'JOURNEY TKT' appear, use ONLY 'TKT' value.\n"
+        "- PASS / Passenger / Pax                        -> PASS\n"
+        "- NETCASH / NET CASH / AMOUNT / NET AMOUNT / TOTAL -> NET\n"
+        "  ⚠️ NET = NETCASH value ONLY. NEVER add UPI to NET.\n"
+        "  ⚠️ If NETCASH=22290 and UPI=4360, then NET=22290 and UPI=4360. NEVER NET=26650.\n"
+        "- UPI / QR / DIGI CASH / DIGITAL CASH / UPI CASH / ONLINE -> UPI\n"
+        "- REFUND / DIGI REFUND / UPI REFUND / QR REFUND -> REF (SUM ALL refunds)\n"
+        "- PF / P/TKT / PLATFORM TICKET                  -> PF\n"
+        "- MR / MR AMT                                   -> MR / MR AMT\n"
+        "- CST / VOUCHER / RTC / N/I / N/I AMOUNT / N/I PASS -> IGNORE (unless NUMBER clearly maps)\n\n"
+        "==========================================================\n"
+        "STEP 4 — CRITICAL RULES (NEVER BREAK)\n"
+        "==========================================================\n"
+        "1. NET = NETCASH value ONLY. NEVER add UPI/DIGI/POS to NET.\n"
+        "2. ALL refunds (REFUND + DIGI REFUND + POS REFUND + UPI REFUND) -> SUM into REF.\n"
+        "3. DIGI CASH / DIGITAL CASH / QR CASH -> UPI, NOT NET.\n"
+        "4. UPI CASH -> UPI, NOT NET.\n"
+        "5. If a field is mentioned BUT NO NUMBER is given (e.g. 'POS----NIL', 'VOUCHER-----NIL', 'N/I----NIL'), OMIT it completely. Do NOT put 0.\n"
+        "6. Negative numbers are preserved with sign (e.g. -865 stays -865).\n"
+        "7. If a field has no numeric value, OMIT it.\n"
+        "8. 'NIL' / 'nil' / '-' / 'NA' / 'not available' = missing -> OMIT.\n"
+        "9. Do NOT invent numbers. Do NOT add fields together unless rule explicitly says so (only REF refunds get summed).\n"
+        "10. 'RS 4000/-' -> 4000. Strip 'RS', '/-', commas.\n"
+        "11. Empty PRS or UTS section -> output {} for that section.\n"
+        "12. Return ONLY pure JSON.\n\n"
+        "==========================================================\n"
+        "STEP 5 — EXAMPLE\n"
+        "==========================================================\n"
+        "Input:\n"
+        "AMGURI JN PRS EARNINGS FOR 30/10/26\n"
+        "TKT-----16\n"
+        "PASS-----21\n"
+        "NETCASH---RS 4000/-\n"
+        "REFUND----RS 560/-\n"
+        "DIGI CASH-----RS 36390 /-\n"
+        "DIGI REFUND---RS 1055 /-\n"
+        "POS----NIL\n"
+        "POS REFUND---NIL\n"
+        "CST --NIL\n"
+        "VOUCHER------NIL\n"
+        "C/TKT-----03\n"
+        "C/PASS----------03\n"
+        "N/I----NIL\n"
+        "N/I AMOUNT--RS NIL\n\n"
+        "AMGURI JN UTS EARNINGS FOR 30/10/26\n"
+        "TKT--281\n"
+        "JOURNEY TKT---278\n"
+        "PASS----458\n"
+        "NETCASH---RS 22290/-\n"
+        "UPI CASH-----RS 4360 /-\n"
+        "REFUND ---RS NIL/-\n"
+        "UPI REFUND---RS NIL/-\n\n"
+        "Correct Output:\n"
+        "{\"prs\":{\"AGI\":{\"TKT\":16,\"PASS\":21,\"NET\":4000,\"REF\":1615,\"UPI\":36390,\"C/TKT\":3,\"C/PASS\":3}},"
+        "\"uts\":{\"AGI\":{\"TKT\":281,\"PASS\":458,\"NET\":22290,\"UPI\":4360}}}\n\n"
+        "Explanation:\n"
+        "- PRS NET = 4000 (NETCASH only, NOT 4000+36390)\n"
+        "- PRS UPI = 36390 (DIGI CASH -> UPI)\n"
+        "- PRS REF = 560 + 1055 = 1615\n"
+        "- UTS TKT = 281 (JOURNEY TKT 278 IGNORED)\n"
+        "- UTS NET = 22290 (NETCASH only, NOT 22290+4360)\n"
+        "- UTS UPI = 4360 (UPI CASH -> UPI)\n\n"
+        "==========================================================\n"
+        "STEP 6 — JSON FORMAT\n"
+        "==========================================================\n"
+        "Required format (only include fields with actual numbers):\n"
+        "{\"prs\":{\"STATION\":{\"TKT\":0,\"PASS\":0,\"C/TKT\":0,\"C/PASS\":0,\"REF\":0,\"NET\":0,\"VCH\":0,\"POS\":0,\"UPI\":0}},"
+        "\"uts\":{\"STATION\":{\"TKT\":0,\"PASS\":0,\"NET\":0,\"UPI\":0,\"PF\":0,\"MR\":0,\"MR AMT\":0}}}\n\n"
+        "MESSAGE:\n"
+        + msg +
+        "\n\nJSON ONLY:"
+    )
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 4096}
+        "generationConfig": {
+            "temperature": 0.1,
+            "maxOutputTokens": 2048
+        }
     }
     try:
         res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=60)
@@ -473,7 +420,7 @@ def apply_post_processing(data, msg):
             if code not in new_prs:
                 new_prs[code] = vals
             else:
-                print(f"⚠️ Duplicate PRS station '{code}' in same message → keeping first")
+                print(f"⚠️ Duplicate PRS station '{code}' → keeping first")
         else:
             print(f"❌ Station skipped (not resolved): {st}")
     data["prs"] = new_prs
@@ -485,7 +432,7 @@ def apply_post_processing(data, msg):
             if code not in new_uts:
                 new_uts[code] = vals
             else:
-                print(f"⚠️ Duplicate UTS station '{code}' in same message → keeping first")
+                print(f"⚠️ Duplicate UTS station '{code}' → keeping first")
         else:
             print(f"❌ UTS Station skipped: {st}")
     data["uts"] = new_uts
@@ -548,7 +495,7 @@ def update_google_sheet(data):
     def queue(r, c, val):
         key = (r, c)
         if key in queued:
-            print(f"⏭️ Cell {rowcol_to_a1(r,c)} already queued, skipping duplicate")
+            print(f"⏭️ Cell {rowcol_to_a1(r,c)} already queued, skipping")
             return
         queued.add(key)
         updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
@@ -561,7 +508,7 @@ def update_google_sheet(data):
             continue
 
         if not _has_any_nonzero(vals):
-            print(f"⏭️ PRS {st}: all values are 0/missing → SKIPPED")
+            print(f"⏭️ PRS {st}: all values 0/missing → SKIPPED")
             continue
 
         row = info["row"]
@@ -571,5 +518,4 @@ def update_google_sheet(data):
             except:
                 continue
 
-            if fld not in PRS_COLS:
-        
+            if fld
