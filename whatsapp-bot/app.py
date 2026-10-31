@@ -28,7 +28,7 @@ GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 GEMINI_MODEL = "gemini-2.5-flash"
 
 # ==============================================
-# STATION ALIASES
+# STATION ALIASES (AMGURI JN added)
 # ==============================================
 STATION_ALIASES = {
     "DBRT": ["DBRT", "DIBRUGARH TOWN", "DIBRUGARHTOWN"],
@@ -44,7 +44,7 @@ STATION_ALIASES = {
     "NAM": ["NAM", "NAMRUP"],
     "NHK": ["NHK", "NAHARKATIYA", "NAHARKATIA"],
     "FKG": ["FKG", "FURKATING", "FURKATING JN"],
-    "AGI": ["AGI", "AMGURI"],
+    "AGI": ["AGI", "AMGURI", "AMGURI JN", "AMGURI JUNCTION", "AMGURI TOWN"],
     "DJG": ["DJG", "DULIAJAN"],
     "LEDO": ["LEDO"],
     "MRG": ["MRG", "MARGHERITA"],
@@ -53,7 +53,7 @@ STATION_ALIASES = {
     "TTB": ["TTB", "TINSUKIA TOWN"],
     "BOJ": ["BOJ", "BORHAT"],
     "BFD": ["BFD", "BORDUBI ROAD"],
-    "SPK": ["SPK", "SAPEKHATI"],
+    "SPK": ["SPK", "SAPEKHATI", "SAPEKHATI JN"],
     "CHB": ["CHB", "CHABUA"],
     "SPTR": ["SPTR", "SILAPATHAR"],
     "DMC": ["DMC", "DHEMAJI"],
@@ -179,7 +179,7 @@ def load_credentials_dict():
     return None
 
 # ==============================================
-# GOOGLE SHEETS  (NO CACHE)
+# GOOGLE SHEETS
 # ==============================================
 def get_sheet():
     creds_dict = load_credentials_dict()
@@ -257,70 +257,173 @@ def resolve_station(name):
     return None
 
 # ==============================================
-# GEMINI
+# GEMINI — CRYSTAL CLEAR RULES
 # ==============================================
 def call_gemini(msg):
     if not GEMINI_API_KEY:
         print("❌ GEMINI_API_KEY missing!")
         return None
 
-    prompt = f"""You are an expert Indian Railway PRS & UTS data extraction engine.
-Extract numbers into STRICT JSON only. No explanation, no markdown.
+    prompt = f"""You are an expert Indian Railway PRS & UTS EARNINGS extraction engine.
+Read the ENTIRE message naturally, understand it, then extract numbers into STRICT JSON.
+No explanation, no markdown. Only pure JSON.
 
 VALID STATION CODES (use ONLY these exact short codes):
 {', '.join(ALL_STATIONS)}
 
-=== UNDERSTAND THE MESSAGE NATURALLY ===
-Messages can be in ANY format (WhatsApp, typed, mixed English/Hindi, broken lines, typos).
-Read the entire message and extract each numeric field for the mentioned station(s).
-A single message may contain both UTS and PRS sections — extract both separately.
-A single message may mention multiple stations — extract ALL of them.
+==========================================================
+STEP 1 — DETECT SECTION
+==========================================================
+Message may have TWO sections clearly labelled:
+- "PRS EARNINGS" / "PRS" → PRS section
+- "UTS EARNINGS" / "UTS" → UTS section
+Extract each section SEPARATELY into its own object.
+A station may appear in BOTH PRS and UTS.
+A message may mention MULTIPLE stations — extract ALL.
 
-=== MAPPING RULES (FOLLOW 100%) ===
+Station names may be written in any form:
+- "AMGURI JN", "AMGURI", "AMGURI JUNCTION", "AGI" → AGI
+- "NEW TINSUKIA", "NTSK" → NTSK
+- "SPK", "SAPEKHATI" → SPK
+→ ALWAYS output the SHORT CODE.
 
-PRS:
-- TKT / Tickets / No of Tickets / Ticket Count     → TKT
-- PASS / Passenger / Pax / Passenger Count         → PASS
-- C/T , C/TKT , Cancel Ticket , Cancelled Ticket   → C/TKT
-- C/P , C/PASS , Cancel Passenger                  → C/PASS
-- NET / AMT / Amount / Total / Net Amount / Net Cash → NET
-- REF / Refund / Cash REF / UPI REF / Refund Amt   → REF
-- Digi RF / Digital Refund / Online Refund         → REF
-- VCH / Voucher                                    → VCH
-- POS (only when the word "POS" is written)        → POS
-- QR / UPI / PhonePe / GPay / Paytm / Card / Digital / E-Cash / ECASH / any other digital payment → UPI
+==========================================================
+STEP 2 — PRS MAPPING (STRICT)
+==========================================================
+- TKT / Tickets / No of Tickets / Ticket Count             → TKT
+- PASS / Passenger / Pax / Passenger Count                 → PASS
+- C/TKT / C TKT / Cancel Ticket / Cancelled Ticket / CST   → C/TKT
+   (CST = Cancelled Ticket = C/TKT ONLY when it contains a NUMBER)
+- C/PASS / C PASS / Cancel Passenger / Cancelled Pass      → C/PASS
+- N/I / NI / N I                                           → C/TKT / C/PASS / etc. — only if NUMBER present, else OMIT
+- NETCASH / NET CASH / NET AMOUNT / AMOUNT / TOTAL / CASH  → NET
+   ⚠️ NET = NETCASH value ONLY. NEVER add UPI/DIGI to NET.
+- REFUND / REF / REFUND AMOUNT / CASH REFUND               → REF
+- DIGI REFUND / DIGI RF / DIGITAL REFUND / ONLINE REFUND   → REF
+- POS REFUND / POS RF                                      → REF
+- UPI REFUND / QR REFUND                                   → REF
+   ⚠️ ALL refunds (REFUND + DIGI REFUND + POS REFUND + UPI REFUND) → SUM them ALL into REF.
+   Example: REFUND 560 + DIGI REFUND 1055 + POS REFUND 0 + UPI REFUND 0 = REF 1615
+- DIGI CASH / DIGI / DIGITAL CASH / QR CASH / ONLINE CASH  → UPI
+- UPI / QR / PhonePe / GPay / Paytm / Card / E-Cash        → UPI
+- POS (only when NUMBER present)                            → POS
+- VCH / VOUCHER                                             → VCH
+- N/I AMOUNT / N I AMOUNT                                   → IGNORE (do not map anywhere)
 
-UTS:
-- TKT, PASS, NET (Amount), UPI, PF (Platform tickets), MR, MR AMT
+==========================================================
+STEP 3 — UTS MAPPING (STRICT)
+==========================================================
+- TKT / Tickets                                             → TKT
+- JOURNEY TKT / J TKT                                       → IGNORE (do NOT map to TKT)
+   ⚠️ If both "TKT" and "JOURNEY TKT" appear, use ONLY "TKT" value.
+- PASS / Passenger / Pax                                    → PASS
+- NETCASH / NET CASH / AMOUNT / NET AMOUNT / TOTAL          → NET
+   ⚠️ NET = NETCASH value ONLY. NEVER add UPI to NET.
+   ⚠️ If NETCASH=22290 and UPI=4360, then NET=22290 and UPI=4360. NEVER NET=26650.
+- UPI / QR / DIGI CASH / DIGITAL CASH / UPI CASH / ONLINE   → UPI
+- REFUND / DIGI REFUND / UPI REFUND / QR REFUND             → REF (SUM ALL refunds)
+- PF / P/TKT / PLATFORM TICKET                              → PF
+- P/PASS / PLATFORM PASS                                    → (ignore or PF as applicable — only if number present)
+- MR / MR AMT                                               → MR / MR AMT
+- CST / VOUCHER / RTC / N/I / N/I AMOUNT / N/I PASS         → IGNORE (unless NUMBER and clearly maps)
+- POS (only when NUMBER present)                            → POS (rare in UTS)
 
-=== CRITICAL RULES FOR MISSING NUMBERS (VERY IMPORTANT) ===
+==========================================================
+STEP 4 — CRITICAL RULES (NEVER BREAK)
+==========================================================
+1. NET = NETCASH value ONLY. NEVER add UPI/DIGI/POS to NET.
+2. ALL refunds (REFUND + DIGI REFUND + POS REFUND + UPI REFUND) → SUM them into REF.
+3. DIGI CASH / DIGITAL CASH / QR CASH → UPI, NOT NET.
+4. UPI CASH → UPI, NOT NET.
+5. If a field is mentioned BUT NO NUMBER is given (e.g. "POS----NIL", "VOUCHER-----NIL", "N/I----NIL", "CST --NIL", "RTC-----NIL"), OMIT that field completely. Do NOT put 0.
+6. Negative numbers are preserved with sign (e.g. -865 stays -865).
+7. If a field has no numeric value, OMIT it from the station object.
+8. "NIL" / "nil" / "-" / "NA" / "not available" = missing → OMIT.
+9. Do NOT invent numbers. Do NOT add fields together unless the rule explicitly says so (only REF refunds get summed).
+10. "RS 4000/-" → 4000. "RS 36390 /-" → 36390. Strip "RS", "/-", commas.
+11. Empty PRS or UTS section → output {{}} for that section.
+12. Return ONLY pure JSON.
 
-1. If a field is mentioned BUT NO NUMBER is given (e.g. "Net cash me amount ata wo nhi aya", "Net amount not received", "amount missing", "amount nahi aya"), then DO NOT include that field in the JSON at all. OMIT IT COMPLETELY. Do NOT put 0.
-2. Only include a field in JSON if you actually see a NUMERIC VALUE for it in the message.
-3. "Nil" / "NIL" / "-" / "not received" / "not available" / "nahi aya" → treat as MISSING → OMIT the field.
-4. Do NOT guess. Do NOT invent numbers. Only extract what is literally written.
-5. If a field is completely absent from the message, OMIT it.
+==========================================================
+STEP 5 — EXAMPLE (STUDY CAREFULLY)
+==========================================================
+Input:
+"AMGURI JN PRS EARNINGS FOR 30/10/26
+TKT-----16
+PASS-----21
+NETCASH---RS 4000/-
+REFUND----RS 560/-
+DIGI CASH-----RS 36390 /-
+DIGI REFUND---RS 1055 /-
+POS----NIL
+POS REFUND---NIL
+CST --NIL
+VOUCHER------NIL
+C/TKT-----03
+C/PASS----------03
+N/I----NIL
+N/I AMOUNT--RS NIL
+N/I PASS----------NIL
 
-=== NEGATIVE NUMBERS ===
-If you see a negative number (e.g. "AMOUNT :- -865", "Net: -500"), preserve the negative sign and output it as negative (e.g. -865). DO NOT convert to positive.
+AMGURI JN UTS EARNINGS FOR 30/10/26
+TKT--281
+JOURNEY TKT---278
+PASS----458
+NETCASH---RS 22290/-
+UPI CASH-----RS 4360 /-
+REFUND ---RS NIL/-
+UPI REFUND---RS NIL/-
+P/TKT-----NIL
+P/PASS----------NIL
+CST----NIL
+VOUCHER------NIL
+RTC-----NIL
+C/TKT-----NIL
+C/PASS----------NIL
+N/I----NIL
+N/I AMOUNT --RS NIL /-
+N/I PASS----------NIL"
 
-=== STATION RULES ===
-- Always return the official short code only
-- "BGND STATION" or "BGND" → BGND
-- "TEZU" → TEZU
-- Never confuse similar looking stations
-- If station is not clearly identifiable, skip that station entirely
+Correct Output:
+{{
+  "prs": {{
+    "AGI": {{
+      "TKT": 16,
+      "PASS": 21,
+      "NET": 4000,
+      "REF": 1615,
+      "UPI": 36390,
+      "C/TKT": 3,
+      "C/PASS": 3
+    }}
+  }},
+  "uts": {{
+    "AGI": {{
+      "TKT": 281,
+      "PASS": 458,
+      "NET": 22290,
+      "UPI": 4360
+    }}
+  }}
+}}
 
-=== OTHER RULES ===
-1. Any refund always goes to REF column
-2. Only explicit "POS" goes to POS column
-3. QR + all digital payments go to UPI
-4. Multiple stations in one message → extract all
-5. Return ONLY pure JSON — no explanation, no markdown
-6. If a section (PRS/UTS) is not present in the message, return empty object {{}} for it
-7. If a field has no numeric value in the message, OMIT it from the station object
+EXPLANATION of example:
+- PRS NET = 4000 (NETCASH only, NOT 4000+36390)
+- PRS UPI = 36390 (DIGI CASH → UPI)
+- PRS REF = 560 + 1055 = 1615 (REFUND + DIGI REFUND; POS REFUND NIL ignored)
+- PRS POS = omitted (NIL)
+- PRS C/TKT = 3, C/PASS = 3
+- PRS CST NIL → ignored (no CST field exists separately, maps to C/TKT but NIL so omit)
+- UTS TKT = 281 (JOURNEY TKT 278 IGNORED)
+- UTS NET = 22290 (NETCASH only, NOT 22290+4360)
+- UTS UPI = 4360 (UPI CASH → UPI)
+- UTS REFUND NIL → REF omitted
+- All NIL fields → omitted
 
-Required JSON format (only include fields that have actual numbers):
+==========================================================
+STEP 6 — JSON FORMAT
+==========================================================
+Required JSON format (only include fields with actual numbers):
 {{
   "prs": {{
     "STATION": {{"TKT":0, "PASS":0, "C/TKT":0, "C/PASS":0, "REF":0, "NET":0, "VCH":0, "POS":0, "UPI":0}}
@@ -330,28 +433,6 @@ Required JSON format (only include fields that have actual numbers):
   }}
 }}
 
-EXAMPLE (message where NET amount is missing):
-Input:
-"EARNINGS OF SPK
-PRS
-TKT:-8
-PASS:-9
-C/TKT:-1
-C/PASS:-3
-Ref-2340
-Digi RF -nil
-Net cash me amount ata wo nhi aya
-UPI:-11575"
-
-Correct Output:
-{{
-  "prs": {{
-    "SPK": {{"TKT":8, "PASS":9, "C/TKT":1, "C/PASS":3, "REF":2340, "UPI":11575}}
-  }},
-  "uts": {{}}
-}}
-(NOTICE: NET is OMITTED, Digi RF nil is OMITTED, no invented numbers)
-
 MESSAGE:
 {msg}
 
@@ -360,10 +441,10 @@ JSON ONLY:"""
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.05, "maxOutputTokens": 4096}
+        "generationConfig": {"temperature": 0.0, "maxOutputTokens": 4096}
     }
     try:
-        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
+        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=60)
         if res.status_code == 200:
             txt = res.json()['candidates'][0]['content']['parts'][0]['text']
             txt = re.sub(r'```json\n?', '', txt, flags=re.IGNORECASE)
@@ -412,13 +493,9 @@ def apply_post_processing(data, msg):
     return data
 
 # ==============================================
-# UPDATE SHEET  (STRICT — NO OVERWRITE, NO ADD, NO ZERO)
+# UPDATE SHEET
 # ==============================================
 def is_cell_empty(value):
-    """
-    Sirf truly blank / nil / null / '-' ko empty maano.
-    0 ko VALID value maano → overwrite mat karo.
-    """
     if value is None:
         return True
     s = str(value).strip().replace(",", "").replace(" ", "")
@@ -429,7 +506,6 @@ def is_cell_empty(value):
     return False
 
 def _has_any_nonzero(vals):
-    """Check karo ki dict me kam se kam ek non-zero number hai ya nahi."""
     if not vals:
         return False
     for v in vals.values():
@@ -441,16 +517,10 @@ def _has_any_nonzero(vals):
     return False
 
 def _is_field_allowed(v, fld):
-    """
-    Field-specific validation:
-    - NET: negative allowed (net cash negative ho sakta hai)
-    - Baaki sab: sirf positive (> 0)
-    - 0 always skip
-    """
     if v == 0:
         return False
     if fld in NEGATIVE_ALLOWED_FIELDS:
-        return True  # NET me negative bhi allowed
+        return True
     return v > 0
 
 def update_google_sheet(data):
@@ -458,7 +528,6 @@ def update_google_sheet(data):
     if not sheet:
         return False
 
-    # Always fresh read
     try:
         matrix = sheet.get_all_values()
     except Exception as e:
@@ -474,7 +543,7 @@ def update_google_sheet(data):
             return ""
 
     updates = []
-    queued = set()   # 🔒 duplicate queue prevention
+    queued = set()
 
     def queue(r, c, val):
         key = (r, c)
@@ -491,9 +560,8 @@ def update_google_sheet(data):
             print(f"⚠️ Station {st} not found in sheet map")
             continue
 
-        # 🔴 Agar saare fields 0/missing hain → station skip
         if not _has_any_nonzero(vals):
-            print(f"⏭️ PRS {st}: all values are 0/missing → SKIPPED (nothing to write)")
+            print(f"⏭️ PRS {st}: all values are 0/missing → SKIPPED")
             continue
 
         row = info["row"]
@@ -504,84 +572,4 @@ def update_google_sheet(data):
                 continue
 
             if fld not in PRS_COLS:
-                continue
-
-            # 🔴 Field-specific validation (NET negative allowed, baaki positive)
-            if not _is_field_allowed(v, fld):
-                print(f"⏭️ PRS {st} {fld}: value {v} not allowed (0 or wrong sign) → SKIPPED")
-                continue
-
-            col = PRS_COLS[fld]
-            existing_raw = get_current(row, col)
-
-            if is_cell_empty(existing_raw):
-                queue(row, col, v)
-                print(f"✅ PRS {st} {fld}: wrote {v} (was empty)")
-            else:
-                print(f"⏭️ PRS {st} {fld}: SKIPPED (already has → '{existing_raw}')")
-
-    # -------- UTS --------
-    for st, vals in data.get("uts", {}).items():
-        info = smap.get(st)
-        if not info:
-            continue
-
-        # 🔴 Agar saare fields 0/missing hain → station skip
-        if not _has_any_nonzero(vals):
-            print(f"⏭️ UTS {st}: all values are 0/missing → SKIPPED (nothing to write)")
-            continue
-
-        row = info["row"]
-        for fld, val in (vals or {}).items():
-            if fld == "PF" and not val:
-                continue
-            try:
-                v = float(val)
-            except:
-                continue
-
-            # 🔴 Field-specific validation (NET negative allowed, baaki positive)
-            if not _is_field_allowed(v, fld):
-                print(f"⏭️ UTS {st} {fld}: value {v} not allowed (0 or wrong sign) → SKIPPED")
-                continue
-
-            if info["nameCol"] == "C":
-                col = {"TKT":4,"PASS":5,"NET":9,"UPI":12,"PF":8,"MR":9,"MR AMT":10}.get(fld)
-            else:
-                col = UTS_COLS_NU.get(fld)
-
-            if not col:
-                continue
-
-            existing_raw = get_current(row, col)
-            if is_cell_empty(existing_raw):
-                queue(row, col, v)
-                print(f"✅ UTS {st} {fld}: wrote {v} (was empty)")
-            else:
-                print(f"⏭️ UTS {st} {fld}: SKIPPED (already has → '{existing_raw}')")
-
-    if not updates:
-        print("⚠️ No cells updated (all already filled or values were 0)")
-        return True
-
-    try:
-        sheet.batch_update(updates)
-        print(f"✅ Batch update successful ({len(updates)} cells)")
-        return True
-    except Exception as e:
-        print(f"❌ Batch update failed: {e}")
-        return False
-
-# ==============================================
-# WEBHOOK
-# ==============================================
-@app.route("/", methods=["GET"])
-def home():
-    return "Bot is running ✅", 200
-
-@app.route("/webhook", methods=["GET"])
-def webhook_verify():
-    mode = request.args.get("hub.mode")
-    token = request.args.get("hub.verify_token")
-    challenge = request.args.get("hub.challenge")
-    if mode == "sub
+        
