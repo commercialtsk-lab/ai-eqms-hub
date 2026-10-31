@@ -307,17 +307,22 @@ WhatsApp messages often have text pasted without spaces. Learn to SPLIT them:
 2. Full name ho ya code, dono same station hain:
    "AMGURI JN", "AMGURI", "AGI" → "AGI" | "NEW TINSUKIA" → "NTSK" | "TINSUKIA" → "TSK"
    "DIBRUGARH TOWN" → "DBRT" | "DIBRUGARH" → "DBRG" | "FURKATING JN" → "FKG"
+   "DHEMAJI" / "DMC" → "DMC"
 3. Agar station clearly identifiable nahi hai, us station ko skip karo.
 
 === STRICT PRS MAPPING (100% MANDATORY) ===
-- "NET" = SIRF "NETCASH" / "NET CASH" ki value. KABHI BHI Digi Cash / QR / UPI NET me ADD MAT KARO.
-- ALL digital cash (DIGI CASH, QR, UPI CASH, UPI, PhonePe, GPay, Paytm, Card) → "UPI". NET me NAHI.
+- "NET" = cash amount. Accept ANY of these labels:
+  NETCASH / NET CASH / NET / AMT / AMOUNT / CASH AMT / CASH AMOUNT
+  Example: "AMT- 5460" → NET=5460
+  Example: "NETCASH---RS 4000/-" → NET=4000
+- ALL digital cash (DIGI CASH, QR, UPI CASH, UPI, PhonePe, GPay, Paytm, Card, QR CASH) → "UPI". NET me NAHI.
+  Example: "QR- 8310" → UPI=8310
 - POS = sirf explicit "POS" likha ho tab. POS cash → POS column.
-- "REF" = SUM of ALL refunds (RFD + Cash Refund + Digi Refund + UPI Refund + POS Refund) — SAB ADD karo, ek REF number do.
+- "REF" = SUM of ALL refunds (RFD + Cash Refund + Digi Refund + UPI Refund + POS Refund + UPI REF) — SAB ADD karo, ek REF number do.
   Example: RFD 10175 + Digi RFD 23426 → "REF": 33601
 - T/TKT / TKT / Tickets → TKT ; T/Pass / PASS → PASS
-- C/TKT → C/TKT ; C/Pass → C/PASS
-- VCH / Voucher → VCH
+- C/TKT / C/T → C/TKT ; C/Pass / C/P → C/PASS
+- VCH / Voucher / VOU → VCH
 - J/AMOUNT (journey total amount) → IGNORE karo, kisi column me nahi jata
 
 === STRICT UTS MAPPING (100% MANDATORY) ===
@@ -333,7 +338,7 @@ WhatsApp messages often have text pasted without spaces. Learn to SPLIT them:
   "MR=14AMOUNT=40620" → "MR": 14, "MR AMT": 40620. YE MISS HONE NAHI CHAHIYE.
 
 === CRITICAL RULES FOR MISSING NUMBERS ===
-1. Field mentioned but NO NUMBER ("amount nahi aya", "nil", "-", "not received") → OMIT field completely. Do NOT put 0.
+1. Field mentioned but NO NUMBER ("amount nahi aya", "nil", "-", "not received", "Nil") → OMIT field completely. Do NOT put 0.
 2. Only include a field if a NUMERIC VALUE is literally written.
 3. Do NOT guess. Do NOT invent numbers.
 4. Agar section (PRS/UTS) message me nahi hai → empty object {{}}
@@ -426,6 +431,30 @@ Output:
 (NOTICE: "MR=14AMOUNT=40620" → MR=14 AUR MR AMT=40620 — DONO chahiye, 1440620 ya sirf 14 kabhi mat do.
 "RFD 10175 + Digi RFD 23426" → REF=33601. "P/TKT =319AOUNT =3190" → PF=319.
 "T/jenny=992" ignore (total T/TKT=1340 use karo). "J/AMOUNT =354500" ignore — kisi column me nahi jata. "E/CASH" → UPI.)
+
+=== EXAMPLE 4 (AMT + QR style — VERY COMMON) ===
+Input:
+"*PRS / DMC* 
+ *DATE- 31/10/2026* 
+ *PRS———-* 
+TKT - 29
+PASS-  40
+AMT-   5460 /-
+C/T - Nil
+C/P-  Nil
+REF- Nil
+VOU- Nil
+QR-   8310/-
+UPI REF - Nil"
+
+Output:
+{{
+  "prs": {{
+    "DMC": {{"TKT": 29, "PASS": 40, "NET": 5460, "UPI": 8310}}
+  }},
+  "uts": {{}}
+}}
+(NOTICE: AMT → NET. QR → UPI. VOU/Nil → omitted. C/T Nil → omitted.)
 
 MESSAGE:
 {msg}
@@ -545,18 +574,48 @@ def apply_fallback_fixes(data, msg):
 
         uts[st] = vals
 
-    # ---------- PRS fallback: REF total ----------
+    # ---------- PRS fallback ----------
     prs = data.get("prs") or {}
     if len(prs) == 1:
         st, vals = next(iter(prs.items()))
         vals = vals if isinstance(vals, dict) else {}
+
+        # NET from AMT / AMOUNT / NETCASH / NET CASH
+        if not vals.get("NET"):
+            m = re.search(r'\b(?:AMT|AMOUNT|NET\s*CASH|NETCASH|NET)\s*[=:\-–—]?\s*(?:RS\.?\s*)?([\d,]+)', up)
+            if m:
+                v = _to_float(m.group(1))
+                if v is not None:
+                    vals["NET"] = v
+                    print(f"🔧 Fallback: PRS {st} NET = {v} (AMT/AMOUNT/NETCASH se recover)")
+
+        # UPI from QR / DIGI CASH / UPI CASH / UPI
+        if not vals.get("UPI"):
+            m = re.search(r'\b(?:QR|DIGI\s*CASH|UPI\s*CASH|UPI)\s*[=:\-–—]?\s*(?:RS\.?\s*)?([\d,]+)', up)
+            if m:
+                v = _to_float(m.group(1))
+                if v is not None:
+                    vals["UPI"] = v
+                    print(f"🔧 Fallback: PRS {st} UPI = {v} (QR/DIGI/UPI se recover)")
+
+        # VCH from VOU / VOUCHER / VCH
+        if not vals.get("VCH"):
+            m = re.search(r'\b(?:VOU|VOUCHER|VCH)\s*[=:\-–—]?\s*(?:RS\.?\s*)?([\d,]+)', up)
+            if m:
+                v = _to_float(m.group(1))
+                if v is not None:
+                    vals["VCH"] = v
+                    print(f"🔧 Fallback: PRS {st} VCH = {v} (VOU se recover)")
+
+        # REF total
         if not vals.get("REF"):
-            amounts = re.findall(r'\b(?:RFD|REFUND|REF)\s*[=:]?\s*([\d,]+)', up)
+            amounts = re.findall(r'\b(?:RFD|REFUND|REF|UPI\s*REF)\s*[=:\-–—]?\s*([\d,]+)', up)
             nums = [_to_float(a) for a in amounts]
             nums = [n for n in nums if n is not None]
             if nums:
                 vals["REF"] = sum(nums)
                 print(f"🔧 Fallback: PRS {st} REF = {vals['REF']} (regex se recover, {len(nums)} refunds)")
+
         prs[st] = vals
 
     return data
