@@ -28,7 +28,7 @@ GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 GEMINI_MODEL = "gemini-2.5-flash"
 
 # ==============================================
-# STATION ALIASES  (code bhi, full name bhi, "JN" suffix ke sath bhi)
+# STATION ALIASES
 # ==============================================
 STATION_ALIASES = {
     "DBRT": ["DBRT", "DIBRUGARH TOWN", "DIBRUGARHTOWN"],
@@ -107,7 +107,7 @@ UTS_COLS_NU = {
 NEGATIVE_ALLOWED_FIELDS = {"NET"}
 
 # ==============================================
-# STATION RESOLUTION HELPERS  (FULL NAME / JN / STATION sab handle karta hai)
+# STATION RESOLUTION HELPERS
 # ==============================================
 SUFFIX_RE = re.compile(r'\b(STATION|STN|JUNCTION|JN|RAILWAY|RLY)\b')
 
@@ -124,10 +124,6 @@ for _code, _aliases in STATION_ALIASES.items():
         _alias_index[_norm_station(_a).replace(' ', '')] = _code
 
 def resolve_station(name):
-    """
-    Code ho ya full name, 'Jn'/'Station'/'Junction' ke sath ho — sab official code me resolve hota hai.
-    'AMGURI JN' -> AGI, 'Tinsukia' -> TSK, 'New Tinsukia Jn' -> NTSK
-    """
     if not name:
         return None
     original = str(name).upper().strip()
@@ -147,7 +143,6 @@ def resolve_station(name):
     if n2.replace(' ', '') in _alias_index:
         return _alias_index[n2.replace(' ', '')]
 
-    # substring fallback (len>=4)
     n2_clean = n2.replace(' ', '')
     for code, aliases in STATION_ALIASES.items():
         for alias in aliases:
@@ -299,42 +294,52 @@ Read the entire message and extract each numeric field for the mentioned station
 A single message may contain both UTS and PRS sections — extract both separately.
 A single message may mention multiple stations — extract ALL of them.
 
-=== STATION RULES (100% MANDATORY — READ CAREFULLY) ===
+=== GARBLED / SQUISHED TEXT RULES (VERY IMPORTANT) ===
+WhatsApp messages often have text pasted without spaces. Learn to SPLIT them:
+- "MR=14AMOUNT=40620" → MR=14 AND MR AMT=40620 (do NOT merge into one number)
+- "MR = 14 AMOUNT = 40620" → MR=14, MR AMT=40620
+- "P/TKT =319AOUNT =3190" → PF=319 (count). The amount after it (3190) is PF amount — IGNORE it, no field for it.
+- "MR=14AMOUNT=40620" me 1440620 jaisa koi number KABHI mat banao. Dono alag fields hain.
+- "T/jenny=992" ya "J/TKT" = JOURNEY tickets — ignore karo agar total "T/TKT" alag se diya hai.
+
+=== STATION RULES (100% MANDATORY) ===
 1. ALWAYS output the OFFICIAL SHORT CODE as the key — even if the message uses the FULL STATION NAME.
-2. Full name ho ya code, dono ko same station samjho:
-   "AMGURI JN", "AMGURI", "Amguri Junction", "AGI" → ALL mean "AGI"
-   "TINSUKIA" → "TSK" | "NEW TINSUKIA" → "NTSK" | "DIBRUGARH TOWN" → "DBRT" | "DIBRUGARH" → "DBRG"
-   "FURKATING JN" → "FKG" | "MARIANI" → "MXN" | "NORTH LAKHIMPUR" → "NLP" | "TEZU" → "TEZU"
+2. Full name ho ya code, dono same station hain:
+   "AMGURI JN", "AMGURI", "AGI" → "AGI" | "NEW TINSUKIA" → "NTSK" | "TINSUKIA" → "TSK"
+   "DIBRUGARH TOWN" → "DBRT" | "DIBRUGARH" → "DBRG" | "FURKATING JN" → "FKG"
 3. Agar station clearly identifiable nahi hai, us station ko skip karo.
 
 === STRICT PRS MAPPING (100% MANDATORY) ===
-- "NET" = SIRF "NETCASH" / "NET CASH" / "Net cash" ki value. KABHI BHI Digi Cash / QR / UPI / digital cash NET me ADD MAT KARO.
-- ALL digital cash amounts (DIGI CASH, Digi Cash, QR, UPI CASH, UPI, PhonePe, GPay, Paytm, Card, online payment) → "UPI" field me jaate hain. NET me NAHI.
-- POS = sirf tab jab message me explicitly "POS" likha ho. POS cash ko POS column me rakho (UPI me nahi).
-- "REF" = SUM of ALL refund amounts in the message. Cash Refund + Digi Refund + UPI Refund + POS Refund — SAB KO ADD KARO aur ek hi REF number do.
-  Example: REFUND 560 + DIGI REFUND 1055 → "REF": 1615
-- TKT / Tickets → TKT ; PASS / Passenger → PASS
-- C/TKT / Cancelled Ticket → C/TKT ; C/PASS / Cancelled Passenger → C/PASS
-- VOUCHER / VCH → VCH
-- N/I, CST, POS REFUND (as separate refund) → refunds ke total me include karo (POS refund REF me jata hai)
+- "NET" = SIRF "NETCASH" / "NET CASH" ki value. KABHI BHI Digi Cash / QR / UPI NET me ADD MAT KARO.
+- ALL digital cash (DIGI CASH, QR, UPI CASH, UPI, PhonePe, GPay, Paytm, Card) → "UPI". NET me NAHI.
+- POS = sirf explicit "POS" likha ho tab. POS cash → POS column.
+- "REF" = SUM of ALL refunds (RFD + Cash Refund + Digi Refund + UPI Refund + POS Refund) — SAB ADD karo, ek REF number do.
+  Example: RFD 10175 + Digi RFD 23426 → "REF": 33601
+- T/TKT / TKT / Tickets → TKT ; T/Pass / PASS → PASS
+- C/TKT → C/TKT ; C/Pass → C/PASS
+- VCH / Voucher → VCH
+- J/AMOUNT (journey total amount) → IGNORE karo, kisi column me nahi jata
 
 === STRICT UTS MAPPING (100% MANDATORY) ===
-- "NET" = SIRF "NETCASH" value. UPI CASH ya digital cash NET me ADD MAT KARO.
-  VERY IMPORTANT EXAMPLE: "NETCASH 22290" aur "UPI CASH 4360" → NET=22290, UPI=4360.
-  NET=26650 KABHI MAT DO (ye UPI add karne se aata hai — GALAT HAI).
-- UPI CASH / QR / digital → UPI
-- REF = sum of all refunds (UPI REFUND + REFUND etc. — jo NIL ho usko skip karo)
-- TKT = total tickets. Agar "TKT 281" aur "JOURNEY TKT 278" dono hain → TKT = 281 (total wala).
-- PASS = total passengers ; PF = platform tickets ; MR = miscellaneous receipt count ; MR AMT = MR amount
+- "NET" = SIRF "NETCASH" value. UPI/digital cash NET me ADD MAT KARO.
+  EXAMPLE: "NETCASH 22290" + "UPI CASH 4360" → NET=22290, UPI=4360. NET=26650 KABHI MAT DO.
+- E/CASH / ECASH / E-CASH / UPI CASH / QR / digital → "UPI"
+- REF = sum of all refunds (jo NIL ho usko skip)
+- T/TKT = total tickets (agla "T/jenny" / "J/TKT" diya ho to bhi T/TKT hi use karo)
+- T/Pass / PASS → PASS
+- PF (platform tickets) ke labels: "P/TKT", "PF", "PLT", "PLATFORM", ya sirf "M" / "m" → sab "PF" me count karo.
+  EXAMPLE: "P/TKT =319" → "PF": 319 ; line sirf "M = 40" hai aur context platform ka hai → "PF": 40
+- MR = miscellaneous receipt COUNT, MR AMT = miscellaneous receipt AMOUNT.
+  "MR=14AMOUNT=40620" → "MR": 14, "MR AMT": 40620. YE MISS HONE NAHI CHAHIYE.
 
 === CRITICAL RULES FOR MISSING NUMBERS ===
-1. Field mentioned but NO NUMBER (e.g. "amount nahi aya", "nil", "-", "not received") → OMIT that field completely. Do NOT put 0.
+1. Field mentioned but NO NUMBER ("amount nahi aya", "nil", "-", "not received") → OMIT field completely. Do NOT put 0.
 2. Only include a field if a NUMERIC VALUE is literally written.
 3. Do NOT guess. Do NOT invent numbers.
-4. Agar ek section (PRS/UTS) message me nahi hai → empty object {{}}
+4. Agar section (PRS/UTS) message me nahi hai → empty object {{}}
 
 === NEGATIVE NUMBERS ===
-Negative number dikhe (e.g. "AMOUNT :- -865") → negative sign preserve karo. Positive mat karo.
+Negative number dikhe (e.g. "AMOUNT :- -865") → negative sign preserve karo.
 
 Required JSON format (only include fields that have actual numbers):
 {{
@@ -346,7 +351,7 @@ Required JSON format (only include fields that have actual numbers):
   }}
 }}
 
-=== EXAMPLE 1 (refunds added, digi cash NOT added to net) ===
+=== EXAMPLE 1 (refunds added, digi cash NOT in net) ===
 Input:
 "EARNINGS OF SPK
 PRS
@@ -365,26 +370,14 @@ Output:
 }}
 (NOTICE: REF = 560 + 1055 = 1615. NET omitted kyunki number nahi tha.)
 
-=== EXAMPLE 2 (full name station + digi cash NOT in net) ===
+=== EXAMPLE 2 (full name station + UPI cash separate from net) ===
 Input:
 "AMGURI JN PRS EARNINGS FOR 30/10/26
-TKT-----16
-PASS-----21
-NETCASH---RS 4000/-
-REFUND----RS 560/-
-DIGI CASH-----RS 36390/-
-DIGI REFUND---RS 1055/-
-POS----NIL
-VOUCHER------NIL
-C/TKT-----03
-C/PASS----------03
-
+TKT-----16 PASS-----21 NETCASH---RS 4000/-
+REFUND----RS 560/- DIGI CASH-----RS 36390/- DIGI REFUND---RS 1055/-
+POS----NIL VOUCHER------NIL C/TKT-----03 C/PASS----------03
 AMGURI JN UTS EARNINGS FOR 30/10/26
-TKT--281
-PASS----458
-NETCASH---RS 22290/-
-UPI CASH-----RS 4360/-
-REFUND ---RS NIL/-"
+TKT--281 PASS----458 NETCASH---RS 22290/- UPI CASH-----RS 4360/- REFUND ---RS NIL/-"
 
 Output:
 {{
@@ -395,7 +388,44 @@ Output:
     "AGI": {{"TKT": 281, "PASS": 458, "NET": 22290, "UPI": 4360}}
   }}
 }}
-(NOTICE: "AMGURI JN" → "AGI". PRS NET=4000 sirf netcash, DIGI CASH 36390 → UPI. REF=560+1055=1615. UTS NET=22290 sirf netcash, UPI=4360 — 26650 BILKUL NAHI.)
+(NOTICE: "AMGURI JN" → "AGI". NET sirf netcash. UPI CASH → UPI, NET me nahi.)
+
+=== EXAMPLE 3 (squished garbled UTS — MOST IMPORTANT) ===
+Input:
+"Earnings Of NTSK
+Date:30/10/26
+PRS/NTSK
+T/TKT =116
+T/Pass =170
+C/TKT =11
+C/Pass =19
+RFD =10175
+Netcash =24330
+Digi CASH =90325
+Digi RFD =23426
+Vch=8390
+
+UTS/NTSK
+T/jenny=992
+T/TKT =1340
+T/Pass =1554
+P/TKT =319AOUNT =3190
+MR=14AMOUNT=40620
+E/CASH =70232
+J/AMOUNT =354500"
+
+Output:
+{{
+  "prs": {{
+    "NTSK": {{"TKT": 116, "PASS": 170, "C/TKT": 11, "C/PASS": 19, "REF": 33601, "NET": 24330, "UPI": 90325, "VCH": 8390}}
+  }},
+  "uts": {{
+    "NTSK": {{"TKT": 1340, "PASS": 1554, "PF": 319, "MR": 14, "MR AMT": 40620, "UPI": 70232}}
+  }}
+}}
+(NOTICE: "MR=14AMOUNT=40620" → MR=14 AUR MR AMT=40620 — DONO chahiye, 1440620 ya sirf 14 kabhi mat do.
+"RFD 10175 + Digi RFD 23426" → REF=33601. "P/TKT =319AOUNT =3190" → PF=319.
+"T/jenny=992" ignore (total T/TKT=1340 use karo). "J/AMOUNT =354500" ignore — kisi column me nahi jata. "E/CASH" → UPI.)
 
 MESSAGE:
 {msg}
@@ -453,6 +483,81 @@ def apply_post_processing(data, msg):
         else:
             print(f"❌ UTS Station skipped: {st}")
     data["uts"] = new_uts
+
+    return data
+
+# ==============================================
+# REGEX FALLBACK  (Gemini miss kare to bot khud fix kare)
+# ==============================================
+def _to_float(s):
+    try:
+        return float(str(s).replace(",", "").strip())
+    except:
+        return None
+
+def apply_fallback_fixes(data, msg):
+    """
+    Gemini squished text miss kar de to regex se fix.
+    SAFETY: sirf SINGLE-station section me apply hota hai — multi-station me
+    galat station me likhne ka risk hai, isliye waha Gemini pe trust.
+    """
+    if not data:
+        return data
+
+    up = " " + msg.upper() + " "
+
+    # ---------- UTS fallback ----------
+    uts = data.get("uts") or {}
+    if len(uts) == 1:
+        st, vals = next(iter(uts.items()))
+        vals = vals if isinstance(vals, dict) else {}
+
+        # MR + MR AMT: "MR=14AMOUNT=40620", "MR = 14 AMOUNT = 40620"
+        if not vals.get("MR AMT"):
+            m = re.search(r'\bMR\s*[=:]?\s*([\d,]+)\s*(?:A\s?M?O?U?N?T|AMT|AOUNT|AMNT)\s*[=:]?\s*([\d,]+)', up)
+            if m:
+                if not vals.get("MR"):
+                    v = _to_float(m.group(1))
+                    if v is not None:
+                        vals["MR"] = v
+                v = _to_float(m.group(2))
+                if v is not None:
+                    vals["MR AMT"] = v
+                    print(f"🔧 Fallback: {st} MR AMT = {v} (regex se recover)")
+
+        # PF: P/TKT, PF, PLT, PLATFORM
+        if not vals.get("PF"):
+            m = re.search(r'\b(?:P\s?/\s?TKT|PF|PLT|PLATFORM)\s*[=:]?\s*([\d,]+)', up)
+            if m:
+                v = _to_float(m.group(1))
+                if v is not None:
+                    vals["PF"] = v
+                    print(f"🔧 Fallback: {st} PF = {v} (regex se recover)")
+
+        # PF: lone "M" / "m" label → platform count
+        if not vals.get("PF"):
+            m = re.search(r'(?:^|\n)\s*M\s*[=:]\s*([\d,]+)', msg.upper())
+            if m:
+                v = _to_float(m.group(1))
+                if v is not None:
+                    vals["PF"] = v
+                    print(f"🔧 Fallback: {st} PF = {v} ('M' label se recover)")
+
+        uts[st] = vals
+
+    # ---------- PRS fallback: REF total ----------
+    prs = data.get("prs") or {}
+    if len(prs) == 1:
+        st, vals = next(iter(prs.items()))
+        vals = vals if isinstance(vals, dict) else {}
+        if not vals.get("REF"):
+            amounts = re.findall(r'\b(?:RFD|REFUND|REF)\s*[=:]?\s*([\d,]+)', up)
+            nums = [_to_float(a) for a in amounts]
+            nums = [n for n in nums if n is not None]
+            if nums:
+                vals["REF"] = sum(nums)
+                print(f"🔧 Fallback: PRS {st} REF = {vals['REF']} (regex se recover, {len(nums)} refunds)")
+        prs[st] = vals
 
     return data
 
@@ -575,7 +680,6 @@ def update_google_sheet(data):
                 continue
 
             if info["nameCol"] == "C":
-                # ⚠️ NOTE: NET aur MR yaha same column 9 par hain — apne sheet layout verify kar lena
                 col = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12, "PF": 8, "MR": 19, "MR AMT": 20}.get(fld)
             else:
                 col = UTS_COLS_NU.get(fld)
@@ -643,6 +747,7 @@ def webhook():
                         continue
 
                     data = apply_post_processing(data, text)
+                    data = apply_fallback_fixes(data, text)   # 🔧 regex safety net
                     print("✅ Final Data:", json.dumps(data))
                     update_google_sheet(data)
     except Exception as e:
