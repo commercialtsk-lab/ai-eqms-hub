@@ -358,7 +358,7 @@ Extract numbers into STRICT JSON only. No explanation, no markdown, no extra tex
 
 STATION RULES:
 1. Message me FULL NAME ho ya CODE — dono same station hain. Hamesha CODE se key banao.
-   "Borhat" → "BFD" | "New Tinsukia" / "ntsk" → "NTSK" | "Sibsagar Town" → "SRTN" | "Lakua" → "LXA"
+   "Borhat" → "BFD" | "New Tinsukia" / "ntsk" → "NTSK" | "Sibsagar Town" → "SRTN" | "Lakua" → "LXA" | "Naharkatia" → "NHK" | "Dhemaji" → "DMC"
 2. ROING aur TEZU sirf PRS stations hain — inke UTS data ko ignore karo.
 
 === OSOP SECTION (MOST IMPORTANT) ===
@@ -377,6 +377,13 @@ OSOP NATURAL UNDERSTANDING RULES (bahut important):
    - "Osop ntsk
      26-10-26
      Unit 5
+     Amt 600"
+   - "Osop dmc
+     26-10-26
+     Unit 5
+     Amt 600"
+   - "Osop nhk
+     26-10-26
      Amt 600"
    - "OSOP DBRG date 01/11/2026 unit 4 Amount 450"
    - "osop new tinsukia 26.10.26 400 unit5"
@@ -466,7 +473,36 @@ Output:
   ]
 }}
 
-=== EXAMPLE 3 (terse UTS) ===
+=== EXAMPLE 3 (your exact recent messages) ===
+Input:
+"Osop dmc
+26-10-26
+Unit 5
+Amt 600
+Osop nhk
+26-10-26
+Amt 600
+Osop ntsk
+26-10-26
+Amt 450
+Osop ntsk
+26-10-26
+Unit 5
+Amt 600"
+
+Output:
+{{
+  "prs": {{}},
+  "uts": {{}},
+  "osop": [
+    {{"station": "DMC", "date": "26-10-26", "unit": 5, "amount": 600}},
+    {{"station": "NHK", "date": "26-10-26", "amount": 600}},
+    {{"station": "NTSK", "date": "26-10-26", "amount": 450}},
+    {{"station": "NTSK", "date": "26-10-26", "unit": 5, "amount": 600}}
+  ]
+}}
+
+=== EXAMPLE 4 (terse UTS) ===
 Input:
 "Borhat uts
 Pass:-7
@@ -483,7 +519,7 @@ Output:
   "osop": []
 }}
 
-=== EXAMPLE 4 (normal PRS+UTS) ===
+=== EXAMPLE 5 (normal PRS+UTS) ===
 Input:
 "AMGURI JN PRS EARNINGS
 TKT-----16 PASS-----21 NETCASH---RS 4000/-
@@ -900,10 +936,9 @@ def update_osop_sheet(entries):
         print("❌ OSOP row 5 me koi date nahi mili")
         return False
 
-    # ========== FIXED: Stations ab row 6 se 50 tak scan honge ==========
-    # Aapke sheet me stations row 7 se 25 tak hain (Sibsagar Town row 22 pe)
+    # Stations row 6 se 50 tak (Sibsagar Town + dono New Tinsukia cover)
     station_rows = {}
-    for r in range(6, 50):  # <-- yahan pehle 21 tha, ab 50 kar diya
+    for r in range(6, 50):
         if r-1 >= len(matrix):
             break
         cell = matrix[r-1][1] if len(matrix[r-1]) > 1 else ""
