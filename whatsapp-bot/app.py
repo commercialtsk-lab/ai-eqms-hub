@@ -5,6 +5,7 @@ import time
 import base64
 import requests
 import gspread
+import threading
 from datetime import datetime
 from gspread.utils import rowcol_to_a1
 from google.oauth2.service_account import Credentials
@@ -27,6 +28,9 @@ GOOGLE_CREDENTIALS_B64 = os.environ.get("GOOGLE_CREDENTIALS_B64", "")
 GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 
 GEMINI_MODEL = "gemini-2.5-flash"
+
+# Lock for OSOP (prevents race when two NTSK messages come together)
+osop_lock = threading.Lock()
 
 # ==============================================
 # STATION ALIASES
@@ -739,150 +743,151 @@ def update_google_sheet(data):
     return True
 
 # ==============================================
-# OSOP UPDATE
+# OSOP UPDATE (with LOCK to prevent race)
 # ==============================================
 def update_osop_sheet(entries):
     if not entries:
         return True
 
-    sh = get_spreadsheet()
-    if not sh:
-        return False
+    with osop_lock:  # <-- yahan lock hai. Do NTSK messages ek saath aaye to serialize honge
+        sh = get_spreadsheet()
+        if not sh:
+            return False
 
-    try:
-        ws = sh.worksheet("OSOP")
-    except gspread.WorksheetNotFound:
-        print("❌ 'OSOP' worksheet nahi mili")
-        return False
-
-    try:
-        matrix = ws.get_all_values()
-    except Exception as e:
-        print(f"❌ OSOP read error: {e}")
-        return False
-
-    if len(matrix) < 6:
-        print("❌ OSOP sheet me kam se kam 6 rows chahiye")
-        return False
-
-    def get_current(r, c):
         try:
-            return matrix[r-1][c-1]
-        except:
-            return ""
+            ws = sh.worksheet("OSOP")
+        except gspread.WorksheetNotFound:
+            print("❌ 'OSOP' worksheet nahi mili")
+            return False
 
-    row5 = matrix[4] if len(matrix) > 4 else []
-    date_cols = {}
-    c = 3
-    max_cols = max(len(row5), 40)
-    while c <= max_cols:
-        raw = row5[c-1] if c-1 < len(row5) else ""
-        if not str(raw).strip() and c < len(row5):
-            raw = row5[c]
-        d = parse_date_flexible(raw)
-        if d:
-            date_cols[d] = (c, c + 1)
-            print(f"📅 OSOP date '{raw.strip()}' → {rowcol_to_a1(5, c)}:{rowcol_to_a1(5, c+1)}")
-        c += 2
+        try:
+            matrix = ws.get_all_values()
+        except Exception as e:
+            print(f"❌ OSOP read error: {e}")
+            return False
 
-    if not date_cols:
-        print("❌ OSOP row 5 me koi date nahi mili")
-        return False
+        if len(matrix) < 6:
+            print("❌ OSOP sheet me kam se kam 6 rows chahiye")
+            return False
 
-    station_rows = {}
-    for r in range(6, len(matrix) + 1):
-        if r-1 >= len(matrix):
-            break
-        cell = matrix[r-1][1] if len(matrix[r-1]) > 1 else ""
-        if not str(cell).strip():
-            continue
-        code = resolve_station(cell)
-        if code:
-            station_rows.setdefault(code, []).append(r)
-            print(f"📍 OSOP row {r}: '{str(cell).strip()}' → {code}")
+        def get_current(r, c):
+            try:
+                return matrix[r-1][c-1]
+            except:
+                return ""
 
-    if not station_rows:
-        print("❌ OSOP B column me koi station nahi mila")
-        return False
+        row5 = matrix[4] if len(matrix) > 4 else []
+        date_cols = {}
+        c = 3
+        max_cols = max(len(row5), 40)
+        while c <= max_cols:
+            raw = row5[c-1] if c-1 < len(row5) else ""
+            if not str(raw).strip() and c < len(row5):
+                raw = row5[c]
+            d = parse_date_flexible(raw)
+            if d:
+                date_cols[d] = (c, c + 1)
+                print(f"📅 OSOP date '{raw.strip()}' → {rowcol_to_a1(5, c)}:{rowcol_to_a1(5, c+1)}")
+            c += 2
 
-    updates = []
-    queued = set()
+        if not date_cols:
+            print("❌ OSOP row 5 me koi date nahi mili")
+            return False
 
-    def queue(r, c, val):
-        key = (r, c)
-        if key in queued:
-            return
-        queued.add(key)
-        updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
-
-    for e in entries:
-        if not isinstance(e, dict):
-            continue
-        code = e.get("station")
-        if code not in station_rows:
-            print(f"⚠️ OSOP: '{code}' sheet me nahi mila → skip")
-            continue
-
-        rows = station_rows[code]
-        d = parse_date_flexible(e.get("date"))
-        if not d or d not in date_cols:
-            print(f"⚠️ OSOP {code}: date '{e.get('date')}' match nahi hua → skip")
-            continue
-
-        camt, cunit = date_cols[d]
-
-        chosen_row = None
-        for r in rows:
-            if is_cell_empty(get_current(r, camt)) and is_cell_empty(get_current(r, cunit)):
-                chosen_row = r
+        station_rows = {}
+        for r in range(6, len(matrix) + 1):
+            if r-1 >= len(matrix):
                 break
-        if chosen_row is None:
+            cell = matrix[r-1][1] if len(matrix[r-1]) > 1 else ""
+            if not str(cell).strip():
+                continue
+            code = resolve_station(cell)
+            if code:
+                station_rows.setdefault(code, []).append(r)
+                print(f"📍 OSOP row {r}: '{str(cell).strip()}' → {code}")
+
+        if not station_rows:
+            print("❌ OSOP B column me koi station nahi mila")
+            return False
+
+        updates = []
+        queued = set()
+
+        def queue(r, c, val):
+            key = (r, c)
+            if key in queued:
+                return
+            queued.add(key)
+            updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
+
+        for e in entries:
+            if not isinstance(e, dict):
+                continue
+            code = e.get("station")
+            if code not in station_rows:
+                print(f"⚠️ OSOP: '{code}' sheet me nahi mila → skip")
+                continue
+
+            rows = station_rows[code]
+            d = parse_date_flexible(e.get("date"))
+            if not d or d not in date_cols:
+                print(f"⚠️ OSOP {code}: date '{e.get('date')}' match nahi hua → skip")
+                continue
+
+            camt, cunit = date_cols[d]
+
+            chosen_row = None
             for r in rows:
-                if is_cell_empty(get_current(r, camt)):
+                if is_cell_empty(get_current(r, camt)) and is_cell_empty(get_current(r, cunit)):
                     chosen_row = r
                     break
+            if chosen_row is None:
+                for r in rows:
+                    if is_cell_empty(get_current(r, camt)):
+                        chosen_row = r
+                        break
 
-        if chosen_row is None:
-            print(f"⚠️ OSOP {code} {d}: saari rows filled → skip")
-            continue
+            if chosen_row is None:
+                print(f"⚠️ OSOP {code} {d}: saari rows filled → skip")
+                continue
 
-        row = chosen_row
-        print(f"📌 OSOP {code} {d}: using row {row}")
+            row = chosen_row
+            print(f"📌 OSOP {code} {d}: using row {row}")
 
-        amt = _to_float(e.get("amount")) if e.get("amount") is not None else None
-        if amt is not None and amt != 0:
-            if is_cell_empty(get_current(row, camt)):
-                queue(row, camt, amt)
-                print(f"✅ OSOP {code} {d}: amount {amt} → {rowcol_to_a1(row, camt)}")
-            else:
-                print(f"⏭️ OSOP {code} {d}: amount already filled → NO OVERWRITE")
+            amt = _to_float(e.get("amount")) if e.get("amount") is not None else None
+            if amt is not None and amt != 0:
+                if is_cell_empty(get_current(row, camt)):
+                    queue(row, camt, amt)
+                    print(f"✅ OSOP {code} {d}: amount {amt} → {rowcol_to_a1(row, camt)}")
+                else:
+                    print(f"⏭️ OSOP {code} {d}: amount already filled → NO OVERWRITE")
 
-        unit = e.get("unit")
-        if unit is None or str(unit).strip() == "":
-            if amt is not None:
-                unit = int(amt // 100)
-                print(f"🔧 unit missing → amount//100 = {unit}")
-            else:
-                unit = None
+            unit = e.get("unit")
+            if unit is None or str(unit).strip() == "":
+                if amt is not None:
+                    unit = int(amt // 100)
+                    print(f"🔧 unit missing → amount//100 = {unit}")
+                else:
+                    unit = None
 
-        if unit is not None and str(unit).strip() != "":
-            if is_cell_empty(get_current(row, cunit)):
-                queue(row, cunit, unit)
-                print(f"✅ OSOP {code} {d}: unit {unit} → {rowcol_to_a1(row, cunit)}")
-            else:
-                print(f"⏭️ OSOP {code} {d}: unit already filled → NO OVERWRITE")
+            if unit is not None and str(unit).strip() != "":
+                if is_cell_empty(get_current(row, cunit)):
+                    queue(row, cunit, unit)
+                    print(f"✅ OSOP {code} {d}: unit {unit} → {rowcol_to_a1(row, cunit)}")
+                else:
+                    print(f"⏭️ OSOP {code} {d}: unit already filled → NO OVERWRITE")
 
-    if not updates:
-        print("⚠️ OSOP: kuch write nahi hua")
-        return True
+        if not updates:
+            print("⚠️ OSOP: kuch write nahi hua")
+            return True
 
-    try:
-        ws.batch_update(updates)
-        print(f"✅ OSOP batch update successful ({len(updates)} cells)")
-        return True
-    except Exception as e:
-        print(f"❌ OSOP batch update failed: {e}")
-        return False
+        try:
+            ws.batch_update(updates)
+            print(f"✅ OSOP batch update successful ({len(updates)} cells)")
+            return True
+        except Exception as e:
+            print(f"❌ OSOP batch update failed: {e}")
+            return False
 
 # ==============================================
 # WEBHOOK
