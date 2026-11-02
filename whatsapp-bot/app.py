@@ -32,11 +32,10 @@ GEMINI_MODEL = "gemini-2.5-flash"
 OSOP_LOCK_FILE = "/tmp/osop_update.lock"
 IWOW_LOCK_FILE = "/tmp/iwow_update.lock"
 
-# 24-hr grace window: yesterday's 22:00-23:59 placement accepted until this IST hour
 IWOW_GRACE_HOUR = int(os.environ.get("IWOW_GRACE_HOUR", "6"))
 
 # ==============================================
-# IST TIME HELPER (server is UTC, user is IST)
+# IST TIME HELPER
 # ==============================================
 def ist_now():
     try:
@@ -146,7 +145,6 @@ UTS_COLS_NU = {
     "MR": 19, "MR AMT": 20, "UPI": 21
 }
 
-# Columns for the UTS block whose station names are in column C
 UTS_COLS_C_BLOCK = {
     "PF": 8, "TKT": 4, "PASS": 5, "NET": 9,
     "MR": 19, "MR AMT": 20, "UPI": 12,
@@ -155,7 +153,7 @@ UTS_COLS_C_BLOCK = {
 NEGATIVE_ALLOWED_FIELDS = {"NET"}
 
 # ==============================================
-# STATION RESOLUTION HELPERS
+# STATION RESOLUTION
 # ==============================================
 SUFFIX_RE = re.compile(r'\b(STATION|STN|JUNCTION|JN|RAILWAY|RLY)\b')
 
@@ -309,13 +307,9 @@ def get_sheet():
 
 def get_station_map(sheet):
     """
-    Build a map: STATION_CODE -> {row, nameCol}
-    Reads from three blocks of the UTS&PRS sheet:
-      • B  column, rows 3..30   (PRS block)
-      • M  column, rows 31..47  (UTS NU block)
-      • C  column, rows 32..48  (UTS C-block)
-    Every name is normalized through resolve_station so 'JTTN' and
-    'Jorhat Town' both key to 'JTTN'.
+    Build STATION_CODE -> {row, nameCol} by scanning full sheet.
+    Reads column B (PRS), column M (UTS NU), column C (UTS C-block),
+    plus a full scan for any missed stations.
     """
     m = {}
     try:
@@ -332,36 +326,45 @@ def get_station_map(sheet):
             return
         code = resolve_station(txt)
         if not code:
-            code = txt.upper()
+            # Only fallback if it looks like a station code (short, no spaces)
+            up = txt.upper()
+            if len(up) <= 5 and re.match(r'^[A-Z0-9]+$', up):
+                code = up
         if code and code not in m:
             m[code] = {"row": row_1based, "nameCol": name_col}
 
-    # PRS block: col B (index 1), rows 3..30 → i = 2..29
+    # PRS block: col B (index 1)
     for i in range(2, min(30, len(all_values))):
         row = all_values[i]
         val = row[1] if len(row) > 1 else ""
         _add(val, i + 1, "B")
 
-    # UTS NU block: col M (index 12), rows 31..47 → i = 30..46
+    # UTS NU block: col M (index 12)
     for i in range(30, min(47, len(all_values))):
         row = all_values[i]
         val = row[12] if len(row) > 12 else ""
         _add(val, i + 1, "M")
 
-    # UTS C-block: col C (index 2), rows 32..48 → i = 31..47
+    # UTS C-block: col C (index 2)
     for i in range(31, min(48, len(all_values))):
         row = all_values[i]
         val = row[2] if len(row) > 2 else ""
         _add(val, i + 1, "C")
 
+    # Fallback full scan across columns B, C, M for any missed station codes
+    for i in range(2, len(all_values)):
+        row = all_values[i]
+        for idx, col_letter in ((1, "B"), (2, "C"), (12, "M")):
+            if len(row) > idx:
+                _add(row[idx], i + 1, col_letter)
+
     print(f"✅ Station map ready: {len(m)} stations")
     if m:
-        sample = list(m.items())[:8]
-        print(f"   sample → {sample}")
+        print(f"   sample → {list(m.items())[:8]}")
     return m
 
 # ==============================================
-# DATE PARSER
+# DATE / TIME PARSER
 # ==============================================
 def parse_date_flexible(s):
     if s is None:
@@ -439,87 +442,57 @@ def parse_time_flexible(s):
     return None
 
 # ==============================================
-# GEMINI
+# GEMINI — NATURAL PROMPT
 # ==============================================
 def call_gemini(msg):
     if not GEMINI_API_KEY:
         print("❌ GEMINI_API_KEY missing!")
         return None
 
-    station_legend = "\n".join(f'{c} = {STATION_OFFICIAL[c]}' for c in ALL_STATIONS)
+    station_legend = ", ".join(f'{c}={STATION_OFFICIAL[c]}' for c in ALL_STATIONS)
 
-    prompt = f"""You are an expert Indian Railway data extraction engine for PRS, UTS, OSOP and INWARD GOODS (IWOW).
+    prompt = f"""You are an expert Indian Railway data extractor for the Tinsukia Division.
 
-Extract into STRICT JSON only.
+You will receive free-form WhatsApp messages that may contain any combination of PRS, UTS, OSOP, and INWARD GOODS (IWOW) data. People write casually — Hinglish, abbreviations, typos, multi-line messages, shorthand, mixed formats. Read each message naturally, like a railway officer would, and extract the meaning. Trust your judgement.
 
-=== OFFICIAL STATIONS ===
+Return a single JSON object with exactly these keys (all four present, empty if nothing found):
+
+  "prs"   : {{ "<STATION_CODE>": {{ "TKT":num, "PASS":num, "C/TKT":num, "C/PASS":num, "REF":num, "NET":num, "VCH":num, "POS":num, "UPI":num }} }}
+  "uts"   : {{ "<STATION_CODE>": {{ "PF":num, "TKT":num, "PASS":num, "NET":num, "MR":num, "MR AMT":num, "UPI":num }} }}
+  "osop"  : [ {{ "station":"CODE", "date":"as written", "amount":num, "unit":num or omitted }} ]
+  "goods" : [ {{ "from_stn":"CODE", "to_stn":"CODE", "wagons":num, "placement_time":"HH:MM", "placement_date":"as written", "commodity":"UPPERCASE", "line":"just number", "party":"FULL NAME UPPERCASE", "wagon_type":"optional", "free_time":"optional" }} ]
+
+Official station codes (use these exact codes):
 {station_legend}
 
-=== OSOP ===
-If message has OSOP/Osop → put in "osop" array.
-Keep date string exactly as written. Omit unit if not given.
+Field meaning hints:
+- PRS = reserved ticketing (TKT, PASS, C/TKT, C/PASS, REF, NET, VCH, POS, UPI)
+- UTS = unreserved ticketing (PF, TKT, PASS, NET, MR, MR AMT, UPI)
+- OSOP = one-station-one-place monthly/quarterly revenue amounts
+- IWOW / INWARD GOODS = goods wagons placed (cement, coal, naphtha, containers etc.)
 
-=== PRS & UTS ===
-Multi-station bundle supported. Map fields correctly. Omit nil/nill.
+Guidelines (use judgement, don't over-apply):
+- Numbers are whole Rupees unless lakh/crore/L/Cr unit is present — then convert (e.g. "1.5 L" → 150000).
+- Dates: keep them as the user wrote them. Don't reformat.
+- Times: normalise to HH:MM 24-hour.
+- Commodity / party: UPPERCASE.
+- Line: just the digit (from "L/1" → "1").
+- If a field isn't present in the message, don't invent it — omit the key.
+- Only put stations you actually saw in the message — don't guess extra stations.
+- Ignore greetings or general chatter.
 
-PRS fields: TKT, PASS, C/TKT, C/PASS, REF, NET, VCH, POS, UPI
-UTS fields: PF, TKT, PASS, NET, MR, MR AMT, UPI
-
-=== INWARD GOODS / IWOW (VERY IMPORTANT) ===
-Any message about goods position, wagons placed, inward, rake, cement, coal, naphtha etc. → extract into "goods" array.
-
-Fields for each goods entry:
-- "from_stn" : originating station code (Ex-CCIB → CCIB)
-- "to_stn"   : destination station code (to JTTN → JTTN)
-- "wagons"   : number of wagons (11)
-- "placement_time" : time like "21:00" or "00:01" (24-hour)
-- "placement_date" : date string exactly as written (01.11.26)
-- "commodity": commodity in UPPERCASE (CEMENT)
-- "line"     : line number only (from L/1 → 1)
-- "party"    : full party name UPPERCASE
-- "wagon_type": if given use it, otherwise guess common type (BCN for cement, BTPN for oil, BCNA, BOXN etc.)
-- "free_time": if given use it, otherwise leave empty (code will calculate)
-
-Example input:
-"JTTN GOODS POSITION:
-11 wagons Ex-CCIB to JTTN (Cement) placed at 21:00 hrs on 01.11.26 on L/1.
-Party- M/s. Cement Corporation Ltd."
-
-Output:
-{{
-  "prs": {{}},
-  "uts": {{}},
-  "osop": [],
-  "goods": [
-    {{
-      "from_stn": "CCIB",
-      "to_stn": "JTTN",
-      "wagons": 11,
-      "placement_time": "21:00",
-      "placement_date": "01.11.26",
-      "commodity": "CEMENT",
-      "line": "1",
-      "party": "M/S CEMENT CORPORATION LTD",
-      "wagon_type": "BCN",
-      "free_time": ""
-    }}
-  ]
-}}
-
-Any format of goods/inward/rake/placement message must be understood.
+Return JSON only, no markdown fences.
 
 MESSAGE:
-{msg}
-
-JSON ONLY:"""
+\"\"\"{msg}\"\"\""""
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.05, "maxOutputTokens": 4096}
+        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 4096}
     }
     try:
-        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
+        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=45)
         if res.status_code == 200:
             txt = res.json()['candidates'][0]['content']['parts'][0]['text']
             txt = re.sub(r'```json\n?', '', txt, flags=re.IGNORECASE)
@@ -554,7 +527,7 @@ def apply_post_processing(data, msg):
             if code not in new_prs:
                 new_prs[code] = vals
         else:
-            print(f"❌ Station skipped: {st}")
+            print(f"❌ PRS station skipped: {st}")
     data["prs"] = new_prs
 
     new_uts = {}
@@ -564,7 +537,7 @@ def apply_post_processing(data, msg):
             if code not in new_uts:
                 new_uts[code] = vals
         else:
-            print(f"❌ UTS Station skipped: {st}")
+            print(f"❌ UTS station skipped: {st}")
     data["uts"] = new_uts
 
     new_osop = []
@@ -634,6 +607,12 @@ def _to_float(s):
 # UPDATE PRS / UTS
 # ==============================================
 def update_google_sheet(data):
+    prs = data.get("prs") or {}
+    uts = data.get("uts") or {}
+    if not prs and not uts:
+        print("ℹ️ No PRS/UTS data to write")
+        return True
+
     sheet = get_sheet()
     if not sheet:
         return False
@@ -645,7 +624,7 @@ def update_google_sheet(data):
 
     smap = get_station_map(sheet)
     if not smap:
-        print("❌ Station map empty — cannot update PRS/UTS")
+        print("❌ Station map empty")
         return False
 
     def get_current(r, c):
@@ -667,10 +646,10 @@ def update_google_sheet(data):
         updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
 
     # -------- PRS --------
-    for st, vals in data.get("prs", {}).items():
+    for st, vals in prs.items():
         info = smap.get(st)
         if not info:
-            print(f"⚠️ PRS station '{st}' not found in sheet map")
+            print(f"⚠️ PRS '{st}' not in sheet map")
             continue
         if not _has_any_nonzero(vals):
             print(f"⚠️ PRS {st}: all zero → skip")
@@ -680,13 +659,8 @@ def update_google_sheet(data):
             try:
                 v = float(val)
             except Exception:
-                print(f"⚠️ PRS {st} {fld}: non-numeric {val!r}")
                 continue
-            if fld not in PRS_COLS:
-                print(f"⚠️ PRS {st}: unknown field '{fld}'")
-                continue
-            if not _is_field_allowed(v, fld):
-                print(f"⚠️ PRS {st} {fld}: {v} not allowed")
+            if fld not in PRS_COLS or not _is_field_allowed(v, fld):
                 continue
             col = PRS_COLS[fld]
             current = get_current(row, col)
@@ -697,10 +671,10 @@ def update_google_sheet(data):
                 print(f"⏭️ PRS {st} {fld}: cell='{current}' → skip")
 
     # -------- UTS --------
-    for st, vals in data.get("uts", {}).items():
+    for st, vals in uts.items():
         info = smap.get(st)
         if not info:
-            print(f"⚠️ UTS station '{st}' not found in sheet map")
+            print(f"⚠️ UTS '{st}' not in sheet map")
             continue
         if not _has_any_nonzero(vals):
             print(f"⚠️ UTS {st}: all zero → skip")
@@ -714,10 +688,8 @@ def update_google_sheet(data):
             try:
                 v = float(val)
             except Exception:
-                print(f"⚠️ UTS {st} {fld}: non-numeric {val!r}")
                 continue
             if not _is_field_allowed(v, fld):
-                print(f"⚠️ UTS {st} {fld}: {v} not allowed")
                 continue
 
             if name_col == "C":
@@ -743,7 +715,7 @@ def update_google_sheet(data):
             print(f"❌ Batch update failed: {e}")
             return False
     else:
-        print("⚠️ No PRS/UTS updates queued")
+        print("⚠️ No PRS/UTS cells written")
     return True
 
 # ==============================================
@@ -849,7 +821,7 @@ def update_osop_sheet(entries):
     return True
 
 # ==============================================
-# IWOW UPDATE — 24-HOUR CLOCK LOGIC
+# IWOW UPDATE
 # ==============================================
 def _norm_str(v):
     return str(v or "").strip().upper()
@@ -895,7 +867,7 @@ def update_iwow_sheet(entries):
         tomorrow = today + timedelta(days=1)
         grace_cutoff = dt_time(IWOW_GRACE_HOUR, 0)
 
-        print(f"🕐 IWOW now (IST): {now.strftime('%Y-%m-%d %H:%M')} | today={today} | yesterday={yesterday} | start_row={start_row}")
+        print(f"🕐 IWOW now (IST): {now.strftime('%Y-%m-%d %H:%M')} | start_row={start_row}")
 
         updates = []
         current_row = start_row
@@ -916,7 +888,7 @@ def update_iwow_sheet(entries):
             ftime     = _norm_str(e.get("free_time"))
 
             if not to_stn or not pdate:
-                print(f"⏭️ Missing to_stn/date → skip | raw_date={e.get('placement_date')!r}")
+                print(f"⏭️ Missing to_stn/date → skip")
                 continue
 
             print(f"🔎 {from_stn}→{to_stn} | date={pdate} time={ptime} wagons={wagons}")
@@ -928,7 +900,7 @@ def update_iwow_sheet(entries):
                 if ptime:
                     placement_dt = datetime.combine(pdate, ptime)
                     if placement_dt > now + timedelta(minutes=5):
-                        reason = f"future time {placement_dt.strftime('%H:%M')} (now {now.strftime('%H:%M')})"
+                        reason = f"future time"
                     else:
                         accept = True
                 else:
@@ -937,25 +909,18 @@ def update_iwow_sheet(entries):
             elif pdate == yesterday:
                 if ptime and ptime >= dt_time(22, 0) and now.time() < grace_cutoff:
                     accept = True
-                    reason = f"yesterday 22:00+ within grace (now {now.strftime('%H:%M')})"
                 else:
-                    if not ptime:
-                        reason = "yesterday without time"
-                    elif ptime < dt_time(22, 0):
-                        reason = f"yesterday pre-22:00 ({ptime.strftime('%H:%M')})"
-                    else:
-                        reason = f"yesterday 22:00+ but grace cutoff passed"
+                    reason = "yesterday outside grace"
 
             elif pdate == tomorrow:
                 if ptime:
                     placement_dt = datetime.combine(pdate, ptime)
                     if placement_dt <= now + timedelta(minutes=30):
                         accept = True
-                        reason = "imminent tomorrow placement"
                     else:
-                        reason = f"tomorrow pre-report ({pdate})"
+                        reason = f"tomorrow pre-report"
                 else:
-                    reason = f"tomorrow pre-report ({pdate})"
+                    reason = f"tomorrow pre-report"
 
             else:
                 reason = f"date out of range ({pdate})"
@@ -964,7 +929,6 @@ def update_iwow_sheet(entries):
                 print(f"⏭️ Rejected ({reason})")
                 continue
 
-            # duplicate check
             pdate_str_check  = pdate.strftime("%d-%m-%Y")
             ptime_str_check  = ptime.strftime("%H:%M") if ptime else ""
             wagons_str_check = str(wagons or "").strip()
@@ -993,7 +957,7 @@ def update_iwow_sheet(entries):
                     break
 
             if is_duplicate:
-                print(f"⏭️ Duplicate (all fields match)")
+                print(f"⏭️ Duplicate")
                 continue
 
             try:
@@ -1045,21 +1009,13 @@ def update_iwow_sheet(entries):
                 if val is not None and str(val).strip() != "":
                     updates.append({"range": rowcol_to_a1(current_row, col), "values": [[val]]})
 
-            q(2, to_stn)
-            q(3, line)
-            q(4, wtype)
-            q(5, commodity)
-            q(6, wagons)
-            q(8, wagons)
-            q(9, arrival_time_str)
-            q(10, arrival_date_str)
-            q(11, ptime_str)
-            q(12, pdate_str)
-            q(18, ftime)
-            q(21, from_stn)
-            q(23, party)
+            q(2, to_stn); q(3, line); q(4, wtype); q(5, commodity)
+            q(6, wagons); q(8, wagons)
+            q(9, arrival_time_str); q(10, arrival_date_str)
+            q(11, ptime_str); q(12, pdate_str)
+            q(18, ftime); q(21, from_stn); q(23, party)
 
-            print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | {wagons} | {commodity} | {ftime} | {wtype}")
+            print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | {wagons} | {commodity}")
             current_row += 1
 
         if updates:
@@ -1147,7 +1103,7 @@ def startup_check():
     if sh:
         try:
             m = get_station_map(sh)
-            print(f"🗺️  Sample stations: {list(m.items())[:6]}")
+            print(f"🗺️  Sample stations: {list(m.items())[:8]}")
         except Exception as e:
             print(f"❌ Station map build failed: {e}")
     print("===================================")
