@@ -29,7 +29,7 @@ GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 GEMINI_MODEL = "gemini-2.5-flash"
 
 # ==============================================
-# STATION ALIASES  (Aapke exact names ke according)
+# STATION ALIASES
 # ==============================================
 STATION_ALIASES = {
     "DBRT": ["DBRT", "DIBRUGARH TOWN"],
@@ -192,6 +192,71 @@ def already_processed(msg_id):
     return False
 
 # ==============================================
+# WHATSAPP BUNDLE SPLITTER  ← MAIN FIX
+# ==============================================
+# WhatsApp copy-paste pattern:
+#   [02/11, 6:29 pm] Amit Kumar Srctc Control Tsk: REVENUE OF SPK
+#   ...
+#   [02/11, 6:39 pm] SS/BLMR: BLMR
+#   ...
+# Also handles:
+#   02/11/2026, 6:29 pm - Amit Kumar: ...
+#   [02/11/26, 18:29:15] Name: ...
+BUNDLE_HEADER_RE = re.compile(
+    r'^\s*'
+    r'(?:'
+        r'\[\d{1,2}/\d{1,2}(?:/\d{2,4})?,\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm|AM|PM)?\]'   # [02/11, 6:29 pm]
+        r'|'
+        r'\d{1,2}/\d{1,2}(?:/\d{2,4})?,\s*\d{1,2}:\d{2}(?::\d{2})?\s*(?:am|pm|AM|PM)?\s*[-–]'  # 02/11/2026, 6:29 pm -
+    )
+    r'\s*[^:\n]{1,80}:'   # Sender name:
+    ,
+    re.MULTILINE
+)
+
+def split_whatsapp_bundle(text):
+    """
+    Split a WhatsApp copy-paste bundle into individual message bodies.
+    Returns list of (sender, body) tuples.
+    If no headers found → returns [(None, text)].
+    """
+    if not text:
+        return []
+
+    lines = text.splitlines()
+    header_positions = []
+    for i, line in enumerate(lines):
+        if BUNDLE_HEADER_RE.match(line):
+            header_positions.append(i)
+
+    if not header_positions:
+        # No WhatsApp headers — treat entire text as one message
+        return [(None, text.strip())]
+
+    segments = []
+    for idx, start in enumerate(header_positions):
+        end = header_positions[idx + 1] if idx + 1 < len(header_positions) else len(lines)
+        header = lines[start]
+        m = BUNDLE_HEADER_RE.match(header)
+        sender = None
+        if m:
+            sender_part = header.split("]")[-1] if "]" in header else header.split(" - ")[-1]
+            if ":" in sender_part:
+                sender = sender_part.split(":")[0].strip()
+        body_lines = lines[start + 1:end]
+        # Skip first line (contains header + first content after colon)
+        first_content = ""
+        if ":" in header:
+            first_content = header.split(":", 1)[1].strip()
+        body = "\n".join(([first_content] if first_content else []) + body_lines).strip()
+        if body:
+            segments.append((sender, body))
+
+    if not segments:
+        return [(None, text.strip())]
+    return segments
+
+# ==============================================
 # CREDENTIALS
 # ==============================================
 def _fix_newlines_inside_strings(s: str) -> str:
@@ -249,7 +314,7 @@ def load_credentials_dict():
     return None
 
 # ==============================================
-# GOOGLE SHEETS  (NO CACHE)
+# GOOGLE SHEETS
 # ==============================================
 def get_spreadsheet():
     creds_dict = load_credentials_dict()
@@ -310,7 +375,7 @@ def get_station_map(sheet):
     return m
 
 # ==============================================
-# DATE PARSER (koi bhi format)
+# DATE PARSER
 # ==============================================
 def parse_date_flexible(s):
     if s is None:
@@ -358,7 +423,7 @@ Extract numbers into STRICT JSON only. No explanation, no markdown, no extra tex
 
 STATION RULES:
 1. Message me FULL NAME ho ya CODE — dono same station hain. Hamesha CODE se key banao.
-   "Borhat" → "BFD" | "New Tinsukia" / "ntsk" → "NTSK" | "Sibsagar Town" → "SRTN" | "Lakua" → "LXA" | "Naharkatia" → "NHK" | "Dhemaji" → "DMC"
+   "Borhat" → "BFD" | "New Tinsukia" / "ntsk" → "NTSK" | "Sibsagar Town" → "SRTN" | "Lakua" → "LXA" | "Naharkatia" → "NHK" | "Dhemaji" → "DMC" | "Bhalukmara" → "BLMR"
 2. ROING aur TEZU sirf PRS stations hain — inke UTS data ko ignore karo.
 
 === OSOP SECTION (MOST IMPORTANT) ===
@@ -367,48 +432,28 @@ Agar message me "OSOP" / "Osop" / "osop" / "O.S.O.P" kahin bhi aaya hai to uske 
 Har OSOP entry ke 4 possible fields:
 - "station" : OFFICIAL CODE (full name aaye to code banao)
 - "date"    : EXACTLY jaisa message me likha hai — CONVERT MAT KARO.
-              "26-10-26", "26/10/2026", "1 Nov 26", "01.11.26", "26.10.26" — jo bhi string aayi hai wahi rakho.
 - "unit"    : unit number agar diya ho. Agar unit bilkul nahi diya → "unit" key OMIT karo.
 - "amount"  : amount number (zaroori)
 
-OSOP NATURAL UNDERSTANDING RULES (bahut important):
+OSOP RULES:
 1. Format bilkul free hai. Multi-line, single-line, mixed order, missing labels — sab samajh lo.
-2. Examples of formats you MUST handle:
-   - "Osop ntsk
-     26-10-26
-     Unit 5
-     Amt 600"
-   - "Osop dmc
-     26-10-26
-     Unit 5
-     Amt 600"
-   - "Osop nhk
-     26-10-26
-     Amt 600"
-   - "OSOP DBRG date 01/11/2026 unit 4 Amount 450"
-   - "osop new tinsukia 26.10.26 400 unit5"
-   - "OSOP - Sibsagar Town - 1-11-26 - Rs 520"
-   - "DBRG osop amt 620 dt 01/11/2026"
-   - "Osop
-     NTSK
-     26-10-26
-     400
-     unit 5"
-   - "OSOP NTSK 26/10/26 Amt:400 U:5"
-   - "OSOP SRTN 26-10-26 Amt 520"
-3. Ek message me multiple OSOP entries ho sakte hain → ARRAY me MESSAGE KE ORDER me rakho. Order mat badlo.
-4. Same station multiple baar aa sakta hai (different unit) → alag-alag array items banao.
-5. Amount me "Rs", "/-", "," , "rupees" hata do, sirf number rakho.
-6. Agar message me OSOP nahi hai → "osop": [] do.
+2. Ek message me multiple OSOP entries ho sakte hain → ARRAY me MESSAGE KE ORDER me rakho.
+3. Same station multiple baar aa sakta hai (different unit) → alag-alag array items banao.
+4. Amount me "Rs", "/-", ",", "rupees" hata do, sirf number rakho.
+5. Agar message me OSOP nahi hai → "osop": [] do.
 
 === GARBLED / SQUISHED TEXT ===
 - "MR=14AMOUNT=40620" → MR=14 AND MR AMT=40620
 - "Pass:-7" → PASS = 7
-- "T/jenny=992" ignore if total T/TKT already given
 
-=== SHORT / TERSE MESSAGES ===
-Agar sirf "UTS" likha hai aur PRS nahi → saara data UTS me daalo.
-Tkt→TKT, Pass→PASS, Cash/Netcash→NET, Ecash/UPI/QR→UPI
+=== SHORT / TERSE MESSAGES (VERY IMPORTANT) ===
+Agar message me sirf station ka naam + TKT/PASS/Amount/Cash type data hai aur PRS/UTS ka label NAHI hai:
+→ Saara data UTS me daalo (TKT, PASS, NET)
+Example: "BLMR Date -02/11/2026 TKT -7 Pass -13 Amount -590/-"
+Output: "uts": {{"BLMR": {{"TKT": 7, "PASS": 13, "NET": 590}}}}
+
+Agar "UTS" likha hai aur PRS nahi → saara data UTS me daalo.
+Agar "PRS" likha hai aur UTS nahi → saara data PRS me daalo.
 
 === STRICT PRS MAPPING ===
 - NET = sirf Netcash. Digi/QR/UPI kabhi NET me mat daalo.
@@ -419,7 +464,7 @@ Tkt→TKT, Pass→PASS, Cash/Netcash→NET, Ecash/UPI/QR→UPI
 === STRICT UTS MAPPING ===
 - NET = sirf Netcash. UPI alag.
 - PF labels: P/TKT, PF, PLT, PLATFORM, ya sirf "M"
-- MR + MR AMT alag-alag. Squished text bhi samajh lo.
+- MR + MR AMT alag-alag.
 
 === MISSING / NEGATIVE ===
 - "nil", "-", "nahi aya" → field OMIT (0 mat do)
@@ -438,56 +483,62 @@ Required JSON format:
   ]
 }}
 
-=== EXAMPLE 1 (multi-line OSOP - exact style) ===
+=== EXAMPLE 1 (terse message no label) ===
+Input:
+"BLMR 
+Date -02/11/2026
+TKT -7
+Pass -13
+Amount -590/-"
+
+Output:
+{{
+  "prs": {{}},
+  "uts": {{
+    "BLMR": {{"TKT": 7, "PASS": 13, "NET": 590}}
+  }},
+  "osop": []
+}}
+
+=== EXAMPLE 2 (full PRS+UTS like SPK) ===
+Input:
+"REVENUE OF SPK
+DATE.     02/11/2026
+UTS
+TKT                  294
+PASS.               476
+NET CASH.    17720
+E CASH.          2110
+
+PRS
+TKT                 20
+PASS.              58
+NET CASH.    40665
+UPI QR .          12580
+REFUND.          1335
+C/TKT.              1
+C/PASS.           1
+Digi ref:-            nill  .."
+
+Output:
+{{
+  "prs": {{
+    "SPK": {{"TKT": 20, "PASS": 58, "NET": 40665, "UPI": 12580, "REF": 1335, "C/TKT": 1, "C/PASS": 1}}
+  }},
+  "uts": {{
+    "SPK": {{"TKT": 294, "PASS": 476, "NET": 17720, "UPI": 2110}}
+  }},
+  "osop": []
+}}
+
+=== EXAMPLE 3 (multi-line OSOP) ===
 Input:
 "Osop ntsk
-26-10-26
-Unit 5
-Amt 600"
-
-Output:
-{{
-  "prs": {{}},
-  "uts": {{}},
-  "osop": [
-    {{"station": "NTSK", "date": "26-10-26", "unit": 5, "amount": 600}}
-  ]
-}}
-
-=== EXAMPLE 2 (multiple OSOP, order preserve) ===
-Input:
-"OSOP DBRG, date 01/11/2026, unit 4, Amount 450
-OSOP DBRG date 01/11/2026 amount 620
-OSOP New Tinsukia 01/11/26 unit 2 amount 300
-OSOP Sibsagar Town 01/11/26 Amt 520"
-
-Output:
-{{
-  "prs": {{}},
-  "uts": {{}},
-  "osop": [
-    {{"station": "DBRG", "date": "01/11/2026", "unit": 4, "amount": 450}},
-    {{"station": "DBRG", "date": "01/11/2026", "amount": 620}},
-    {{"station": "NTSK", "date": "01/11/26", "unit": 2, "amount": 300}},
-    {{"station": "SRTN", "date": "01/11/26", "amount": 520}}
-  ]
-}}
-
-=== EXAMPLE 3 (your exact recent messages) ===
-Input:
-"Osop dmc
 26-10-26
 Unit 5
 Amt 600
 Osop nhk
 26-10-26
-Amt 600
-Osop ntsk
-26-10-26
-Amt 450
-Osop ntsk
-26-10-26
-Unit 5
 Amt 600"
 
 Output:
@@ -495,48 +546,9 @@ Output:
   "prs": {{}},
   "uts": {{}},
   "osop": [
-    {{"station": "DMC", "date": "26-10-26", "unit": 5, "amount": 600}},
-    {{"station": "NHK", "date": "26-10-26", "amount": 600}},
-    {{"station": "NTSK", "date": "26-10-26", "amount": 450}},
-    {{"station": "NTSK", "date": "26-10-26", "unit": 5, "amount": 600}}
+    {{"station": "NTSK", "date": "26-10-26", "unit": 5, "amount": 600}},
+    {{"station": "NHK", "date": "26-10-26", "amount": 600}}
   ]
-}}
-
-=== EXAMPLE 4 (terse UTS) ===
-Input:
-"Borhat uts
-Pass:-7
-Tkt:-5
-Cash:-385
-Ecash:-190"
-
-Output:
-{{
-  "prs": {{}},
-  "uts": {{
-    "BFD": {{"TKT": 5, "PASS": 7, "NET": 385, "UPI": 190}}
-  }},
-  "osop": []
-}}
-
-=== EXAMPLE 5 (normal PRS+UTS) ===
-Input:
-"AMGURI JN PRS EARNINGS
-TKT-----16 PASS-----21 NETCASH---RS 4000/-
-REFUND----RS 560/- DIGI CASH-----RS 36390/- DIGI REFUND---RS 1055/-
-POS----NIL VOUCHER------NIL C/TKT-----03 C/PASS----------03
-AMGURI JN UTS EARNINGS
-TKT--281 PASS----458 NETCASH---RS 22290/- UPI CASH-----RS 4360/-"
-
-Output:
-{{
-  "prs": {{
-    "AGI": {{"TKT": 16, "PASS": 21, "NET": 4000, "REF": 1615, "UPI": 36390, "C/TKT": 3, "C/PASS": 3}}
-  }},
-  "uts": {{
-    "AGI": {{"TKT": 281, "PASS": 458, "NET": 22290, "UPI": 4360}}
-  }},
-  "osop": []
 }}
 
 MESSAGE:
@@ -599,7 +611,6 @@ def apply_post_processing(data, msg):
             print(f"❌ UTS Station skipped: {st}")
     data["uts"] = new_uts
 
-    # OSOP stations resolve (ORDER preserve)
     new_osop = []
     for e in data.get("osop", []):
         if not isinstance(e, dict):
@@ -612,7 +623,6 @@ def apply_post_processing(data, msg):
             print(f"❌ OSOP entry skipped (station not resolved): {e}")
     data["osop"] = new_osop
 
-    # UTS-only message me PRS me data aa gaya to move karo
     up = msg.upper()
     if "UTS" in up and "PRS" not in up.replace("UTS", ""):
         if not data["uts"] and len(data["prs"]) == 1:
@@ -625,7 +635,7 @@ def apply_post_processing(data, msg):
     return data
 
 # ==============================================
-# REGEX FALLBACK (safety net only)
+# REGEX FALLBACK
 # ==============================================
 def _to_float(s):
     try:
@@ -652,20 +662,12 @@ def apply_fallback_fixes(data, msg):
     prs = data.get("prs") or {}
     osop = data.get("osop") or []
 
-    # ---------- OSOP fallback (only if Gemini missed) ----------
     if "OSOP" in up and not osop:
         lines = msg.splitlines()
         for i, line in enumerate(lines):
             if re.search(r'\bOSOP\b', line, re.IGNORECASE):
                 window = "\n".join(lines[i:i+8])
                 st_m = re.search(r'OSOP\s*[:\-]?\s*([A-Za-z][A-Za-z0-9 .]+)', window, re.IGNORECASE)
-                if not st_m:
-                    for j in range(i+1, min(i+4, len(lines))):
-                        cand = lines[j].strip()
-                        if cand and re.match(r'^[A-Za-z][A-Za-z0-9 .]+$', cand) and not re.search(r'\d{2}', cand):
-                            st_m = re.match(r'^([A-Za-z][A-Za-z0-9 .]+)$', cand)
-                            if st_m:
-                                break
                 if not st_m:
                     continue
                 code = resolve_station(st_m.group(1))
@@ -693,7 +695,6 @@ def apply_fallback_fixes(data, msg):
 
         data["osop"] = osop
 
-    # Terse UTS fallback
     if not uts and "UTS" in up and "NETCASH" not in up.replace(" ", "") and "DIGI" not in up:
         found = _find_stations_in_text(msg)
         if len(found) == 1:
@@ -712,7 +713,6 @@ def apply_fallback_fixes(data, msg):
                 data["uts"] = {st: vals}
                 print(f"🔧 Terse UTS fallback: {st} → {vals}")
 
-    # MR + MR AMT squished
     if len(data.get("uts") or {}) == 1:
         st, vals = next(iter(data["uts"].items()))
         vals = vals if isinstance(vals, dict) else {}
@@ -735,7 +735,6 @@ def apply_fallback_fixes(data, msg):
                     print(f"🔧 Fallback: {st} PF = {v}")
         data["uts"][st] = vals
 
-    # PRS REF total
     if len(data.get("prs") or {}) == 1:
         st, vals = next(iter(data["prs"].items()))
         vals = vals if isinstance(vals, dict) else {}
@@ -750,7 +749,7 @@ def apply_fallback_fixes(data, msg):
     return data
 
 # ==============================================
-# UPDATE SHEET  (STRICT — NO OVERWRITE, NO ADD, NO ZERO)
+# UPDATE SHEET
 # ==============================================
 def is_cell_empty(value):
     if value is None:
@@ -810,7 +809,6 @@ def update_google_sheet(data):
         queued.add(key)
         updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
 
-    # -------- PRS --------
     for st, vals in data.get("prs", {}).items():
         info = smap.get(st)
         if not info:
@@ -840,7 +838,6 @@ def update_google_sheet(data):
             else:
                 print(f"⏭️ PRS {st} {fld}: SKIPPED (already has '{existing_raw}')")
 
-    # -------- UTS --------
     for st, vals in data.get("uts", {}).items():
         info = smap.get(st)
         if not info:
@@ -917,7 +914,6 @@ def update_osop_sheet(entries):
         except:
             return ""
 
-    # ---------- Row 5 me dates hain (har 2 column ka pair) ----------
     row5 = matrix[4] if len(matrix) > 4 else []
     date_cols = {}
     c = 3
@@ -936,7 +932,6 @@ def update_osop_sheet(entries):
         print("❌ OSOP row 5 me koi date nahi mili")
         return False
 
-    # Stations row 6 se 50 tak (Sibsagar Town + dono New Tinsukia cover)
     station_rows = {}
     for r in range(6, 50):
         if r-1 >= len(matrix):
@@ -966,7 +961,6 @@ def update_osop_sheet(entries):
         queued.add(key)
         updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
 
-    # Process entries in exact message order
     for e in entries:
         if not isinstance(e, dict):
             continue
@@ -987,7 +981,6 @@ def update_osop_sheet(entries):
 
         camt, cunit = date_cols[d]
 
-        # First completely empty slot for this date
         chosen_row = None
         for r in rows:
             if is_cell_empty(get_current(r, camt)) and is_cell_empty(get_current(r, cunit)):
@@ -1006,7 +999,6 @@ def update_osop_sheet(entries):
         row = chosen_row
         print(f"📌 OSOP {code} {d}: using row {row}")
 
-        # ---- Amount (ONLY if empty) ----
         amt = _to_float(e.get("amount")) if e.get("amount") is not None else None
         if amt is not None and amt != 0:
             if is_cell_empty(get_current(row, camt)):
@@ -1015,7 +1007,6 @@ def update_osop_sheet(entries):
             else:
                 print(f"⏭️ OSOP {code} {d}: amount already filled → NO OVERWRITE")
 
-        # ---- Unit ----
         unit = e.get("unit")
         if unit is None or str(unit).strip() == "":
             if amt is not None:
@@ -1043,6 +1034,31 @@ def update_osop_sheet(entries):
     except Exception as e:
         print(f"❌ OSOP batch update failed: {e}")
         return False
+
+# ==============================================
+# PROCESS ONE MESSAGE
+# ==============================================
+def process_single_message(text, sender=None):
+    """Process a single (already split) message."""
+    if not text or not text.strip():
+        return
+
+    label = f" [{sender}]" if sender else ""
+    print(f"\n📩 Processing message{label}:\n{text[:400]}...")
+
+    data = call_gemini(text)
+    if not data:
+        print("❌ Extraction failed")
+        return
+
+    data = apply_post_processing(data, text)
+    data = apply_fallback_fixes(data, text)
+    print("✅ Final Data:", json.dumps(data))
+
+    update_google_sheet(data)
+
+    if data.get("osop"):
+        update_osop_sheet(data["osop"])
 
 # ==============================================
 # WEBHOOK
@@ -1074,24 +1090,25 @@ def webhook():
                     if already_processed(msg_id):
                         continue
 
-                    text = (m.get("text") or {}).get("body", "").strip()
-                    if not text:
+                    full_text = (m.get("text") or {}).get("body", "").strip()
+                    if not full_text:
                         continue
 
-                    print(f"\n📩 Incoming:\n{text[:400]}...")
-                    data = call_gemini(text)
-                    if not data:
-                        print("❌ Extraction failed")
-                        continue
+                    print(f"\n📦 Incoming raw message (len={len(full_text)})")
 
-                    data = apply_post_processing(data, text)
-                    data = apply_fallback_fixes(data, text)
-                    print("✅ Final Data:", json.dumps(data))
+                    # *** SPLIT WHATSAPP BUNDLE INTO INDIVIDUAL MESSAGES ***
+                    segments = split_whatsapp_bundle(full_text)
+                    print(f"✂️ Split into {len(segments)} sub-message(s)")
 
-                    update_google_sheet(data)
+                    for idx, (sender, body) in enumerate(segments):
+                        if not body or not body.strip():
+                            continue
+                        print(f"\n--- Sub-message {idx+1}/{len(segments)} ---")
+                        try:
+                            process_single_message(body, sender)
+                        except Exception as e:
+                            print(f"❌ Error in sub-message {idx+1}: {e}")
 
-                    if data.get("osop"):
-                        update_osop_sheet(data["osop"])
     except Exception as e:
         print(f"❌ Webhook Error: {e}")
 
