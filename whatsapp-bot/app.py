@@ -377,7 +377,7 @@ OSOP NATURAL UNDERSTANDING RULES (bahut important):
    - "Osop ntsk
      26-10-26
      Unit 5
-     Amt 400"
+     Amt 600"
    - "OSOP DBRG date 01/11/2026 unit 4 Amount 450"
    - "osop new tinsukia 26.10.26 400 unit5"
    - "OSOP - Sibsagar Town - 1-11-26 - Rs 520"
@@ -388,6 +388,7 @@ OSOP NATURAL UNDERSTANDING RULES (bahut important):
      400
      unit 5"
    - "OSOP NTSK 26/10/26 Amt:400 U:5"
+   - "OSOP SRTN 26-10-26 Amt 520"
 3. Ek message me multiple OSOP entries ho sakte hain → ARRAY me MESSAGE KE ORDER me rakho. Order mat badlo.
 4. Same station multiple baar aa sakta hai (different unit) → alag-alag array items banao.
 5. Amount me "Rs", "/-", "," , "rupees" hata do, sirf number rakho.
@@ -430,19 +431,19 @@ Required JSON format:
   ]
 }}
 
-=== EXAMPLE 1 (multi-line OSOP) ===
+=== EXAMPLE 1 (multi-line OSOP - exact style) ===
 Input:
 "Osop ntsk
 26-10-26
 Unit 5
-Amt 400"
+Amt 600"
 
 Output:
 {{
   "prs": {{}},
   "uts": {{}},
   "osop": [
-    {{"station": "NTSK", "date": "26-10-26", "unit": 5, "amount": 400}}
+    {{"station": "NTSK", "date": "26-10-26", "unit": 5, "amount": 600}}
   ]
 }}
 
@@ -950,17 +951,17 @@ def update_osop_sheet(entries):
 
         camt, cunit = date_cols[d]
 
-        # First available empty row for this station + date
+        # First completely empty slot for this date
         chosen_row = None
         for r in rows:
-            amt_cell = get_current(r, camt)
-            unit_cell = get_current(r, cunit)
-            if is_cell_empty(amt_cell) and is_cell_empty(unit_cell):
+            if is_cell_empty(get_current(r, camt)) and is_cell_empty(get_current(r, cunit)):
                 chosen_row = r
                 break
-            if is_cell_empty(amt_cell):
-                chosen_row = r
-                break
+        if chosen_row is None:
+            for r in rows:
+                if is_cell_empty(get_current(r, camt)):
+                    chosen_row = r
+                    break
 
         if chosen_row is None:
             print(f"⚠️ OSOP {code} {d}: saari rows filled hain → skip entry {e}")
@@ -969,20 +970,18 @@ def update_osop_sheet(entries):
         row = chosen_row
         print(f"📌 OSOP {code} {d}: using row {row}")
 
-        # ---- Amount ----
+        # ---- Amount (ONLY if empty) ----
         amt = _to_float(e.get("amount")) if e.get("amount") is not None else None
         if amt is not None and amt != 0:
-            ex = get_current(row, camt)
-            if is_cell_empty(ex):
+            if is_cell_empty(get_current(row, camt)):
                 queue(row, camt, amt)
                 print(f"✅ OSOP {code} {d}: amount {amt} → {rowcol_to_a1(row, camt)}")
             else:
-                print(f"⏭️ OSOP {code} {d}: amount cell already '{ex}' → NO OVERWRITE")
+                print(f"⏭️ OSOP {code} {d}: amount already filled → NO OVERWRITE")
 
         # ---- Unit ----
         unit = e.get("unit")
         if unit is None or str(unit).strip() == "":
-            # Unit missing → amount // 100
             if amt is not None:
                 unit = int(amt // 100)
                 print(f"🔧 OSOP {code} {d}: unit missing → calculated amount//100 = {unit}")
@@ -991,15 +990,14 @@ def update_osop_sheet(entries):
                 unit = None
 
         if unit is not None and str(unit).strip() != "":
-            ex = get_current(row, cunit)
-            if is_cell_empty(ex):
+            if is_cell_empty(get_current(row, cunit)):
                 queue(row, cunit, unit)
                 print(f"✅ OSOP {code} {d}: unit {unit} → {rowcol_to_a1(row, cunit)}")
             else:
-                print(f"⏭️ OSOP {code} {d}: unit cell already '{ex}' → NO OVERWRITE")
+                print(f"⏭️ OSOP {code} {d}: unit already filled → NO OVERWRITE")
 
     if not updates:
-        print("⚠️ OSOP: kuch write nahi hua")
+        print("⚠️ OSOP: kuch write nahi hua (cells already filled ya date/station match nahi hua)")
         return True
 
     try:
