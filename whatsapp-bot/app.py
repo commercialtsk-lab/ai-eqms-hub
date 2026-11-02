@@ -5,7 +5,7 @@ import time
 import base64
 import requests
 import gspread
-import threading
+import fcntl
 from datetime import datetime
 from gspread.utils import rowcol_to_a1
 from google.oauth2.service_account import Credentials
@@ -29,8 +29,8 @@ GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 
 GEMINI_MODEL = "gemini-2.5-flash"
 
-# Lock for OSOP (prevents race when two NTSK messages come together)
-osop_lock = threading.Lock()
+# File-based lock (works across multiple workers)
+OSOP_LOCK_FILE = "/tmp/osop_update.lock"
 
 # ==============================================
 # STATION ALIASES
@@ -743,13 +743,17 @@ def update_google_sheet(data):
     return True
 
 # ==============================================
-# OSOP UPDATE (with LOCK to prevent race)
+# OSOP UPDATE - 100% FIXED WITH FILE LOCK
 # ==============================================
 def update_osop_sheet(entries):
     if not entries:
         return True
 
-    with osop_lock:  # <-- yahan lock hai. Do NTSK messages ek saath aaye to serialize honge
+    # File lock - cross process / multi-worker safe
+    lock_fd = open(OSOP_LOCK_FILE, "w")
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)  # exclusive lock, waits if another process is updating
+
         sh = get_spreadsheet()
         if not sh:
             return False
@@ -836,6 +840,7 @@ def update_osop_sheet(entries):
 
             camt, cunit = date_cols[d]
 
+            # Always pick the FIRST empty slot (lowest row number)
             chosen_row = None
             for r in rows:
                 if is_cell_empty(get_current(r, camt)) and is_cell_empty(get_current(r, cunit)):
@@ -888,6 +893,10 @@ def update_osop_sheet(entries):
         except Exception as e:
             print(f"❌ OSOP batch update failed: {e}")
             return False
+
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        lock_fd.close()
 
 # ==============================================
 # WEBHOOK
