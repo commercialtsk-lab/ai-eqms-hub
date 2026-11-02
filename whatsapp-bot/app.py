@@ -900,9 +900,10 @@ def update_osop_sheet(entries):
         print("❌ OSOP row 5 me koi date nahi mili")
         return False
 
-    # B6:B20 stations (duplicates allowed – order preserved)
+    # ========== FIXED: Stations ab row 6 se 50 tak scan honge ==========
+    # Aapke sheet me stations row 7 se 25 tak hain (Sibsagar Town row 22 pe)
     station_rows = {}
-    for r in range(6, 21):
+    for r in range(6, 50):  # <-- yahan pehle 21 tha, ab 50 kar diya
         if r-1 >= len(matrix):
             break
         cell = matrix[r-1][1] if len(matrix[r-1]) > 1 else ""
@@ -916,7 +917,7 @@ def update_osop_sheet(entries):
             print(f"⚠️ OSOP row {r}: '{cell}' resolve nahi hua")
 
     if not station_rows:
-        print("❌ OSOP B6:B20 me koi station nahi mila")
+        print("❌ OSOP B column me koi station nahi mila")
         return False
 
     updates = []
