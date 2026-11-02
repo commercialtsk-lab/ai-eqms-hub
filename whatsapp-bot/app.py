@@ -132,7 +132,7 @@ STATION_OFFICIAL = {
     "ROING": "Roing", "TEZU": "Tezu", "CGF": "Chariali",
     "DMGN": "Dhamalgaon Jn", "TNGN": "Tangani", "NSBG": "New Sisiborgaon",
     "KOWN": "Khowang", "NCH": "Nakachari", "CMA": "Cinnamara",
-    "KXL": "Kamarbandha Ali", "BBGN": "Barua Bamungaon", "BLMR": "Bhalukmara",
+    "KXL": "KXL", "BBGN": "Barua Bamungaon", "BLMR": "Bhalukmara",
     "NMGY": "Numaligarh", "KRHT": "Kharahat", "CCIB": "CCIB"
 }
 
@@ -144,6 +144,12 @@ PRS_COLS = {
 UTS_COLS_NU = {
     "PF": 14, "TKT": 16, "PASS": 17, "NET": 18,
     "MR": 19, "MR AMT": 20, "UPI": 21
+}
+
+# Columns for the UTS block whose station names are in column C
+UTS_COLS_C_BLOCK = {
+    "PF": 8, "TKT": 4, "PASS": 5, "NET": 9,
+    "MR": 19, "MR AMT": 20, "UPI": 12,
 }
 
 NEGATIVE_ALLOWED_FIELDS = {"NET"}
@@ -302,6 +308,15 @@ def get_sheet():
         return None
 
 def get_station_map(sheet):
+    """
+    Build a map: STATION_CODE -> {row, nameCol}
+    Reads from three blocks of the UTS&PRS sheet:
+      • B  column, rows 3..30   (PRS block)
+      • M  column, rows 31..47  (UTS NU block)
+      • C  column, rows 32..48  (UTS C-block)
+    Every name is normalized through resolve_station so 'JTTN' and
+    'Jorhat Town' both key to 'JTTN'.
+    """
     m = {}
     try:
         all_values = sheet.get_all_values()
@@ -309,26 +324,44 @@ def get_station_map(sheet):
         print(f"❌ Error reading sheet: {e}")
         return m
 
+    print(f"📋 Sheet has {len(all_values)} rows")
+
+    def _add(raw, row_1based, name_col):
+        txt = str(raw).strip()
+        if not txt:
+            return
+        code = resolve_station(txt)
+        if not code:
+            code = txt.upper()
+        if code and code not in m:
+            m[code] = {"row": row_1based, "nameCol": name_col}
+
+    # PRS block: col B (index 1), rows 3..30 → i = 2..29
     for i in range(2, min(30, len(all_values))):
-        val = all_values[i][1] if len(all_values[i]) > 1 else ""
-        if val:
-            m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "B"})
+        row = all_values[i]
+        val = row[1] if len(row) > 1 else ""
+        _add(val, i + 1, "B")
 
+    # UTS NU block: col M (index 12), rows 31..47 → i = 30..46
     for i in range(30, min(47, len(all_values))):
-        val = all_values[i][12] if len(all_values[i]) > 12 else ""
-        if val:
-            m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "M"})
+        row = all_values[i]
+        val = row[12] if len(row) > 12 else ""
+        _add(val, i + 1, "M")
 
+    # UTS C-block: col C (index 2), rows 32..48 → i = 31..47
     for i in range(31, min(48, len(all_values))):
-        val = all_values[i][2] if len(all_values[i]) > 2 else ""
-        if val:
-            m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "C"})
+        row = all_values[i]
+        val = row[2] if len(row) > 2 else ""
+        _add(val, i + 1, "C")
 
     print(f"✅ Station map ready: {len(m)} stations")
+    if m:
+        sample = list(m.items())[:8]
+        print(f"   sample → {sample}")
     return m
 
 # ==============================================
-# DATE PARSER (robust)
+# DATE PARSER
 # ==============================================
 def parse_date_flexible(s):
     if s is None:
@@ -382,9 +415,6 @@ def parse_date_flexible(s):
     print(f"⚠️ Could not parse date: '{s}'")
     return None
 
-# ==============================================
-# TIME PARSER (24-hour clock)
-# ==============================================
 def parse_time_flexible(s):
     if s is None:
         return None
@@ -432,6 +462,9 @@ Keep date string exactly as written. Omit unit if not given.
 === PRS & UTS ===
 Multi-station bundle supported. Map fields correctly. Omit nil/nill.
 
+PRS fields: TKT, PASS, C/TKT, C/PASS, REF, NET, VCH, POS, UPI
+UTS fields: PF, TKT, PASS, NET, MR, MR AMT, UPI
+
 === INWARD GOODS / IWOW (VERY IMPORTANT) ===
 Any message about goods position, wagons placed, inward, rake, cement, coal, naphtha etc. → extract into "goods" array.
 
@@ -450,7 +483,6 @@ Fields for each goods entry:
 Example input:
 "JTTN GOODS POSITION:
 11 wagons Ex-CCIB to JTTN (Cement) placed at 21:00 hrs on 01.11.26 on L/1.
-
 Party- M/s. Cement Corporation Ltd."
 
 Output:
@@ -558,22 +590,11 @@ def apply_post_processing(data, msg):
 
     return data
 
-# ==============================================
-# REGEX FALLBACK
-# ==============================================
-def _to_float(s):
-    try:
-        return float(str(s).replace(",", "").strip())
-    except:
-        return None
-
 def apply_fallback_fixes(data, msg):
-    if not data:
-        return data
-    return data
+    return data if data else data
 
 # ==============================================
-# UPDATE SHEETS (PRS/UTS)
+# SHEET HELPERS
 # ==============================================
 def is_cell_empty(value):
     if value is None:
@@ -592,7 +613,7 @@ def _has_any_nonzero(vals):
         try:
             if float(v) != 0:
                 return True
-        except:
+        except Exception:
             continue
     return False
 
@@ -603,6 +624,15 @@ def _is_field_allowed(v, fld):
         return True
     return v > 0
 
+def _to_float(s):
+    try:
+        return float(str(s).replace(",", "").strip())
+    except Exception:
+        return None
+
+# ==============================================
+# UPDATE PRS / UTS
+# ==============================================
 def update_google_sheet(data):
     sheet = get_sheet()
     if not sheet:
@@ -614,11 +644,16 @@ def update_google_sheet(data):
         return False
 
     smap = get_station_map(sheet)
+    if not smap:
+        print("❌ Station map empty — cannot update PRS/UTS")
+        return False
 
     def get_current(r, c):
         try:
-            return matrix[r-1][c-1]
-        except:
+            if r - 1 < len(matrix) and c - 1 < len(matrix[r - 1]):
+                return matrix[r - 1][c - 1]
+            return ""
+        except Exception:
             return ""
 
     updates = []
@@ -631,46 +666,74 @@ def update_google_sheet(data):
         queued.add(key)
         updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
 
+    # -------- PRS --------
     for st, vals in data.get("prs", {}).items():
         info = smap.get(st)
-        if not info or not _has_any_nonzero(vals):
+        if not info:
+            print(f"⚠️ PRS station '{st}' not found in sheet map")
+            continue
+        if not _has_any_nonzero(vals):
+            print(f"⚠️ PRS {st}: all zero → skip")
             continue
         row = info["row"]
         for fld, val in (vals or {}).items():
             try:
                 v = float(val)
-            except:
+            except Exception:
+                print(f"⚠️ PRS {st} {fld}: non-numeric {val!r}")
                 continue
-            if fld not in PRS_COLS or not _is_field_allowed(v, fld):
+            if fld not in PRS_COLS:
+                print(f"⚠️ PRS {st}: unknown field '{fld}'")
+                continue
+            if not _is_field_allowed(v, fld):
+                print(f"⚠️ PRS {st} {fld}: {v} not allowed")
                 continue
             col = PRS_COLS[fld]
-            if is_cell_empty(get_current(row, col)):
+            current = get_current(row, col)
+            if is_cell_empty(current):
                 queue(row, col, v)
-                print(f"✅ PRS {st} {fld}: wrote {v}")
+                print(f"✅ PRS {st} {fld}: row={row} col={col} → {v}")
+            else:
+                print(f"⏭️ PRS {st} {fld}: cell='{current}' → skip")
 
+    # -------- UTS --------
     for st, vals in data.get("uts", {}).items():
         info = smap.get(st)
-        if not info or not _has_any_nonzero(vals):
+        if not info:
+            print(f"⚠️ UTS station '{st}' not found in sheet map")
+            continue
+        if not _has_any_nonzero(vals):
+            print(f"⚠️ UTS {st}: all zero → skip")
             continue
         row = info["row"]
+        name_col = info["nameCol"]
+
         for fld, val in (vals or {}).items():
             if fld == "PF" and not val:
                 continue
             try:
                 v = float(val)
-            except:
+            except Exception:
+                print(f"⚠️ UTS {st} {fld}: non-numeric {val!r}")
                 continue
             if not _is_field_allowed(v, fld):
+                print(f"⚠️ UTS {st} {fld}: {v} not allowed")
                 continue
-            if info["nameCol"] == "C":
-                col = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12, "PF": 8, "MR": 19, "MR AMT": 20}.get(fld)
+
+            if name_col == "C":
+                col = UTS_COLS_C_BLOCK.get(fld)
             else:
                 col = UTS_COLS_NU.get(fld)
+
             if not col:
+                print(f"⚠️ UTS {st}: no column for '{fld}' (nameCol={name_col})")
                 continue
-            if is_cell_empty(get_current(row, col)):
+            current = get_current(row, col)
+            if is_cell_empty(current):
                 queue(row, col, v)
-                print(f"✅ UTS {st} {fld}: wrote {v}")
+                print(f"✅ UTS {st} {fld}: row={row} col={col} → {v}")
+            else:
+                print(f"⏭️ UTS {st} {fld}: cell='{current}' → skip")
 
     if updates:
         try:
@@ -679,6 +742,8 @@ def update_google_sheet(data):
         except Exception as e:
             print(f"❌ Batch update failed: {e}")
             return False
+    else:
+        print("⚠️ No PRS/UTS updates queued")
     return True
 
 # ==============================================
@@ -695,7 +760,7 @@ def update_osop_sheet(entries):
             return False
         try:
             ws = sh.worksheet("OSOP")
-        except:
+        except Exception:
             print("❌ 'OSOP' worksheet nahi mili")
             return False
 
@@ -704,15 +769,15 @@ def update_osop_sheet(entries):
                 continue
             try:
                 matrix = ws.get_all_values()
-            except:
+            except Exception:
                 continue
             if len(matrix) < 6:
                 continue
 
             def get_current(r, c):
                 try:
-                    return matrix[r-1][c-1]
-                except:
+                    return matrix[r - 1][c - 1]
+                except Exception:
                     return ""
 
             row5 = matrix[4] if len(matrix) > 4 else []
@@ -720,7 +785,7 @@ def update_osop_sheet(entries):
             c = 3
             max_cols = max(len(row5), 40)
             while c <= max_cols:
-                raw = row5[c-1] if c-1 < len(row5) else ""
+                raw = row5[c - 1] if c - 1 < len(row5) else ""
                 if not str(raw).strip() and c < len(row5):
                     raw = row5[c]
                 d = parse_date_flexible(raw)
@@ -730,9 +795,9 @@ def update_osop_sheet(entries):
 
             station_rows = {}
             for r in range(6, len(matrix) + 1):
-                if r-1 >= len(matrix):
+                if r - 1 >= len(matrix):
                     break
-                cell = matrix[r-1][1] if len(matrix[r-1]) > 1 else ""
+                cell = matrix[r - 1][1] if len(matrix[r - 1]) > 1 else ""
                 if not str(cell).strip():
                     continue
                 code = resolve_station(cell)
@@ -784,7 +849,7 @@ def update_osop_sheet(entries):
     return True
 
 # ==============================================
-# IWOW UPDATE — 24-HOUR CLOCK LOGIC (FINAL)
+# IWOW UPDATE — 24-HOUR CLOCK LOGIC
 # ==============================================
 def _norm_str(v):
     return str(v or "").strip().upper()
@@ -813,7 +878,6 @@ def update_iwow_sheet(entries):
             print(f"❌ IWOW read error: {e}")
             return False
 
-        # First empty row (col B) from row 4 onwards
         start_row = 4
         for r in range(4, len(matrix) + 50):
             bval = ""
@@ -825,12 +889,11 @@ def update_iwow_sheet(entries):
         else:
             start_row = len(matrix) + 1
 
-        # 24-hour clock — all comparisons in IST
         now = ist_now()
         today = now.date()
         yesterday = today - timedelta(days=1)
         tomorrow = today + timedelta(days=1)
-        grace_cutoff = dt_time(IWOW_GRACE_HOUR, 0)  # default 06:00
+        grace_cutoff = dt_time(IWOW_GRACE_HOUR, 0)
 
         print(f"🕐 IWOW now (IST): {now.strftime('%Y-%m-%d %H:%M')} | today={today} | yesterday={yesterday} | start_row={start_row}")
 
@@ -858,12 +921,10 @@ def update_iwow_sheet(entries):
 
             print(f"🔎 {from_stn}→{to_stn} | date={pdate} time={ptime} wagons={wagons}")
 
-            # ---------- 24-HOUR CLOCK ACCEPTANCE ----------
             accept = False
             reason = ""
 
             if pdate == today:
-                # TODAY: accept any 24h time; reject only future time (>5 min ahead)
                 if ptime:
                     placement_dt = datetime.combine(pdate, ptime)
                     if placement_dt > now + timedelta(minutes=5):
@@ -874,20 +935,18 @@ def update_iwow_sheet(entries):
                     accept = True
 
             elif pdate == yesterday:
-                # YESTERDAY: 22:00-23:59 placement, user sending before grace_cutoff (early morning)
                 if ptime and ptime >= dt_time(22, 0) and now.time() < grace_cutoff:
                     accept = True
-                    reason = f"yesterday 22:00+ within grace window (now {now.strftime('%H:%M')})"
+                    reason = f"yesterday 22:00+ within grace (now {now.strftime('%H:%M')})"
                 else:
                     if not ptime:
                         reason = "yesterday without time"
                     elif ptime < dt_time(22, 0):
                         reason = f"yesterday pre-22:00 ({ptime.strftime('%H:%M')})"
                     else:
-                        reason = f"yesterday 22:00+ but grace cutoff passed (now {now.strftime('%H:%M')})"
+                        reason = f"yesterday 22:00+ but grace cutoff passed"
 
             elif pdate == tomorrow:
-                # TOMORROW: accept only if within next 30 min (clock skew / pre-report edge)
                 if ptime:
                     placement_dt = datetime.combine(pdate, ptime)
                     if placement_dt <= now + timedelta(minutes=30):
@@ -905,7 +964,7 @@ def update_iwow_sheet(entries):
                 print(f"⏭️ Rejected ({reason})")
                 continue
 
-            # ---------- DUPLICATE CHECK (all 8 key fields) ----------
+            # duplicate check
             pdate_str_check  = pdate.strftime("%d-%m-%Y")
             ptime_str_check  = ptime.strftime("%H:%M") if ptime else ""
             wagons_str_check = str(wagons or "").strip()
@@ -937,10 +996,9 @@ def update_iwow_sheet(entries):
                 print(f"⏭️ Duplicate (all fields match)")
                 continue
 
-            # ---------- FREE TIME + WAGON TYPE ----------
             try:
                 wagons_num = int(float(wagons)) if wagons else 42
-            except:
+            except Exception:
                 wagons_num = 42
 
             if "NAPHTHA" in commodity or "NAPTHA" in commodity:
@@ -971,7 +1029,6 @@ def update_iwow_sheet(entries):
                     else:
                         wtype = "BCN"
 
-            # Arrival time = placement - random 25/30/35/40 min (24-hour rollover safe)
             arrival_time_str = ""
             arrival_date_str = pdate.strftime("%d-%m-%Y")
             ptime_str        = ptime.strftime("%H:%M") if ptime else ""
@@ -988,19 +1045,19 @@ def update_iwow_sheet(entries):
                 if val is not None and str(val).strip() != "":
                     updates.append({"range": rowcol_to_a1(current_row, col), "values": [[val]]})
 
-            q(2, to_stn)            # B
-            q(3, line)              # C
-            q(4, wtype)             # D
-            q(5, commodity)         # E
-            q(6, wagons)            # F
-            q(8, wagons)            # H
-            q(9, arrival_time_str)  # I
-            q(10, arrival_date_str) # J
-            q(11, ptime_str)        # K
-            q(12, pdate_str)        # L
-            q(18, ftime)            # R
-            q(21, from_stn)         # U
-            q(23, party)            # W
+            q(2, to_stn)
+            q(3, line)
+            q(4, wtype)
+            q(5, commodity)
+            q(6, wagons)
+            q(8, wagons)
+            q(9, arrival_time_str)
+            q(10, arrival_date_str)
+            q(11, ptime_str)
+            q(12, pdate_str)
+            q(18, ftime)
+            q(21, from_stn)
+            q(23, party)
 
             print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | {wagons} | {commodity} | {ftime} | {wtype}")
             current_row += 1
@@ -1086,7 +1143,13 @@ def startup_check():
     print(f"CREDENTIALS     : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
     print(f"IWOW_GRACE_HOUR : {IWOW_GRACE_HOUR}:00 IST")
     print(f"IST_NOW         : {ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
-    get_sheet()
+    sh = get_sheet()
+    if sh:
+        try:
+            m = get_station_map(sh)
+            print(f"🗺️  Sample stations: {list(m.items())[:6]}")
+        except Exception as e:
+            print(f"❌ Station map build failed: {e}")
     print("===================================")
 
 startup_check()
