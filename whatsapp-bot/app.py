@@ -7,7 +7,7 @@ import requests
 import gspread
 import fcntl
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time as dt_time
 from gspread.utils import rowcol_to_a1
 from google.oauth2.service_account import Credentials
 from flask import Flask, request, jsonify
@@ -29,8 +29,20 @@ GOOGLE_CREDENTIALS_B64 = os.environ.get("GOOGLE_CREDENTIALS_B64", "")
 GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 
 GEMINI_MODEL = "gemini-2.5-flash"
+
 OSOP_LOCK_FILE = "/tmp/osop_update.lock"
 IWOW_LOCK_FILE = "/tmp/iwow_update.lock"
+IWOW_GRACE_HOUR = int(os.environ.get("IWOW_GRACE_HOUR", "6"))
+
+# ==============================================
+# IST TIME HELPER
+# ==============================================
+def ist_now():
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
+    except Exception:
+        return datetime.utcnow() + timedelta(hours=5, minutes=30)
 
 # ==============================================
 # STATION ALIASES
@@ -94,8 +106,7 @@ STATION_ALIASES = {
     "BBGN": ["BBGN", "BARUA BAMUNGAON", "BARUABAMUNGAON"],
     "BLMR": ["BLMR", "BHALUKMARA"],
     "NMGY": ["NMGY", "NUMALIGARH"],
-    "KRHT": ["KRHT", "KHARAHAT"],
-    "CCIB": ["CCIB", "CHANDI CHOWK", "CHANDICHOWKI"]
+    "KRHT": ["KRHT", "KHARAHAT"]
 }
 
 ALL_STATIONS = list(STATION_ALIASES.keys())
@@ -120,7 +131,7 @@ STATION_OFFICIAL = {
     "DMGN": "Dhamalgaon Jn", "TNGN": "Tangani", "NSBG": "New Sisiborgaon",
     "KOWN": "Khowang", "NCH": "Nakachari", "CMA": "Cinnamara",
     "KXL": "Kamarbandha Ali", "BBGN": "Barua Bamungaon", "BLMR": "Bhalukmara",
-    "NMGY": "Numaligarh", "KRHT": "Kharahat", "CCIB": "CCIB"
+    "NMGY": "Numaligarh", "KRHT": "Kharahat"
 }
 
 PRS_COLS = {
@@ -342,20 +353,29 @@ def parse_date_flexible(s):
     except Exception:
         return None
 
+# ==============================================
+# TIME PARSER (for IWOW)
+# ==============================================
 def parse_time_flexible(s):
+    if s is None:
+        return None
+    s = str(s).strip().upper()
     if not s:
         return None
-    s = str(s).strip().upper().replace("HRS", "").replace("HR", "").strip()
-    for fmt in ("%H:%M", "%H.%M", "%H%M"):
+    s = re.sub(r'\b(HRS|HR|HOURS|HOUR)\b', '', s).strip()
+    s = s.replace('.', ':').replace(' ', '')
+
+    for fmt in ("%H:%M", "%H%M"):
         try:
             return datetime.strptime(s, fmt).time()
-        except:
+        except Exception:
             pass
-    m = re.search(r'(\d{1,2})[:\.](\d{2})', s)
+
+    m = re.search(r'(\d{1,2}):(\d{2})', s)
     if m:
         try:
             return datetime.strptime(f"{m.group(1)}:{m.group(2)}", "%H:%M").time()
-        except:
+        except Exception:
             pass
     return None
 
@@ -369,39 +389,163 @@ def call_gemini(msg):
 
     station_legend = "\n".join(f'{c} = {STATION_OFFICIAL[c]}' for c in ALL_STATIONS)
 
-    prompt = f"""You are an expert Indian Railway data extraction engine for PRS, UTS, OSOP and INWARD GOODS (IWOW).
+    prompt = f"""You are an expert Indian Railway PRS & UTS & OSOP & INWARD GOODS (IWOW) data extraction engine.
+You work exactly like a human railway accountant. Any format, multi-station bundle, multi-line, missing labels — you understand naturally.
 
-Extract into STRICT JSON only.
+Extract numbers into STRICT JSON only. No explanation, no markdown.
 
 === OFFICIAL STATIONS ===
 {station_legend}
 
-=== OSOP ===
-If message has OSOP/Osop → put in "osop" array.
-Keep date string exactly as written. Omit unit if not given.
+STATION RULES:
+1. Full name or code → always use CODE.
+   "Sapekhati" / "SPK" → SPK
+   "Bhalukmara" / "BLMR" → BLMR
+   "New Tinsukia" / "ntsk" → NTSK
+   "Sibsagar Town" → SRTN
+   "Lakua" → LXA
+   "Naharkatia" → NHK
+   "Dhemaji" → DMC
 
-=== PRS & UTS ===
-Multi-station bundle supported. Map fields correctly. Omit nil/nill.
+=== OSOP SECTION ===
+Agar message me OSOP / Osop aaya hai to "osop" array me nikaalo.
+date string bilkul waisi rakho jaisi message me hai.
+unit nahi diya to key omit karo.
 
-=== INWARD GOODS / IWOW (VERY IMPORTANT) ===
-Any message about goods position, wagons placed, inward, rake, cement, coal, etc. → extract into "goods" array.
+=== PRS & UTS (MULTI-STATION BUNDLE SUPPORT) ===
+Message me ek se zyada stations ka data ho sakta hai (copy-paste bundle).
+Har station ka data alag-alag nikaalo.
 
-Fields for each goods entry:
-- "from_stn" : originating station code (Ex-CCIB → CCIB)
-- "to_stn"   : destination station code (to JTTN → JTTN)
-- "wagons"   : number of wagons (11)
-- "placement_time" : time like "21:00"
-- "placement_date" : date string exactly as written (01.11.26)
+STRICT MAPPING:
+PRS:
+- TKT / T/TKT → TKT
+- PASS / T/PASS → PASS
+- C/TKT → C/TKT
+- C/PASS → C/PASS
+- NET CASH / NETCASH → NET
+- UPI / UPI QR / DIGI CASH / E CASH / ECASH → UPI
+- REFUND / RFD / DIGI REF → REF (sum of all refunds)
+- VOUCHER / VCH → VCH
+- POS → POS
+
+UTS:
+- TKT → TKT
+- PASS → PASS
+- NET CASH → NET
+- E CASH / UPI → UPI
+- PF / P/TKT / PLATFORM → PF
+- MR → MR
+- MR AMT / AMOUNT (for MR) → MR AMT
+
+MISSING: "nil", "nill", "-", "nahi aya" → field OMIT (0 mat do)
+
+=== INWARD GOODS / IWOW ===
+Agar message me goods position / wagons placed / inward / rake / cement / coal / naphtha / container / placement ho → "goods" array me nikaalo.
+Har goods entry ke fields:
+- "from_stn": originating station code (Ex-CCIB → CCIB)
+- "to_stn": destination station code (to JTTN → JTTN)
+- "wagons": number of wagons
+- "placement_time": time like "21:00" (24-hour)
+- "placement_date": date string exactly as written (01.11.26)
 - "commodity": commodity in UPPERCASE (CEMENT)
-- "line"     : line number only (from L/1 → 1)
-- "party"    : full party name UPPERCASE
-- "wagon_type": if given use it, otherwise guess common type (BCN for cement, BTPN for oil, BCNA, BOXN etc.)
-- "free_time": if given use it, otherwise "3 HRS"
+- "line": line number only (from L/1 → 1)
+- "party": full party name UPPERCASE
+- "wagon_type": optional (BCN, BTPN, BOXN, CONTAINER etc.)
+- "free_time": optional
 
-Example input:
+=== EXAMPLES ===
+
+EXAMPLE 1 (your exact bundle style):
+Input:
+"REVENUE OF SPK
+DATE.     02/11/2026
+UTS
+TKT                  294
+PASS.               476
+NET CASH.    17720
+E CASH.          2110
+
+PRS
+TKT                 20
+PASS.              58
+NET CASH.    40665
+UPI QR .          12580
+REFUND.          1335
+C/TKT.              1
+C/PASS.           1
+Digi ref:-            nill  ..
+
+BLMR 
+Date -02/11/2026
+TKT -7
+Pass -13
+Amount -590/-"
+
+Output:
+{{
+  "prs": {{
+    "SPK": {{"TKT": 20, "PASS": 58, "NET": 40665, "UPI": 12580, "REF": 1335, "C/TKT": 1, "C/PASS": 1}}
+  }},
+  "uts": {{
+    "SPK": {{"TKT": 294, "PASS": 476, "NET": 17720, "UPI": 2110}},
+    "BLMR": {{"TKT": 7, "PASS": 13, "NET": 590}}
+  }},
+  "osop": [],
+  "goods": []
+}}
+
+EXAMPLE 2 (OSOP multi):
+Input:
+"Osop dmc
+26-10-26
+Unit 5
+Amt 600
+Osop nhk
+26-10-26
+Amt 600
+Osop ntsk
+26-10-26
+Amt 450
+Osop ntsk
+26-10-26
+Unit 5
+Amt 600"
+
+Output:
+{{
+  "prs": {{}},
+  "uts": {{}},
+  "osop": [
+    {{"station": "DMC", "date": "26-10-26", "unit": 5, "amount": 600}},
+    {{"station": "NHK", "date": "26-10-26", "amount": 600}},
+    {{"station": "NTSK", "date": "26-10-26", "amount": 450}},
+    {{"station": "NTSK", "date": "26-10-26", "unit": 5, "amount": 600}}
+  ],
+  "goods": []
+}}
+
+EXAMPLE 3 (terse UTS):
+Input:
+"Borhat uts
+Pass:-7
+Tkt:-5
+Cash:-385
+Ecash:-190"
+
+Output:
+{{
+  "prs": {{}},
+  "uts": {{
+    "BFD": {{"TKT": 5, "PASS": 7, "NET": 385, "UPI": 190}}
+  }},
+  "osop": [],
+  "goods": []
+}}
+
+EXAMPLE 4 (inward goods):
+Input:
 "JTTN GOODS POSITION:
 11 wagons Ex-CCIB to JTTN (Cement) placed at 21:00 hrs on 01.11.26 on L/1.
-
 Party- M/s. Cement Corporation Ltd."
 
 Output:
@@ -418,14 +562,12 @@ Output:
       "placement_date": "01.11.26",
       "commodity": "CEMENT",
       "line": "1",
-      "party": "M/S CEMENT CORPORATION LTD",
-      "wagon_type": "BCN",
-      "free_time": "3 HRS"
+      "party": "M/S CEMENT CORPORATION LTD"
     }}
   ]
 }}
 
-Any format of goods/inward/rake/placement message must be understood.
+Any format of goods / inward / rake / placement message must be understood.
 
 MESSAGE:
 {msg}
@@ -472,6 +614,8 @@ def apply_post_processing(data, msg):
         if code:
             if code not in new_prs:
                 new_prs[code] = vals
+            else:
+                print(f"⚠️ Duplicate PRS station '{code}' → keeping first")
         else:
             print(f"❌ Station skipped: {st}")
     data["prs"] = new_prs
@@ -482,6 +626,8 @@ def apply_post_processing(data, msg):
         if code:
             if code not in new_uts:
                 new_uts[code] = vals
+            else:
+                print(f"⚠️ Duplicate UTS station '{code}' → keeping first")
         else:
             print(f"❌ UTS Station skipped: {st}")
     data["uts"] = new_uts
@@ -494,9 +640,11 @@ def apply_post_processing(data, msg):
         if code:
             e["station"] = code
             new_osop.append(e)
+        else:
+            print(f"❌ OSOP entry skipped: {e}")
     data["osop"] = new_osop
 
-    # Goods stations
+    # IWOW goods station resolution
     new_goods = []
     for e in data.get("goods", []):
         if not isinstance(e, dict):
@@ -507,6 +655,15 @@ def apply_post_processing(data, msg):
             e["to_stn"] = resolve_station(e["to_stn"]) or str(e["to_stn"]).upper()
         new_goods.append(e)
     data["goods"] = new_goods
+
+    up = msg.upper()
+    if "UTS" in up and "PRS" not in up.replace("UTS", ""):
+        if not data["uts"] and len(data["prs"]) == 1:
+            st, vals = next(iter(data["prs"].items()))
+            if isinstance(vals, dict) and not any(k in vals for k in ("C/TKT", "C/PASS", "VCH", "POS", "REF")):
+                data["uts"] = {st: vals}
+                data["prs"] = {}
+                print(f"🔧 Moved PRS→UTS for {st}")
 
     return data
 
@@ -522,11 +679,54 @@ def _to_float(s):
 def apply_fallback_fixes(data, msg):
     if not data:
         return data
-    # existing OSOP fallback remains (omitted for brevity in this response, but full in final)
+
+    up = msg.upper()
+    osop = data.get("osop") or []
+
+    if "OSOP" in up and not osop:
+        lines = msg.splitlines()
+        for i, line in enumerate(lines):
+            if re.search(r'\bOSOP\b', line, re.IGNORECASE):
+                window = "\n".join(lines[i:i+8])
+                st_m = re.search(r'OSOP\s*[:\-]?\s*([A-Za-z][A-Za-z0-9 .]+)', window, re.IGNORECASE)
+                if not st_m:
+                    for j in range(i+1, min(i+4, len(lines))):
+                        cand = lines[j].strip()
+                        if cand and re.match(r'^[A-Za-z][A-Za-z0-9 .]+$', cand) and not re.search(r'\d{2}', cand):
+                            st_m = re.match(r'^([A-Za-z][A-Za-z0-9 .]+)$', cand)
+                            if st_m:
+                                break
+                if not st_m:
+                    continue
+                code = resolve_station(st_m.group(1))
+                if not code:
+                    continue
+
+                date_m = re.search(r'(\d{1,4}[-/\.]\d{1,2}[-/\.]\d{1,4})', window)
+                unit_m = re.search(r'(?:unit|u)\s*[:=\-]?\s*(\d+)', window, re.IGNORECASE)
+                amt_m  = re.search(r'(?:amt|amount|rs\.?)\s*[:=\-]?\s*([\d,]+)', window, re.IGNORECASE)
+                if not amt_m:
+                    nums = re.findall(r'\b([\d,]{2,})\b', window)
+                    if nums:
+                        amt_m = type('X', (), {'group': lambda self, n: nums[-1]})()
+
+                if date_m and amt_m:
+                    entry = {
+                        "station": code,
+                        "date": date_m.group(1),
+                        "amount": _to_float(amt_m.group(1))
+                    }
+                    if unit_m:
+                        entry["unit"] = int(unit_m.group(1))
+                    osop.append(entry)
+                    print(f"🔧 OSOP fallback: {entry}")
+
+        data["osop"] = osop
+
     return data
 
 # ==============================================
-# UPDATE SHEETS (PRS/UTS) - unchanged
+# UPDATE SHEETS
 # ==============================================
 def is_cell_empty(value):
     if value is None:
@@ -560,6 +760,7 @@ def update_google_sheet(data):
     sheet = get_sheet()
     if not sheet:
         return False
+
     try:
         matrix = sheet.get_all_values()
     except Exception as e:
@@ -600,6 +801,8 @@ def update_google_sheet(data):
             if is_cell_empty(get_current(row, col)):
                 queue(row, col, v)
                 print(f"✅ PRS {st} {fld}: wrote {v}")
+            else:
+                print(f"⏭️ PRS {st} {fld}: SKIPPED (already filled)")
 
     for st, vals in data.get("uts", {}).items():
         info = smap.get(st)
@@ -624,6 +827,8 @@ def update_google_sheet(data):
             if is_cell_empty(get_current(row, col)):
                 queue(row, col, v)
                 print(f"✅ UTS {st} {fld}: wrote {v}")
+            else:
+                print(f"⏭️ UTS {st} {fld}: SKIPPED (already filled)")
 
     if updates:
         try:
@@ -635,30 +840,37 @@ def update_google_sheet(data):
     return True
 
 # ==============================================
-# OSOP UPDATE (unchanged logic)
+# OSOP UPDATE - FINAL 100% FIXED VERSION
 # ==============================================
 def update_osop_sheet(entries):
     if not entries:
         return True
+
     lock_fd = open(OSOP_LOCK_FILE, "w")
     try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX)
+
         sh = get_spreadsheet()
         if not sh:
             return False
+
         try:
             ws = sh.worksheet("OSOP")
-        except:
+        except gspread.WorksheetNotFound:
             print("❌ 'OSOP' worksheet nahi mili")
             return False
 
         for e in entries:
             if not isinstance(e, dict):
                 continue
+
+            # Har entry ke liye FRESH sheet read
             try:
                 matrix = ws.get_all_values()
-            except:
+            except Exception as ex:
+                print(f"❌ OSOP read error: {ex}")
                 continue
+
             if len(matrix) < 6:
                 continue
 
@@ -681,6 +893,9 @@ def update_osop_sheet(entries):
                     date_cols[d] = (c, c + 1)
                 c += 2
 
+            if not date_cols:
+                continue
+
             station_rows = {}
             for r in range(6, len(matrix) + 1):
                 if r-1 >= len(matrix):
@@ -694,13 +909,18 @@ def update_osop_sheet(entries):
 
             code = e.get("station")
             if code not in station_rows:
+                print(f"⚠️ OSOP: '{code}' sheet me nahi mila → skip")
                 continue
+
             rows = station_rows[code]
             d = parse_date_flexible(e.get("date"))
             if not d or d not in date_cols:
+                print(f"⚠️ OSOP {code}: date '{e.get('date')}' match nahi hua → skip")
                 continue
+
             camt, cunit = date_cols[d]
 
+            # Pehla empty slot choose karo
             chosen_row = None
             for r in rows:
                 if is_cell_empty(get_current(r, camt)) and is_cell_empty(get_current(r, cunit)):
@@ -711,34 +931,58 @@ def update_osop_sheet(entries):
                     if is_cell_empty(get_current(r, camt)):
                         chosen_row = r
                         break
+
             if chosen_row is None:
+                print(f"⚠️ OSOP {code} {d}: saari rows filled → skip")
                 continue
 
             row = chosen_row
+            print(f"📌 OSOP {code} {d}: using row {row}")
+
             updates = []
+
             amt = _to_float(e.get("amount")) if e.get("amount") is not None else None
-            if amt is not None and amt != 0 and is_cell_empty(get_current(row, camt)):
-                updates.append({"range": rowcol_to_a1(row, camt), "values": [[amt]]})
+            if amt is not None and amt != 0:
+                if is_cell_empty(get_current(row, camt)):
+                    updates.append({"range": rowcol_to_a1(row, camt), "values": [[amt]]})
+                    print(f"✅ OSOP {code} {d}: amount {amt} → {rowcol_to_a1(row, camt)}")
+                else:
+                    print(f"⏭️ OSOP {code} {d}: amount already filled → NO OVERWRITE")
+
             unit = e.get("unit")
             if unit is None or str(unit).strip() == "":
                 if amt is not None:
                     unit = int(amt // 100)
-            if unit is not None and str(unit).strip() != "" and is_cell_empty(get_current(row, cunit)):
-                updates.append({"range": rowcol_to_a1(row, cunit), "values": [[unit]]})
+                    print(f"🔧 unit missing → amount//100 = {unit}")
+                else:
+                    unit = None
+
+            if unit is not None and str(unit).strip() != "":
+                if is_cell_empty(get_current(row, cunit)):
+                    updates.append({"range": rowcol_to_a1(row, cunit), "values": [[unit]]})
+                    print(f"✅ OSOP {code} {d}: unit {unit} → {rowcol_to_a1(row, cunit)}")
+                else:
+                    print(f"⏭️ OSOP {code} {d}: unit already filled → NO OVERWRITE")
+
             if updates:
                 try:
                     ws.batch_update(updates)
-                    print(f"✅ OSOP {code} written on row {row}")
+                    print(f"✅ OSOP write done for {code}")
                 except Exception as ex:
                     print(f"❌ OSOP write failed: {ex}")
+
     finally:
         fcntl.flock(lock_fd, fcntl.LOCK_UN)
         lock_fd.close()
+
     return True
 
 # ==============================================
-# IWOW (INWARD GOODS) UPDATE - NEW
+# IWOW UPDATE  (NEW)
 # ==============================================
+def _norm_str(v):
+    return str(v or "").strip().upper()
+
 def update_iwow_sheet(entries):
     if not entries:
         return True
@@ -763,19 +1007,24 @@ def update_iwow_sheet(entries):
             print(f"❌ IWOW read error: {e}")
             return False
 
-        # Find first empty row starting from row 4 (index 3)
         start_row = 4
         for r in range(4, len(matrix) + 50):
             bval = ""
-            if r-1 < len(matrix) and len(matrix[r-1]) > 1:
-                bval = str(matrix[r-1][1]).strip()
+            if r - 1 < len(matrix) and len(matrix[r - 1]) > 1:
+                bval = str(matrix[r - 1][1]).strip()
             if not bval:
                 start_row = r
                 break
         else:
             start_row = len(matrix) + 1
 
-        print(f"📌 IWOW starting from row {start_row}")
+        now = ist_now()
+        today = now.date()
+        yesterday = today - timedelta(days=1)
+        tomorrow = today + timedelta(days=1)
+        grace_cutoff = dt_time(IWOW_GRACE_HOUR, 0)
+
+        print(f"🕐 IWOW now (IST): {now.strftime('%Y-%m-%d %H:%M')} | start_row={start_row}")
 
         updates = []
         current_row = start_row
@@ -784,56 +1033,146 @@ def update_iwow_sheet(entries):
             if not isinstance(e, dict):
                 continue
 
-            from_stn = str(e.get("from_stn") or "").upper().strip()
-            to_stn   = str(e.get("to_stn") or "").upper().strip()
-            wagons   = e.get("wagons")
-            ptime    = parse_time_flexible(e.get("placement_time"))
-            pdate    = parse_date_flexible(e.get("placement_date"))
-            commodity = str(e.get("commodity") or "").upper().strip()
-            line     = str(e.get("line") or "").strip()
-            party    = str(e.get("party") or "").upper().strip()
-            wtype    = str(e.get("wagon_type") or "BCN").upper().strip()
-            ftime    = str(e.get("free_time") or "3 HRS").upper().strip()
+            from_stn  = _norm_str(e.get("from_stn"))
+            to_stn    = _norm_str(e.get("to_stn"))
+            wagons    = e.get("wagons")
+            ptime     = parse_time_flexible(e.get("placement_time"))
+            pdate     = parse_date_flexible(e.get("placement_date"))
+            commodity = _norm_str(e.get("commodity"))
+            line      = _norm_str(e.get("line"))
+            party     = _norm_str(e.get("party"))
+            wtype     = _norm_str(e.get("wagon_type"))
+            ftime     = _norm_str(e.get("free_time"))
 
-            if not to_stn:
+            if not to_stn or not pdate:
+                print(f"⏭️ Missing to_stn/date → skip")
                 continue
 
-            # Placement date → dd-mm-yyyy
-            pdate_str = pdate.strftime("%d-%m-%Y") if pdate else ""
+            print(f"🔎 {from_stn}→{to_stn} | date={pdate} time={ptime} wagons={wagons}")
 
-            # Placement time → hh:mm
-            ptime_str = ptime.strftime("%H:%M") if ptime else ""
+            accept = False
+            reason = ""
 
-            # Arrival time = placement - random 25/30/35/40 min
+            if pdate == today:
+                if ptime:
+                    placement_dt = datetime.combine(pdate, ptime)
+                    if placement_dt > now + timedelta(minutes=5):
+                        reason = f"future time"
+                    else:
+                        accept = True
+                else:
+                    accept = True
+
+            elif pdate == yesterday:
+                if ptime and ptime >= dt_time(22, 0) and now.time() < grace_cutoff:
+                    accept = True
+                else:
+                    reason = "yesterday outside grace"
+
+            elif pdate == tomorrow:
+                if ptime:
+                    placement_dt = datetime.combine(pdate, ptime)
+                    if placement_dt <= now + timedelta(minutes=30):
+                        accept = True
+                    else:
+                        reason = f"tomorrow pre-report"
+                else:
+                    reason = f"tomorrow pre-report"
+
+            else:
+                reason = f"date out of range ({pdate})"
+
+            if not accept:
+                print(f"⏭️ Rejected ({reason})")
+                continue
+
+            pdate_str_check  = pdate.strftime("%d-%m-%Y")
+            ptime_str_check  = ptime.strftime("%H:%M") if ptime else ""
+            wagons_str_check = str(wagons or "").strip()
+
+            is_duplicate = False
+            for r in range(3, len(matrix)):
+                row = matrix[r]
+                existing_to        = _norm_str(row[1])   if len(row) > 1  else ""
+                existing_line      = _norm_str(row[2])   if len(row) > 2  else ""
+                existing_commodity = _norm_str(row[4])   if len(row) > 4  else ""
+                existing_wagons    = str(row[5]).strip() if len(row) > 5  else ""
+                existing_time      = str(row[10]).strip() if len(row) > 10 else ""
+                existing_date      = str(row[11]).strip() if len(row) > 11 else ""
+                existing_from      = _norm_str(row[20])  if len(row) > 20 else ""
+                existing_party     = _norm_str(row[22])  if len(row) > 22 else ""
+
+                if (existing_to        == to_stn and
+                    existing_date      == pdate_str_check and
+                    existing_time      == ptime_str_check and
+                    existing_wagons    == wagons_str_check and
+                    existing_from      == from_stn and
+                    existing_commodity == commodity and
+                    existing_line      == line and
+                    existing_party     == party):
+                    is_duplicate = True
+                    break
+
+            if is_duplicate:
+                print(f"⏭️ Duplicate")
+                continue
+
+            try:
+                wagons_num = int(float(wagons)) if wagons else 42
+            except Exception:
+                wagons_num = 42
+
+            if "NAPHTHA" in commodity or "NAPTHA" in commodity:
+                ftime = "8 HRS"
+                if not wtype:
+                    wtype = "BTPN"
+            elif "CONTAINER" in commodity or "CONT" in commodity:
+                wtype = "CONTAINER"
+                if not ftime:
+                    ftime = "3 HRS"
+            else:
+                if not ftime:
+                    if wagons_num <= 20:
+                        ftime = "5 HRS"
+                    elif wagons_num <= 30:
+                        ftime = "7 HRS"
+                    else:
+                        ftime = "9 HRS"
+                if not wtype:
+                    if "CEMENT" in commodity:
+                        wtype = "BCN"
+                    elif "COAL" in commodity:
+                        wtype = "BOXN"
+                    elif any(x in commodity for x in ["FOOD", "GRAIN", "RICE", "WHEAT"]):
+                        wtype = "BCN"
+                    elif "FERT" in commodity:
+                        wtype = "BCN"
+                    else:
+                        wtype = "BCN"
+
             arrival_time_str = ""
-            arrival_date_str = pdate_str
-            if ptime and pdate:
-                delta_min = random.choice([25, 30, 35, 40])
+            arrival_date_str = pdate.strftime("%d-%m-%Y")
+            ptime_str        = ptime.strftime("%H:%M") if ptime else ""
+            pdate_str        = pdate.strftime("%d-%m-%Y")
+
+            if ptime:
+                delta = random.choice([25, 30, 35, 40])
                 placement_dt = datetime.combine(pdate, ptime)
-                arrival_dt = placement_dt - timedelta(minutes=delta_min)
+                arrival_dt = placement_dt - timedelta(minutes=delta)
                 arrival_time_str = arrival_dt.strftime("%H:%M")
                 arrival_date_str = arrival_dt.strftime("%d-%m-%Y")
 
-            # Write cells
             def q(col, val):
                 if val is not None and str(val).strip() != "":
                     updates.append({"range": rowcol_to_a1(current_row, col), "values": [[val]]})
 
-            q(2, to_stn)          # B - To station
-            q(3, line)            # C - Line
-            q(4, wtype)           # D - Wagon type
-            q(5, commodity)       # E - Commodity
-            q(6, wagons)          # F - Wagons
-            q(8, wagons)          # H - Wagons again
-            q(9, arrival_time_str)# I - Arrival time
-            q(10, arrival_date_str)# J - Arrival date
-            q(11, ptime_str)      # K - Placement time
-            q(12, pdate_str)      # L - Placement date
-            q(18, ftime)          # R - Free time
-            q(21, from_stn)       # U - From station
-            q(23, party)          # W - Party
+            q(2, to_stn); q(3, line); q(4, wtype); q(5, commodity)
+            q(6, wagons); q(8, wagons)
+            q(9, arrival_time_str); q(10, arrival_date_str)
+            q(11, ptime_str); q(12, pdate_str)
+            q(18, ftime); q(21, from_stn); q(23, party)
 
-            print(f"✅ IWOW row {current_row}: {from_stn} → {to_stn} | {wagons} wagons | {commodity}")
+            print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | {wagons} | {commodity}")
             current_row += 1
 
         if updates:
@@ -901,7 +1240,6 @@ def webhook():
 
                     if data.get("goods"):
                         update_iwow_sheet(data["goods"])
-
     except Exception as e:
         print(f"❌ Webhook Error: {e}")
 
@@ -915,6 +1253,8 @@ def startup_check():
     print(f"SHEET_NAME     : {SHEET_NAME}")
     print(f"GEMINI_API_KEY : {bool(GEMINI_API_KEY)}")
     print(f"CREDENTIALS    : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
+    print(f"IWOW_GRACE_HOUR: {IWOW_GRACE_HOUR}:00 IST")
+    print(f"IST_NOW        : {ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
     get_sheet()
     print("===================================")
 
