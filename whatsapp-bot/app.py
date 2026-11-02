@@ -615,12 +615,10 @@ def apply_fallback_fixes(data, msg):
 
     # ---------- OSOP fallback (only if Gemini missed) ----------
     if "OSOP" in up and not osop:
-        # Multi-line / free format
         lines = msg.splitlines()
         for i, line in enumerate(lines):
             if re.search(r'\bOSOP\b', line, re.IGNORECASE):
                 window = "\n".join(lines[i:i+8])
-                # station
                 st_m = re.search(r'OSOP\s*[:\-]?\s*([A-Za-z][A-Za-z0-9 .]+)', window, re.IGNORECASE)
                 if not st_m:
                     for j in range(i+1, min(i+4, len(lines))):
@@ -880,23 +878,23 @@ def update_osop_sheet(entries):
         except:
             return ""
 
-    # Row 5 dates (every 2 columns)
-    row5 = matrix[4] if len(matrix) > 4 else []
+    # ---------- Row 4 me dates hain (har 2 column ka pair) ----------
+    row4 = matrix[3] if len(matrix) > 3 else []   # row 4 = index 3
     date_cols = {}
-    c = 3
-    max_cols = max(len(row5), 40)
+    c = 3   # C column se start
+    max_cols = max(len(row4), 40)
     while c <= max_cols:
-        raw = row5[c-1] if c-1 < len(row5) else ""
-        if not str(raw).strip() and c < len(row5):
-            raw = row5[c]
+        raw = row4[c-1] if c-1 < len(row4) else ""
+        if not str(raw).strip() and c < len(row4):
+            raw = row4[c]   # merged cell ke liye right side check
         d = parse_date_flexible(raw)
         if d:
             date_cols[d] = (c, c + 1)
-            print(f"📅 OSOP date '{raw.strip()}' → {rowcol_to_a1(5, c)}:{rowcol_to_a1(5, c+1)}")
+            print(f"📅 OSOP date '{raw.strip()}' → {rowcol_to_a1(4, c)}:{rowcol_to_a1(4, c+1)}")
         c += 2
 
     if not date_cols:
-        print("❌ OSOP row 5 me koi date nahi mili")
+        print("❌ OSOP row 4 me koi date nahi mili")
         return False
 
     # B6:B20 stations
@@ -952,7 +950,7 @@ def update_osop_sheet(entries):
             print(f"⚠️ OSOP {code}: date '{e.get('date')}' samajh nahi aayi → skip")
             continue
         if d not in date_cols:
-            print(f"⚠️ OSOP {code}: date '{e.get('date')}' ({d}) row 5 me nahi mili → skip")
+            print(f"⚠️ OSOP {code}: date '{e.get('date')}' ({d}) row 4 me nahi mili → skip")
             continue
 
         camt, cunit = date_cols[d]
