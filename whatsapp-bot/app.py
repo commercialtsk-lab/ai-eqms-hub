@@ -6,8 +6,7 @@ import base64
 import requests
 import gspread
 import fcntl
-import random
-from datetime import datetime, timedelta, time as dt_time
+from datetime import datetime
 from gspread.utils import rowcol_to_a1
 from google.oauth2.service_account import Credentials
 from flask import Flask, request, jsonify
@@ -31,18 +30,6 @@ GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 GEMINI_MODEL = "gemini-2.5-flash"
 
 OSOP_LOCK_FILE = "/tmp/osop_update.lock"
-IWOW_LOCK_FILE = "/tmp/iwow_update.lock"
-IWOW_GRACE_HOUR = int(os.environ.get("IWOW_GRACE_HOUR", "6"))
-
-# ==============================================
-# IST TIME HELPER
-# ==============================================
-def ist_now():
-    try:
-        from zoneinfo import ZoneInfo
-        return datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
-    except Exception:
-        return datetime.utcnow() + timedelta(hours=5, minutes=30)
 
 # ==============================================
 # STATION ALIASES
@@ -354,32 +341,6 @@ def parse_date_flexible(s):
         return None
 
 # ==============================================
-# TIME PARSER (for IWOW)
-# ==============================================
-def parse_time_flexible(s):
-    if s is None:
-        return None
-    s = str(s).strip().upper()
-    if not s:
-        return None
-    s = re.sub(r'\b(HRS|HR|HOURS|HOUR)\b', '', s).strip()
-    s = s.replace('.', ':').replace(' ', '')
-
-    for fmt in ("%H:%M", "%H%M"):
-        try:
-            return datetime.strptime(s, fmt).time()
-        except Exception:
-            pass
-
-    m = re.search(r'(\d{1,2}):(\d{2})', s)
-    if m:
-        try:
-            return datetime.strptime(f"{m.group(1)}:{m.group(2)}", "%H:%M").time()
-        except Exception:
-            pass
-    return None
-
-# ==============================================
 # GEMINI
 # ==============================================
 def call_gemini(msg):
@@ -389,7 +350,7 @@ def call_gemini(msg):
 
     station_legend = "\n".join(f'{c} = {STATION_OFFICIAL[c]}' for c in ALL_STATIONS)
 
-    prompt = f"""You are an expert Indian Railway PRS & UTS & OSOP & INWARD GOODS (IWOW) data extraction engine.
+    prompt = f"""You are an expert Indian Railway PRS & UTS & OSOP data extraction engine.
 You work exactly like a human railway accountant. Any format, multi-station bundle, multi-line, missing labels — you understand naturally.
 
 Extract numbers into STRICT JSON only. No explanation, no markdown.
@@ -439,20 +400,6 @@ UTS:
 
 MISSING: "nil", "nill", "-", "nahi aya" → field OMIT (0 mat do)
 
-=== INWARD GOODS / IWOW ===
-Agar message me goods position / wagons placed / inward / rake / cement / coal / naphtha / container / placement ho → "goods" array me nikaalo.
-Har goods entry ke fields:
-- "from_stn": originating station code (Ex-CCIB → CCIB)
-- "to_stn": destination station code (to JTTN → JTTN)
-- "wagons": number of wagons
-- "placement_time": time like "21:00" (24-hour)
-- "placement_date": date string exactly as written (01.11.26)
-- "commodity": commodity in UPPERCASE (CEMENT)
-- "line": line number only (from L/1 → 1)
-- "party": full party name UPPERCASE
-- "wagon_type": optional (BCN, BTPN, BOXN, CONTAINER etc.)
-- "free_time": optional
-
 === EXAMPLES ===
 
 EXAMPLE 1 (your exact bundle style):
@@ -490,8 +437,7 @@ Output:
     "SPK": {{"TKT": 294, "PASS": 476, "NET": 17720, "UPI": 2110}},
     "BLMR": {{"TKT": 7, "PASS": 13, "NET": 590}}
   }},
-  "osop": [],
-  "goods": []
+  "osop": []
 }}
 
 EXAMPLE 2 (OSOP multi):
@@ -520,8 +466,7 @@ Output:
     {{"station": "NHK", "date": "26-10-26", "amount": 600}},
     {{"station": "NTSK", "date": "26-10-26", "amount": 450}},
     {{"station": "NTSK", "date": "26-10-26", "unit": 5, "amount": 600}}
-  ],
-  "goods": []
+  ]
 }}
 
 EXAMPLE 3 (terse UTS):
@@ -538,36 +483,8 @@ Output:
   "uts": {{
     "BFD": {{"TKT": 5, "PASS": 7, "NET": 385, "UPI": 190}}
   }},
-  "osop": [],
-  "goods": []
+  "osop": []
 }}
-
-EXAMPLE 4 (inward goods):
-Input:
-"JTTN GOODS POSITION:
-11 wagons Ex-CCIB to JTTN (Cement) placed at 21:00 hrs on 01.11.26 on L/1.
-Party- M/s. Cement Corporation Ltd."
-
-Output:
-{{
-  "prs": {{}},
-  "uts": {{}},
-  "osop": [],
-  "goods": [
-    {{
-      "from_stn": "CCIB",
-      "to_stn": "JTTN",
-      "wagons": 11,
-      "placement_time": "21:00",
-      "placement_date": "01.11.26",
-      "commodity": "CEMENT",
-      "line": "1",
-      "party": "M/S CEMENT CORPORATION LTD"
-    }}
-  ]
-}}
-
-Any format of goods / inward / rake / placement message must be understood.
 
 MESSAGE:
 {msg}
@@ -591,11 +508,8 @@ JSON ONLY:"""
                 parsed["prs"] = parsed.get("prs") or {}
                 parsed["uts"] = parsed.get("uts") or {}
                 parsed["osop"] = parsed.get("osop") or []
-                parsed["goods"] = parsed.get("goods") or []
                 if not isinstance(parsed["osop"], list):
                     parsed["osop"] = [parsed["osop"]]
-                if not isinstance(parsed["goods"], list):
-                    parsed["goods"] = [parsed["goods"]]
                 return parsed
             print("⚠️ Gemini returned no JSON")
         else:
@@ -643,18 +557,6 @@ def apply_post_processing(data, msg):
         else:
             print(f"❌ OSOP entry skipped: {e}")
     data["osop"] = new_osop
-
-    # IWOW goods station resolution
-    new_goods = []
-    for e in data.get("goods", []):
-        if not isinstance(e, dict):
-            continue
-        if e.get("from_stn"):
-            e["from_stn"] = resolve_station(e["from_stn"]) or str(e["from_stn"]).upper()
-        if e.get("to_stn"):
-            e["to_stn"] = resolve_station(e["to_stn"]) or str(e["to_stn"]).upper()
-        new_goods.append(e)
-    data["goods"] = new_goods
 
     up = msg.upper()
     if "UTS" in up and "PRS" not in up.replace("UTS", ""):
@@ -978,218 +880,6 @@ def update_osop_sheet(entries):
     return True
 
 # ==============================================
-# IWOW UPDATE  (NEW)
-# ==============================================
-def _norm_str(v):
-    return str(v or "").strip().upper()
-
-def update_iwow_sheet(entries):
-    if not entries:
-        return True
-
-    lock_fd = open(IWOW_LOCK_FILE, "w")
-    try:
-        fcntl.flock(lock_fd, fcntl.LOCK_EX)
-
-        sh = get_spreadsheet()
-        if not sh:
-            return False
-
-        try:
-            ws = sh.worksheet("IWOW")
-        except gspread.WorksheetNotFound:
-            print("❌ 'IWOW' worksheet nahi mili")
-            return False
-
-        try:
-            matrix = ws.get_all_values()
-        except Exception as e:
-            print(f"❌ IWOW read error: {e}")
-            return False
-
-        start_row = 4
-        for r in range(4, len(matrix) + 50):
-            bval = ""
-            if r - 1 < len(matrix) and len(matrix[r - 1]) > 1:
-                bval = str(matrix[r - 1][1]).strip()
-            if not bval:
-                start_row = r
-                break
-        else:
-            start_row = len(matrix) + 1
-
-        now = ist_now()
-        today = now.date()
-        yesterday = today - timedelta(days=1)
-        tomorrow = today + timedelta(days=1)
-        grace_cutoff = dt_time(IWOW_GRACE_HOUR, 0)
-
-        print(f"🕐 IWOW now (IST): {now.strftime('%Y-%m-%d %H:%M')} | start_row={start_row}")
-
-        updates = []
-        current_row = start_row
-
-        for e in entries:
-            if not isinstance(e, dict):
-                continue
-
-            from_stn  = _norm_str(e.get("from_stn"))
-            to_stn    = _norm_str(e.get("to_stn"))
-            wagons    = e.get("wagons")
-            ptime     = parse_time_flexible(e.get("placement_time"))
-            pdate     = parse_date_flexible(e.get("placement_date"))
-            commodity = _norm_str(e.get("commodity"))
-            line      = _norm_str(e.get("line"))
-            party     = _norm_str(e.get("party"))
-            wtype     = _norm_str(e.get("wagon_type"))
-            ftime     = _norm_str(e.get("free_time"))
-
-            if not to_stn or not pdate:
-                print(f"⏭️ Missing to_stn/date → skip")
-                continue
-
-            print(f"🔎 {from_stn}→{to_stn} | date={pdate} time={ptime} wagons={wagons}")
-
-            accept = False
-            reason = ""
-
-            if pdate == today:
-                if ptime:
-                    placement_dt = datetime.combine(pdate, ptime)
-                    if placement_dt > now + timedelta(minutes=5):
-                        reason = f"future time"
-                    else:
-                        accept = True
-                else:
-                    accept = True
-
-            elif pdate == yesterday:
-                if ptime and ptime >= dt_time(22, 0) and now.time() < grace_cutoff:
-                    accept = True
-                else:
-                    reason = "yesterday outside grace"
-
-            elif pdate == tomorrow:
-                if ptime:
-                    placement_dt = datetime.combine(pdate, ptime)
-                    if placement_dt <= now + timedelta(minutes=30):
-                        accept = True
-                    else:
-                        reason = f"tomorrow pre-report"
-                else:
-                    reason = f"tomorrow pre-report"
-
-            else:
-                reason = f"date out of range ({pdate})"
-
-            if not accept:
-                print(f"⏭️ Rejected ({reason})")
-                continue
-
-            pdate_str_check  = pdate.strftime("%d-%m-%Y")
-            ptime_str_check  = ptime.strftime("%H:%M") if ptime else ""
-            wagons_str_check = str(wagons or "").strip()
-
-            is_duplicate = False
-            for r in range(3, len(matrix)):
-                row = matrix[r]
-                existing_to        = _norm_str(row[1])   if len(row) > 1  else ""
-                existing_line      = _norm_str(row[2])   if len(row) > 2  else ""
-                existing_commodity = _norm_str(row[4])   if len(row) > 4  else ""
-                existing_wagons    = str(row[5]).strip() if len(row) > 5  else ""
-                existing_time      = str(row[10]).strip() if len(row) > 10 else ""
-                existing_date      = str(row[11]).strip() if len(row) > 11 else ""
-                existing_from      = _norm_str(row[20])  if len(row) > 20 else ""
-                existing_party     = _norm_str(row[22])  if len(row) > 22 else ""
-
-                if (existing_to        == to_stn and
-                    existing_date      == pdate_str_check and
-                    existing_time      == ptime_str_check and
-                    existing_wagons    == wagons_str_check and
-                    existing_from      == from_stn and
-                    existing_commodity == commodity and
-                    existing_line      == line and
-                    existing_party     == party):
-                    is_duplicate = True
-                    break
-
-            if is_duplicate:
-                print(f"⏭️ Duplicate")
-                continue
-
-            try:
-                wagons_num = int(float(wagons)) if wagons else 42
-            except Exception:
-                wagons_num = 42
-
-            if "NAPHTHA" in commodity or "NAPTHA" in commodity:
-                ftime = "8 HRS"
-                if not wtype:
-                    wtype = "BTPN"
-            elif "CONTAINER" in commodity or "CONT" in commodity:
-                wtype = "CONTAINER"
-                if not ftime:
-                    ftime = "3 HRS"
-            else:
-                if not ftime:
-                    if wagons_num <= 20:
-                        ftime = "5 HRS"
-                    elif wagons_num <= 30:
-                        ftime = "7 HRS"
-                    else:
-                        ftime = "9 HRS"
-                if not wtype:
-                    if "CEMENT" in commodity:
-                        wtype = "BCN"
-                    elif "COAL" in commodity:
-                        wtype = "BOXN"
-                    elif any(x in commodity for x in ["FOOD", "GRAIN", "RICE", "WHEAT"]):
-                        wtype = "BCN"
-                    elif "FERT" in commodity:
-                        wtype = "BCN"
-                    else:
-                        wtype = "BCN"
-
-            arrival_time_str = ""
-            arrival_date_str = pdate.strftime("%d-%m-%Y")
-            ptime_str        = ptime.strftime("%H:%M") if ptime else ""
-            pdate_str        = pdate.strftime("%d-%m-%Y")
-
-            if ptime:
-                delta = random.choice([25, 30, 35, 40])
-                placement_dt = datetime.combine(pdate, ptime)
-                arrival_dt = placement_dt - timedelta(minutes=delta)
-                arrival_time_str = arrival_dt.strftime("%H:%M")
-                arrival_date_str = arrival_dt.strftime("%d-%m-%Y")
-
-            def q(col, val):
-                if val is not None and str(val).strip() != "":
-                    updates.append({"range": rowcol_to_a1(current_row, col), "values": [[val]]})
-
-            q(2, to_stn); q(3, line); q(4, wtype); q(5, commodity)
-            q(6, wagons); q(8, wagons)
-            q(9, arrival_time_str); q(10, arrival_date_str)
-            q(11, ptime_str); q(12, pdate_str)
-            q(18, ftime); q(21, from_stn); q(23, party)
-
-            print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | {wagons} | {commodity}")
-            current_row += 1
-
-        if updates:
-            try:
-                ws.batch_update(updates)
-                print(f"✅ IWOW batch update successful ({len(updates)} cells)")
-            except Exception as e:
-                print(f"❌ IWOW batch update failed: {e}")
-                return False
-
-    finally:
-        fcntl.flock(lock_fd, fcntl.LOCK_UN)
-        lock_fd.close()
-
-    return True
-
-# ==============================================
 # WEBHOOK
 # ==============================================
 @app.route("/", methods=["GET"])
@@ -1237,9 +927,6 @@ def webhook():
 
                     if data.get("osop"):
                         update_osop_sheet(data["osop"])
-
-                    if data.get("goods"):
-                        update_iwow_sheet(data["goods"])
     except Exception as e:
         print(f"❌ Webhook Error: {e}")
 
@@ -1253,8 +940,6 @@ def startup_check():
     print(f"SHEET_NAME     : {SHEET_NAME}")
     print(f"GEMINI_API_KEY : {bool(GEMINI_API_KEY)}")
     print(f"CREDENTIALS    : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
-    print(f"IWOW_GRACE_HOUR: {IWOW_GRACE_HOUR}:00 IST")
-    print(f"IST_NOW        : {ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
     get_sheet()
     print("===================================")
 
