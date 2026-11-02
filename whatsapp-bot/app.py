@@ -32,6 +32,19 @@ GEMINI_MODEL = "gemini-2.5-flash"
 OSOP_LOCK_FILE = "/tmp/osop_update.lock"
 IWOW_LOCK_FILE = "/tmp/iwow_update.lock"
 
+# 24-hr grace window: yesterday's 22:00-23:59 placement accepted until this IST hour
+IWOW_GRACE_HOUR = int(os.environ.get("IWOW_GRACE_HOUR", "6"))
+
+# ==============================================
+# IST TIME HELPER (server is UTC, user is IST)
+# ==============================================
+def ist_now():
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
+    except Exception:
+        return datetime.utcnow() + timedelta(hours=5, minutes=30)
+
 # ==============================================
 # STATION ALIASES
 # ==============================================
@@ -254,7 +267,7 @@ def load_credentials_dict():
     return None
 
 # ==============================================
-# GOOGLE SHEETS  (NO CACHE)
+# GOOGLE SHEETS
 # ==============================================
 def get_spreadsheet():
     creds_dict = load_credentials_dict()
@@ -315,7 +328,7 @@ def get_station_map(sheet):
     return m
 
 # ==============================================
-# DATE PARSER
+# DATE PARSER (robust)
 # ==============================================
 def parse_date_flexible(s):
     if s is None:
@@ -323,39 +336,75 @@ def parse_date_flexible(s):
     s = str(s).strip()
     if not s:
         return None
+    s = re.sub(r'[\u2013\u2014]', '-', s)
+
     formats = (
         "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y",
         "%d/%m/%y", "%d-%m-%y", "%d.%m.%y",
-        "%Y-%m-%d", "%Y/%m/%d",
+        "%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d",
         "%d %b %Y", "%d %B %Y", "%d %b %y", "%d %B %y",
+        "%d %b, %Y", "%d %B, %Y",
         "%d %m %Y", "%d %m %y",
         "%d/%m", "%d-%m", "%d.%m",
+        "%d %b", "%d %B",
     )
     for fmt in formats:
         try:
-            return datetime.strptime(s, fmt).date()
+            dt = datetime.strptime(s, fmt)
+            if fmt in ("%d/%m", "%d-%m", "%d.%m", "%d %b", "%d %B"):
+                dt = dt.replace(year=ist_now().year)
+            return dt.date()
         except ValueError:
             pass
+
     try:
         from dateutil import parser as _dp
-        return _dp.parse(s, dayfirst=True).date()
+        dt = _dp.parse(s, dayfirst=True)
+        if dt.year == 1900:
+            dt = dt.replace(year=ist_now().year)
+        return dt.date()
     except Exception:
-        return None
+        pass
 
+    m = re.search(r'(\d{1,2})[\.\-\/ ](\d{1,2})(?:[\.\-\/ ](\d{2,4}))?', s)
+    if m:
+        try:
+            d = int(m.group(1))
+            mo = int(m.group(2))
+            y = m.group(3)
+            yi = int(y) if y else ist_now().year
+            if yi < 100:
+                yi += 2000
+            return datetime(yi, mo, d).date()
+        except Exception:
+            pass
+
+    print(f"⚠️ Could not parse date: '{s}'")
+    return None
+
+# ==============================================
+# TIME PARSER (24-hour clock)
+# ==============================================
 def parse_time_flexible(s):
+    if s is None:
+        return None
+    s = str(s).strip().upper()
     if not s:
         return None
-    s = str(s).strip().upper().replace("HRS", "").replace("HR", "").strip()
-    for fmt in ("%H:%M", "%H.%M", "%H%M"):
+    s = re.sub(r'\b(HRS|HR|HOURS|HOUR)\b', '', s).strip()
+    s = s.replace('.', ':').replace(' ', '')
+
+    for fmt in ("%H:%M", "%H%M"):
         try:
             return datetime.strptime(s, fmt).time()
-        except:
+        except Exception:
             pass
-    m = re.search(r'(\d{1,2})[:\.](\d{2})', s)
+
+    m = re.search(r'(\d{1,2}):(\d{2})', s)
     if m:
         try:
             return datetime.strptime(f"{m.group(1)}:{m.group(2)}", "%H:%M").time()
-        except:
+        except Exception:
             pass
     return None
 
@@ -390,7 +439,7 @@ Fields for each goods entry:
 - "from_stn" : originating station code (Ex-CCIB → CCIB)
 - "to_stn"   : destination station code (to JTTN → JTTN)
 - "wagons"   : number of wagons (11)
-- "placement_time" : time like "21:00"
+- "placement_time" : time like "21:00" or "00:01" (24-hour)
 - "placement_date" : date string exactly as written (01.11.26)
 - "commodity": commodity in UPPERCASE (CEMENT)
 - "line"     : line number only (from L/1 → 1)
@@ -496,7 +545,6 @@ def apply_post_processing(data, msg):
             new_osop.append(e)
     data["osop"] = new_osop
 
-    # Goods stations
     new_goods = []
     for e in data.get("goods", []):
         if not isinstance(e, dict):
@@ -736,8 +784,11 @@ def update_osop_sheet(entries):
     return True
 
 # ==============================================
-# IWOW UPDATE - COMPLETE WITH ALL MISSING RULES
+# IWOW UPDATE — 24-HOUR CLOCK LOGIC (FINAL)
 # ==============================================
+def _norm_str(v):
+    return str(v or "").strip().upper()
+
 def update_iwow_sheet(entries):
     if not entries:
         return True
@@ -762,23 +813,26 @@ def update_iwow_sheet(entries):
             print(f"❌ IWOW read error: {e}")
             return False
 
-        # Find first empty row starting from row 4
+        # First empty row (col B) from row 4 onwards
         start_row = 4
         for r in range(4, len(matrix) + 50):
             bval = ""
-            if r-1 < len(matrix) and len(matrix[r-1]) > 1:
-                bval = str(matrix[r-1][1]).strip()
+            if r - 1 < len(matrix) and len(matrix[r - 1]) > 1:
+                bval = str(matrix[r - 1][1]).strip()
             if not bval:
                 start_row = r
                 break
         else:
             start_row = len(matrix) + 1
 
-        print(f"📌 IWOW starting from row {start_row}")
-
-        now = datetime.now()
+        # 24-hour clock — all comparisons in IST
+        now = ist_now()
         today = now.date()
         yesterday = today - timedelta(days=1)
+        tomorrow = today + timedelta(days=1)
+        grace_cutoff = dt_time(IWOW_GRACE_HOUR, 0)  # default 06:00
+
+        print(f"🕐 IWOW now (IST): {now.strftime('%Y-%m-%d %H:%M')} | today={today} | yesterday={yesterday} | start_row={start_row}")
 
         updates = []
         current_row = start_row
@@ -787,62 +841,103 @@ def update_iwow_sheet(entries):
             if not isinstance(e, dict):
                 continue
 
-            from_stn = str(e.get("from_stn") or "").upper().strip()
-            to_stn   = str(e.get("to_stn") or "").upper().strip()
-            wagons   = e.get("wagons")
-            ptime    = parse_time_flexible(e.get("placement_time"))
-            pdate    = parse_date_flexible(e.get("placement_date"))
-            commodity = str(e.get("commodity") or "").upper().strip()
-            line     = str(e.get("line") or "").strip()
-            party    = str(e.get("party") or "").upper().strip()
-            wtype    = str(e.get("wagon_type") or "").upper().strip()
-            ftime    = str(e.get("free_time") or "").upper().strip()
+            from_stn  = _norm_str(e.get("from_stn"))
+            to_stn    = _norm_str(e.get("to_stn"))
+            wagons    = e.get("wagons")
+            ptime     = parse_time_flexible(e.get("placement_time"))
+            pdate     = parse_date_flexible(e.get("placement_date"))
+            commodity = _norm_str(e.get("commodity"))
+            line      = _norm_str(e.get("line"))
+            party     = _norm_str(e.get("party"))
+            wtype     = _norm_str(e.get("wagon_type"))
+            ftime     = _norm_str(e.get("free_time"))
 
             if not to_stn or not pdate:
+                print(f"⏭️ Missing to_stn/date → skip | raw_date={e.get('placement_date')!r}")
                 continue
 
-            # ========== FINAL DATE + TIME RULE ==========
-            # Today → full accept (except future)
-            # Yesterday → only if time >= 22:00
-            if ptime:
-                placement_dt = datetime.combine(pdate, ptime)
-                if placement_dt > now + timedelta(minutes=5):
-                    print(f"⏭️ Future time reject: {placement_dt}")
-                    continue
+            print(f"🔎 {from_stn}→{to_stn} | date={pdate} time={ptime} wagons={wagons}")
+
+            # ---------- 24-HOUR CLOCK ACCEPTANCE ----------
+            accept = False
+            reason = ""
 
             if pdate == today:
-                pass  # full accept
+                # TODAY: accept any 24h time; reject only future time (>5 min ahead)
+                if ptime:
+                    placement_dt = datetime.combine(pdate, ptime)
+                    if placement_dt > now + timedelta(minutes=5):
+                        reason = f"future time {placement_dt.strftime('%H:%M')} (now {now.strftime('%H:%M')})"
+                    else:
+                        accept = True
+                else:
+                    accept = True
+
             elif pdate == yesterday:
-                if not ptime or ptime < dt_time(22, 0):
-                    print(f"⏭️ Yesterday data before 22:00 → reject")
-                    continue
+                # YESTERDAY: 22:00-23:59 placement, user sending before grace_cutoff (early morning)
+                if ptime and ptime >= dt_time(22, 0) and now.time() < grace_cutoff:
+                    accept = True
+                    reason = f"yesterday 22:00+ within grace window (now {now.strftime('%H:%M')})"
+                else:
+                    if not ptime:
+                        reason = "yesterday without time"
+                    elif ptime < dt_time(22, 0):
+                        reason = f"yesterday pre-22:00 ({ptime.strftime('%H:%M')})"
+                    else:
+                        reason = f"yesterday 22:00+ but grace cutoff passed (now {now.strftime('%H:%M')})"
+
+            elif pdate == tomorrow:
+                # TOMORROW: accept only if within next 30 min (clock skew / pre-report edge)
+                if ptime:
+                    placement_dt = datetime.combine(pdate, ptime)
+                    if placement_dt <= now + timedelta(minutes=30):
+                        accept = True
+                        reason = "imminent tomorrow placement"
+                    else:
+                        reason = f"tomorrow pre-report ({pdate})"
+                else:
+                    reason = f"tomorrow pre-report ({pdate})"
+
             else:
-                print(f"⏭️ Date too old → reject")
+                reason = f"date out of range ({pdate})"
+
+            if not accept:
+                print(f"⏭️ Rejected ({reason})")
                 continue
 
-            # ========== DUPLICATE CHECK ==========
+            # ---------- DUPLICATE CHECK (all 8 key fields) ----------
+            pdate_str_check  = pdate.strftime("%d-%m-%Y")
+            ptime_str_check  = ptime.strftime("%H:%M") if ptime else ""
+            wagons_str_check = str(wagons or "").strip()
+
             is_duplicate = False
-            pdate_str_check = pdate.strftime("%d-%m-%Y")
-            ptime_str_check = ptime.strftime("%H:%M") if ptime else ""
-            for r in range(3, min(len(matrix), current_row + 5)):
-                try:
-                    existing_to = str(matrix[r][1]).strip().upper() if len(matrix[r]) > 1 else ""
-                    existing_date = str(matrix[r][11]).strip() if len(matrix[r]) > 11 else ""
-                    existing_time = str(matrix[r][10]).strip() if len(matrix[r]) > 10 else ""
-                    existing_wagons = str(matrix[r][5]).strip() if len(matrix[r]) > 5 else ""
-                    if (existing_to == to_stn and 
-                        existing_date == pdate_str_check and 
-                        existing_time == ptime_str_check and
-                        existing_wagons == str(wagons or "")):
-                        is_duplicate = True
-                        break
-                except:
-                    pass
+            for r in range(3, len(matrix)):
+                row = matrix[r]
+                existing_to        = _norm_str(row[1])   if len(row) > 1  else ""
+                existing_line      = _norm_str(row[2])   if len(row) > 2  else ""
+                existing_commodity = _norm_str(row[4])   if len(row) > 4  else ""
+                existing_wagons    = str(row[5]).strip() if len(row) > 5  else ""
+                existing_time      = str(row[10]).strip() if len(row) > 10 else ""
+                existing_date      = str(row[11]).strip() if len(row) > 11 else ""
+                existing_from      = _norm_str(row[20])  if len(row) > 20 else ""
+                existing_party     = _norm_str(row[22])  if len(row) > 22 else ""
+
+                if (existing_to        == to_stn and
+                    existing_date      == pdate_str_check and
+                    existing_time      == ptime_str_check and
+                    existing_wagons    == wagons_str_check and
+                    existing_from      == from_stn and
+                    existing_commodity == commodity and
+                    existing_line      == line and
+                    existing_party     == party):
+                    is_duplicate = True
+                    break
+
             if is_duplicate:
-                print(f"⏭️ Duplicate skipped: {to_stn} {pdate_str_check} {ptime_str_check}")
+                print(f"⏭️ Duplicate (all fields match)")
                 continue
 
-            # ========== FREE TIME + WAGON TYPE (FINAL RULES) ==========
+            # ---------- FREE TIME + WAGON TYPE ----------
             try:
                 wagons_num = int(float(wagons)) if wagons else 42
             except:
@@ -876,11 +971,11 @@ def update_iwow_sheet(entries):
                     else:
                         wtype = "BCN"
 
-            # Arrival time = placement - random 25/30/35/40 min
+            # Arrival time = placement - random 25/30/35/40 min (24-hour rollover safe)
             arrival_time_str = ""
             arrival_date_str = pdate.strftime("%d-%m-%Y")
-            ptime_str = ptime.strftime("%H:%M") if ptime else ""
-            pdate_str = pdate.strftime("%d-%m-%Y")
+            ptime_str        = ptime.strftime("%H:%M") if ptime else ""
+            pdate_str        = pdate.strftime("%d-%m-%Y")
 
             if ptime:
                 delta = random.choice([25, 30, 35, 40])
@@ -907,7 +1002,7 @@ def update_iwow_sheet(entries):
             q(21, from_stn)         # U
             q(23, party)            # W
 
-            print(f"✅ IWOW row {current_row}: {from_stn} → {to_stn} | {wagons} | {commodity} | {ftime} | {wtype}")
+            print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | {wagons} | {commodity} | {ftime} | {wtype}")
             current_row += 1
 
         if updates:
@@ -986,9 +1081,11 @@ def webhook():
 # ==============================================
 def startup_check():
     print("========== STARTUP CHECK ==========")
-    print(f"SHEET_NAME     : {SHEET_NAME}")
-    print(f"GEMINI_API_KEY : {bool(GEMINI_API_KEY)}")
-    print(f"CREDENTIALS    : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
+    print(f"SHEET_NAME      : {SHEET_NAME}")
+    print(f"GEMINI_API_KEY  : {bool(GEMINI_API_KEY)}")
+    print(f"CREDENTIALS     : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
+    print(f"IWOW_GRACE_HOUR : {IWOW_GRACE_HOUR}:00 IST")
+    print(f"IST_NOW         : {ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
     get_sheet()
     print("===================================")
 
