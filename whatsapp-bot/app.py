@@ -32,6 +32,9 @@ GEMINI_MODEL = "gemini-2.5-flash"
 OSOP_LOCK_FILE = "/tmp/osop_update.lock"
 IWOW_LOCK_FILE = "/tmp/iwow_update.lock"
 
+# Grace window: yesterday's 22:00+ data accepted until this hour (default 6 AM)
+IWOW_GRACE_HOUR = int(os.environ.get("IWOW_GRACE_HOUR", "6"))
+
 # ==============================================
 # STATION ALIASES
 # ==============================================
@@ -254,7 +257,7 @@ def load_credentials_dict():
     return None
 
 # ==============================================
-# GOOGLE SHEETS  (NO CACHE)
+# GOOGLE SHEETS
 # ==============================================
 def get_spreadsheet():
     creds_dict = load_credentials_dict()
@@ -736,7 +739,10 @@ def update_osop_sheet(entries):
     return True
 
 # ==============================================
-# IWOW UPDATE - COMPLETE WITH ALL MISSING RULES
+# IWOW UPDATE — FINAL RULES
+#  • Today's data   → accept (reject only future time)
+#  • Yesterday      → accept 22:00+ data ONLY when current time < 06:00
+#  • Duplicate      → skip only when ALL key fields match
 # ==============================================
 def update_iwow_sheet(entries):
     if not entries:
@@ -766,8 +772,8 @@ def update_iwow_sheet(entries):
         start_row = 4
         for r in range(4, len(matrix) + 50):
             bval = ""
-            if r-1 < len(matrix) and len(matrix[r-1]) > 1:
-                bval = str(matrix[r-1][1]).strip()
+            if r - 1 < len(matrix) and len(matrix[r - 1]) > 1:
+                bval = str(matrix[r - 1][1]).strip()
             if not bval:
                 start_row = r
                 break
@@ -779,6 +785,7 @@ def update_iwow_sheet(entries):
         now = datetime.now()
         today = now.date()
         yesterday = today - timedelta(days=1)
+        grace_until = dt_time(IWOW_GRACE_HOUR, 0)
 
         updates = []
         current_row = start_row
@@ -787,65 +794,98 @@ def update_iwow_sheet(entries):
             if not isinstance(e, dict):
                 continue
 
-            from_stn = str(e.get("from_stn") or "").upper().strip()
-            to_stn   = str(e.get("to_stn") or "").upper().strip()
-            wagons   = e.get("wagons")
-            ptime    = parse_time_flexible(e.get("placement_time"))
-            pdate    = parse_date_flexible(e.get("placement_date"))
+            from_stn  = str(e.get("from_stn") or "").upper().strip()
+            to_stn    = str(e.get("to_stn") or "").upper().strip()
+            wagons    = e.get("wagons")
+            ptime     = parse_time_flexible(e.get("placement_time"))
+            pdate     = parse_date_flexible(e.get("placement_date"))
             commodity = str(e.get("commodity") or "").upper().strip()
-            line     = str(e.get("line") or "").strip()
-            party    = str(e.get("party") or "").upper().strip()
-            wtype    = str(e.get("wagon_type") or "").upper().strip()
-            ftime    = str(e.get("free_time") or "").upper().strip()
+            line      = str(e.get("line") or "").strip()
+            party     = str(e.get("party") or "").upper().strip()
+            wtype     = str(e.get("wagon_type") or "").upper().strip()
+            ftime     = str(e.get("free_time") or "").upper().strip()
 
             if not to_stn or not pdate:
+                print(f"⏭️ Missing to_stn/date, skipped")
                 continue
 
-            # ========== FINAL DATE + TIME RULE ==========
-            # Today → full accept (except future)
-            # Yesterday → only if time >= 22:00
-            if ptime:
-                placement_dt = datetime.combine(pdate, ptime)
-                if placement_dt > now + timedelta(minutes=5):
-                    print(f"⏭️ Future time reject: {placement_dt}")
-                    continue
+            # ==========================================
+            # DATE ACCEPTANCE
+            # ==========================================
+            accept = False
+            reason = ""
 
             if pdate == today:
-                pass  # full accept
+                if ptime:
+                    placement_dt = datetime.combine(pdate, ptime)
+                    if placement_dt > now + timedelta(minutes=5):
+                        reason = f"future time {placement_dt.strftime('%H:%M')}"
+                    else:
+                        accept = True
+                else:
+                    accept = True
+
             elif pdate == yesterday:
-                if not ptime or ptime < dt_time(22, 0):
-                    print(f"⏭️ Yesterday data before 22:00 → reject")
-                    continue
+                if ptime and ptime >= dt_time(22, 0) and now.time() < grace_until:
+                    accept = True
+                    reason = "late-night grace window"
+                else:
+                    if ptime and ptime < dt_time(22, 0):
+                        reason = f"yesterday data before 22:00 ({ptime.strftime('%H:%M')})"
+                    else:
+                        reason = "yesterday 22:00+ but grace window passed"
+
             else:
-                print(f"⏭️ Date too old → reject")
+                reason = f"date too old ({pdate})"
+
+            if not accept:
+                print(f"⏭️ Rejected ({reason}): {from_stn}->{to_stn} {pdate} {ptime}")
                 continue
 
-            # ========== DUPLICATE CHECK ==========
+            # ==========================================
+            # DUPLICATE CHECK — all key fields must match
+            # ==========================================
+            pdate_str_check  = pdate.strftime("%d-%m-%Y")
+            ptime_str_check  = ptime.strftime("%H:%M") if ptime else ""
+            wagons_str_check = str(wagons or "").strip()
+
             is_duplicate = False
-            pdate_str_check = pdate.strftime("%d-%m-%Y")
-            ptime_str_check = ptime.strftime("%H:%M") if ptime else ""
-            for r in range(3, min(len(matrix), current_row + 5)):
+            for r in range(3, len(matrix)):
                 try:
-                    existing_to = str(matrix[r][1]).strip().upper() if len(matrix[r]) > 1 else ""
-                    existing_date = str(matrix[r][11]).strip() if len(matrix[r]) > 11 else ""
-                    existing_time = str(matrix[r][10]).strip() if len(matrix[r]) > 10 else ""
-                    existing_wagons = str(matrix[r][5]).strip() if len(matrix[r]) > 5 else ""
-                    if (existing_to == to_stn and 
-                        existing_date == pdate_str_check and 
-                        existing_time == ptime_str_check and
-                        existing_wagons == str(wagons or "")):
+                    row = matrix[r]
+                    existing_to        = str(row[1]).strip().upper()  if len(row) > 1  else ""
+                    existing_line      = str(row[2]).strip()           if len(row) > 2  else ""
+                    existing_commodity = str(row[4]).strip().upper()   if len(row) > 4  else ""
+                    existing_wagons    = str(row[5]).strip()           if len(row) > 5  else ""
+                    existing_time      = str(row[10]).strip()          if len(row) > 10 else ""
+                    existing_date      = str(row[11]).strip()          if len(row) > 11 else ""
+                    existing_from      = str(row[20]).strip().upper()  if len(row) > 20 else ""
+                    existing_party     = str(row[22]).strip().upper()  if len(row) > 22 else ""
+
+                    if (existing_to        == to_stn and
+                        existing_date      == pdate_str_check and
+                        existing_time      == ptime_str_check and
+                        existing_wagons    == wagons_str_check and
+                        existing_from      == from_stn and
+                        existing_commodity == commodity and
+                        existing_line      == line and
+                        existing_party     == party):
                         is_duplicate = True
                         break
-                except:
+                except Exception:
                     pass
+
             if is_duplicate:
-                print(f"⏭️ Duplicate skipped: {to_stn} {pdate_str_check} {ptime_str_check}")
+                print(f"⏭️ Duplicate (all fields match): {from_stn}->{to_stn} "
+                      f"{pdate_str_check} {ptime_str_check}")
                 continue
 
-            # ========== FREE TIME + WAGON TYPE (FINAL RULES) ==========
+            # ==========================================
+            # FREE TIME + WAGON TYPE
+            # ==========================================
             try:
                 wagons_num = int(float(wagons)) if wagons else 42
-            except:
+            except Exception:
                 wagons_num = 42
 
             if "NAPHTHA" in commodity or "NAPTHA" in commodity:
@@ -879,8 +919,8 @@ def update_iwow_sheet(entries):
             # Arrival time = placement - random 25/30/35/40 min
             arrival_time_str = ""
             arrival_date_str = pdate.strftime("%d-%m-%Y")
-            ptime_str = ptime.strftime("%H:%M") if ptime else ""
-            pdate_str = pdate.strftime("%d-%m-%Y")
+            ptime_str        = ptime.strftime("%H:%M") if ptime else ""
+            pdate_str        = pdate.strftime("%d-%m-%Y")
 
             if ptime:
                 delta = random.choice([25, 30, 35, 40])
@@ -907,7 +947,8 @@ def update_iwow_sheet(entries):
             q(21, from_stn)         # U
             q(23, party)            # W
 
-            print(f"✅ IWOW row {current_row}: {from_stn} → {to_stn} | {wagons} | {commodity} | {ftime} | {wtype}")
+            print(f"✅ IWOW row {current_row}: {from_stn} → {to_stn} | "
+                  f"{wagons} | {commodity} | {ftime} | {wtype}")
             current_row += 1
 
         if updates:
@@ -986,9 +1027,10 @@ def webhook():
 # ==============================================
 def startup_check():
     print("========== STARTUP CHECK ==========")
-    print(f"SHEET_NAME     : {SHEET_NAME}")
-    print(f"GEMINI_API_KEY : {bool(GEMINI_API_KEY)}")
-    print(f"CREDENTIALS    : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
+    print(f"SHEET_NAME      : {SHEET_NAME}")
+    print(f"GEMINI_API_KEY  : {bool(GEMINI_API_KEY)}")
+    print(f"CREDENTIALS     : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
+    print(f"IWOW_GRACE_HOUR : {IWOW_GRACE_HOUR}:00")
     get_sheet()
     print("===================================")
 
