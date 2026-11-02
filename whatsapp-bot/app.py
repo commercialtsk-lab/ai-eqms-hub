@@ -73,7 +73,7 @@ STATION_ALIASES = {
     "DKM": ["DKM", "DIKOM"],
     "PNT": ["PNT", "PANITOLA"],
     "TII": ["TII", "TINGRAI"],
-    "LXA": ["LXA", "LAKSWA"],
+    "LXA": ["LXA", "LAKSWA", "LAKWA"],
     "SFR": ["SFR", "SAFRAI"],
     "SLX": ["SLX", "SELENG HAT", "SELENGHAT"],
     "NMT": ["NMT", "NAMTIALI"],
@@ -358,7 +358,7 @@ Extract numbers into STRICT JSON only. No explanation, no markdown, no extra tex
 
 STATION RULES:
 1. Message me FULL NAME ho ya CODE — dono same station hain. Hamesha CODE se key banao.
-   "Borhat" → "BFD" | "New Tinsukia" / "ntsk" / "New Tinsukia Jn" → "NTSK" | "Amguri Jn" → "AGI"
+   "Borhat" → "BFD" | "New Tinsukia" / "ntsk" / "New Tinsukia Jn" → "NTSK" | "Amguri Jn" → "AGI" | "Sibsagar Town" → "SRTN"
 2. ROING aur TEZU sirf PRS stations hain — inke UTS data ko ignore karo.
 
 === OSOP SECTION (MOST IMPORTANT) ===
@@ -450,7 +450,8 @@ Output:
 Input:
 "OSOP DBRG, date 01/11/2026, unit 4, Amount 450
 OSOP DBRG date 01/11/2026 amount 620
-OSOP New Tinsukia 01/11/26 unit 2 amount 300"
+OSOP New Tinsukia 01/11/26 unit 2 amount 300
+OSOP Sibsagar Town 01/11/26 Amt 520"
 
 Output:
 {{
@@ -459,7 +460,8 @@ Output:
   "osop": [
     {{"station": "DBRG", "date": "01/11/2026", "unit": 4, "amount": 450}},
     {{"station": "DBRG", "date": "01/11/2026", "amount": 620}},
-    {{"station": "NTSK", "date": "01/11/26", "unit": 2, "amount": 300}}
+    {{"station": "NTSK", "date": "01/11/26", "unit": 2, "amount": 300}},
+    {{"station": "SRTN", "date": "01/11/26", "amount": 520}}
   ]
 }}
 
@@ -879,14 +881,14 @@ def update_osop_sheet(entries):
             return ""
 
     # ---------- Row 5 me dates hain (har 2 column ka pair) ----------
-    row5 = matrix[4] if len(matrix) > 4 else []   # row 5 = index 4
+    row5 = matrix[4] if len(matrix) > 4 else []
     date_cols = {}
-    c = 3   # C column se start
+    c = 3
     max_cols = max(len(row5), 40)
     while c <= max_cols:
         raw = row5[c-1] if c-1 < len(row5) else ""
         if not str(raw).strip() and c < len(row5):
-            raw = row5[c]   # merged cell ke liye right side check
+            raw = row5[c]
         d = parse_date_flexible(raw)
         if d:
             date_cols[d] = (c, c + 1)
@@ -927,7 +929,7 @@ def update_osop_sheet(entries):
         queued.add(key)
         updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
 
-    # Process entries in the exact order they arrived in the message
+    # Process entries in exact message order
     for e in entries:
         if not isinstance(e, dict):
             continue
@@ -936,7 +938,7 @@ def update_osop_sheet(entries):
             print(f"⚠️ OSOP: '{e.get('station')}' sheet me nahi mila → skip")
             continue
 
-        rows = station_rows[code]          # list of rows for this station (in sheet order)
+        rows = station_rows[code]
 
         d = parse_date_flexible(e.get("date"))
         if not d:
@@ -948,16 +950,14 @@ def update_osop_sheet(entries):
 
         camt, cunit = date_cols[d]
 
-        # Find the FIRST available (empty) row for this station + date
+        # First available empty row for this station + date
         chosen_row = None
         for r in rows:
             amt_cell = get_current(r, camt)
             unit_cell = get_current(r, cunit)
-            # Prefer a completely empty slot for this date
             if is_cell_empty(amt_cell) and is_cell_empty(unit_cell):
                 chosen_row = r
                 break
-            # If amount is empty but unit is filled, still use it
             if is_cell_empty(amt_cell):
                 chosen_row = r
                 break
@@ -982,19 +982,13 @@ def update_osop_sheet(entries):
         # ---- Unit ----
         unit = e.get("unit")
         if unit is None or str(unit).strip() == "":
-            # Try to infer only if other rows of same station have a single common unit pattern
-            used_units = set()
-            for rr in rows:
-                if rr == row:
-                    continue
-                uv = _to_float(get_current(rr, cunit))
-                if uv is not None:
-                    used_units.add(int(uv))
-            if len(used_units) == 1:
-                unit = used_units.pop() + 1
-                print(f"🔧 OSOP {code} {d}: unit missing → inferred '{unit}'")
+            # Unit missing → amount // 100
+            if amt is not None:
+                unit = int(amt // 100)
+                print(f"🔧 OSOP {code} {d}: unit missing → calculated amount//100 = {unit}")
             else:
-                print(f"⚠️ OSOP {code} {d}: unit missing → blank rahega")
+                print(f"⚠️ OSOP {code} {d}: unit missing aur amount bhi nahi → blank")
+                unit = None
 
         if unit is not None and str(unit).strip() != "":
             ex = get_current(row, cunit)
