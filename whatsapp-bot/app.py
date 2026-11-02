@@ -29,7 +29,7 @@ GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 GEMINI_MODEL = "gemini-2.5-flash"
 
 # ==============================================
-# STATION ALIASES  (OFFICIAL LIST)
+# STATION ALIASES  (Aapke exact names ke according)
 # ==============================================
 STATION_ALIASES = {
     "DBRT": ["DBRT", "DIBRUGARH TOWN"],
@@ -38,7 +38,7 @@ STATION_ALIASES = {
     "TSK": ["TSK", "TINSUKIA", "TINSUKIA JN", "TIN SUKIA", "TINSUKIA TOWN"],
     "MXN": ["MXN", "MARIANI", "MARIANI JN"],
     "JTTN": ["JTTN", "JORHAT TOWN", "JORHAT"],
-    "SRTN": ["SRTN", "SIBSAGAR TOWN", "SIVASAGAR TOWN", "SIBSAGAR", "SIVASAGAR"],
+    "SRTN": ["SRTN", "SIBSAGAR TOWN", "SIVASAGAR TOWN", "SIBSAGAR", "SIVASAGAR", "SIVSAGAR TOWN"],
     "SLGR": ["SLGR", "SIMALUGURI", "SIMALUGURI JN"],
     "GLGT": ["GLGT", "GOLAGHAT"],
     "MRHT": ["MRHT", "MORANHAT", "MORAN HAT"],
@@ -73,7 +73,7 @@ STATION_ALIASES = {
     "DKM": ["DKM", "DIKOM"],
     "PNT": ["PNT", "PANITOLA"],
     "TII": ["TII", "TINGRAI"],
-    "LXA": ["LXA", "LAKSWA", "LAKWA"],
+    "LXA": ["LXA", "LAKSWA", "LAKWA", "LAKUA"],
     "SFR": ["SFR", "SAFRAI"],
     "SLX": ["SLX", "SELENG HAT", "SELENGHAT"],
     "NMT": ["NMT", "NAMTIALI"],
@@ -358,7 +358,7 @@ Extract numbers into STRICT JSON only. No explanation, no markdown, no extra tex
 
 STATION RULES:
 1. Message me FULL NAME ho ya CODE — dono same station hain. Hamesha CODE se key banao.
-   "Borhat" → "BFD" | "New Tinsukia" / "ntsk" / "New Tinsukia Jn" → "NTSK" | "Amguri Jn" → "AGI" | "Sibsagar Town" → "SRTN"
+   "Borhat" → "BFD" | "New Tinsukia" / "ntsk" → "NTSK" | "Sibsagar Town" → "SRTN" | "Lakua" → "LXA"
 2. ROING aur TEZU sirf PRS stations hain — inke UTS data ko ignore karo.
 
 === OSOP SECTION (MOST IMPORTANT) ===
