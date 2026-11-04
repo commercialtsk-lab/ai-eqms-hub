@@ -98,7 +98,9 @@ STATION_ALIASES = {
     "NMGY": ["NMGY", "NUMALIGARH"],
     "KRHT": ["KRHT", "KHARAHAT"],
     "CCIB": ["CCIB", "CHANDI CHOWK", "CHANDICHOWKI"],
-    "MRLB": ["MRLB", "MAL BAZAR", "MALBAZAR", "MAL JUNCTION", "MAL JN"]
+    "MRLB": ["MRLB", "MAL BAZAR", "MALBAZAR", "MAL JUNCTION", "MAL JN"],
+    "BLZ":  ["BLZ", "BADARPUR", "BADARPUR JN"],
+    "FCGC": ["FCGC", "FCI", "FCI SIDING", "FOOD CORPORATION"]
 }
 
 ALL_STATIONS = list(STATION_ALIASES.keys())
@@ -124,7 +126,7 @@ STATION_OFFICIAL = {
     "KOWN": "Khowang", "NCH": "Nakachari", "CMA": "Cinnamara",
     "KXL": "Kamarbandha Ali", "BBGN": "Barua Bamungaon", "BLMR": "Bhalukmara",
     "NMGY": "Numaligarh", "KRHT": "Kharahat", "CCIB": "CCIB",
-    "MRLB": "Mal Bazar"
+    "MRLB": "Mal Bazar", "BLZ": "Badarpur Jn", "FCGC": "FCI Siding"
 }
 
 PRS_COLS = {
@@ -139,7 +141,6 @@ UTS_COLS_NU = {
 
 NEGATIVE_ALLOWED_FIELDS = {"NET"}
 
-# Container wagon type codes — if present in wtype, commodity forced to CONTAINER
 CONTAINER_WAGON_CODES = {"BLC", "BFKN", "BLL", "BLH", "BLCN", "BLCA", "BLLA", "CFN", "CONTR", "CONT"}
 
 # ==============================================
@@ -399,20 +400,19 @@ Return ONE JSON object with these keys (all present, empty if nothing found):
   "prs"   : {{ "<STATION_CODE>": {{ "TKT":num, "PASS":num, "C/TKT":num, "C/PASS":num, "REF":num, "NET":num, "VCH":num, "POS":num, "UPI":num }} }}
   "uts"   : {{ "<STATION_CODE>": {{ "PF":num, "TKT":num, "PASS":num, "NET":num, "MR":num, "MR AMT":num, "UPI":num }} }}
   "osop"  : [ {{ "station":"CODE", "date":"as written", "amount":num, "unit":num or omit }} ]
-  "goods" : [ {{ "from_stn":"CODE", "to_stn":"CODE", "wagons":num, "placement_time":"HH:MM", "placement_date":"as written", "commodity":"UPPERCASE", "line":"just number", "party":"FULL NAME UPPERCASE", "wagon_type":"optional", "weight":num or omit, "freight":num or omit }} ]
+  "goods" : [ {{ "from_stn":"CODE", "to_stn":"CODE", "wagons":num, "placement_time":"HH:MM", "placement_date":"as written", "commodity":"UPPERCASE", "line":"just number or comma list", "party":"FULL NAME UPPERCASE", "wagon_type":"optional", "weight":num or omit, "freight":num or omit }} ]
 
 === OFFICIAL STATIONS (CODE = Full Name) ===
 {station_legend}
 
 Rules of thumb (apply with judgement — don't over-apply):
 - Station full name OR code → always use the CODE as key.
-- PRS NET = net cash only (never add UPI/digi cash). UPI/digi cash/QR/UPI RFD NOT into NET.
+- PRS NET = net cash only (never add UPI/digi cash).
 - REF = SUM of all refunds (cash + digi + pos + upi refunds).
-- UTS NET = net cash. UPI cash separate. J/Amount / journey amount → NET (this is the total earnings figure for UTS).
+- UTS NET = net cash. UPI cash separate. J/Amount / journey amount → NET.
 - UTS J/TKT / journey tickets → TKT ; J/Pass → PASS (when T/TKT or T/Pass absent).
-- MR + MR AMT both → always capture both. "MR=14AMOUNT=40620" → MR=14, MR AMT=40620.
+- MR + MR AMT both → always capture both.
 - PF / P/TKT / PLT / PLATFORM / "M" → all map to PF.
-- T/jenny / J/TKT journey tickets → if T/TKT total available, use the total for TKT.
 - Missing values (nil, -, "nahi aya") → omit the key. Don't insert 0.
 - Negative numbers → keep sign.
 
@@ -424,13 +424,58 @@ Fields per goods entry:
 - "placement_time": HH:MM 24-hour
 - "placement_date": date exactly as written
 - "commodity": UPPERCASE. If the message mentions container, container wagon type, or the container is being loaded → commodity = "CONTAINER".
-- "line": just the digit
+- "line": just the digit. **If the message splits wagons across multiple lines (LINE NO 4 - 05 WAGONS, LINE NO 5 - 02 WAGONS etc.), create ONE goods entry PER LINE with the respective wagons count.** If a single line mentions multiple lines together (L/4,5,6), use "4,5,6".
 - "party": full UPPERCASE
 - "wagon_type": optional — if any container wagon code (BLC, BFKN, BLL, BLH, BLCN, CFN) mentioned, use it
-- "weight": optional number (e.g. 896)
-- "freight": optional number (e.g. 2716325)
+- "weight": optional number
+- "freight": optional number
 
-Example (this format is very common — read carefully):
+=== MULTI-LINE EXAMPLE (very important — CRACK THIS FORMAT) ===
+Input:
+"FCGC GOODS POSITION.
+21 WAGONS EX -BLZ TO FCGC (RICE) PLACED AT  05:15 HRS  ON DATE 03/11/26 
+LINE NO 4- 05 WAGONS
+LINE NO 5- 02 WAGONS 
+LINE NO 6 - 14 WAGONS
+M/S- FOOD CORPORATION OF INDIA ASSAM
+(RAKE DEMAND)"
+
+Expected goods (3 entries — one per LINE NO):
+[
+  {{
+    "from_stn": "BLZ",
+    "to_stn": "FCGC",
+    "wagons": 5,
+    "placement_time": "05:15",
+    "placement_date": "03/11/26",
+    "commodity": "RICE",
+    "line": "4",
+    "party": "M/S FOOD CORPORATION OF INDIA ASSAM"
+  }},
+  {{
+    "from_stn": "BLZ",
+    "to_stn": "FCGC",
+    "wagons": 2,
+    "placement_time": "05:15",
+    "placement_date": "03/11/26",
+    "commodity": "RICE",
+    "line": "5",
+    "party": "M/S FOOD CORPORATION OF INDIA ASSAM"
+  }},
+  {{
+    "from_stn": "BLZ",
+    "to_stn": "FCGC",
+    "wagons": 14,
+    "placement_time": "05:15",
+    "placement_date": "03/11/26",
+    "commodity": "RICE",
+    "line": "6",
+    "party": "M/S FOOD CORPORATION OF INDIA ASSAM"
+  }}
+]
+(Total wagons across lines = 5+2+14 = 21, which matches the "21 WAGONS" header. Always preserve per-line wagon split if lines are given separately.)
+
+=== SINGLE LINE EXAMPLE ===
 Input:
 "DT - 02/11/26
 EX MRLB  TO SPTR
@@ -441,8 +486,7 @@ Weight -896
 Freight - 2716325
 P/TIME- 21:30 HRS
 PARTY -M/S ACC"
-
-Expected goods entry:
+Expected:
 {{
   "from_stn": "MRLB",
   "to_stn": "SPTR",
@@ -492,36 +536,12 @@ VCH -8896
 RFD -9526"
 Output:
 {{
-  "prs": {{
-    "MXN": {{"TKT": 98, "PASS": 205, "NET": 146315, "REF": 905, "UPI": 35460, "VCH": 31220, "C/TKT": 2, "C/PASS": 2}}
-  }},
-  "uts": {{
-    "MXN": {{"PF": 69, "TKT": 686, "PASS": 881, "NET": 83970, "UPI": 33905, "MR": 22, "MR AMT": 44610}}
-  }},
-  "osop": [], "goods": []
-}}
-(NOTICE: "J/Amount 83970" → NET. "J/TKT 686" → TKT. "J/Pass 881" → PASS. "Ecash 33905" → UPI.)
-
-Example C — squished:
-Input:
-"Earnings Of NTSK
-PRS/NTSK
-T/TKT =116 T/Pass =170 C/TKT =11 C/Pass =19
-RFD =10175 Netcash =24330 Digi CASH =90325 Digi RFD =23426 Vch=8390
-UTS/NTSK
-T/jenny=992 T/TKT =1340 T/Pass =1554
-P/TKT =319AOUNT =3190
-MR=14AMOUNT=40620
-E/CASH =70232
-J/AMOUNT =354500"
-Output:
-{{
-  "prs": {{"NTSK": {{"TKT": 116, "PASS": 170, "C/TKT": 11, "C/PASS": 19, "REF": 33601, "NET": 24330, "UPI": 90325, "VCH": 8390}}}},
-  "uts": {{"NTSK": {{"TKT": 1340, "PASS": 1554, "PF": 319, "MR": 14, "MR AMT": 40620, "UPI": 70232, "NET": 354500}}}},
+  "prs": {{"MXN": {{"TKT": 98, "PASS": 205, "NET": 146315, "REF": 905, "UPI": 35460, "VCH": 31220, "C/TKT": 2, "C/PASS": 2}}}},
+  "uts": {{"MXN": {{"PF": 69, "TKT": 686, "PASS": 881, "NET": 83970, "UPI": 33905, "MR": 22, "MR AMT": 44610}}}},
   "osop": [], "goods": []
 }}
 
-Example D — OSOP:
+Example C — OSOP:
 Input:
 "Osop dmc
 26-10-26
@@ -579,24 +599,14 @@ def apply_post_processing(data, msg):
     for st, vals in data.get("prs", {}).items():
         code = resolve_station(st)
         if code:
-            if code not in new_prs:
-                new_prs[code] = vals
-            else:
-                print(f"⚠️ Duplicate PRS station '{code}' → keeping first")
-        else:
-            print(f"❌ Station skipped: {st}")
+            new_prs.setdefault(code, vals)
     data["prs"] = new_prs
 
     new_uts = {}
     for st, vals in data.get("uts", {}).items():
         code = resolve_station(st)
         if code:
-            if code not in new_uts:
-                new_uts[code] = vals
-            else:
-                print(f"⚠️ Duplicate UTS station '{code}' → keeping first")
-        else:
-            print(f"❌ UTS Station skipped: {st}")
+            new_uts.setdefault(code, vals)
     data["uts"] = new_uts
 
     new_osop = []
@@ -607,8 +617,6 @@ def apply_post_processing(data, msg):
         if code:
             e["station"] = code
             new_osop.append(e)
-        else:
-            print(f"❌ OSOP entry skipped: {e}")
     data["osop"] = new_osop
 
     new_goods = []
@@ -619,12 +627,24 @@ def apply_post_processing(data, msg):
             e["from_stn"] = resolve_station(e["from_stn"]) or str(e["from_stn"]).upper()
         if e.get("to_stn"):
             e["to_stn"] = resolve_station(e["to_stn"]) or str(e["to_stn"]).upper()
-        # 🆕 Container logic — if wagon_type is container code OR commodity mentions container
+
         comm = str(e.get("commodity") or "").upper()
         wtype = str(e.get("wagon_type") or "").upper()
         if ("CONTAINER" in comm or "CONT" in comm or
                 wtype in CONTAINER_WAGON_CODES or "CONTAINER" in wtype):
             e["commodity"] = "CONTAINER"
+
+        # Normalise line field — keep as-is if it's a comma list, else string digit
+        ln = e.get("line")
+        if ln is not None:
+            ln_str = str(ln).strip()
+            if "," in ln_str:
+                nums = re.findall(r'\d+', ln_str)
+                e["line"] = ",".join(nums) if nums else ln_str
+            else:
+                m = re.search(r'\d+', ln_str)
+                e["line"] = m.group(0) if m else ln_str
+
         new_goods.append(e)
     data["goods"] = new_goods
 
@@ -635,7 +655,6 @@ def apply_post_processing(data, msg):
             if isinstance(vals, dict) and not any(k in vals for k in ("C/TKT", "C/PASS", "VCH", "POS", "REF")):
                 data["uts"] = {st: vals}
                 data["prs"] = {}
-                print(f"🔧 Moved PRS→UTS for {st}")
 
     return data
 
@@ -658,6 +677,67 @@ def _find_stations_in_text(msg):
                 break
     return found
 
+def _parse_multi_line_goods(msg):
+    """
+    Detects messages where wagons are split across multiple LINE NO lines:
+      LINE NO 4 - 05 WAGONS
+      LINE NO 5 - 02 WAGONS
+      LINE NO 6 - 14 WAGONS
+    Returns a list of goods entries (one per line), or [] if pattern not found.
+    """
+    up = msg.upper()
+
+    # Header info
+    from_m = re.search(r'\bEX\s*[-:/]?\s*([A-Z]{2,6})\b', up)
+    to_m   = re.search(r'\bTO\s+([A-Z]{2,6})\b', up)
+    if not from_m or not to_m:
+        return []
+    from_stn = resolve_station(from_m.group(1))
+    to_stn   = resolve_station(to_m.group(1))
+    if not from_stn or not to_stn:
+        return []
+
+    # Every "LINE NO <n> ... <x> WAGON[S]" line
+    line_hits = re.findall(
+        r'LINE\s*(?:NO\.?|NUMBER|NUM)?\s*[-:=]?\s*(\d+)\s*[-–:=]?\s*(\d+)\s*WAGON',
+        up
+    )
+    if len(line_hits) < 2:
+        return []
+
+    comm_m  = re.search(r'\(([A-Z][A-Z\s]+)\)', up)
+    if not comm_m:
+        comm_m = re.search(r'COMMODITY\s*[-:=]?\s*([A-Z][A-Z\s]+)', up)
+    commodity = comm_m.group(1).strip() if comm_m else ""
+
+    ptime_m = re.search(r'PLACED\s+AT\s+(\d{1,2}[:.]\d{2})', up)
+    if not ptime_m:
+        ptime_m = re.search(r'P/?TIME\s*[-:=]?\s*(\d{1,2}[:.]\d{2})', up)
+    ptime = ptime_m.group(1) if ptime_m else ""
+
+    pdate_m = re.search(r'(?:ON\s+DATE|DT|DATE)\s*[-:=]?\s*(\d{1,4}[-/\.]\d{1,2}[-/\.]\d{1,4})', up)
+    if not pdate_m:
+        pdate_m = re.search(r'(\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4})', up)
+    pdate = pdate_m.group(1) if pdate_m else ""
+
+    party_m = re.search(r'M/S\s*[-:=]?\s*([A-Z][A-Z0-9 ./&()\-]+)', msg.upper())
+    party = party_m.group(1).strip() if party_m else ""
+
+    out = []
+    for line_no, wagons in line_hits:
+        out.append({
+            "from_stn": from_stn,
+            "to_stn": to_stn,
+            "wagons": int(wagons),
+            "placement_time": ptime,
+            "placement_date": pdate,
+            "commodity": commodity,
+            "line": line_no,
+            "party": party
+        })
+    print(f"🔧 Multi-line goods parsed: {len(out)} entries")
+    return out
+
 def apply_fallback_fixes(data, msg):
     if not data:
         return data
@@ -666,29 +746,24 @@ def apply_fallback_fixes(data, msg):
     uts = data.get("uts") or {}
     prs = data.get("prs") or {}
 
-    # Terse UTS fallback
+    # Terse UTS
     if not uts and "UTS" in up and "NETCASH" not in up.replace(" ", "") and "DIGI" not in up:
         found = _find_stations_in_text(msg)
         if len(found) == 1:
             st = next(iter(found))
             vals = {}
             m = re.search(r'(?:T\s?/\s?TKT|TKT|TICKETS?)\s*[:=\-]*\s*([\d,]+)', up)
-            if m:
-                vals["TKT"] = _to_float(m.group(1))
+            if m: vals["TKT"] = _to_float(m.group(1))
             m = re.search(r'(?:T\s?/\s?PASS|PASS|PAX)\s*[:=\-]*\s*([\d,]+)', up)
-            if m:
-                vals["PASS"] = _to_float(m.group(1))
+            if m: vals["PASS"] = _to_float(m.group(1))
             m = re.search(r'(?<![A-Z])CASH\s*[:=\-]*\s*([\d,]+)', up)
-            if m:
-                vals["NET"] = _to_float(m.group(1))
+            if m: vals["NET"] = _to_float(m.group(1))
             m = re.search(r'E\s?[-/]?\s?CASH\s*[:=\-]*\s*([\d,]+)', up)
-            if m:
-                vals["UPI"] = _to_float(m.group(1))
+            if m: vals["UPI"] = _to_float(m.group(1))
             vals = {k: v for k, v in vals.items() if v is not None}
             if vals:
                 uts[st] = vals
                 data["uts"] = uts
-                print(f"🔧 Terse UTS fallback: {st} → {vals}")
 
     # MR + MR AMT
     if len(uts) == 1:
@@ -699,17 +774,14 @@ def apply_fallback_fixes(data, msg):
             if m:
                 if not vals.get("MR"):
                     v = _to_float(m.group(1))
-                    if v is not None:
-                        vals["MR"] = v
+                    if v is not None: vals["MR"] = v
                 v = _to_float(m.group(2))
-                if v is not None:
-                    vals["MR AMT"] = v
+                if v is not None: vals["MR AMT"] = v
         if not vals.get("PF"):
             m = re.search(r'\b(?:P\s?/\s?TKT|PF|PLT|PLATFORM)\s*[=:]?\s*([\d,]+)', up)
             if m:
                 v = _to_float(m.group(1))
-                if v is not None:
-                    vals["PF"] = v
+                if v is not None: vals["PF"] = v
         uts[st] = vals
 
     # UTS NET from J/Amount
@@ -720,21 +792,17 @@ def apply_fallback_fixes(data, msg):
             m = re.search(r'J\s*/?\s*(?:AMOUNT|AMT)\s*[-:=]?\s*([\d,]+)', up)
             if m:
                 v = _to_float(m.group(1))
-                if v is not None:
-                    vals["NET"] = v
-                    print(f"🔧 UTS {st} NET from J/Amount = {v}")
+                if v is not None: vals["NET"] = v
         if not vals.get("TKT"):
             m = re.search(r'J\s*/?\s*TKT\s*[-:=]?\s*([\d,]+)', up)
             if m:
                 v = _to_float(m.group(1))
-                if v is not None:
-                    vals["TKT"] = v
+                if v is not None: vals["TKT"] = v
         if not vals.get("PASS"):
             m = re.search(r'J\s*/?\s*(?:PASS|PAX)\s*[-:=]?\s*([\d,]+)', up)
             if m:
                 v = _to_float(m.group(1))
-                if v is not None:
-                    vals["PASS"] = v
+                if v is not None: vals["PASS"] = v
         uts[st] = vals
 
     # PRS REF total
@@ -744,8 +812,7 @@ def apply_fallback_fixes(data, msg):
         if not vals.get("REF"):
             amounts = re.findall(r'\b(?:RFD|REFUND|REF)\s*[=:]?\s*([\d,]+)', up)
             nums = [n for n in (_to_float(a) for a in amounts) if n is not None]
-            if nums:
-                vals["REF"] = sum(nums)
+            if nums: vals["REF"] = sum(nums)
         prs[st] = vals
 
     # OSOP fallback
@@ -756,59 +823,24 @@ def apply_fallback_fixes(data, msg):
             if re.search(r'\bOSOP\b', line, re.IGNORECASE):
                 window = "\n".join(lines[i:i+8])
                 st_m = re.search(r'OSOP\s*[:\-]?\s*([A-Za-z][A-Za-z0-9 .]+)', window, re.IGNORECASE)
-                if not st_m:
-                    continue
+                if not st_m: continue
                 code = resolve_station(st_m.group(1))
-                if not code:
-                    continue
+                if not code: continue
                 date_m = re.search(r'(\d{1,4}[-/\.]\d{1,2}[-/\.]\d{1,4})', window)
                 unit_m = re.search(r'(?:unit|u)\s*[:=\-]?\s*(\d+)', window, re.IGNORECASE)
                 amt_m  = re.search(r'(?:amt|amount|rs\.?)\s*[:=\-]?\s*([\d,]+)', window, re.IGNORECASE)
                 if date_m and amt_m:
                     entry = {"station": code, "date": date_m.group(1),
                              "amount": _to_float(amt_m.group(1))}
-                    if unit_m:
-                        entry["unit"] = int(unit_m.group(1))
+                    if unit_m: entry["unit"] = int(unit_m.group(1))
                     osop.append(entry)
         data["osop"] = osop
 
-    # IWOW regex fallback if Gemini missed it
-    goods = data.get("goods") or []
-    if not goods:
-        has_goods_hint = any(k in up for k in ("WAGON", "RAKE", "EX ", "TO ", "COMMODITY", "P/TIME", "FREIGHT"))
-        if has_goods_hint and ("LOAD" in up or "WAGON" in up or "RAKE" in up):
-            stns = _find_stations_in_text(msg)
-            if len(stns) >= 2:
-                from_m = re.search(r'\bEX\s+([A-Z]{3,5})\b', up)
-                to_m   = re.search(r'\bTO\s+([A-Z]{3,5})\b', up)
-                from_stn = resolve_station(from_m.group(1)) if from_m else None
-                to_stn = resolve_station(to_m.group(1)) if to_m else None
-                if from_stn and to_stn:
-                    wagons_m = re.search(r'(\d+)\s*WAGON', up)
-                    line_m = re.search(r'LINE\s*(?:NO\.?|NO)?\s*[-:=]?\s*(\d+)', up)
-                    comm_m = re.search(r'COMMODITY\s*[-:=]?\s*([A-Z][A-Z\s]+)', up)
-                    party_m = re.search(r'PARTY\s*[-:=]?\s*([A-Z][A-Z0-9 ./&]+)', up)
-                    ptime_m = re.search(r'P/TIME\s*[-:=]?\s*(\d{1,2}[:.]\d{2})', up)
-                    pdate_m = re.search(r'DT\s*[-:=]?\s*(\d{1,4}[-/\.]\d{1,2}[-/\.]\d{1,4})', up)
-                    wt_m = re.search(r'WEIGHT\s*[-:=]?\s*([\d,.]+)', up)
-                    fr_m = re.search(r'FREIGHT\s*[-:=]?\s*([\d,.]+)', up)
-                    entry = {
-                        "from_stn": from_stn,
-                        "to_stn": to_stn,
-                        "wagons": _to_float(wagons_m.group(1)) if wagons_m else None,
-                        "placement_time": ptime_m.group(1) if ptime_m else "",
-                        "placement_date": pdate_m.group(1) if pdate_m else "",
-                        "commodity": comm_m.group(1).strip() if comm_m else "",
-                        "line": line_m.group(1) if line_m else "",
-                        "party": party_m.group(1).strip() if party_m else "",
-                    }
-                    if wt_m:
-                        entry["weight"] = _to_float(wt_m.group(1))
-                    if fr_m:
-                        entry["freight"] = _to_float(fr_m.group(1))
-                    goods.append(entry)
-                    data["goods"] = goods
-                    print(f"🔧 IWOW fallback: {entry}")
+    # 🔧 Multi-line goods detection — overrides Gemini if lines are split
+    multi = _parse_multi_line_goods(msg)
+    if multi:
+        data["goods"] = multi
+        print(f"🔧 Multi-line goods override applied ({len(multi)} entries)")
 
     return data
 
@@ -874,9 +906,7 @@ def update_google_sheet(data):
 
     for st, vals in data.get("prs", {}).items():
         info = smap.get(st)
-        if not info:
-            continue
-        if not _has_any_nonzero(vals):
+        if not info or not _has_any_nonzero(vals):
             continue
         row = info["row"]
         for fld, val in (vals or {}).items():
@@ -884,9 +914,7 @@ def update_google_sheet(data):
                 v = float(val)
             except:
                 continue
-            if fld not in PRS_COLS:
-                continue
-            if not _is_field_allowed(v, fld):
+            if fld not in PRS_COLS or not _is_field_allowed(v, fld):
                 continue
             col = PRS_COLS[fld]
             if is_cell_empty(get_current(row, col)):
@@ -895,9 +923,7 @@ def update_google_sheet(data):
 
     for st, vals in data.get("uts", {}).items():
         info = smap.get(st)
-        if not info:
-            continue
-        if not _has_any_nonzero(vals):
+        if not info or not _has_any_nonzero(vals):
             continue
         row = info["row"]
         for fld, val in (vals or {}).items():
@@ -919,16 +945,14 @@ def update_google_sheet(data):
                 queue(row, col, v)
                 print(f"✅ UTS {st} {fld}: wrote {v}")
 
-    if not updates:
-        return True
-
-    try:
-        sheet.batch_update(updates)
-        print(f"✅ Batch update successful ({len(updates)} cells)")
-        return True
-    except Exception as e:
-        print(f"❌ Batch update failed: {e}")
-        return False
+    if updates:
+        try:
+            sheet.batch_update(updates)
+            print(f"✅ Batch update successful ({len(updates)} cells)")
+        except Exception as e:
+            print(f"❌ Batch update failed: {e}")
+            return False
+    return True
 
 # ==============================================
 # OSOP UPDATE
@@ -957,7 +981,7 @@ def update_osop_sheet(entries):
 
             try:
                 matrix = ws.get_all_values()
-            except Exception as ex:
+            except Exception:
                 continue
 
             if len(matrix) < 6:
@@ -1097,7 +1121,7 @@ def update_iwow_sheet(entries):
         tomorrow = today + timedelta(days=1)
         grace_cutoff = dt_time(IWOW_GRACE_HOUR, 0)
 
-        print(f"🕐 IWOW now (IST): {now.strftime('%Y-%m-%d %H:%M')} | start_row={start_row}")
+        print(f"🕐 IWOW now (IST): {now.strftime('%Y-%m-%d %H:%M')} | today={today} | yesterday={yesterday} | grace_cutoff={grace_cutoff}")
 
         updates = []
         current_row = start_row
@@ -1121,9 +1145,16 @@ def update_iwow_sheet(entries):
                 print(f"⏭️ Missing to_stn/date → skip")
                 continue
 
-            print(f"🔎 {from_stn}→{to_stn} | date={pdate} time={ptime} wagons={wagons}")
+            print(f"🔎 {from_stn}→{to_stn} | date={pdate} time={ptime} wagons={wagons} line={line}")
 
-            # Date acceptance
+            # ==========================================
+            # DATE ACCEPTANCE — 24-hour clock in IST
+            #  • Today: any past time (reject only future >5 min)
+            #  • Yesterday: only if placement >= 22:00 AND now < grace_cutoff (06:00)
+            #    → "forgot 22:00, remembered 2 AM" grace window
+            #  • Tomorrow: only if within 30 min (edge)
+            #  • Anything else: reject
+            # ==========================================
             accept = False
             reason = ""
 
@@ -1131,16 +1162,24 @@ def update_iwow_sheet(entries):
                 if ptime:
                     placement_dt = datetime.combine(pdate, ptime)
                     if placement_dt > now + timedelta(minutes=5):
-                        reason = "future time"
+                        reason = f"future time {placement_dt.strftime('%H:%M')} (now {now.strftime('%H:%M')})"
                     else:
                         accept = True
                 else:
                     accept = True
+
             elif pdate == yesterday:
                 if ptime and ptime >= dt_time(22, 0) and now.time() < grace_cutoff:
                     accept = True
+                    reason = f"yesterday 22:00+ within grace (now {now.strftime('%H:%M')})"
                 else:
-                    reason = "yesterday outside grace"
+                    if not ptime:
+                        reason = "yesterday without time"
+                    elif ptime < dt_time(22, 0):
+                        reason = f"yesterday pre-22:00 ({ptime.strftime('%H:%M')})"
+                    else:
+                        reason = f"yesterday 22:00+ but grace passed (now {now.strftime('%H:%M')})"
+
             elif pdate == tomorrow:
                 if ptime:
                     placement_dt = datetime.combine(pdate, ptime)
@@ -1150,6 +1189,7 @@ def update_iwow_sheet(entries):
                         reason = "tomorrow pre-report"
                 else:
                     reason = "tomorrow pre-report"
+
             else:
                 reason = f"date out of range ({pdate})"
 
@@ -1161,6 +1201,7 @@ def update_iwow_sheet(entries):
             ptime_str_check  = ptime.strftime("%H:%M") if ptime else ""
             wagons_str_check = str(wagons or "").strip()
 
+            # Duplicate check includes `line` so multi-line entries each get their own row
             is_duplicate = False
             for r in range(3, len(matrix)):
                 row = matrix[r]
@@ -1185,10 +1226,9 @@ def update_iwow_sheet(entries):
                     break
 
             if is_duplicate:
-                print(f"⏭️ Duplicate")
+                print(f"⏭️ Duplicate (line {line})")
                 continue
 
-            # 🆕 Container rule — force commodity=CONTAINER if wagon is container type
             if wtype in CONTAINER_WAGON_CODES or "CONTAINER" in wtype:
                 commodity = "CONTAINER"
             elif "CONTAINER" in commodity or "CONT" in commodity:
@@ -1203,13 +1243,10 @@ def update_iwow_sheet(entries):
 
             if "NAPHTHA" in commodity or "NAPTHA" in commodity:
                 ftime = "8 HRS"
-                if not wtype:
-                    wtype = "BTPN"
+                if not wtype: wtype = "BTPN"
             elif "CONTAINER" in commodity:
-                if not ftime:
-                    ftime = "3 HRS"
-                if not wtype:
-                    wtype = "CONTAINER"
+                if not ftime: ftime = "3 HRS"
+                if not wtype: wtype = "CONTAINER"
             else:
                 if not ftime:
                     if wagons_num <= 20:
@@ -1219,16 +1256,11 @@ def update_iwow_sheet(entries):
                     else:
                         ftime = "9 HRS"
                 if not wtype:
-                    if "CEMENT" in commodity:
-                        wtype = "BCN"
-                    elif "COAL" in commodity:
-                        wtype = "BOXN"
-                    elif any(x in commodity for x in ["FOOD", "GRAIN", "RICE", "WHEAT"]):
-                        wtype = "BCN"
-                    elif "FERT" in commodity:
-                        wtype = "BCN"
-                    else:
-                        wtype = "BCN"
+                    if "CEMENT" in commodity: wtype = "BCN"
+                    elif "COAL" in commodity: wtype = "BOXN"
+                    elif any(x in commodity for x in ["FOOD", "GRAIN", "RICE", "WHEAT"]): wtype = "BCN"
+                    elif "FERT" in commodity: wtype = "BCN"
+                    else: wtype = "BCN"
 
             arrival_time_str = ""
             arrival_date_str = pdate.strftime("%d-%m-%Y")
@@ -1252,7 +1284,7 @@ def update_iwow_sheet(entries):
             q(11, ptime_str); q(12, pdate_str)
             q(18, ftime); q(21, from_stn); q(23, party)
 
-            print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | {wagons} | {commodity}")
+            print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | wagons={wagons} | line={line} | {commodity}")
             current_row += 1
 
         if updates:
