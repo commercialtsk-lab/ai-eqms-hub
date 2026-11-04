@@ -146,40 +146,46 @@ NEGATIVE_ALLOWED_FIELDS = {"NET"}
 CONTAINER_WAGON_CODES = {"BLC", "BFKN", "BLL", "BLH", "BLCN", "BLCA", "BLLA", "CFN", "CONTR", "CONT"}
 
 # ==============================================
-# COMMODITY ABBREVIATION
+# COMMODITY ABBREVIATION  (FIXED — sab variation handle karta hai)
 # ==============================================
 def abbreviate_commodity(comm):
-    """RICE(FCI)→FCI/R, WHEAT(FCI)→FCI/W, RICE(PUB)→PUB/R, WHEAT(PUB)→PUB/W."""
+    """
+    RICE (FCI) / RICE(FCI) / FCI RICE / FCI/R  → "FCI/R"
+    WHEAT (FCI) → "FCI/W" ; RICE (PUB) → "PUB/R" ; WHEAT (PUB) → "PUB/W"
+    Pehle se abbreviated input ko waise hi rakhta hai (yehi asli glitch tha).
+    """
     if not comm:
         return ""
     c = str(comm).upper().strip()
     c = re.sub(r'\s+', ' ', c)
 
+    # Already abbreviated? → waise hi rehne do
+    m = re.match(r'^\s*(FCI|PUB)\s*/\s*(R|W)\s*$', c)
+    if m:
+        return f"{m.group(1)}/{m.group(2)}"
+    m = re.match(r'^\s*(R|W)\s*/\s*(FCI|PUB)\s*$', c)
+    if m:
+        return f"{m.group(2)}/{m.group(1)}"
+
     if "CONTAINER" in c or c in ("CONT", "CNTR"):
         return "CONTAINER"
 
-    has_fci = "FCI" in c or "FOOD CORPORATION" in c
-    has_pub = "PUB" in c or "PUBLIC" in c
-    has_rice = "RICE" in c
-    has_wheat = "WHEAT" in c
+    # Brackets/spaces hata ke bhi detect karo
+    sq = re.sub(r'[^A-Z]', '', c)
+    has_fci   = "FCI" in sq or "FOODCORPORATION" in sq or "FOOD" in sq
+    has_pub   = "PUB" in sq
+    has_rice  = "RICE" in sq
+    has_wheat = "WHEAT" in sq
 
-    if has_rice and has_fci:
-        return "FCI/R"
-    if has_wheat and has_fci:
-        return "FCI/W"
-    if has_rice and has_pub:
-        return "PUB/R"
-    if has_wheat and has_pub:
-        return "PUB/W"
-    if has_rice:
-        return "RICE"
-    if has_wheat:
-        return "WHEAT"
-    if has_fci:
-        return "FCI"
-    if has_pub:
-        return "PUB"
-    return c
+    if has_rice and has_fci:   return "FCI/R"
+    if has_wheat and has_fci:  return "FCI/W"
+    if has_rice and has_pub:   return "PUB/R"
+    if has_wheat and has_pub:  return "PUB/W"
+    if has_rice:   return "RICE"
+    if has_wheat:  return "WHEAT"
+    if has_fci:    return "FCI"
+    if has_pub:    return "PUB"
+    return sq if sq else c
 
 # ==============================================
 # STATION RESOLUTION HELPERS
@@ -302,27 +308,6 @@ def load_credentials_dict():
 # ==============================================
 # GOOGLE SHEETS
 # ==============================================
-def get_sheet():
-    creds_dict = load_credentials_dict()
-    if not creds_dict:
-        return None
-    try:
-        scopes = ["https://www.googleapis.com/auth/spreadsheets",
-                  "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        gc = gspread.authorize(creds)
-        sh = gc.open(SHEET_NAME)
-        try:
-            sheet = sh.worksheet("UTS&PRS")
-        except gspread.WorksheetNotFound:
-            print("⚠️ 'UTS&PRS' tab nahi mili → sheet1 use kar rahe hain")
-            sheet = sh.sheet1
-        print(f"✅ Google Sheet connected: '{sh.title}' / tab: '{sheet.title}'")
-        return sheet
-    except Exception as e:
-        print(f"❌ Google Sheet Connection Error: {e}")
-        return None
-
 def get_spreadsheet():
     creds_dict = load_credentials_dict()
     if not creds_dict:
@@ -333,10 +318,25 @@ def get_spreadsheet():
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         gc = gspread.authorize(creds)
         sh = gc.open(SHEET_NAME)
-        print(f"✅ Spreadsheet connected: '{sh.title}'")
         return sh
     except Exception as e:
         print(f"❌ Google Sheet Connection Error: {e}")
+        return None
+
+def get_sheet():
+    sh = get_spreadsheet()
+    if not sh:
+        return None
+    try:
+        try:
+            sheet = sh.worksheet("UTS&PRS")
+        except gspread.WorksheetNotFound:
+            print("⚠️ 'UTS&PRS' tab nahi mili → sheet1 use kar rahe hain")
+            sheet = sh.sheet1
+        print(f"✅ Google Sheet connected: '{sh.title}' / tab: '{sheet.title}'")
+        return sheet
+    except Exception as e:
+        print(f"❌ Worksheet Error: {e}")
         return None
 
 def get_station_map(sheet):
@@ -394,7 +394,7 @@ def parse_date_flexible(s):
         return None
 
 def parse_time_flexible(s):
-    """Tolerant time parser — handles 12:50, 12/50, 12.50, 1250, 12:50 HRS."""
+    """12:50, 12/50, 12.50, 1250, 12:50 HRS — sab handle karta hai."""
     if s is None:
         return None
     s = str(s).strip().upper()
@@ -441,7 +441,7 @@ Return ONE JSON object with these keys (all present, empty if nothing found):
   "prs"   : {{ "<STATION_CODE>": {{ "TKT":num, "PASS":num, "C/TKT":num, "C/PASS":num, "REF":num, "NET":num, "VCH":num, "POS":num, "UPI":num }} }}
   "uts"   : {{ "<STATION_CODE>": {{ "PF":num, "TKT":num, "PASS":num, "NET":num, "MR":num, "MR AMT":num, "UPI":num }} }}
   "osop"  : [ {{ "station":"CODE", "date":"as written", "amount":num, "unit":num or omit }} ]
-  "goods" : [ {{ "from_stn":"CODE", "to_stn":"CODE", "wagons":num, "placement_time":"HH:MM", "placement_date":"as written", "commodity":"ABBREVIATED UPPERCASE", "line":"number or comma list", "party":"UPPERCASE", "wagon_type":"optional", "weight":num or omit, "freight":num or omit }} ]
+  "goods" : [ {{ "from_stn":"CODE", "to_stn":"CODE", "wagons":num, "placement_time":"HH:MM", "placement_date":"as written", "commodity":"RAW AS WRITTEN", "line":"number or comma list", "party":"UPPERCASE", "wagon_type":"optional", "weight":num or omit, "freight":num or omit }} ]
 
 === OFFICIAL STATIONS (CODE = Full Name) ===
 {station_legend}
@@ -453,19 +453,14 @@ PRS/UTS rules:
 - MR + MR AMT both captured. PF / P/TKT / PLT / PLATFORM / "M" → PF.
 - Missing → omit key.
 
-=== INWARD GOODS / IWOW ===
-Fields: from_stn, to_stn, wagons, placement_time, placement_date, commodity, line, party, (optional) wagon_type, weight, freight.
+=== COMMODITY (RAW — DO NOT ABBREVIATE) ===
+"commodity" field me message jo likha hai WAISE HI copy karo — RAW, EXACT.
+- "Rice (FCI)" → likho "Rice (FCI)" ya "RICE (FCI)" — bas uppercase kar sakte ho
+- "Rice (FCI)" ko "FCI" ya "FCI/R" KABHI MAT likho — abbreviation ka kaam baad me code karta hai
+- "Wheat (FCI)" → "WHEAT (FCI)" ; "Cement" → "CEMENT" ; container ho to "CONTAINER"
 
-COMMODITY ABBREVIATION (always apply):
-- RICE (FCI) / FCI RICE / RICE FCI  → "FCI/R"
-- WHEAT (FCI) / FCI WHEAT / WHEAT FCI → "FCI/W"
-- RICE (PUB) / PUB RICE → "PUB/R"
-- WHEAT (PUB) / PUB WHEAT → "PUB/W"
-- RICE alone → "RICE" ; WHEAT alone → "WHEAT"
-- FCI alone → "FCI" ; PUB alone → "PUB"
-- CONTAINER → "CONTAINER"
-- CEMENT → "CEMENT" ; COAL → "COAL" ; NAPHTHA → "NAPHTHA" ; FERT → "FERT"
-- Others → UPPERCASE
+=== INWARD GOODS / IWOW ===
+Fields: from_stn, to_stn, wagons, placement_time, placement_date, commodity (RAW), line, party, (optional) wagon_type, weight, freight.
 
 MULTI-LINE SAME COMMODITY + SAME TIME → MERGE:
 If SAME commodity, SAME from/to, SAME time+date across multiple lines → ONE entry, wagons = SUM, line = comma list.
@@ -482,9 +477,10 @@ Output:
   "from_stn": "KNNN", "to_stn": "NTSK",
   "wagons": 58, "placement_time": "12:50",
   "placement_date": "04/11/26",
-  "commodity": "FCI/R",
+  "commodity": "RICE(FCI)",
   "line": "10,12", "party": ""
 }}]
+(NOTICE: "commodity" RAW hai — "RICE(FCI)". Abbreviate nahi kiya. 55+03=58 wagons merged, lines "10,12".)
 
 MESSAGE:
 \"\"\"{msg}\"\"\"
@@ -558,6 +554,7 @@ def apply_post_processing(data, msg):
         if e.get("to_stn"):
             e["to_stn"] = resolve_station(e["to_stn"]) or str(e["to_stn"]).upper()
 
+        # Abbreviation 100% yahan hota hai — FIXED version
         e["commodity"] = abbreviate_commodity(e.get("commodity"))
 
         wtype = str(e.get("wagon_type") or "").upper()
@@ -606,6 +603,7 @@ def _merge_goods(entries):
         )
         if key not in merged:
             merged[key] = dict(e)
+            merged[key]["commodity"] = abbreviate_commodity(e.get("commodity"))
             order.append(key)
         else:
             existing = merged[key]
@@ -652,9 +650,9 @@ def _parse_goods_regex(msg):
     shared_time = ptime_m.group(1) if ptime_m else ""
 
     pattern = re.compile(
-        r'(\d+)\s*(?:[A-Z0-9]{2,6}\s*)?'
-        r'(?:RICE\s*\([A-Z]+\)|WHEAT\s*\([A-Z]+\)|RICE|WHEAT|[A-Z]{3,})?\s*'
-        r'WAGONS?\s+EX\s*[-:]?\s*([A-Z]{2,6})\s+TO\s+([A-Z]{2,6})\s*'
+        r'(\d+)\s*(?:[A-Z0-9]{{2,6}}\s*)?'
+        r'(?:RICE\s*\([A-Z]+\)|WHEAT\s*\([A-Z]+\)|RICE|WHEAT|[A-Z]{{3,}})?\s*'
+        r'WAGONS?\s+EX\s*[-:]?\s*([A-Z]{{2,6}})\s+TO\s+([A-Z]{{2,6}})\s*'
         r'(?:.*?L\s*/\s*NO\s*[-:=]?\s*(\d+))?',
         re.IGNORECASE
     )
@@ -740,7 +738,7 @@ def apply_fallback_fixes(data, msg):
     return data
 
 # ==============================================
-# UPDATE SHEET
+# UPDATE SHEET (UTS&PRS)
 # ==============================================
 def is_cell_empty(value):
     if value is None:
@@ -850,7 +848,7 @@ def update_google_sheet(data):
     return True
 
 # ==============================================
-# OSOP UPDATE
+# OSOP UPDATE  (FIXED unit inference + order allocation)
 # ==============================================
 def update_osop_sheet(entries):
     if not entries:
@@ -870,96 +868,129 @@ def update_osop_sheet(entries):
             print("❌ 'OSOP' worksheet nahi mili")
             return False
 
+        # Fresh read — saari entries ke liye ek baar (lock ke andar hi safe hai)
+        try:
+            matrix = ws.get_all_values()
+        except Exception as e:
+            print(f"❌ OSOP read error: {e}")
+            return False
+
+        if len(matrix) < 6:
+            print("❌ OSOP sheet me data nahi hai")
+            return False
+
+        def get_current(r, c):
+            try:
+                return matrix[r-1][c-1]
+            except:
+                return ""
+
+        # ---- Row 5: dates (har merged pair ka left cell) ----
+        row5 = matrix[4] if len(matrix) > 4 else []
+        date_cols = {}
+        c = 3
+        max_cols = max(len(row5), 40)
+        while c <= max_cols:
+            raw = row5[c-1] if c-1 < len(row5) else ""
+            if not str(raw).strip() and c < len(row5):
+                raw = row5[c]
+            d = parse_date_flexible(raw)
+            if d:
+                date_cols[d] = (c, c + 1)
+            c += 2
+
+        if not date_cols:
+            print("❌ OSOP row 5 me koi date nahi mili")
+            return False
+
+        # ---- B column: station rows (code -> ordered row list, duplicates included) ----
+        station_rows = {}
+        for r in range(6, len(matrix) + 1):
+            if r-1 >= len(matrix):
+                break
+            cell = matrix[r-1][1] if len(matrix[r-1]) > 1 else ""
+            if not str(cell).strip():
+                continue
+            code = resolve_station(cell)
+            if code:
+                station_rows.setdefault(code, []).append(r)
+
+        usage = {code: 0 for code in station_rows}
+
         for e in entries:
             if not isinstance(e, dict):
                 continue
 
-            try:
-                matrix = ws.get_all_values()
-            except Exception:
-                continue
-
-            if len(matrix) < 6:
-                continue
-
-            def get_current(r, c):
-                try:
-                    return matrix[r-1][c-1]
-                except:
-                    return ""
-
-            row5 = matrix[4] if len(matrix) > 4 else []
-            date_cols = {}
-            c = 3
-            max_cols = max(len(row5), 40)
-            while c <= max_cols:
-                raw = row5[c-1] if c-1 < len(row5) else ""
-                if not str(raw).strip() and c < len(row5):
-                    raw = row5[c]
-                d = parse_date_flexible(raw)
-                if d:
-                    date_cols[d] = (c, c + 1)
-                c += 2
-
-            if not date_cols:
-                continue
-
-            station_rows = {}
-            for r in range(6, len(matrix) + 1):
-                if r-1 >= len(matrix):
-                    break
-                cell = matrix[r-1][1] if len(matrix[r-1]) > 1 else ""
-                if not str(cell).strip():
-                    continue
-                code = resolve_station(cell)
-                if code:
-                    station_rows.setdefault(code, []).append(r)
-
             code = e.get("station")
             if code not in station_rows:
+                print(f"⚠️ OSOP: '{code}' sheet me nahi mila → skip")
                 continue
 
             rows = station_rows[code]
             d = parse_date_flexible(e.get("date"))
             if not d or d not in date_cols:
+                print(f"⚠️ OSOP {code}: date '{e.get('date')}' row 5 me nahi mili → skip")
                 continue
 
             camt, cunit = date_cols[d]
+            amt = _to_float(e.get("amount")) if e.get("amount") is not None else None
 
-            chosen_row = None
-            for r in rows:
-                if is_cell_empty(get_current(r, camt)) and is_cell_empty(get_current(r, cunit)):
-                    chosen_row = r
+            # ---- Row choose karo: order-based, conflict par aage badho ----
+            row = None
+            idx = usage.get(code, 0)
+            while idx < len(rows):
+                r = rows[idx]
+                ex = get_current(r, camt)
+                ex_f = _to_float(ex)
+                if is_cell_empty(ex):
+                    row = r
                     break
-            if chosen_row is None:
-                for r in rows:
-                    if is_cell_empty(get_current(r, camt)):
-                        chosen_row = r
-                        break
+                if amt is not None and ex_f is not None and ex_f == amt:
+                    print(f"⏭️ OSOP {code} {d}: amount {amt} already row {r} me → duplicate skip")
+                    row = "SKIP"
+                    break
+                idx += 1   # cell filled with different value → agli duplicate row try
 
-            if chosen_row is None:
+            if row == "SKIP":
                 continue
+            if row is None:
+                print(f"⚠️ OSOP {code}: saari duplicate rows filled → skip: {e}")
+                continue
+            usage[code] = idx + 1
 
-            row = chosen_row
             updates = []
 
-            amt = _to_float(e.get("amount")) if e.get("amount") is not None else None
+            # ---- AMOUNT (left column) ----
             if amt is not None and amt != 0:
-                if is_cell_empty(get_current(row, camt)):
-                    updates.append({"range": rowcol_to_a1(row, camt), "values": [[amt]]})
+                updates.append({"range": rowcol_to_a1(row, camt), "values": [[amt]]})
 
+            # ---- UNIT (right column) — FIXED inference ----
             unit = e.get("unit")
             if unit is None or str(unit).strip() == "":
-                if amt is not None:
-                    unit = int(amt // 100)
+                # Same station ki baki duplicate rows ke units se compare karke infer
+                used_units = set()
+                for rr in rows:
+                    if rr == row:
+                        continue
+                    uv = _to_float(get_current(rr, cunit))
+                    if uv is not None:
+                        used_units.add(int(uv))
+                if len(used_units) == 1:
+                    unit = used_units.pop() + 1
+                    print(f"🔧 OSOP {code} {d}: unit missing → existing units compare karke '{unit}' infer kiya")
+                else:
+                    print(f"⚠️ OSOP {code} {d}: unit missing, infer nahi hua → unit blank")
+
             if unit is not None and str(unit).strip() != "":
                 if is_cell_empty(get_current(row, cunit)):
                     updates.append({"range": rowcol_to_a1(row, cunit), "values": [[unit]]})
+                else:
+                    print(f"⏭️ OSOP {code} {d}: unit cell already filled")
 
             if updates:
                 try:
                     ws.batch_update(updates)
-                    print(f"✅ OSOP {code} {d}: written row {row}")
+                    print(f"✅ OSOP {code} {d}: row {row} written ({len(updates)} cells)")
                 except Exception as ex:
                     print(f"❌ OSOP write failed: {ex}")
 
