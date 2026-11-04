@@ -531,7 +531,11 @@ The message may begin with chat-export noise like "[04/11, 7:03 pm] Name:" — i
     PASS  : PASS / Psg / Psgr / Passenger / P (when it sits beside T) / J/Pass
     NET   : NET CASH / Net / Cash / Cash amount / J/Amount  — the cash collection amount (never the grand total)
     UPI   : E CASH / Ecash / E-cash / E cas / UPI / UPI QR / QR / Digital / Paytm / PhonePe
-    REF   : REFUND / RFD / Digi ref / Digital refund — SUM of all refund-type amounts
+    REF   : REFUND / RFD / Digi ref / Digital ref / Refund amount — 
+            IMPORTANT: agar message me ek se zyada refund-type labels hain 
+            (jaise "REFUND: 500" aur "Digi ref: 300" aur "RFD: 200"), 
+            to SABKO ADD karke ek hi REF number do. 
+            Example: REFUND 500 + Digi ref 300 + RFD 200 → REF = 1000
     C/TKT, C/PASS : cancelled tickets / cancelled passengers (PRS)
     PF    : platform tickets (PF / P/TKT / PLT / PLATFORM / "M")
     MR / MR AMT : MR count / MR amount (both captured)
@@ -550,6 +554,9 @@ Output: {{"prs":{{}},"uts":{{"KOWN":{{"TKT":7,"PASS":9,"NET":20,"UPI":400}}}},"o
 
 Input: "Krht uts of 4.11.2026\\nT 36\\nP 58\\nCash 1390\\nE cas 340\\nTtl 1730 only"
 Output: {{"prs":{{}},"uts":{{"KRHT":{{"TKT":36,"PASS":58,"NET":1390,"UPI":340}}}},"osop":[],"goods":[]}}
+
+Input: "PRS BFD\\nTKT 9\\nPASS 20\\nNET CASH 28060\\nREFUND 500\\nDigi ref 300\\nRFD 200\\nC/TKT Nill\\nC/PASS Nill"
+Output: {{"prs":{{"BFD":{{"TKT":9,"PASS":20,"NET":28060,"REF":1000}}}},"uts":{{}},"osop":[],"goods":[]}}
 
 === INWARD GOODS / IWOW ===
 Extract every goods placement into "goods" array.
@@ -848,6 +855,19 @@ def _parse_kv_fallback(body, hint=None):
         out["uts"][code] = vals["uts"]
     if not out["prs"] and not out["uts"]:
         return None
+
+    # Backup: same-line ya multi-line refunds ka sum (agar abhi tak REF nahi mila)
+    if code:
+        if "REF" not in vals.get("prs", {}):
+            all_ref = re.findall(
+                r'\b(?:REFUND|RFD|REF|DIGI\s*REF\w*|DIGITAL\s*REF\w*)\s*[=:\-]?\s*([\d,]+)',
+                body, re.IGNORECASE
+            )
+            nums = [n for n in (_to_float(a) for a in all_ref) if n and n != 0]
+            if nums:
+                out.setdefault("prs", {})[code] = out.get("prs", {}).get(code, {})
+                out["prs"][code]["REF"] = sum(nums)
+
     print(f"🔧 Regex KV fallback used for {code}: {out}")
     return out
 
@@ -914,16 +934,28 @@ def apply_fallback_fixes(data, msg):
     up = msg.upper()
     prs = data.get("prs") or {}
 
-    # PRS REF total
-    if len(prs) == 1:
-        st, vals = next(iter(prs.items()))
-        vals = vals if isinstance(vals, dict) else {}
-        if not vals.get("REF"):
-            amounts = re.findall(r'\b(?:RFD|REFUND|REF)\s*[=:\-]?\s*([\d,]+)', up)
-            nums = [n for n in (_to_float(a) for a in amounts) if n is not None]
-            if nums:
-                vals["REF"] = sum(nums)
-        prs[st] = vals
+    # ---- PRS REF: hamesha saare refund labels ka sum nikalo ----
+    # (Gemini kabhi sirf ek uthata hai, isliye regex se verify karo)
+    if len(prs) >= 1:
+        refund_amounts = re.findall(
+            r'\b(?:REFUND|RFD|REF|DIGI\s*REF\w*|DIGITAL\s*REF\w*|DIGI\s*REFUND)\s*[=:\-]?\s*'
+            r'([\d,]+(?:\.\d+)?)',
+            up
+        )
+        nums = [n for n in (_to_float(a) for a in refund_amounts) if n is not None and n != 0]
+
+        if nums:
+            total_refund = sum(nums)
+            for st in prs:
+                vals = prs[st] if isinstance(prs[st], dict) else {}
+                vals["REF"] = total_refund
+                prs[st] = vals
+            print(f"💰 PRS REF total (all refunds summed): {total_refund}")
+        else:
+            for st in prs:
+                vals = prs[st] if isinstance(prs[st], dict) else {}
+                vals.pop("REF", None)
+                prs[st] = vals
 
     # OSOP fallback
     osop = data.get("osop") or []
