@@ -100,7 +100,8 @@ STATION_ALIASES = {
     "CCIB": ["CCIB", "CHANDI CHOWK", "CHANDICHOWKI"],
     "MRLB": ["MRLB", "MAL BAZAR", "MALBAZAR", "MAL JUNCTION", "MAL JN"],
     "BLZ":  ["BLZ", "BADARPUR", "BADARPUR JN"],
-    "FCGC": ["FCGC", "FCI", "FCI SIDING", "FOOD CORPORATION"]
+    "FCGC": ["FCGC", "FCI SIDING"],
+    "KNNN": ["KNNN", "KANNN", "KANUN"]
 }
 
 ALL_STATIONS = list(STATION_ALIASES.keys())
@@ -126,7 +127,8 @@ STATION_OFFICIAL = {
     "KOWN": "Khowang", "NCH": "Nakachari", "CMA": "Cinnamara",
     "KXL": "Kamarbandha Ali", "BBGN": "Barua Bamungaon", "BLMR": "Bhalukmara",
     "NMGY": "Numaligarh", "KRHT": "Kharahat", "CCIB": "CCIB",
-    "MRLB": "Mal Bazar", "BLZ": "Badarpur Jn", "FCGC": "FCI Siding"
+    "MRLB": "Mal Bazar", "BLZ": "Badarpur Jn", "FCGC": "FCI Siding",
+    "KNNN": "Kanun"
 }
 
 PRS_COLS = {
@@ -142,6 +144,43 @@ UTS_COLS_NU = {
 NEGATIVE_ALLOWED_FIELDS = {"NET"}
 
 CONTAINER_WAGON_CODES = {"BLC", "BFKN", "BLL", "BLH", "BLCN", "BLCA", "BLLA", "CFN", "CONTR", "CONT"}
+
+# ==============================================
+# COMMODITY ABBREVIATION
+# ==============================================
+def abbreviate_commodity(comm):
+    """RICE(FCI)→FCI/R, WHEAT(FCI)→FCI/W, RICE(PUB)→PUB/R, WHEAT(PUB)→PUB/W."""
+    if not comm:
+        return ""
+    c = str(comm).upper().strip()
+    c = re.sub(r'\s+', ' ', c)
+
+    # Container stays container
+    if "CONTAINER" in c or c in ("CONT", "CNTR"):
+        return "CONTAINER"
+
+    has_fci = "FCI" in c or "FOOD CORPORATION" in c
+    has_pub = "PUB" in c or "PUBLIC" in c
+    has_rice = "RICE" in c
+    has_wheat = "WHEAT" in c
+
+    if has_rice and has_fci:
+        return "FCI/R"
+    if has_wheat and has_fci:
+        return "FCI/W"
+    if has_rice and has_pub:
+        return "PUB/R"
+    if has_wheat and has_pub:
+        return "PUB/W"
+    if has_rice:
+        return "RICE"
+    if has_wheat:
+        return "WHEAT"
+    if has_fci:
+        return "FCI"
+    if has_pub:
+        return "PUB"
+    return c
 
 # ==============================================
 # STATION RESOLUTION HELPERS
@@ -356,24 +395,29 @@ def parse_date_flexible(s):
         return None
 
 def parse_time_flexible(s):
+    """Tolerant time parser — handles 12:50, 12/50, 12.50, 1250, 12:50 HRS."""
     if s is None:
         return None
     s = str(s).strip().upper()
     if not s:
         return None
     s = re.sub(r'\b(HRS|HR|HOURS|HOUR)\b', '', s).strip()
-    s = s.replace('.', ':').replace(' ', '')
+    # Normalise all separators to ':'
+    s = re.sub(r'[/\.\-]', ':', s).replace(' ', '')
+    # Squeeze multiple ':' into one
+    s = re.sub(r':+', ':', s)
+
     for fmt in ("%H:%M", "%H%M"):
         try:
             return datetime.strptime(s, fmt).time()
         except Exception:
             pass
-    m = re.search(r'(\d{1,2}):(\d{2})', s)
+    m = re.search(r'(\d{1,2}):(\d{1,2})', s)
     if m:
-        try:
-            return datetime.strptime(f"{m.group(1)}:{m.group(2)}", "%H:%M").time()
-        except Exception:
-            pass
+        hh = int(m.group(1))
+        mm = int(m.group(2))
+        if 0 <= hh <= 23 and 0 <= mm <= 59:
+            return dt_time(hh, mm)
     return None
 
 def ist_now():
@@ -384,7 +428,7 @@ def ist_now():
         return datetime.utcnow() + timedelta(hours=5, minutes=30)
 
 # ==============================================
-# GEMINI — fully natural prompt
+# GEMINI — natural, trusting
 # ==============================================
 def call_gemini(msg):
     if not GEMINI_API_KEY:
@@ -400,161 +444,87 @@ Return ONE JSON object with these keys (all present, empty if nothing found):
   "prs"   : {{ "<STATION_CODE>": {{ "TKT":num, "PASS":num, "C/TKT":num, "C/PASS":num, "REF":num, "NET":num, "VCH":num, "POS":num, "UPI":num }} }}
   "uts"   : {{ "<STATION_CODE>": {{ "PF":num, "TKT":num, "PASS":num, "NET":num, "MR":num, "MR AMT":num, "UPI":num }} }}
   "osop"  : [ {{ "station":"CODE", "date":"as written", "amount":num, "unit":num or omit }} ]
-  "goods" : [ {{ "from_stn":"CODE", "to_stn":"CODE", "wagons":num, "placement_time":"HH:MM", "placement_date":"as written", "commodity":"UPPERCASE", "line":"just number or comma list", "party":"FULL NAME UPPERCASE", "wagon_type":"optional", "weight":num or omit, "freight":num or omit }} ]
+  "goods" : [ {{ "from_stn":"CODE", "to_stn":"CODE", "wagons":num, "placement_time":"HH:MM", "placement_date":"as written", "commodity":"ABBREVIATED UPPERCASE", "line":"number or comma list", "party":"UPPERCASE", "wagon_type":"optional", "weight":num or omit, "freight":num or omit }} ]
 
 === OFFICIAL STATIONS (CODE = Full Name) ===
 {station_legend}
 
-Rules of thumb (apply with judgement — don't over-apply):
-- Station full name OR code → always use the CODE as key.
-- PRS NET = net cash only (never add UPI/digi cash).
-- REF = SUM of all refunds (cash + digi + pos + upi refunds).
-- UTS NET = net cash. UPI cash separate. J/Amount / journey amount → NET.
-- UTS J/TKT / journey tickets → TKT ; J/Pass → PASS (when T/TKT or T/Pass absent).
-- MR + MR AMT both → always capture both.
-- PF / P/TKT / PLT / PLATFORM / "M" → all map to PF.
-- Missing values (nil, -, "nahi aya") → omit the key. Don't insert 0.
-- Negative numbers → keep sign.
+PRS/UTS rules (trust your judgement, don't over-apply):
+- Station full name OR code → use CODE as key.
+- PRS NET = net cash only.
+- REF = SUM of all refunds.
+- UTS NET = net cash; UPI separate; J/Amount → NET; J/TKT → TKT; J/Pass → PASS.
+- MR + MR AMT both captured.
+- PF / P/TKT / PLT / PLATFORM / "M" → PF.
+- Missing → omit key.
 
 === INWARD GOODS / IWOW ===
-Any message about goods placement / rake / wagons / inward / container / cement / coal / naphtha / freight / M/s. → extract into "goods" array.
-Fields per goods entry:
-- "from_stn" / "to_stn": station codes
-- "wagons": number of wagons (parse "14 wagons" / "Load - 14 wagons" / "Rake - 60")
-- "placement_time": HH:MM 24-hour
-- "placement_date": date exactly as written
-- "commodity": UPPERCASE. If the message mentions container, container wagon type, or the container is being loaded → commodity = "CONTAINER".
-- "line": just the digit. **If the message splits wagons across multiple lines (LINE NO 4 - 05 WAGONS, LINE NO 5 - 02 WAGONS etc.), create ONE goods entry PER LINE with the respective wagons count.** If a single line mentions multiple lines together (L/4,5,6), use "4,5,6".
-- "party": full UPPERCASE
-- "wagon_type": optional — if any container wagon code (BLC, BFKN, BLL, BLH, BLCN, CFN) mentioned, use it
-- "weight": optional number
-- "freight": optional number
+Extract every goods placement into "goods" array.
 
-=== MULTI-LINE EXAMPLE (very important — CRACK THIS FORMAT) ===
+Fields:
+- from_stn / to_stn: station codes
+- wagons: number of wagons
+- placement_time: HH:MM 24-hour
+- placement_date: date as written
+- commodity: **ABBREVIATED uppercase** (see below)
+- line: just the digit; if multiple lines mentioned together → "10,12"
+- party: uppercase
+- wagon_type / weight / freight: optional
+
+COMMODITY ABBREVIATION RULES (IMPORTANT — apply always):
+- RICE (FCI) / FCI RICE / RICE FCI  → "FCI/R"
+- WHEAT (FCI) / FCI WHEAT / WHEAT FCI → "FCI/W"
+- RICE (PUB) / PUB RICE / RICE PUB → "PUB/R"
+- WHEAT (PUB) / PUB WHEAT / WHEAT PUB → "PUB/W"
+- RICE alone → "RICE"
+- WHEAT alone → "WHEAT"
+- FCI alone (no RICE/WHEAT) → "FCI"
+- PUB alone → "PUB"
+- CONTAINER / container wagons → "CONTAINER"
+- CEMENT → "CEMENT", COAL → "COAL", NAPHTHA → "NAPHTHA", FERT → "FERT"
+- Others → keep as UPPERCASE
+
+MULTI-LINE WAGONS:
+If the message reports wagons on multiple line numbers with DIFFERENT counts each → create one goods entry per line.
+
+=== VERY IMPORTANT: SAME COMMODITY + SAME TIME ACROSS LINES → MERGE ===
+If the message reports the SAME commodity, SAME from_stn, SAME to_stn, SAME placement time+date across multiple line numbers → produce ONE entry with:
+- wagons = SUM of all those lines
+- line = comma-joined line numbers, e.g. "10,12"
+
+But if commodities DIFFER, keep them as separate entries.
+
+EXAMPLE 1 (merge case — CRACK THIS):
 Input:
-"FCGC GOODS POSITION.
-21 WAGONS EX -BLZ TO FCGC (RICE) PLACED AT  05:15 HRS  ON DATE 03/11/26 
-LINE NO 4- 05 WAGONS
-LINE NO 5- 02 WAGONS 
-LINE NO 6 - 14 WAGONS
-M/S- FOOD CORPORATION OF INDIA ASSAM
-(RAKE DEMAND)"
+"55 BCNL RICE(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-10 AND 
+03 BCNL RICE(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-12 
+AT 12:50 HRS ON DATE-04/11/26"
 
-Expected goods (3 entries — one per LINE NO):
+Expected output — ONE entry (same commodity FCI/R, same time, same stations → merge):
 [
   {{
-    "from_stn": "BLZ",
-    "to_stn": "FCGC",
-    "wagons": 5,
-    "placement_time": "05:15",
-    "placement_date": "03/11/26",
-    "commodity": "RICE",
-    "line": "4",
-    "party": "M/S FOOD CORPORATION OF INDIA ASSAM"
-  }},
-  {{
-    "from_stn": "BLZ",
-    "to_stn": "FCGC",
-    "wagons": 2,
-    "placement_time": "05:15",
-    "placement_date": "03/11/26",
-    "commodity": "RICE",
-    "line": "5",
-    "party": "M/S FOOD CORPORATION OF INDIA ASSAM"
-  }},
-  {{
-    "from_stn": "BLZ",
-    "to_stn": "FCGC",
-    "wagons": 14,
-    "placement_time": "05:15",
-    "placement_date": "03/11/26",
-    "commodity": "RICE",
-    "line": "6",
-    "party": "M/S FOOD CORPORATION OF INDIA ASSAM"
+    "from_stn": "KNNN",
+    "to_stn": "NTSK",
+    "wagons": 58,
+    "placement_time": "12:50",
+    "placement_date": "04/11/26",
+    "commodity": "FCI/R",
+    "line": "10,12",
+    "party": ""
   }}
 ]
-(Total wagons across lines = 5+2+14 = 21, which matches the "21 WAGONS" header. Always preserve per-line wagon split if lines are given separately.)
 
-=== SINGLE LINE EXAMPLE ===
+EXAMPLE 2 (different commodities → separate):
 Input:
-"DT - 02/11/26
-EX MRLB  TO SPTR
-LINE NO- 4
-Load - 14wagons (Rake demand)
-Commodity - Cement
-Weight -896
-Freight - 2716325
-P/TIME- 21:30 HRS
-PARTY -M/S ACC"
-Expected:
-{{
-  "from_stn": "MRLB",
-  "to_stn": "SPTR",
-  "wagons": 14,
-  "placement_time": "21:30",
-  "placement_date": "02/11/26",
-  "commodity": "CEMENT",
-  "line": "4",
-  "party": "M/S ACC",
-  "weight": 896,
-  "freight": 2716325
-}}
+"20 BCNL RICE(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-10
+10 BCNA WHEAT(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-12
+AT 12:50 HRS ON DATE-04/11/26"
 
-=== FEW-SHOT EXAMPLES (PRS/UTS) ===
-
-Example A — terse UTS:
-Input:
-"Borhat uts
-Pass:-7
-Tkt:-5
-Cash:-385
-Ecash:-190"
-Output:
-{{"prs": {{}}, "uts": {{"BFD": {{"TKT": 5, "PASS": 7, "NET": 385, "UPI": 190}}}}, "osop": [], "goods": []}}
-
-Example B — J/Amount is UTS NET:
-Input:
-"MXN STN ON 02/11/2026
-PRS
-T/TKT -98
-T/Pass -205
-Net Cash -146315
-RFD -905
-UPI -35460
-VCH -31220
-C/TKT -2
-C/Pass -2
-UTS
-PF TKT -69
-J/TKT -686
-J/Pass -881
-J/Amount -83970
-Ecash -33905
-MR -22
-MR Amount-44610
-VCH -8896
-RFD -9526"
-Output:
-{{
-  "prs": {{"MXN": {{"TKT": 98, "PASS": 205, "NET": 146315, "REF": 905, "UPI": 35460, "VCH": 31220, "C/TKT": 2, "C/PASS": 2}}}},
-  "uts": {{"MXN": {{"PF": 69, "TKT": 686, "PASS": 881, "NET": 83970, "UPI": 33905, "MR": 22, "MR AMT": 44610}}}},
-  "osop": [], "goods": []
-}}
-
-Example C — OSOP:
-Input:
-"Osop dmc
-26-10-26
-Unit 5
-Amt 600
-Osop nhk
-26-10-26
-Amt 600"
-Output:
-{{"prs": {{}}, "uts": {{}}, "osop": [
-  {{"station": "DMC", "date": "26-10-26", "unit": 5, "amount": 600}},
-  {{"station": "NHK", "date": "26-10-26", "amount": 600}}
-], "goods": []}}
+Expected — TWO entries (different commodity):
+[
+  {{"from_stn":"KNNN","to_stn":"NTSK","wagons":20,"placement_time":"12:50","placement_date":"04/11/26","commodity":"FCI/R","line":"10","party":""}},
+  {{"from_stn":"KNNN","to_stn":"NTSK","wagons":10,"placement_time":"12:50","placement_date":"04/11/26","commodity":"FCI/W","line":"12","party":""}}
+]
 
 MESSAGE:
 \"\"\"{msg}\"\"\"
@@ -628,13 +598,15 @@ def apply_post_processing(data, msg):
         if e.get("to_stn"):
             e["to_stn"] = resolve_station(e["to_stn"]) or str(e["to_stn"]).upper()
 
-        comm = str(e.get("commodity") or "").upper()
+        # Abbreviate commodity
+        e["commodity"] = abbreviate_commodity(e.get("commodity"))
+
+        # Container detection — if wagon type is container
         wtype = str(e.get("wagon_type") or "").upper()
-        if ("CONTAINER" in comm or "CONT" in comm or
-                wtype in CONTAINER_WAGON_CODES or "CONTAINER" in wtype):
+        if wtype in CONTAINER_WAGON_CODES or "CONTAINER" in wtype:
             e["commodity"] = "CONTAINER"
 
-        # Normalise line field — keep as-is if it's a comma list, else string digit
+        # Normalise line field
         ln = e.get("line")
         if ln is not None:
             ln_str = str(ln).strip()
@@ -659,6 +631,55 @@ def apply_post_processing(data, msg):
     return data
 
 # ==============================================
+# MERGE GOODS (same commodity + time + stations)
+# ==============================================
+def _merge_goods(entries):
+    """
+    Merge goods entries that share commodity, from_stn, to_stn,
+    placement_time, placement_date, party — combine wagons & lines.
+    """
+    if not entries:
+        return entries
+    merged = {}
+    order = []
+    for e in entries:
+        key = (
+            str(e.get("from_stn") or "").upper().strip(),
+            str(e.get("to_stn") or "").upper().strip(),
+            abbreviate_commodity(e.get("commodity")),
+            str(e.get("placement_time") or "").strip(),
+            str(e.get("placement_date") or "").strip(),
+            str(e.get("party") or "").upper().strip(),
+        )
+        if key not in merged:
+            merged[key] = dict(e)
+            order.append(key)
+        else:
+            existing = merged[key]
+            # Sum wagons
+            try:
+                existing["wagons"] = float(existing.get("wagons") or 0) + float(e.get("wagons") or 0)
+                if existing["wagons"] == int(existing["wagons"]):
+                    existing["wagons"] = int(existing["wagons"])
+            except Exception:
+                pass
+            # Combine lines
+            lines = []
+            for ln in (existing.get("line"), e.get("line")):
+                if ln is None:
+                    continue
+                for part in re.split(r'[,\s]+', str(ln).strip()):
+                    if part and part not in lines:
+                        lines.append(part)
+            if lines:
+                try:
+                    lines_sorted = sorted(set(lines), key=lambda x: int(x) if x.isdigit() else 999)
+                except Exception:
+                    lines_sorted = sorted(set(lines))
+                existing["line"] = ",".join(lines_sorted)
+    return [merged[k] for k in order]
+
+# ==============================================
 # REGEX FALLBACK
 # ==============================================
 def _to_float(s):
@@ -677,66 +698,67 @@ def _find_stations_in_text(msg):
                 break
     return found
 
-def _parse_multi_line_goods(msg):
+def _parse_goods_regex(msg):
     """
-    Detects messages where wagons are split across multiple LINE NO lines:
-      LINE NO 4 - 05 WAGONS
-      LINE NO 5 - 02 WAGONS
-      LINE NO 6 - 14 WAGONS
-    Returns a list of goods entries (one per line), or [] if pattern not found.
+    Regex fallback for multi-block goods messages.
+    Splits message into chunks per '<N> WAGONS ... L/NO-<line>' segment,
+    builds goods entries, then merges same-commodity same-time across lines.
     """
-    up = msg.upper()
+    up = msg.upper().replace("\n", " ")
+    up = re.sub(r'\s+', ' ', up)
 
-    # Header info
-    from_m = re.search(r'\bEX\s*[-:/]?\s*([A-Z]{2,6})\b', up)
-    to_m   = re.search(r'\bTO\s+([A-Z]{2,6})\b', up)
-    if not from_m or not to_m:
-        return []
-    from_stn = resolve_station(from_m.group(1))
-    to_stn   = resolve_station(to_m.group(1))
-    if not from_stn or not to_stn:
-        return []
-
-    # Every "LINE NO <n> ... <x> WAGON[S]" line
-    line_hits = re.findall(
-        r'LINE\s*(?:NO\.?|NUMBER|NUM)?\s*[-:=]?\s*(\d+)\s*[-–:=]?\s*(\d+)\s*WAGON',
-        up
-    )
-    if len(line_hits) < 2:
-        return []
-
-    comm_m  = re.search(r'\(([A-Z][A-Z\s]+)\)', up)
-    if not comm_m:
-        comm_m = re.search(r'COMMODITY\s*[-:=]?\s*([A-Z][A-Z\s]+)', up)
-    commodity = comm_m.group(1).strip() if comm_m else ""
-
-    ptime_m = re.search(r'PLACED\s+AT\s+(\d{1,2}[:.]\d{2})', up)
-    if not ptime_m:
-        ptime_m = re.search(r'P/?TIME\s*[-:=]?\s*(\d{1,2}[:.]\d{2})', up)
-    ptime = ptime_m.group(1) if ptime_m else ""
-
-    pdate_m = re.search(r'(?:ON\s+DATE|DT|DATE)\s*[-:=]?\s*(\d{1,4}[-/\.]\d{1,2}[-/\.]\d{1,4})', up)
+    # Shared date & time across the whole message
+    pdate_m = re.search(r'(?:ON\s+DATE|DATE)\s*[-:=]?\s*(\d{1,4}[-/\.]\d{1,2}[-/\.]\d{2,4})', up)
     if not pdate_m:
         pdate_m = re.search(r'(\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4})', up)
-    pdate = pdate_m.group(1) if pdate_m else ""
+    shared_date = pdate_m.group(1) if pdate_m else ""
 
-    party_m = re.search(r'M/S\s*[-:=]?\s*([A-Z][A-Z0-9 ./&()\-]+)', msg.upper())
-    party = party_m.group(1).strip() if party_m else ""
+    ptime_m = re.search(r'(?:AT|PLACED\s+AT|P/?TIME)\s*[-:=]?\s*(\d{1,2}\s*[:/\.]\s*\d{1,2})\s*(?:HRS|HR)?', up)
+    shared_time = ptime_m.group(1) if ptime_m else ""
 
-    out = []
-    for line_no, wagons in line_hits:
-        out.append({
-            "from_stn": from_stn,
-            "to_stn": to_stn,
-            "wagons": int(wagons),
-            "placement_time": ptime,
-            "placement_date": pdate,
-            "commodity": commodity,
-            "line": line_no,
-            "party": party
-        })
-    print(f"🔧 Multi-line goods parsed: {len(out)} entries")
-    return out
+    # Find segments: "<n> ... WAGONS EX-<FROM> TO <TO> ... L/NO-<line>"
+    pattern = re.compile(
+        r'(\d+)\s*(?:[A-Z0-9]{2,6}\s*)?'                # wagons + optional wagon code
+        r'(?:RICE\s*\([A-Z]+\)|WHEAT\s*\([A-Z]+\)|RICE|WHEAT|[A-Z]{3,})?\s*'  # optional commodity
+        r'WAGONS?\s+EX\s*[-:]?\s*([A-Z]{2,6})\s+TO\s+([A-Z]{2,6})\s*'         # EX-XXX TO YYY
+        r'(?:.*?L\s*/\s*NO\s*[-:=]?\s*(\d+))?',                                # optional line
+        re.IGNORECASE
+    )
+
+    entries = []
+    for m in pattern.finditer(up):
+        wagons = int(m.group(1))
+        from_raw = m.group(2)
+        to_raw = m.group(3)
+        line = m.group(4) or ""
+
+        # Try to recover commodity from the raw message around this match
+        ctx_start = max(0, m.start() - 3)
+        ctx = up[ctx_start:m.end()]
+        comm_match = re.search(r'(RICE|WHEAT)\s*\(\s*([A-Z]+)\s*\)', ctx)
+        if comm_match:
+            commodity = f"{comm_match.group(1)}({comm_match.group(2)})"
+        else:
+            c = re.search(r'\b(RICE|WHEAT|CEMENT|COAL|NAPHTHA|CONTAINER|FERT)\b', ctx)
+            commodity = c.group(1) if c else ""
+
+        entry = {
+            "from_stn": resolve_station(from_raw) or from_raw,
+            "to_stn": resolve_station(to_raw) or to_raw,
+            "wagons": wagons,
+            "placement_time": shared_time,
+            "placement_date": shared_date,
+            "commodity": abbreviate_commodity(commodity),
+            "line": line,
+            "party": ""
+        }
+        entries.append(entry)
+
+    if entries:
+        print(f"🔧 Regex goods parsed: {len(entries)} raw entries → merging...")
+        entries = _merge_goods(entries)
+        print(f"🔧 After merge: {len(entries)} entries")
+    return entries
 
 def apply_fallback_fixes(data, msg):
     if not data:
@@ -746,65 +768,6 @@ def apply_fallback_fixes(data, msg):
     uts = data.get("uts") or {}
     prs = data.get("prs") or {}
 
-    # Terse UTS
-    if not uts and "UTS" in up and "NETCASH" not in up.replace(" ", "") and "DIGI" not in up:
-        found = _find_stations_in_text(msg)
-        if len(found) == 1:
-            st = next(iter(found))
-            vals = {}
-            m = re.search(r'(?:T\s?/\s?TKT|TKT|TICKETS?)\s*[:=\-]*\s*([\d,]+)', up)
-            if m: vals["TKT"] = _to_float(m.group(1))
-            m = re.search(r'(?:T\s?/\s?PASS|PASS|PAX)\s*[:=\-]*\s*([\d,]+)', up)
-            if m: vals["PASS"] = _to_float(m.group(1))
-            m = re.search(r'(?<![A-Z])CASH\s*[:=\-]*\s*([\d,]+)', up)
-            if m: vals["NET"] = _to_float(m.group(1))
-            m = re.search(r'E\s?[-/]?\s?CASH\s*[:=\-]*\s*([\d,]+)', up)
-            if m: vals["UPI"] = _to_float(m.group(1))
-            vals = {k: v for k, v in vals.items() if v is not None}
-            if vals:
-                uts[st] = vals
-                data["uts"] = uts
-
-    # MR + MR AMT
-    if len(uts) == 1:
-        st, vals = next(iter(uts.items()))
-        vals = vals if isinstance(vals, dict) else {}
-        if not vals.get("MR AMT"):
-            m = re.search(r'\bMR\s*[=:]?\s*([\d,]+)\s*(?:A\s?M?O?U?N?T|AMT|AOUNT|AMNT)\s*[=:]?\s*([\d,]+)', up)
-            if m:
-                if not vals.get("MR"):
-                    v = _to_float(m.group(1))
-                    if v is not None: vals["MR"] = v
-                v = _to_float(m.group(2))
-                if v is not None: vals["MR AMT"] = v
-        if not vals.get("PF"):
-            m = re.search(r'\b(?:P\s?/\s?TKT|PF|PLT|PLATFORM)\s*[=:]?\s*([\d,]+)', up)
-            if m:
-                v = _to_float(m.group(1))
-                if v is not None: vals["PF"] = v
-        uts[st] = vals
-
-    # UTS NET from J/Amount
-    if len(uts) == 1:
-        st, vals = next(iter(uts.items()))
-        vals = vals if isinstance(vals, dict) else {}
-        if not vals.get("NET"):
-            m = re.search(r'J\s*/?\s*(?:AMOUNT|AMT)\s*[-:=]?\s*([\d,]+)', up)
-            if m:
-                v = _to_float(m.group(1))
-                if v is not None: vals["NET"] = v
-        if not vals.get("TKT"):
-            m = re.search(r'J\s*/?\s*TKT\s*[-:=]?\s*([\d,]+)', up)
-            if m:
-                v = _to_float(m.group(1))
-                if v is not None: vals["TKT"] = v
-        if not vals.get("PASS"):
-            m = re.search(r'J\s*/?\s*(?:PASS|PAX)\s*[-:=]?\s*([\d,]+)', up)
-            if m:
-                v = _to_float(m.group(1))
-                if v is not None: vals["PASS"] = v
-        uts[st] = vals
-
     # PRS REF total
     if len(prs) == 1:
         st, vals = next(iter(prs.items()))
@@ -812,7 +775,8 @@ def apply_fallback_fixes(data, msg):
         if not vals.get("REF"):
             amounts = re.findall(r'\b(?:RFD|REFUND|REF)\s*[=:]?\s*([\d,]+)', up)
             nums = [n for n in (_to_float(a) for a in amounts) if n is not None]
-            if nums: vals["REF"] = sum(nums)
+            if nums:
+                vals["REF"] = sum(nums)
         prs[st] = vals
 
     # OSOP fallback
@@ -823,24 +787,36 @@ def apply_fallback_fixes(data, msg):
             if re.search(r'\bOSOP\b', line, re.IGNORECASE):
                 window = "\n".join(lines[i:i+8])
                 st_m = re.search(r'OSOP\s*[:\-]?\s*([A-Za-z][A-Za-z0-9 .]+)', window, re.IGNORECASE)
-                if not st_m: continue
+                if not st_m:
+                    continue
                 code = resolve_station(st_m.group(1))
-                if not code: continue
+                if not code:
+                    continue
                 date_m = re.search(r'(\d{1,4}[-/\.]\d{1,2}[-/\.]\d{1,4})', window)
                 unit_m = re.search(r'(?:unit|u)\s*[:=\-]?\s*(\d+)', window, re.IGNORECASE)
                 amt_m  = re.search(r'(?:amt|amount|rs\.?)\s*[:=\-]?\s*([\d,]+)', window, re.IGNORECASE)
                 if date_m and amt_m:
                     entry = {"station": code, "date": date_m.group(1),
                              "amount": _to_float(amt_m.group(1))}
-                    if unit_m: entry["unit"] = int(unit_m.group(1))
+                    if unit_m:
+                        entry["unit"] = int(unit_m.group(1))
                     osop.append(entry)
         data["osop"] = osop
 
-    # 🔧 Multi-line goods detection — overrides Gemini if lines are split
-    multi = _parse_multi_line_goods(msg)
-    if multi:
-        data["goods"] = multi
-        print(f"🔧 Multi-line goods override applied ({len(multi)} entries)")
+    # ==========================================
+    # GOODS: strong regex override + merge
+    # ==========================================
+    regex_goods = _parse_goods_regex(msg)
+    gemini_goods = data.get("goods") or []
+
+    if regex_goods:
+        # Prefer regex result (handles multi-line merge properly)
+        data["goods"] = regex_goods
+        print(f"✅ Goods from regex: {len(regex_goods)} entries")
+    elif gemini_goods:
+        # Trust Gemini but still merge same-commodity across lines
+        data["goods"] = _merge_goods(gemini_goods)
+        print(f"✅ Goods from Gemini (merged): {len(data['goods'])} entries")
 
     return data
 
@@ -1135,7 +1111,7 @@ def update_iwow_sheet(entries):
             wagons    = e.get("wagons")
             ptime     = parse_time_flexible(e.get("placement_time"))
             pdate     = parse_date_flexible(e.get("placement_date"))
-            commodity = _norm_str(e.get("commodity"))
+            commodity = abbreviate_commodity(e.get("commodity"))
             line      = _norm_str(e.get("line"))
             party     = _norm_str(e.get("party"))
             wtype     = _norm_str(e.get("wagon_type"))
@@ -1145,16 +1121,9 @@ def update_iwow_sheet(entries):
                 print(f"⏭️ Missing to_stn/date → skip")
                 continue
 
-            print(f"🔎 {from_stn}→{to_stn} | date={pdate} time={ptime} wagons={wagons} line={line}")
+            print(f"🔎 {from_stn}→{to_stn} | date={pdate} time={ptime} wagons={wagons} line={line} commodity={commodity}")
 
-            # ==========================================
-            # DATE ACCEPTANCE — 24-hour clock in IST
-            #  • Today: any past time (reject only future >5 min)
-            #  • Yesterday: only if placement >= 22:00 AND now < grace_cutoff (06:00)
-            #    → "forgot 22:00, remembered 2 AM" grace window
-            #  • Tomorrow: only if within 30 min (edge)
-            #  • Anything else: reject
-            # ==========================================
+            # ---------- 24-hour clock acceptance ----------
             accept = False
             reason = ""
 
@@ -1189,7 +1158,6 @@ def update_iwow_sheet(entries):
                         reason = "tomorrow pre-report"
                 else:
                     reason = "tomorrow pre-report"
-
             else:
                 reason = f"date out of range ({pdate})"
 
@@ -1201,7 +1169,6 @@ def update_iwow_sheet(entries):
             ptime_str_check  = ptime.strftime("%H:%M") if ptime else ""
             wagons_str_check = str(wagons or "").strip()
 
-            # Duplicate check includes `line` so multi-line entries each get their own row
             is_duplicate = False
             for r in range(3, len(matrix)):
                 row = matrix[r]
@@ -1231,8 +1198,7 @@ def update_iwow_sheet(entries):
 
             if wtype in CONTAINER_WAGON_CODES or "CONTAINER" in wtype:
                 commodity = "CONTAINER"
-            elif "CONTAINER" in commodity or "CONT" in commodity:
-                commodity = "CONTAINER"
+            elif "CONTAINER" in commodity:
                 if not wtype:
                     wtype = "CONTAINER"
 
@@ -1243,10 +1209,13 @@ def update_iwow_sheet(entries):
 
             if "NAPHTHA" in commodity or "NAPTHA" in commodity:
                 ftime = "8 HRS"
-                if not wtype: wtype = "BTPN"
+                if not wtype:
+                    wtype = "BTPN"
             elif "CONTAINER" in commodity:
-                if not ftime: ftime = "3 HRS"
-                if not wtype: wtype = "CONTAINER"
+                if not ftime:
+                    ftime = "3 HRS"
+                if not wtype:
+                    wtype = "CONTAINER"
             else:
                 if not ftime:
                     if wagons_num <= 20:
@@ -1256,11 +1225,16 @@ def update_iwow_sheet(entries):
                     else:
                         ftime = "9 HRS"
                 if not wtype:
-                    if "CEMENT" in commodity: wtype = "BCN"
-                    elif "COAL" in commodity: wtype = "BOXN"
-                    elif any(x in commodity for x in ["FOOD", "GRAIN", "RICE", "WHEAT"]): wtype = "BCN"
-                    elif "FERT" in commodity: wtype = "BCN"
-                    else: wtype = "BCN"
+                    if "CEMENT" in commodity:
+                        wtype = "BCN"
+                    elif "COAL" in commodity:
+                        wtype = "BOXN"
+                    elif commodity.startswith("FCI/") or commodity.startswith("PUB/") or "RICE" in commodity or "WHEAT" in commodity:
+                        wtype = "BCN"
+                    elif "FERT" in commodity:
+                        wtype = "BCN"
+                    else:
+                        wtype = "BCN"
 
             arrival_time_str = ""
             arrival_date_str = pdate.strftime("%d-%m-%Y")
