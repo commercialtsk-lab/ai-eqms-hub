@@ -149,37 +149,24 @@ CONTAINER_WAGON_CODES = {"BLC", "BFKN", "BLL", "BLH", "BLCN", "BLCA", "BLLA", "C
 # COMMODITY ABBREVIATION
 # ==============================================
 def abbreviate_commodity(comm):
-    """RICE(FCI)→FCI/R, WHEAT(FCI)→FCI/W, RICE(PUB)→PUB/R, WHEAT(PUB)→PUB/W."""
     if not comm:
         return ""
     c = str(comm).upper().strip()
     c = re.sub(r'\s+', ' ', c)
-
-    # Container stays container
     if "CONTAINER" in c or c in ("CONT", "CNTR"):
         return "CONTAINER"
-
     has_fci = "FCI" in c or "FOOD CORPORATION" in c
     has_pub = "PUB" in c or "PUBLIC" in c
     has_rice = "RICE" in c
     has_wheat = "WHEAT" in c
-
-    if has_rice and has_fci:
-        return "FCI/R"
-    if has_wheat and has_fci:
-        return "FCI/W"
-    if has_rice and has_pub:
-        return "PUB/R"
-    if has_wheat and has_pub:
-        return "PUB/W"
-    if has_rice:
-        return "RICE"
-    if has_wheat:
-        return "WHEAT"
-    if has_fci:
-        return "FCI"
-    if has_pub:
-        return "PUB"
+    if has_rice and has_fci: return "FCI/R"
+    if has_wheat and has_fci: return "FCI/W"
+    if has_rice and has_pub: return "PUB/R"
+    if has_wheat and has_pub: return "PUB/W"
+    if has_rice: return "RICE"
+    if has_wheat: return "WHEAT"
+    if has_fci: return "FCI"
+    if has_pub: return "PUB"
     return c
 
 # ==============================================
@@ -205,12 +192,10 @@ def resolve_station(name):
     original = str(name).upper().strip()
     n = re.sub(r'[^A-Z0-9 ]', ' ', original)
     n = re.sub(r'\s+', ' ', n).strip()
-
     if n in STATION_ALIASES:
         return n
     if n.replace(' ', '') in STATION_ALIASES:
         return n.replace(' ', '')
-
     n2 = _norm_station(n)
     if n2 in STATION_ALIASES:
         return n2
@@ -218,14 +203,12 @@ def resolve_station(name):
         return _alias_index[n2]
     if n2.replace(' ', '') in _alias_index:
         return _alias_index[n2.replace(' ', '')]
-
     n2_clean = n2.replace(' ', '')
     for code, aliases in STATION_ALIASES.items():
         for alias in aliases:
             a_clean = alias.replace(' ', '')
             if len(n2_clean) >= 4 and (n2_clean in a_clean or a_clean in n2_clean):
                 return code
-
     print(f"⚠️ Could not resolve station: '{original}'")
     return None
 
@@ -263,7 +246,6 @@ def _fix_newlines_inside_strings(s: str) -> str:
 
 def load_credentials_dict():
     errors = []
-
     if GOOGLE_CREDENTIALS_B64:
         try:
             s = GOOGLE_CREDENTIALS_B64.strip().strip("'\"")
@@ -279,7 +261,6 @@ def load_credentials_dict():
             return d
         except Exception as e:
             errors.append(f"B64 failed: {e}")
-
     raw = (GOOGLE_CREDENTIALS_STR or "").strip()
     if raw:
         candidates = [raw]
@@ -296,7 +277,6 @@ def load_credentials_dict():
                 except json.JSONDecodeError:
                     pass
         errors.append("RAW JSON failed")
-
     print(f"❌ Credentials load failed: {' | '.join(errors) if errors else 'No credentials found'}")
     return None
 
@@ -347,22 +327,18 @@ def get_station_map(sheet):
     except Exception as e:
         print(f"❌ Error reading sheet: {e}")
         return m
-
     for i in range(2, min(30, len(all_values))):
         val = all_values[i][1] if len(all_values[i]) > 1 else ""
         if val:
             m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "B"})
-
     for i in range(30, min(47, len(all_values))):
         val = all_values[i][12] if len(all_values[i]) > 12 else ""
         if val:
             m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "M"})
-
     for i in range(31, min(48, len(all_values))):
         val = all_values[i][2] if len(all_values[i]) > 2 else ""
         if val:
             m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "C"})
-
     print(f"✅ Station map ready: {len(m)} stations")
     return m
 
@@ -395,18 +371,14 @@ def parse_date_flexible(s):
         return None
 
 def parse_time_flexible(s):
-    """Tolerant time parser — handles 12:50, 12/50, 12.50, 1250, 12:50 HRS."""
     if s is None:
         return None
     s = str(s).strip().upper()
     if not s:
         return None
     s = re.sub(r'\b(HRS|HR|HOURS|HOUR)\b', '', s).strip()
-    # Normalise all separators to ':'
     s = re.sub(r'[/\.\-]', ':', s).replace(' ', '')
-    # Squeeze multiple ':' into one
     s = re.sub(r':+', ':', s)
-
     for fmt in ("%H:%M", "%H%M"):
         try:
             return datetime.strptime(s, fmt).time()
@@ -414,8 +386,7 @@ def parse_time_flexible(s):
             pass
     m = re.search(r'(\d{1,2}):(\d{1,2})', s)
     if m:
-        hh = int(m.group(1))
-        mm = int(m.group(2))
+        hh = int(m.group(1)); mm = int(m.group(2))
         if 0 <= hh <= 23 and 0 <= mm <= 59:
             return dt_time(hh, mm)
     return None
@@ -428,7 +399,7 @@ def ist_now():
         return datetime.utcnow() + timedelta(hours=5, minutes=30)
 
 # ==============================================
-# GEMINI — natural, trusting
+# GEMINI — truly natural prompt
 # ==============================================
 def call_gemini(msg):
     if not GEMINI_API_KEY:
@@ -438,93 +409,74 @@ def call_gemini(msg):
     station_legend = "\n".join(f'{c} = {STATION_OFFICIAL[c]}' for c in ALL_STATIONS)
 
     prompt = f"""You are an expert Indian Railway data extraction engine for the Tinsukia Division.
-You read WhatsApp messages like a seasoned railway accountant — messy formats, broken lines, Hinglish, typos, garbled paste, squished text. You understand naturally. Trust your own judgement.
+You read WhatsApp messages exactly like a senior railway accountant who has seen thousands of forwarded earning reports. Terha-merha text, broken lines, Hinglish, typos, "Nill" instead of "0", single-line forwards, multi-station bundles — sab samajh aa jata hai.
+You are the expert. Trust your judgement. Don't over-apply rules.
 
-Return ONE JSON object with these keys (all present, empty if nothing found):
+Return ONE JSON object — always all four keys, empty if nothing found:
   "prs"   : {{ "<STATION_CODE>": {{ "TKT":num, "PASS":num, "C/TKT":num, "C/PASS":num, "REF":num, "NET":num, "VCH":num, "POS":num, "UPI":num }} }}
   "uts"   : {{ "<STATION_CODE>": {{ "PF":num, "TKT":num, "PASS":num, "NET":num, "MR":num, "MR AMT":num, "UPI":num }} }}
   "osop"  : [ {{ "station":"CODE", "date":"as written", "amount":num, "unit":num or omit }} ]
-  "goods" : [ {{ "from_stn":"CODE", "to_stn":"CODE", "wagons":num, "placement_time":"HH:MM", "placement_date":"as written", "commodity":"ABBREVIATED UPPERCASE", "line":"number or comma list", "party":"UPPERCASE", "wagon_type":"optional", "weight":num or omit, "freight":num or omit }} ]
+  "goods" : [ {{ "from_stn":"CODE", "to_stn":"CODE", "wagons":num, "placement_time":"HH:MM", "placement_date":"as written", "commodity":"ABBREVIATED", "line":"number or comma list", "party":"UPPERCASE", "wagon_type":"optional", "weight":num or omit, "freight":num or omit }} ]
 
 === OFFICIAL STATIONS (CODE = Full Name) ===
 {station_legend}
 
-PRS/UTS rules (trust your judgement, don't over-apply):
-- Station full name OR code → use CODE as key.
-- PRS NET = net cash only.
-- REF = SUM of all refunds.
-- UTS NET = net cash; UPI separate; J/Amount → NET; J/TKT → TKT; J/Pass → PASS.
-- MR + MR AMT both captured.
-- PF / P/TKT / PLT / PLATFORM / "M" → PF.
-- Missing → omit key.
+STATION RULE: Use the CODE as the JSON key. Extract the station from the message header/prefix ("REVENUE OF BFD", "Kown 4/11/26", "Krht uts of 4.11.2026") or from any explicit "STATION:" line. If the message is prefixed with a station name like "Kown" or "Krht", that IS the station.
+
+PRS/UTS field intuition:
+- Cash / NET CASH / Netcash → NET
+- E CASH / Ecash / E-cash / E cas / Digi cash / UPI / QR → UPI
+- RFD / REFUND / Ref → REF (if it says Nill/Nil/- → OMIT the key entirely, don't set 0)
+- T/TKT / TKT / Tickets / T → TKT
+- T/Pass / PASS / Pass / Psg / P → PASS
+- C/TKT / C/Pass → as-is
+- VCH / Vou → VCH ; POS → POS
+- PF / P/TKT / PLT / PLATFORM / "M" → PF (UTS)
+- MR / MR AMT / MR Amount → both
+- J/Amount → UTS NET (when present, UTS NET = J/Amount)
+- J/TKT / J/Pass → TKT / PASS if T/TKT absent
+- Ttl / Total at the end → IGNORE (it's a checksum, don't map to any column)
+- "Nill" / "Nil" / "-" → omit that field, don't insert 0
+
+=== VERY SHORT / TERSE MESSAGES ===
+Sometimes the message is just a few lines with NO "PRS"/"UTS" label. Read it naturally:
+  "Kown 4/11/26
+   Psg-9
+   Tckt-7
+   Cash-20
+   Ecash-400"
+→ this is UTS data for KOWN:  TKT=7, PASS=9, NET=20, UPI=400
+
+  "Krht uts of 4.11.2026
+   T 36
+   P 58
+   Cash 1390
+   E cas 340
+   Ttl 1730"
+→ UTS for KRHT: TKT=36, PASS=58, NET=1390, UPI=340 (Ttl=1730 ignored)
+
+  "Borhat uts
+   Pass:-7
+   Tkt:-5
+   Cash:-385
+   Ecash:-190"
+→ UTS for BFD: TKT=5, PASS=7, NET=385, UPI=190
 
 === INWARD GOODS / IWOW ===
-Extract every goods placement into "goods" array.
+Fields: from_stn, to_stn, wagons, placement_time, placement_date, commodity, line, party, (optional) wagon_type, weight, freight.
 
-Fields:
-- from_stn / to_stn: station codes
-- wagons: number of wagons
-- placement_time: HH:MM 24-hour
-- placement_date: date as written
-- commodity: **ABBREVIATED uppercase** (see below)
-- line: just the digit; if multiple lines mentioned together → "10,12"
-- party: uppercase
-- wagon_type / weight / freight: optional
+COMMODITY ABBREVIATION (always apply):
+- RICE(FCI) / FCI RICE / RICE FCI  → "FCI/R"
+- WHEAT(FCI) / FCI WHEAT / WHEAT FCI → "FCI/W"
+- RICE(PUB) / PUB RICE → "PUB/R"
+- WHEAT(PUB) / PUB WHEAT → "PUB/W"
+- RICE alone → "RICE" ; WHEAT alone → "WHEAT"
+- FCI alone → "FCI" ; PUB alone → "PUB"
+- CONTAINER → "CONTAINER" ; CEMENT → "CEMENT" ; COAL → "COAL" ; NAPHTHA → "NAPHTHA" ; FERT → "FERT"
+- Others → UPPERCASE
 
-COMMODITY ABBREVIATION RULES (IMPORTANT — apply always):
-- RICE (FCI) / FCI RICE / RICE FCI  → "FCI/R"
-- WHEAT (FCI) / FCI WHEAT / WHEAT FCI → "FCI/W"
-- RICE (PUB) / PUB RICE / RICE PUB → "PUB/R"
-- WHEAT (PUB) / PUB WHEAT / WHEAT PUB → "PUB/W"
-- RICE alone → "RICE"
-- WHEAT alone → "WHEAT"
-- FCI alone (no RICE/WHEAT) → "FCI"
-- PUB alone → "PUB"
-- CONTAINER / container wagons → "CONTAINER"
-- CEMENT → "CEMENT", COAL → "COAL", NAPHTHA → "NAPHTHA", FERT → "FERT"
-- Others → keep as UPPERCASE
-
-MULTI-LINE WAGONS:
-If the message reports wagons on multiple line numbers with DIFFERENT counts each → create one goods entry per line.
-
-=== VERY IMPORTANT: SAME COMMODITY + SAME TIME ACROSS LINES → MERGE ===
-If the message reports the SAME commodity, SAME from_stn, SAME to_stn, SAME placement time+date across multiple line numbers → produce ONE entry with:
-- wagons = SUM of all those lines
-- line = comma-joined line numbers, e.g. "10,12"
-
-But if commodities DIFFER, keep them as separate entries.
-
-EXAMPLE 1 (merge case — CRACK THIS):
-Input:
-"55 BCNL RICE(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-10 AND 
-03 BCNL RICE(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-12 
-AT 12:50 HRS ON DATE-04/11/26"
-
-Expected output — ONE entry (same commodity FCI/R, same time, same stations → merge):
-[
-  {{
-    "from_stn": "KNNN",
-    "to_stn": "NTSK",
-    "wagons": 58,
-    "placement_time": "12:50",
-    "placement_date": "04/11/26",
-    "commodity": "FCI/R",
-    "line": "10,12",
-    "party": ""
-  }}
-]
-
-EXAMPLE 2 (different commodities → separate):
-Input:
-"20 BCNL RICE(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-10
-10 BCNA WHEAT(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-12
-AT 12:50 HRS ON DATE-04/11/26"
-
-Expected — TWO entries (different commodity):
-[
-  {{"from_stn":"KNNN","to_stn":"NTSK","wagons":20,"placement_time":"12:50","placement_date":"04/11/26","commodity":"FCI/R","line":"10","party":""}},
-  {{"from_stn":"KNNN","to_stn":"NTSK","wagons":10,"placement_time":"12:50","placement_date":"04/11/26","commodity":"FCI/W","line":"12","party":""}}
-]
+MULTI-LINE SAME COMMODITY + SAME TIME → MERGE into ONE entry, wagons = SUM, line = "10,12"
+DIFFERENT COMMODITY → separate entries.
 
 MESSAGE:
 \"\"\"{msg}\"\"\"
@@ -597,16 +549,10 @@ def apply_post_processing(data, msg):
             e["from_stn"] = resolve_station(e["from_stn"]) or str(e["from_stn"]).upper()
         if e.get("to_stn"):
             e["to_stn"] = resolve_station(e["to_stn"]) or str(e["to_stn"]).upper()
-
-        # Abbreviate commodity
         e["commodity"] = abbreviate_commodity(e.get("commodity"))
-
-        # Container detection — if wagon type is container
         wtype = str(e.get("wagon_type") or "").upper()
         if wtype in CONTAINER_WAGON_CODES or "CONTAINER" in wtype:
             e["commodity"] = "CONTAINER"
-
-        # Normalise line field
         ln = e.get("line")
         if ln is not None:
             ln_str = str(ln).strip()
@@ -616,7 +562,6 @@ def apply_post_processing(data, msg):
             else:
                 m = re.search(r'\d+', ln_str)
                 e["line"] = m.group(0) if m else ln_str
-
         new_goods.append(e)
     data["goods"] = new_goods
 
@@ -631,13 +576,9 @@ def apply_post_processing(data, msg):
     return data
 
 # ==============================================
-# MERGE GOODS (same commodity + time + stations)
+# MERGE GOODS
 # ==============================================
 def _merge_goods(entries):
-    """
-    Merge goods entries that share commodity, from_stn, to_stn,
-    placement_time, placement_date, party — combine wagons & lines.
-    """
     if not entries:
         return entries
     merged = {}
@@ -656,14 +597,12 @@ def _merge_goods(entries):
             order.append(key)
         else:
             existing = merged[key]
-            # Sum wagons
             try:
                 existing["wagons"] = float(existing.get("wagons") or 0) + float(e.get("wagons") or 0)
                 if existing["wagons"] == int(existing["wagons"]):
                     existing["wagons"] = int(existing["wagons"])
             except Exception:
                 pass
-            # Combine lines
             lines = []
             for ln in (existing.get("line"), e.get("line")):
                 if ln is None:
@@ -680,7 +619,7 @@ def _merge_goods(entries):
     return [merged[k] for k in order]
 
 # ==============================================
-# REGEX FALLBACK
+# REGEX FALLBACK (goods)
 # ==============================================
 def _to_float(s):
     try:
@@ -688,26 +627,10 @@ def _to_float(s):
     except:
         return None
 
-def _find_stations_in_text(msg):
-    up = msg.upper()
-    found = set()
-    for code, aliases in STATION_ALIASES.items():
-        for a in aliases:
-            if re.search(r'\b' + re.escape(a) + r'\b', up):
-                found.add(code)
-                break
-    return found
-
 def _parse_goods_regex(msg):
-    """
-    Regex fallback for multi-block goods messages.
-    Splits message into chunks per '<N> WAGONS ... L/NO-<line>' segment,
-    builds goods entries, then merges same-commodity same-time across lines.
-    """
     up = msg.upper().replace("\n", " ")
     up = re.sub(r'\s+', ' ', up)
 
-    # Shared date & time across the whole message
     pdate_m = re.search(r'(?:ON\s+DATE|DATE)\s*[-:=]?\s*(\d{1,4}[-/\.]\d{1,2}[-/\.]\d{2,4})', up)
     if not pdate_m:
         pdate_m = re.search(r'(\d{1,2}[-/\.]\d{1,2}[-/\.]\d{2,4})', up)
@@ -716,33 +639,26 @@ def _parse_goods_regex(msg):
     ptime_m = re.search(r'(?:AT|PLACED\s+AT|P/?TIME)\s*[-:=]?\s*(\d{1,2}\s*[:/\.]\s*\d{1,2})\s*(?:HRS|HR)?', up)
     shared_time = ptime_m.group(1) if ptime_m else ""
 
-    # Find segments: "<n> ... WAGONS EX-<FROM> TO <TO> ... L/NO-<line>"
     pattern = re.compile(
-        r'(\d+)\s*(?:[A-Z0-9]{2,6}\s*)?'                # wagons + optional wagon code
-        r'(?:RICE\s*\([A-Z]+\)|WHEAT\s*\([A-Z]+\)|RICE|WHEAT|[A-Z]{3,})?\s*'  # optional commodity
-        r'WAGONS?\s+EX\s*[-:]?\s*([A-Z]{2,6})\s+TO\s+([A-Z]{2,6})\s*'         # EX-XXX TO YYY
-        r'(?:.*?L\s*/\s*NO\s*[-:=]?\s*(\d+))?',                                # optional line
+        r'(\d+)\s*(?:[A-Z0-9]{2,6}\s*)?'
+        r'(?:RICE\s*\([A-Z]+\)|WHEAT\s*\([A-Z]+\)|RICE|WHEAT|[A-Z]{3,})?\s*'
+        r'WAGONS?\s+EX\s*[-:]?\s*([A-Z]{2,6})\s+TO\s+([A-Z]{2,6})\s*'
+        r'(?:.*?L\s*/\s*NO\s*[-:=]?\s*(\d+))?',
         re.IGNORECASE
     )
 
     entries = []
     for m in pattern.finditer(up):
         wagons = int(m.group(1))
-        from_raw = m.group(2)
-        to_raw = m.group(3)
-        line = m.group(4) or ""
-
-        # Try to recover commodity from the raw message around this match
-        ctx_start = max(0, m.start() - 3)
-        ctx = up[ctx_start:m.end()]
+        from_raw = m.group(2); to_raw = m.group(3); line = m.group(4) or ""
+        ctx_start = max(0, m.start() - 3); ctx = up[ctx_start:m.end()]
         comm_match = re.search(r'(RICE|WHEAT)\s*\(\s*([A-Z]+)\s*\)', ctx)
         if comm_match:
             commodity = f"{comm_match.group(1)}({comm_match.group(2)})"
         else:
             c = re.search(r'\b(RICE|WHEAT|CEMENT|COAL|NAPHTHA|CONTAINER|FERT)\b', ctx)
             commodity = c.group(1) if c else ""
-
-        entry = {
+        entries.append({
             "from_stn": resolve_station(from_raw) or from_raw,
             "to_stn": resolve_station(to_raw) or to_raw,
             "wagons": wagons,
@@ -751,24 +667,86 @@ def _parse_goods_regex(msg):
             "commodity": abbreviate_commodity(commodity),
             "line": line,
             "party": ""
-        }
-        entries.append(entry)
+        })
 
     if entries:
-        print(f"🔧 Regex goods parsed: {len(entries)} raw entries → merging...")
         entries = _merge_goods(entries)
-        print(f"🔧 After merge: {len(entries)} entries")
     return entries
+
+# ==============================================
+# TERSE PRS/UTS REGEX FALLBACK
+# ==============================================
+def _detect_station_from_header(msg):
+    """'REVENUE OF BFD', 'Kown 4/11/26', 'Krht uts of 4.11.2026' → station code."""
+    first_lines = "\n".join(msg.strip().splitlines()[:3])
+    up = first_lines.upper()
+    # Try explicit code
+    for code in STATION_ALIASES:
+        if re.search(r'\b' + re.escape(code) + r'\b', up):
+            return code
+    # Try alias names
+    for code, aliases in STATION_ALIASES.items():
+        for a in aliases:
+            if re.search(r'\b' + re.escape(a) + r'\b', up):
+                return code
+    return None
+
+def _terse_uts_fallback(msg, data):
+    """
+    If Gemini missed the UTS block for short messages, recover using regex.
+    Covers: 'Psg-9 / Tckt-7 / Cash-20 / Ecash-400'
+            'T 36 / P 58 / Cash 1390 / E cas 340 / Ttl 1730'
+    """
+    up = msg.upper()
+    uts = data.get("uts") or {}
+
+    # Skip if we already have solid UTS data
+    if uts and any((v or {}).get("NET") for v in uts.values() if isinstance(v, dict)):
+        return data
+
+    # Only trigger for message with numeric earning signals
+    if not re.search(r'\b(CASH|ECASH|E\s*CAS|NET|TKT|TCKT|PASS|PSG)\b', up):
+        return data
+
+    st = _detect_station_from_header(msg)
+    if not st:
+        return data
+
+    vals = {}
+
+    # TKT
+    m = re.search(r'\b(?:T/?TKT|TKT|TICKETS?|TCKT|T)\s*[-:=]?\s*(\d+)', up)
+    if m:
+        vals["TKT"] = _to_float(m.group(1))
+    # PASS
+    m = re.search(r'\b(?:T/?PASS|PASS|PSG|PAX|P)\s*[-:=]?\s*(\d+)', up)
+    if m:
+        vals["PASS"] = _to_float(m.group(1))
+    # NET (Cash)
+    m = re.search(r'(?<![A-Z])CASH\s*[-:=]?\s*(\d+)', up)
+    if m:
+        vals["NET"] = _to_float(m.group(1))
+    # UPI (E cash)
+    m = re.search(r'(?:E\s*[-/]?\s*CAS(?:H)?|ECASH|UPI|QR)\s*[-:=]?\s*(\d+)', up)
+    if m:
+        vals["UPI"] = _to_float(m.group(1))
+
+    vals = {k: v for k, v in vals.items() if v is not None}
+    if vals:
+        uts.setdefault(st, {}).update(vals)
+        data["uts"] = uts
+        print(f"🔧 Terse UTS fallback applied: {st} → {vals}")
+
+    return data
 
 def apply_fallback_fixes(data, msg):
     if not data:
         return data
 
     up = msg.upper()
-    uts = data.get("uts") or {}
     prs = data.get("prs") or {}
 
-    # PRS REF total
+    # PRS REF sum
     if len(prs) == 1:
         st, vals = next(iter(prs.items()))
         vals = vals if isinstance(vals, dict) else {}
@@ -778,6 +756,9 @@ def apply_fallback_fixes(data, msg):
             if nums:
                 vals["REF"] = sum(nums)
         prs[st] = vals
+
+    # Terse UTS recovery
+    data = _terse_uts_fallback(msg, data)
 
     # OSOP fallback
     osop = data.get("osop") or []
@@ -803,20 +784,13 @@ def apply_fallback_fixes(data, msg):
                     osop.append(entry)
         data["osop"] = osop
 
-    # ==========================================
-    # GOODS: strong regex override + merge
-    # ==========================================
+    # Goods
     regex_goods = _parse_goods_regex(msg)
     gemini_goods = data.get("goods") or []
-
     if regex_goods:
-        # Prefer regex result (handles multi-line merge properly)
         data["goods"] = regex_goods
-        print(f"✅ Goods from regex: {len(regex_goods)} entries")
     elif gemini_goods:
-        # Trust Gemini but still merge same-commodity across lines
         data["goods"] = _merge_goods(gemini_goods)
-        print(f"✅ Goods from Gemini (merged): {len(data['goods'])} entries")
 
     return data
 
@@ -855,13 +829,11 @@ def update_google_sheet(data):
     sheet = get_sheet()
     if not sheet:
         return False
-
     try:
         matrix = sheet.get_all_values()
     except Exception as e:
         print(f"❌ Sheet read error: {e}")
         return False
-
     smap = get_station_map(sheet)
 
     def get_current(r, c):
@@ -936,39 +908,31 @@ def update_google_sheet(data):
 def update_osop_sheet(entries):
     if not entries:
         return True
-
     lock_fd = open(OSOP_LOCK_FILE, "w")
     try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX)
-
         sh = get_spreadsheet()
         if not sh:
             return False
-
         try:
             ws = sh.worksheet("OSOP")
         except gspread.WorksheetNotFound:
             print("❌ 'OSOP' worksheet nahi mili")
             return False
-
         for e in entries:
             if not isinstance(e, dict):
                 continue
-
             try:
                 matrix = ws.get_all_values()
             except Exception:
                 continue
-
             if len(matrix) < 6:
                 continue
-
             def get_current(r, c):
                 try:
                     return matrix[r-1][c-1]
                 except:
                     return ""
-
             row5 = matrix[4] if len(matrix) > 4 else []
             date_cols = {}
             c = 3
@@ -981,10 +945,8 @@ def update_osop_sheet(entries):
                 if d:
                     date_cols[d] = (c, c + 1)
                 c += 2
-
             if not date_cols:
                 continue
-
             station_rows = {}
             for r in range(6, len(matrix) + 1):
                 if r-1 >= len(matrix):
@@ -995,18 +957,14 @@ def update_osop_sheet(entries):
                 code = resolve_station(cell)
                 if code:
                     station_rows.setdefault(code, []).append(r)
-
             code = e.get("station")
             if code not in station_rows:
                 continue
-
             rows = station_rows[code]
             d = parse_date_flexible(e.get("date"))
             if not d or d not in date_cols:
                 continue
-
             camt, cunit = date_cols[d]
-
             chosen_row = None
             for r in rows:
                 if is_cell_empty(get_current(r, camt)) and is_cell_empty(get_current(r, cunit)):
@@ -1017,18 +975,14 @@ def update_osop_sheet(entries):
                     if is_cell_empty(get_current(r, camt)):
                         chosen_row = r
                         break
-
             if chosen_row is None:
                 continue
-
             row = chosen_row
             updates = []
-
             amt = _to_float(e.get("amount")) if e.get("amount") is not None else None
             if amt is not None and amt != 0:
                 if is_cell_empty(get_current(row, camt)):
                     updates.append({"range": rowcol_to_a1(row, camt), "values": [[amt]]})
-
             unit = e.get("unit")
             if unit is None or str(unit).strip() == "":
                 if amt is not None:
@@ -1036,18 +990,15 @@ def update_osop_sheet(entries):
             if unit is not None and str(unit).strip() != "":
                 if is_cell_empty(get_current(row, cunit)):
                     updates.append({"range": rowcol_to_a1(row, cunit), "values": [[unit]]})
-
             if updates:
                 try:
                     ws.batch_update(updates)
                     print(f"✅ OSOP {code} {d}: written row {row}")
                 except Exception as ex:
                     print(f"❌ OSOP write failed: {ex}")
-
     finally:
         fcntl.flock(lock_fd, fcntl.LOCK_UN)
         lock_fd.close()
-
     return True
 
 # ==============================================
@@ -1059,21 +1010,17 @@ def _norm_str(v):
 def update_iwow_sheet(entries):
     if not entries:
         return True
-
     lock_fd = open(IWOW_LOCK_FILE, "w")
     try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX)
-
         sh = get_spreadsheet()
         if not sh:
             return False
-
         try:
             ws = sh.worksheet("IWOW")
         except gspread.WorksheetNotFound:
             print("❌ 'IWOW' worksheet nahi mili")
             return False
-
         try:
             matrix = ws.get_all_values()
         except Exception as e:
@@ -1123,7 +1070,6 @@ def update_iwow_sheet(entries):
 
             print(f"🔎 {from_stn}→{to_stn} | date={pdate} time={ptime} wagons={wagons} line={line} commodity={commodity}")
 
-            # ---------- 24-hour clock acceptance ----------
             accept = False
             reason = ""
 
@@ -1136,7 +1082,6 @@ def update_iwow_sheet(entries):
                         accept = True
                 else:
                     accept = True
-
             elif pdate == yesterday:
                 if ptime and ptime >= dt_time(22, 0) and now.time() < grace_cutoff:
                     accept = True
@@ -1148,7 +1093,6 @@ def update_iwow_sheet(entries):
                         reason = f"yesterday pre-22:00 ({ptime.strftime('%H:%M')})"
                     else:
                         reason = f"yesterday 22:00+ but grace passed (now {now.strftime('%H:%M')})"
-
             elif pdate == tomorrow:
                 if ptime:
                     placement_dt = datetime.combine(pdate, ptime)
@@ -1207,6 +1151,7 @@ def update_iwow_sheet(entries):
             except Exception:
                 wagons_num = 42
 
+            # FREE TIME
             if "NAPHTHA" in commodity or "NAPTHA" in commodity:
                 ftime = "8 HRS"
                 if not wtype:
@@ -1218,7 +1163,9 @@ def update_iwow_sheet(entries):
                     wtype = "CONTAINER"
             else:
                 if not ftime:
-                    if wagons_num <= 20:
+                    if wagons_num > 50:
+                        ftime = "11 HRS"
+                    elif wagons_num <= 20:
                         ftime = "5 HRS"
                     elif wagons_num <= 30:
                         ftime = "7 HRS"
@@ -1258,7 +1205,7 @@ def update_iwow_sheet(entries):
             q(11, ptime_str); q(12, pdate_str)
             q(18, ftime); q(21, from_stn); q(23, party)
 
-            print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | wagons={wagons} | line={line} | {commodity}")
+            print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | wagons={wagons} | line={line} | {commodity} | {ftime}")
             current_row += 1
 
         if updates:
@@ -1268,11 +1215,9 @@ def update_iwow_sheet(entries):
             except Exception as e:
                 print(f"❌ IWOW batch update failed: {e}")
                 return False
-
     finally:
         fcntl.flock(lock_fd, fcntl.LOCK_UN)
         lock_fd.close()
-
     return True
 
 # ==============================================
@@ -1304,31 +1249,24 @@ def webhook():
                     msg_id = m.get("id", "")
                     if already_processed(msg_id):
                         continue
-
                     text = (m.get("text") or {}).get("body", "").strip()
                     if not text:
                         continue
-
                     print(f"\n📩 Incoming:\n{text[:400]}...")
                     data = call_gemini(text)
                     if not data:
                         print("❌ Extraction failed")
                         continue
-
                     data = apply_post_processing(data, text)
                     data = apply_fallback_fixes(data, text)
                     print("✅ Final Data:", json.dumps(data))
-
                     update_google_sheet(data)
-
                     if data.get("osop"):
                         update_osop_sheet(data["osop"])
-
                     if data.get("goods"):
                         update_iwow_sheet(data["goods"])
     except Exception as e:
         print(f"❌ Webhook Error: {e}")
-
     return jsonify({"status": "ok"}), 200
 
 # ==============================================
