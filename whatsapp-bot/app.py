@@ -52,7 +52,7 @@ STATION_ALIASES = {
     "GLGT": ["GLGT", "GOLAGHAT"],
     "MRHT": ["MRHT", "MORANHAT", "MORAN HAT"],
     "NAM": ["NAM", "NAMRUP"],
-    "NHK": ["NHK", "NAHARKATIYA", "NAHARKATIA"],
+    "NHK": ["NHK", "NAHARKATIYA", "NAHARKATIA", "NAHARKATIYA"],
     "FKG": ["FKG", "FURKATING", "FURKATING JN"],
     "AGI": ["AGI", "AMGURI", "AMGURI JN", "AMGURI JUNCTION"],
     "DJG": ["DJG", "DULIAJAN"],
@@ -70,7 +70,7 @@ STATION_ALIASES = {
     "MZS": ["MZS", "MURKONGSELEK", "MURKONG SELEK"],
     "NLP": ["NLP", "NORTH LAKHIMPUR", "N LAKHIMPUR", "NORTHLAKHIMPUR"],
     "LBI": ["LBI", "LILABARI"],
-    "BGND": ["BGND", "BAGINADI"],
+    "BGND": ["BGND", "BAGINADI", "BOGINADI"],
     "LMY": ["LMY", "LAIMEKURI"],
     "SRPN": ["SRPN", "SRIPANI"],
     "SMCP": ["SMCP", "SIMEN CHAPARI", "SIMENCHAPARI"],
@@ -82,7 +82,7 @@ STATION_ALIASES = {
     "DKM": ["DKM", "DIKOM"],
     "PNT": ["PNT", "PANITOLA"],
     "TII": ["TII", "TINGRAI"],
-    "LXA": ["LXA", "LAKSWA"],
+    "LXA": ["LXA", "LAKSWA", "LAKUA", "LAKUA"],
     "SFR": ["SFR", "SAFRAI"],
     "SLX": ["SLX", "SELENG HAT", "SELENGHAT"],
     "NMT": ["NMT", "NAMTIALI"],
@@ -123,7 +123,7 @@ STATION_OFFICIAL = {
     "LMY": "Laimekuri", "SRPN": "Sripani", "SMCP": "Simen Chapari",
     "TQM": "Telam", "GOM": "Gogamukh", "BDLN": "Bordoloni",
     "CKW": "Chalkhoa", "LHL": "Lahoal", "DKM": "Dikom",
-    "PNT": "Panitola", "TII": "Tingrai", "LXA": "Lakswa",
+    "PNT": "Panitola", "TII": "Tingrai", "LXA": "Lakua",
     "SFR": "Safrai", "SLX": "Seleng Hat", "NMT": "Namtiali",
     "ROING": "Roing", "TEZU": "Tezu", "CGF": "Chariali",
     "DMGN": "Dhamalgaon Jn", "TNGN": "Tangani", "NSBG": "New Sisiborgaon",
@@ -345,6 +345,10 @@ def get_spreadsheet():
         return None
 
 def get_station_map(sheet):
+    """
+    Stations are now expected in B7:B36.
+    Extra ranges kept for backward compatibility / other sections.
+    """
     m = {}
     try:
         all_values = sheet.get_all_values()
@@ -352,11 +356,14 @@ def get_station_map(sheet):
         print(f"❌ Error reading sheet: {e}")
         return m
 
-    for i in range(2, min(30, len(all_values))):
+    # ========== PRIMARY: B7:B36 ==========
+    for i in range(6, min(36, len(all_values))):          # i=6 → row 7, i=35 → row 36
         val = all_values[i][1] if len(all_values[i]) > 1 else ""
         if val:
-            m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "B"})
+            code_or_name = str(val).upper().strip()
+            m.setdefault(code_or_name, {"row": i + 1, "nameCol": "B"})
 
+    # Keep older ranges for other station blocks (if any)
     for i in range(30, min(47, len(all_values))):
         val = all_values[i][12] if len(all_values[i]) > 12 else ""
         if val:
@@ -367,7 +374,7 @@ def get_station_map(sheet):
         if val:
             m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "C"})
 
-    print(f"✅ Station map ready: {len(m)} stations")
+    print(f"✅ Station map ready: {len(m)} stations (B7:B36 primary)")
     return m
 
 # ==============================================
@@ -449,11 +456,7 @@ def _find_stations_in_text(msg):
     return found
 
 # ==============================================
-# WHATSAPP CHAT SPLITTER  (copy-paste / forward ke multiple messages)
-# Supports:
-#   [04/11, 7:03 pm] Name: text
-#   [04/11/2026, 7:03:12 PM] Name: text
-#   04/11/2026, 7:03 pm - Name: text
+# WHATSAPP CHAT SPLITTER
 # ==============================================
 _CHAT_HEADER_RE = re.compile(
     r'^[ \t]*(?:'
@@ -783,7 +786,7 @@ def _merge_goods(entries):
     return [merged[k] for k in order]
 
 # ==============================================
-# REGEX FALLBACK — UTS / PRS  (Gemini fail ho tab)
+# REGEX FALLBACK — UTS / PRS
 # ==============================================
 _FIELD_PATTERNS = [
     ("MR AMT", r'^MR\s*(AMT|AMOUNT)$'),
@@ -915,7 +918,6 @@ def apply_fallback_fixes(data, msg):
     prs = data.get("prs") or {}
 
     # ========== ALWAYS SUM ALL REFUNDS INTO PRS REF ==========
-    # Scans entire message for every refund amount and forces the total into REF
     refund_amounts = re.findall(
         r'\b(?:RFD|REFUND|REF|DIGI\s*REF\w*|DIGITAL\s*REF\w*|DIGI\s*REFUND|DIGITAL\s*RFD)\s*[=:\-]?\s*([\d,]+(?:\.\d+)?)',
         up
@@ -926,7 +928,6 @@ def apply_fallback_fixes(data, msg):
         total_ref = sum(refund_nums)
         print(f"💰 Refund amounts found: {refund_nums} → TOTAL REF = {total_ref}")
 
-        # Put the total into every PRS station that exists (usually only one)
         if prs:
             for st in list(prs.keys()):
                 vals = prs[st] if isinstance(prs[st], dict) else {}
@@ -934,7 +935,6 @@ def apply_fallback_fixes(data, msg):
                 prs[st] = vals
                 print(f"✅ PRS {st} REF forced to total: {total_ref}")
         else:
-            # Agar PRS bilkul empty hai lekin refunds hain, to try to attach to a station
             found = _find_stations_in_text(msg)
             if len(found) == 1:
                 st = next(iter(found))
