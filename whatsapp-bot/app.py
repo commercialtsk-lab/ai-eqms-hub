@@ -41,7 +41,7 @@ PROCESS_LOCK = threading.Lock()   # ek time pe ek hi message sheet update kare
 # STATION ALIASES
 # ==============================================
 STATION_ALIASES = {
-    "DBRT": ["DBDBRT", "DIBRUGARH TOWN"],
+    "DBRT": ["DBRT", "DIBRUGARH TOWN"],
     "DBRG": ["DBRG", "DIBRUGARH", "DIBRUGARH JN"],
     "NTSK": ["NTSK", "NEW TINSUKIA", "NEW TINSUKIA JN", "NEWTINSUKIA", "NEW TINSUKIA JUNCTION"],
     "TSK": ["TSK", "TINSUKIA", "TINSUKIA JN", "TIN SUKIA", "TINSUKIA TOWN"],
@@ -52,7 +52,7 @@ STATION_ALIASES = {
     "GLGT": ["GLGT", "GOLAGHAT"],
     "MRHT": ["MRHT", "MORANHAT", "MORAN HAT"],
     "NAM": ["NAM", "NAMRUP"],
-    "NHK": ["NHK", "NAHARKATIYA", "NAHARKATIA", "NAHARKATIYA"],
+    "NHK": ["NHK", "NAHARKATIYA", "NAHARKATIA"],
     "FKG": ["FKG", "FURKATING", "FURKATING JN"],
     "AGI": ["AGI", "AMGURI", "AMGURI JN", "AMGURI JUNCTION"],
     "DJG": ["DJG", "DULIAJAN"],
@@ -70,7 +70,7 @@ STATION_ALIASES = {
     "MZS": ["MZS", "MURKONGSELEK", "MURKONG SELEK"],
     "NLP": ["NLP", "NORTH LAKHIMPUR", "N LAKHIMPUR", "NORTHLAKHIMPUR"],
     "LBI": ["LBI", "LILABARI"],
-    "BGND": ["BGND", "BAGINADI", "BOGINADI"],
+    "BGND": ["BGND", "BAGINADI"],
     "LMY": ["LMY", "LAIMEKURI"],
     "SRPN": ["SRPN", "SRIPANI"],
     "SMCP": ["SMCP", "SIMEN CHAPARI", "SIMENCHAPARI"],
@@ -82,7 +82,7 @@ STATION_ALIASES = {
     "DKM": ["DKM", "DIKOM"],
     "PNT": ["PNT", "PANITOLA"],
     "TII": ["TII", "TINGRAI"],
-    "LXA": ["LXA", "LAKSWA", "LAKUA", "LAKUA"],
+    "LXA": ["LXA", "LAKSWA"],
     "SFR": ["SFR", "SAFRAI"],
     "SLX": ["SLX", "SELENG HAT", "SELENGHAT"],
     "NMT": ["NMT", "NAMTIALI"],
@@ -123,7 +123,7 @@ STATION_OFFICIAL = {
     "LMY": "Laimekuri", "SRPN": "Sripani", "SMCP": "Simen Chapari",
     "TQM": "Telam", "GOM": "Gogamukh", "BDLN": "Bordoloni",
     "CKW": "Chalkhoa", "LHL": "Lahoal", "DKM": "Dikom",
-    "PNT": "Panitola", "TII": "Tingrai", "LXA": "Lakua",
+    "PNT": "Panitola", "TII": "Tingrai", "LXA": "Lakswa",
     "SFR": "Safrai", "SLX": "Seleng Hat", "NMT": "Namtiali",
     "ROING": "Roing", "TEZU": "Tezu", "CGF": "Chariali",
     "DMGN": "Dhamalgaon Jn", "TNGN": "Tangani", "NSBG": "New Sisiborgaon",
@@ -345,10 +345,6 @@ def get_spreadsheet():
         return None
 
 def get_station_map(sheet):
-    """
-    Stations are now expected in B7:B36.
-    Extra ranges kept for backward compatibility / other sections.
-    """
     m = {}
     try:
         all_values = sheet.get_all_values()
@@ -356,14 +352,11 @@ def get_station_map(sheet):
         print(f"❌ Error reading sheet: {e}")
         return m
 
-    # ========== PRIMARY: B7:B36 ==========
-    for i in range(6, min(36, len(all_values))):          # i=6 → row 7, i=35 → row 36
+    for i in range(2, min(30, len(all_values))):
         val = all_values[i][1] if len(all_values[i]) > 1 else ""
         if val:
-            code_or_name = str(val).upper().strip()
-            m.setdefault(code_or_name, {"row": i + 1, "nameCol": "B"})
+            m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "B"})
 
-    # Keep older ranges for other station blocks (if any)
     for i in range(30, min(47, len(all_values))):
         val = all_values[i][12] if len(all_values[i]) > 12 else ""
         if val:
@@ -374,7 +367,7 @@ def get_station_map(sheet):
         if val:
             m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "C"})
 
-    print(f"✅ Station map ready: {len(m)} stations (B7:B36 primary)")
+    print(f"✅ Station map ready: {len(m)} stations")
     return m
 
 # ==============================================
@@ -456,7 +449,11 @@ def _find_stations_in_text(msg):
     return found
 
 # ==============================================
-# WHATSAPP CHAT SPLITTER
+# WHATSAPP CHAT SPLITTER  (copy-paste / forward ke multiple messages)
+# Supports:
+#   [04/11, 7:03 pm] Name: text
+#   [04/11/2026, 7:03:12 PM] Name: text
+#   04/11/2026, 7:03 pm - Name: text
 # ==============================================
 _CHAT_HEADER_RE = re.compile(
     r'^[ \t]*(?:'
@@ -534,7 +531,7 @@ The message may begin with chat-export noise like "[04/11, 7:03 pm] Name:" — i
     PASS  : PASS / Psg / Psgr / Passenger / P (when it sits beside T) / J/Pass
     NET   : NET CASH / Net / Cash / Cash amount / J/Amount  — the cash collection amount (never the grand total)
     UPI   : E CASH / Ecash / E-cash / E cas / UPI / UPI QR / QR / Digital / Paytm / PhonePe
-    REF   : REFUND / RFD / Digi ref / Digital refund / Digi refund / Digital RFD — **SUM OF ALL refund-type amounts found anywhere in the message**. If multiple refund lines exist (e.g. REFUND 500 + Digi ref 200 + RFD 100), put the TOTAL (800) in REF. Never take only the first one.
+    REF   : REFUND / RFD / Digi ref / Digital refund — SUM of all refund-type amounts
     C/TKT, C/PASS : cancelled tickets / cancelled passengers (PRS)
     PF    : platform tickets (PF / P/TKT / PLT / PLATFORM / "M")
     MR / MR AMT : MR count / MR amount (both captured)
@@ -786,7 +783,7 @@ def _merge_goods(entries):
     return [merged[k] for k in order]
 
 # ==============================================
-# REGEX FALLBACK — UTS / PRS
+# REGEX FALLBACK — UTS / PRS  (Gemini fail ho tab)
 # ==============================================
 _FIELD_PATTERNS = [
     ("MR AMT", r'^MR\s*(AMT|AMOUNT)$'),
@@ -917,30 +914,16 @@ def apply_fallback_fixes(data, msg):
     up = msg.upper()
     prs = data.get("prs") or {}
 
-    # ========== ALWAYS SUM ALL REFUNDS INTO PRS REF ==========
-    refund_amounts = re.findall(
-        r'\b(?:RFD|REFUND|REF|DIGI\s*REF\w*|DIGITAL\s*REF\w*|DIGI\s*REFUND|DIGITAL\s*RFD)\s*[=:\-]?\s*([\d,]+(?:\.\d+)?)',
-        up
-    )
-    refund_nums = [n for n in (_to_float(a) for a in refund_amounts) if n is not None and n != 0]
-
-    if refund_nums:
-        total_ref = sum(refund_nums)
-        print(f"💰 Refund amounts found: {refund_nums} → TOTAL REF = {total_ref}")
-
-        if prs:
-            for st in list(prs.keys()):
-                vals = prs[st] if isinstance(prs[st], dict) else {}
-                vals["REF"] = total_ref
-                prs[st] = vals
-                print(f"✅ PRS {st} REF forced to total: {total_ref}")
-        else:
-            found = _find_stations_in_text(msg)
-            if len(found) == 1:
-                st = next(iter(found))
-                prs[st] = {"REF": total_ref}
-                print(f"✅ Created PRS {st} with REF={total_ref}")
-        data["prs"] = prs
+    # PRS REF total
+    if len(prs) == 1:
+        st, vals = next(iter(prs.items()))
+        vals = vals if isinstance(vals, dict) else {}
+        if not vals.get("REF"):
+            amounts = re.findall(r'\b(?:RFD|REFUND|REF)\s*[=:\-]?\s*([\d,]+)', up)
+            nums = [n for n in (_to_float(a) for a in amounts) if n is not None]
+            if nums:
+                vals["REF"] = sum(nums)
+        prs[st] = vals
 
     # OSOP fallback
     osop = data.get("osop") or []
