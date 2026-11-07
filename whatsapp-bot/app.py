@@ -1,12 +1,16 @@
 import os
 import re
+import math
 import json
 import time
 import base64
+import threading
+import contextlib
 import requests
 import gspread
 import fcntl
 import random
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, time as dt_time
 from gspread.utils import rowcol_to_a1
 from google.oauth2.service_account import Credentials
@@ -28,11 +32,24 @@ PHONE_NUMBER_ID = (os.environ.get("PHONE_NUMBER_ID") or os.environ.get("WHATSAPP
 GOOGLE_CREDENTIALS_B64 = os.environ.get("GOOGLE_CREDENTIALS_B64", "")
 GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_THINK_FAST = int(os.environ.get("GEMINI_THINK_FAST", "0"))     # pehli koshish: tez
+GEMINI_THINK_DEEP = int(os.environ.get("GEMINI_THINK_DEEP", "2048"))  # data adhoora lage to: gehri soch
+GEMINI_PARALLEL = int(os.environ.get("GEMINI_PARALLEL", "4"))         # ek saath max Gemini calls
+COVERAGE_MIN = float(os.environ.get("COVERAGE_MIN", "0.6"))
+SEND_REPLY = os.environ.get("SEND_REPLY", "1") != "0"                  # WhatsApp par summary reply (band: SEND_REPLY=0)
 
+SHEET_LOCK_FILE = "/tmp/sheet_update.lock"
 OSOP_LOCK_FILE = "/tmp/osop_update.lock"
 IWOW_LOCK_FILE = "/tmp/iwow_update.lock"
-IWOW_GRACE_HOUR = int(os.environ.get("IWOW_GRACE_HOUR", "6"))
+IWOW_GRACE_HOUR = int(os.environ.get("IWOW_GRACE_HOUR", "2"))
+# Same entry dobara aaye (forward / Meta retry / chat me do baar paste) to is sandarbh me bhi rok lo
+IWOW_RECENT_FILE = os.environ.get("IWOW_RECENT_FILE", "/tmp/iwow_recent.json")
+IWOW_DEDUPE_MINUTES = int(os.environ.get("IWOW_DEDUPE_MINUTES", "120"))
+# IWOW me "row khaali hai" tay karne wale columns (B to-stn, E commodity, F wagons, K/L placement time/date)
+IWOW_CORE_COLS = (2, 5, 6, 11, 12)
+
+PROCESS_LOCK = threading.Lock()   # ek time pe ek hi message sheet update kare
 
 # ==============================================
 # STATION ALIASES
@@ -67,7 +84,7 @@ STATION_ALIASES = {
     "MZS": ["MZS", "MURKONGSELEK", "MURKONG SELEK"],
     "NLP": ["NLP", "NORTH LAKHIMPUR", "N LAKHIMPUR", "NORTHLAKHIMPUR"],
     "LBI": ["LBI", "LILABARI"],
-    "BGND": ["BGND", "BAGINADI"],
+    "BGND": ["BGND", "BAGINADI", "BOGINADI"],
     "LMY": ["LMY", "LAIMEKURI"],
     "SRPN": ["SRPN", "SRIPANI"],
     "SMCP": ["SMCP", "SIMEN CHAPARI", "SIMENCHAPARI"],
@@ -79,7 +96,7 @@ STATION_ALIASES = {
     "DKM": ["DKM", "DIKOM"],
     "PNT": ["PNT", "PANITOLA"],
     "TII": ["TII", "TINGRAI"],
-    "LXA": ["LXA", "LAKSWA"],
+    "LXA": ["LXA", "LAKSWA", "LAKUA"],
     "SFR": ["SFR", "SAFRAI"],
     "SLX": ["SLX", "SELENG HAT", "SELENGHAT"],
     "NMT": ["NMT", "NAMTIALI"],
@@ -120,7 +137,7 @@ STATION_OFFICIAL = {
     "LMY": "Laimekuri", "SRPN": "Sripani", "SMCP": "Simen Chapari",
     "TQM": "Telam", "GOM": "Gogamukh", "BDLN": "Bordoloni",
     "CKW": "Chalkhoa", "LHL": "Lahoal", "DKM": "Dikom",
-    "PNT": "Panitola", "TII": "Tingrai", "LXA": "Lakswa",
+    "PNT": "Panitola", "TII": "Tingrai", "LXA": "Lakua",
     "SFR": "Safrai", "SLX": "Seleng Hat", "NMT": "Namtiali",
     "ROING": "Roing", "TEZU": "Tezu", "CGF": "Chariali",
     "DMGN": "Dhamalgaon Jn", "TNGN": "Tangani", "NSBG": "New Sisiborgaon",
@@ -143,49 +160,87 @@ UTS_COLS_NU = {
 
 NEGATIVE_ALLOWED_FIELDS = {"NET"}
 
+PRS_ONLY_FIELDS = {"C/TKT", "C/PASS", "VCH", "POS", "REF"}
+
 CONTAINER_WAGON_CODES = {"BLC", "BFKN", "BLL", "BLH", "BLCN", "BLCA", "BLLA", "CFN", "CONTR", "CONT"}
 
+FIELD_ALIASES = {
+    "TICKET": "TKT", "TICKETS": "TKT", "TKTS": "TKT", "TCKT": "TKT",
+    "PSG": "PASS", "PSGR": "PASS", "PASSENGER": "PASS", "PASSENGERS": "PASS",
+    "CTKT": "C/TKT", "C TKT": "C/TKT", "CPASS": "C/PASS", "C PASS": "C/PASS",
+    "MRAMT": "MR AMT", "MR_AMT": "MR AMT",
+    "REFUND": "REF", "RFD": "REF",
+    "ECASH": "UPI", "E CASH": "UPI", "UPI QR": "UPI", "QR": "UPI",
+    "NET CASH": "NET", "CASH": "NET",
+    "PLATFORM": "PF",
+}
+
 # ==============================================
-# COMMODITY ABBREVIATION  (FIXED — sab variation handle karta hai)
+# COMMODITY ABBREVIATION
 # ==============================================
 def abbreviate_commodity(comm):
-    """
-    RICE (FCI) / RICE(FCI) / FCI RICE / FCI/R  → "FCI/R"
-    WHEAT (FCI) → "FCI/W" ; RICE (PUB) → "PUB/R" ; WHEAT (PUB) → "PUB/W"
-    Pehle se abbreviated input ko waise hi rakhta hai (yehi asli glitch tha).
-    """
+    """RICE(FCI)→FCI/R, WHEAT(FCI)→FCI/W, RICE(PUB)→PUB/R, WHEAT(PUB)→PUB/W."""
     if not comm:
         return ""
     c = str(comm).upper().strip()
     c = re.sub(r'\s+', ' ', c)
 
-    # Already abbreviated? → waise hi rehne do
-    m = re.match(r'^\s*(FCI|PUB)\s*/\s*(R|W)\s*$', c)
-    if m:
-        return f"{m.group(1)}/{m.group(2)}"
-    m = re.match(r'^\s*(R|W)\s*/\s*(FCI|PUB)\s*$', c)
-    if m:
-        return f"{m.group(2)}/{m.group(1)}"
-
+    if re.fullmatch(r'(FCI|PUB)/[RW]', c):
+        return c
     if "CONTAINER" in c or c in ("CONT", "CNTR"):
         return "CONTAINER"
+    if "NAPHTHA" in c or "NAPTHA" in c:
+        return "NAPHTHA"
 
-    # Brackets/spaces hata ke bhi detect karo
-    sq = re.sub(r'[^A-Z]', '', c)
-    has_fci   = "FCI" in sq or "FOODCORPORATION" in sq or "FOOD" in sq
-    has_pub   = "PUB" in sq
-    has_rice  = "RICE" in sq
-    has_wheat = "WHEAT" in sq
+    has_fci = "FCI" in c or "FOOD CORPORATION" in c
+    has_pub = "PUB" in c or "PUBLIC" in c
+    has_rice = "RICE" in c
+    has_wheat = "WHEAT" in c
 
-    if has_rice and has_fci:   return "FCI/R"
-    if has_wheat and has_fci:  return "FCI/W"
-    if has_rice and has_pub:   return "PUB/R"
-    if has_wheat and has_pub:  return "PUB/W"
-    if has_rice:   return "RICE"
-    if has_wheat:  return "WHEAT"
-    if has_fci:    return "FCI"
-    if has_pub:    return "PUB"
-    return sq if sq else c
+    if has_rice and has_fci:
+        return "FCI/R"
+    if has_wheat and has_fci:
+        return "FCI/W"
+    if has_rice and has_pub:
+        return "PUB/R"
+    if has_wheat and has_pub:
+        return "PUB/W"
+    if has_rice:
+        return "RICE"
+    if has_wheat:
+        return "WHEAT"
+    if has_fci:
+        return "FCI"
+    if has_pub:
+        return "PUB"
+    return c
+
+def _is_container(commodity, wtype):
+    tokens = set(re.split(r'[^A-Z0-9]+', str(wtype or "").upper()))
+    return "CONTAINER" in str(commodity or "").upper() or "CONTAINER" in str(wtype or "").upper() \
+        or bool(tokens & CONTAINER_WAGON_CODES)
+
+def iwow_free_time(wagons, commodity="", wtype=""):
+    """
+    46 ya usse zyada wagons -> 11 HRS (sabse pehle).
+    Naphtha 8, Container 3, <=20 -> 5, <=30 -> 7, baaki (31-45) -> 9.
+    """
+    try:
+        w = int(float(wagons)) if wagons not in (None, "") else 42
+    except Exception:
+        w = 42
+    if w >= 46:
+        return "11 HRS"
+    c = str(commodity or "").upper()
+    if "NAPHTHA" in c or "NAPTHA" in c:
+        return "8 HRS"
+    if _is_container(c, wtype):
+        return "3 HRS"
+    if w <= 20:
+        return "5 HRS"
+    if w <= 30:
+        return "7 HRS"
+    return "9 HRS"
 
 # ==============================================
 # STATION RESOLUTION HELPERS
@@ -200,16 +255,22 @@ def _norm_station(s):
 
 _alias_index = {}
 for _code, _aliases in STATION_ALIASES.items():
+    _alias_index.setdefault(_norm_station(_code), _code)
     for _a in _aliases:
-        _alias_index[_norm_station(_a)] = _code
-        _alias_index[_norm_station(_a).replace(' ', '')] = _code
+        _alias_index.setdefault(_norm_station(_a), _code)
+        _alias_index.setdefault(_norm_station(_a).replace(' ', ''), _code)
+for _code, _nm in STATION_OFFICIAL.items():
+    _alias_index.setdefault(_norm_station(_nm), _code)
+    _alias_index.setdefault(_norm_station(_nm).replace(' ', ''), _code)
 
-def resolve_station(name):
+def resolve_station(name, quiet=False):
     if not name:
         return None
     original = str(name).upper().strip()
     n = re.sub(r'[^A-Z0-9 ]', ' ', original)
     n = re.sub(r'\s+', ' ', n).strip()
+    if not n:
+        return None
 
     if n in STATION_ALIASES:
         return n
@@ -224,29 +285,51 @@ def resolve_station(name):
     if n2.replace(' ', '') in _alias_index:
         return _alias_index[n2.replace(' ', '')]
 
+    # fuzzy — sirf tab jab exactly ek station match ho
     n2_clean = n2.replace(' ', '')
-    for code, aliases in STATION_ALIASES.items():
-        for alias in aliases:
-            a_clean = alias.replace(' ', '')
-            if len(n2_clean) >= 4 and (n2_clean in a_clean or a_clean in n2_clean):
-                return code
+    if len(n2_clean) >= 5:
+        hits = set()
+        for code, aliases in STATION_ALIASES.items():
+            for alias in aliases:
+                a_clean = alias.replace(' ', '')
+                if len(a_clean) >= 4 and (n2_clean in a_clean or a_clean in n2_clean):
+                    hits.add(code)
+        if len(hits) == 1:
+            return next(iter(hits))
 
-    print(f"⚠️ Could not resolve station: '{original}'")
+    if not quiet:
+        print(f"⚠️ Could not resolve station: '{original}'")
     return None
 
 # ==============================================
 # META RETRY PROTECTION
 # ==============================================
 PROCESSED_MSG_IDS = {}
+_PROC_LOCK = threading.Lock()
 
 def already_processed(msg_id):
+    if not msg_id:
+        return False
     now = time.time()
-    for k in [k for k, t in PROCESSED_MSG_IDS.items() if now - t > 600]:
-        del PROCESSED_MSG_IDS[k]
-    if msg_id in PROCESSED_MSG_IDS:
-        return True
-    PROCESSED_MSG_IDS[msg_id] = now
-    return False
+    with _PROC_LOCK:
+        for k in [k for k, t in PROCESSED_MSG_IDS.items() if now - t > 600]:
+            del PROCESSED_MSG_IDS[k]
+        if msg_id in PROCESSED_MSG_IDS:
+            return True
+        PROCESSED_MSG_IDS[msg_id] = now
+        return False
+
+@contextlib.contextmanager
+def file_lock(path):
+    f = open(path, "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(f, fcntl.LOCK_UN)
+        finally:
+            f.close()
 
 # ==============================================
 # CREDENTIALS
@@ -280,7 +363,6 @@ def load_credentials_dict():
                 d = json.loads(base64.urlsafe_b64decode(s).decode("utf-8"))
             if "private_key" in d:
                 d["private_key"] = d["private_key"].replace("\\n", "\n")
-            print("✅ Credentials loaded via GOOGLE_CREDENTIALS_B64")
             return d
         except Exception as e:
             errors.append(f"B64 failed: {e}")
@@ -296,7 +378,6 @@ def load_credentials_dict():
                     d = json.loads(fixed)
                     if "private_key" in d:
                         d["private_key"] = d["private_key"].replace("\\n", "\n")
-                    print("✅ Credentials loaded via GOOGLE_CREDENTIALS (raw JSON)")
                     return d
                 except json.JSONDecodeError:
                     pass
@@ -308,83 +389,173 @@ def load_credentials_dict():
 # ==============================================
 # GOOGLE SHEETS
 # ==============================================
-def get_spreadsheet():
-    creds_dict = load_credentials_dict()
-    if not creds_dict:
-        return None
-    try:
+_GC = None
+_GC_TIME = 0.0
+_GC_LOCK = threading.RLock()
+
+def _get_gc(force=False):
+    """gspread client 45 min cache — har message pe naya login nahi."""
+    global _GC, _GC_TIME
+    with _GC_LOCK:
+        if not force and _GC is not None and time.time() - _GC_TIME < 2700:
+            return _GC
+        creds_dict = load_credentials_dict()
+        if not creds_dict:
+            return None
         scopes = ["https://www.googleapis.com/auth/spreadsheets",
                   "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        gc = gspread.authorize(creds)
-        sh = gc.open(SHEET_NAME)
-        return sh
+        _GC = gspread.authorize(creds)
+        _GC_TIME = time.time()
+        return _GC
+
+def gs_retry(fn, *args, **kwargs):
+    """Sheets API 429/5xx par retry."""
+    last = None
+    for attempt in range(5):
+        try:
+            return fn(*args, **kwargs)
+        except gspread.exceptions.APIError as e:
+            last = e
+            code = getattr(getattr(e, "response", None), "status_code", 0)
+            if code in (429, 500, 502, 503, 504):
+                time.sleep(min(2 ** attempt, 20) + random.random())
+                continue
+            raise
+        except requests.RequestException as e:
+            last = e
+            time.sleep(min(2 ** attempt, 10) + random.random())
+    raise last
+
+_SH = None
+_SH_TIME = 0.0
+_WS_CACHE = {}
+
+def reset_caches():
+    """Koi bhi sheet error aaye to client/spreadsheet/worksheet cache saaf (agli baar naya connect)."""
+    global _GC, _SH, _SH_TIME
+    with _GC_LOCK:
+        _GC = None
+        _SH = None
+        _SH_TIME = 0.0
+        _WS_CACHE.clear()
+
+def get_spreadsheet():
+    global _SH, _SH_TIME
+    try:
+        with _GC_LOCK:
+            if _SH is not None and time.time() - _SH_TIME < 2700:
+                return _SH
+            gc = _get_gc()
+            if not gc:
+                return None
+            try:
+                sh = gs_retry(gc.open, SHEET_NAME)
+            except Exception:
+                gc = _get_gc(force=True)      # token/client purana ho gaya ho to naya
+                if not gc:
+                    return None
+                sh = gs_retry(gc.open, SHEET_NAME)
+            _SH, _SH_TIME = sh, time.time()
+            _WS_CACHE.clear()
+            return sh
     except Exception as e:
         print(f"❌ Google Sheet Connection Error: {e}")
         return None
+
+def get_ws(sh, name):
+    w = _WS_CACHE.get(name)
+    if w is None:
+        w = gs_retry(sh.worksheet, name)
+        _WS_CACHE[name] = w
+    return w
 
 def get_sheet():
     sh = get_spreadsheet()
     if not sh:
         return None
     try:
-        try:
-            sheet = sh.worksheet("UTS&PRS")
-        except gspread.WorksheetNotFound:
-            print("⚠️ 'UTS&PRS' tab nahi mili → sheet1 use kar rahe hain")
-            sheet = sh.sheet1
-        print(f"✅ Google Sheet connected: '{sh.title}' / tab: '{sheet.title}'")
-        return sheet
+        return get_ws(sh, "UTS&PRS")
+    except gspread.WorksheetNotFound:
+        print("⚠️ 'UTS&PRS' tab nahi mili → sheet1 use kar rahe hain")
+        return sh.sheet1
     except Exception as e:
-        print(f"❌ Worksheet Error: {e}")
+        print(f"❌ Worksheet error: {e}")
+        reset_caches()
         return None
 
-def get_station_map(sheet):
+def get_station_map(sheet, all_values=None):
+    """
+    Stations B7:B36 me (primary). Purani ranges (M, C) backward-compat ke liye.
+    Map me raw cell text aur resolved station code dono keys hain.
+    """
     m = {}
-    try:
-        all_values = sheet.get_all_values()
-    except Exception as e:
-        print(f"❌ Error reading sheet: {e}")
-        return m
+    if all_values is None:
+        try:
+            all_values = gs_retry(sheet.get_all_values)
+        except Exception as e:
+            print(f"❌ Error reading sheet: {e}")
+            return m
 
-    for i in range(2, min(30, len(all_values))):
-        val = all_values[i][1] if len(all_values[i]) > 1 else ""
-        if val:
-            m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "B"})
+    def add(val, row, col):
+        raw = str(val).upper().strip()
+        if not raw:
+            return
+        info = {"row": row, "nameCol": col}
+        m.setdefault(raw, info)
+        code = resolve_station(raw, quiet=True)
+        if code:
+            m.setdefault(code, info)
 
+    for i in range(6, min(36, len(all_values))):          # row 7..36
+        add(all_values[i][1] if len(all_values[i]) > 1 else "", i + 1, "B")
     for i in range(30, min(47, len(all_values))):
-        val = all_values[i][12] if len(all_values[i]) > 12 else ""
-        if val:
-            m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "M"})
-
+        add(all_values[i][12] if len(all_values[i]) > 12 else "", i + 1, "M")
     for i in range(31, min(48, len(all_values))):
-        val = all_values[i][2] if len(all_values[i]) > 2 else ""
-        if val:
-            m.setdefault(str(val).upper().strip(), {"row": i + 1, "nameCol": "C"})
+        add(all_values[i][2] if len(all_values[i]) > 2 else "", i + 1, "C")
 
-    print(f"✅ Station map ready: {len(m)} stations")
+    print(f"✅ Station map ready: {len(m)} keys")
     return m
 
 # ==============================================
 # DATE / TIME PARSERS
 # ==============================================
+def ist_now():
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
+    except Exception:
+        return datetime.utcnow() + timedelta(hours=5, minutes=30)
+
 def parse_date_flexible(s):
-    if s is None:
+    if s is None or isinstance(s, bool):
+        return None
+    if isinstance(s, (int, float)):          # Sheets serial date (UNFORMATTED_VALUE)
+        if 20000 < s < 80000:
+            return (datetime(1899, 12, 30) + timedelta(days=int(s))).date()
         return None
     s = str(s).strip()
     if not s:
         return None
+    s = re.sub(r'(?<=\d)(st|nd|rd|th)\b', '', s, flags=re.I)
     formats = (
         "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y",
         "%d/%m/%y", "%d-%m-%y", "%d.%m.%y",
         "%Y-%m-%d", "%Y/%m/%d",
         "%d %b %Y", "%d %B %Y", "%d %b %y", "%d %B %y",
         "%d %m %Y", "%d %m %y",
-        "%d/%m", "%d-%m", "%d.%m",
+        "%d-%b-%Y", "%d-%b-%y", "%d/%b/%Y", "%d-%B-%Y",
     )
     for fmt in formats:
         try:
             return datetime.strptime(s, fmt).date()
+        except ValueError:
+            pass
+    # saal ke bina (04/11, 4-11, 4 Nov) -> current saal (pehle ye 1900 ban jata tha)
+    year = ist_now().year
+    for fmt in ("%d/%m", "%d-%m", "%d.%m", "%d %b", "%d %B"):
+        try:
+            return datetime.strptime(f"{s} {year}", fmt + " %Y").date()
         except ValueError:
             pass
     try:
@@ -394,152 +565,419 @@ def parse_date_flexible(s):
         return None
 
 def parse_time_flexible(s):
-    """12:50, 12/50, 12.50, 1250, 12:50 HRS — sab handle karta hai."""
+    """Tolerant — 12:50, 12/50, 12.50, 1250, 12:50 HRS, 2:30 pm."""
     if s is None:
         return None
+    if isinstance(s, dt_time):
+        return s
+    if isinstance(s, bool):
+        return None
+    if isinstance(s, float) and 0 <= s < 1:   # Sheets time fraction (UNFORMATTED_VALUE)
+        mins = int(round(s * 1440)) % 1440
+        return dt_time(mins // 60, mins % 60)
     s = str(s).strip().upper()
     if not s:
         return None
+    ampm = None
+    m_ap = re.search(r'(?<![A-Z])([AP])\.?M\b\.?', s)
+    if m_ap:
+        ampm = m_ap.group(1) + "M"
+    s = re.sub(r'(?<![A-Z])[AP]\.?M\b\.?', '', s)
     s = re.sub(r'\b(HRS|HR|HOURS|HOUR)\b', '', s).strip()
     s = re.sub(r'[/\.\-]', ':', s).replace(' ', '')
     s = re.sub(r':+', ':', s)
 
-    for fmt in ("%H:%M", "%H%M"):
-        try:
-            return datetime.strptime(s, fmt).time()
-        except Exception:
-            pass
-    m = re.search(r'(\d{1,2}):(\d{1,2})', s)
+    hh = mm = None
+    m = re.fullmatch(r'(\d{1,2}):(\d{1,2})(?::\d{1,2})?', s)
     if m:
-        hh = int(m.group(1))
-        mm = int(m.group(2))
-        if 0 <= hh <= 23 and 0 <= mm <= 59:
-            return dt_time(hh, mm)
+        hh, mm = int(m.group(1)), int(m.group(2))
+    else:
+        m = re.fullmatch(r'(\d{3,4})', s)
+        if m:
+            v = m.group(1).zfill(4)
+            hh, mm = int(v[:2]), int(v[2:])
+        else:
+            m = re.search(r'(\d{1,2}):(\d{1,2})', s)
+            if m:
+                hh, mm = int(m.group(1)), int(m.group(2))
+    if hh is None:
+        return None
+    if ampm == "PM" and hh < 12:
+        hh += 12
+    if ampm == "AM" and hh == 12:
+        hh = 0
+    if 0 <= hh <= 23 and 0 <= mm <= 59:
+        return dt_time(hh, mm)
     return None
 
-def ist_now():
+# ==============================================
+# NUMBER / REGEX HELPERS
+# ==============================================
+def _to_float(s):
     try:
-        from zoneinfo import ZoneInfo
-        return datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
+        return float(str(s).replace(",", "").strip())
     except Exception:
-        return datetime.utcnow() + timedelta(hours=5, minutes=30)
+        return None
+
+def _clean_num(v):
+    """'1,200', 'Rs 500/-', 12.0 -> number. Nil/blank -> None."""
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        f = float(v)
+    else:
+        s = str(v).strip().replace(",", "").replace("₹", "")
+        s = re.sub(r'(?i)\brs\.?', '', s)
+        m = re.search(r'-?\d+(?:\.\d+)?', s)
+        if not m:
+            return None
+        f = float(m.group())
+    if f != f:
+        return None
+    return int(f) if f.is_integer() else round(f, 2)
+
+_ALIAS_LIST = sorted(
+    ((re.sub(r'[^A-Z0-9]+', ' ', a.upper()).strip(), code)
+     for code, als in STATION_ALIASES.items() for a in als),
+    key=lambda x: -len(x[0]))
+
+def _find_stations_in_text(msg):
+    """Lambe naam pehle match hote hain, taaki 'DIBRUGARH TOWN' me 'DIBRUGARH' alag na aaye."""
+    up = " " + re.sub(r'[^A-Z0-9]+', ' ', str(msg or "").upper()) + " "
+    found = set()
+    for alias, code in _ALIAS_LIST:
+        a = f" {alias} "
+        if a in up:
+            found.add(code)
+            up = up.replace(a, " ")
+    return found
+
+def _norm_field(k):
+    k = re.sub(r'\s+', ' ', str(k).upper().strip())
+    return FIELD_ALIASES.get(k, k)
+
+# ==============================================
+# WHATSAPP CHAT SPLITTER
+# ==============================================
+_CHAT_HEADER_RE = re.compile(
+    r'^[ \t]*(?:'
+    r'\[(?P<ts1>\d{1,2}[/.\-]\d{1,2}(?:[/.\-]\d{2,4})?,?\s*\d{1,2}[:.]\d{2}(?::\d{2})?\s*(?:[APap]\.?[Mm]\.?)?)\]'
+    r'|(?P<ts2>\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4},?\s+\d{1,2}[:.]\d{2}(?::\d{2})?\s*(?:[APap]\.?[Mm]\.?)?)\s+-'
+    r')\s*(?P<sender>[^:\n]{1,80}?):[ \t]*',
+    re.MULTILINE)
+
+def split_chat_messages(text):
+    text = (text or "").replace("\u200e", "").replace("\u200f", "").replace("\u202f", " ").replace("\u00a0", " ")
+    matches = list(_CHAT_HEADER_RE.finditer(text))
+    if not matches:
+        return [{"sender": "", "ts": "", "body": text.strip()}]
+
+    blocks = []
+    pre = text[:matches[0].start()].strip()
+    if pre:
+        blocks.append({"sender": "", "ts": "", "body": pre})
+    for i, m in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        body = text[m.end():end].strip()
+        if body:
+            blocks.append({
+                "sender": m.group("sender").strip(),
+                "ts": (m.group("ts1") or m.group("ts2") or "").strip(),
+                "body": body,
+            })
+    return blocks
+
+def guess_station_hint(body, sender=""):
+    """Message me station ka naam ho to wahi, warna sender ke naam se (jaise 'SM KOWN')."""
+    found = _find_stations_in_text(body)
+    if len(found) == 1:
+        return next(iter(found))
+    if not found:
+        s = _find_stations_in_text(sender)
+        if len(s) == 1:
+            return next(iter(s))
+    return None
 
 # ==============================================
 # GEMINI — natural, trusting
 # ==============================================
-def call_gemini(msg):
-    if not GEMINI_API_KEY:
-        print("❌ GEMINI_API_KEY missing!")
-        return None
-
-    station_legend = "\n".join(f'{c} = {STATION_OFFICIAL[c]}' for c in ALL_STATIONS)
-
-    prompt = f"""You are an expert Indian Railway data extraction engine for the Tinsukia Division.
-You read WhatsApp messages like a seasoned railway accountant — messy formats, broken lines, Hinglish, typos, garbled paste, squished text. You understand naturally. Trust your own judgement.
+PROMPT_TEMPLATE = r"""You are an expert Indian Railway data extraction engine for the Tinsukia Division.
+You read WhatsApp messages like a seasoned railway accountant — messy formats, broken lines, Hinglish, typos, garbled paste, squished text, merged words ("272AOUNT"), copied/forwarded chat text, random spacing, mixed labels, missing separators. You understand naturally, the way a human who has done this job for years does. Trust your own judgement and extract EVERYTHING that is really present. Never invent numbers that are not in the message.
 
 Return ONE JSON object with these keys (all present, empty if nothing found):
-  "prs"   : {{ "<STATION_CODE>": {{ "TKT":num, "PASS":num, "C/TKT":num, "C/PASS":num, "REF":num, "NET":num, "VCH":num, "POS":num, "UPI":num }} }}
-  "uts"   : {{ "<STATION_CODE>": {{ "PF":num, "TKT":num, "PASS":num, "NET":num, "MR":num, "MR AMT":num, "UPI":num }} }}
-  "osop"  : [ {{ "station":"CODE", "date":"as written", "amount":num, "unit":num or omit }} ]
-  "goods" : [ {{ "from_stn":"CODE", "to_stn":"CODE", "wagons":num, "placement_time":"HH:MM", "placement_date":"as written", "commodity":"RAW AS WRITTEN", "line":"number or comma list", "party":"UPPERCASE", "wagon_type":"optional", "weight":num or omit, "freight":num or omit }} ]
+  "prs"   : { "<STATION_CODE>": { "TKT":num, "PASS":num, "C/TKT":num, "C/PASS":num, "REF":num, "NET":num, "VCH":num, "POS":num, "UPI":num } }
+  "uts"   : { "<STATION_CODE>": { "PF":num, "TKT":num, "PASS":num, "NET":num, "MR":num, "MR AMT":num, "UPI":num } }
+  "osop"  : [ { "station":"CODE", "date":"as written", "amount":num, "unit":num or omit } ]
+  "goods" : [ { "from_stn":"CODE", "to_stn":"CODE", "wagons":num, "placement_time":"HH:MM", "placement_date":"as written", "commodity":"ABBREVIATED UPPERCASE", "line":"number or comma list", "party":"UPPERCASE", "wagon_type":"optional", "weight":num or omit, "freight":num or omit } ]
+
+=== CONTEXT ===
+__CTX__
+STATION HINT (use ONLY if the message text itself names no station): __HINT__
+The message may begin with chat-export noise like "[04/11, 7:03 pm] Name:" — ignore it. Sender names/designations (Sr CTC, SM, SS, Pradip Mishra) are NOT data.
+One message can contain several things at once (PRS + UTS + OSOP + goods, or several stations, or several forwarded reports pasted one after another). Extract all of them.
 
 === OFFICIAL STATIONS (CODE = Full Name) ===
-{station_legend}
+__LEGEND__
+Always output the CODE, never the full name. Fix spelling mistakes and short forms yourself (Kown/Khowang → KOWN, Krht → KRHT). Headings like "Earnings Of NTSK", "REVENUE OF BFD", "PRS/NTSK", "UTS/NTSK" tell you the station and the section.
 
-PRS/UTS rules:
-- Station full name OR code → use CODE as key.
-- PRS NET = net cash only. REF = SUM of all refunds.
-- UTS NET = net cash; UPI separate; J/Amount → NET; J/TKT → TKT; J/Pass → PASS.
-- MR + MR AMT both captured. PF / P/TKT / PLT / PLATFORM / "M" → PF.
-- Missing → omit key.
+=== PRS / UTS READING GUIDE ===
+- Normally ONE station's daily revenue report. Station key = CODE (from the text or from STATION HINT). Multi-station bundles are possible → one key per station.
+- Lines under a "UTS" heading → "uts". Lines under a "PRS" heading → "prs". Headings can look like "PRS", "PRS/NTSK", "PRS :", "UTS REPORT". If the message has NO UTS/PRS label at all (small stations) → treat as UTS.
+- Field meanings (people write them in many ways; a leading "T/" means Total, e.g. T/TKT = total tickets):
+    TKT   : TKT / Tkts / Tckt / Ticket / T / T/TKT / J/TKT
+    PASS  : PASS / Psg / Psgr / Passenger / P (when it sits beside T) / T/Pass / J/Pass
+    NET   : NET CASH / Netcash / Net / Cash / Cash amount / J/Amount  — the cash collection amount (never the grand total)
+    UPI   : E CASH / E/CASH / Ecash / E-cash / E cas / Digi cash / Digital cash / UPI / UPI QR / QR / Digital / Paytm / PhonePe
+    REF   : REFUND / RFD / Digi ref / Digital refund / Digi refund / Digi RFD / Digital RFD — SUM OF ALL refund-type amounts found anywhere in the message. If multiple refund lines exist (e.g. REFUND 500 + Digi ref 200 + RFD 100), put the TOTAL (800) in REF. Never take only the first one.
+    C/TKT, C/PASS : cancelled tickets / cancelled passengers (PRS)
+    VCH, POS : vouchers / POS-machine amount (PRS)
+    PF    : platform tickets COUNT (PF / P/TKT / PLT / PLATFORM / "M"). A platform AMOUNT next to it has no column → ignore it.
+    MR / MR AMT : MR count / MR amount (both captured). "MR=13AMOUNT=37960" → MR 13, MR AMT 37960.
+- "Jenny" / "JTBS" lines (e.g. "T/jenny 1132") are only a sub-count of tickets already included in the total → ignore them, never add them to TKT.
+- "Ttl" / "Total" / "Grand total" lines are totals → IGNORE (never put them in NET or anywhere).
+- Nil / Nill / NIL / - / blank / "nill .." → omit that key.
+- Date lines like "DATE. 04/11/2026" or "Date:06/11/26" → ignore (not a field).
+- Numbers must be plain numbers (remove commas, Rs, /-, spaces).
+- Missing → omit key. If a label is unusual or misspelt, decide by meaning and position, like a human accountant would. A number must go to exactly one field.
 
-=== COMMODITY (RAW — DO NOT ABBREVIATE) ===
-"commodity" field me message jo likha hai WAISE HI copy karo — RAW, EXACT.
-- "Rice (FCI)" → likho "Rice (FCI)" ya "RICE (FCI)" — bas uppercase kar sakte ho
-- "Rice (FCI)" ko "FCI" ya "FCI/R" KABHI MAT likho — abbreviation ka kaam baad me code karta hai
-- "Wheat (FCI)" → "WHEAT (FCI)" ; "Cement" → "CEMENT" ; container ho to "CONTAINER"
+PRS/UTS EXAMPLES:
+Input: "REVENUE OF BFD\nDATE.     04/11/2026\nUTS\nTKT                  200\nPASS.               333\nNET CASH.    10485\nE CASH.          1230\n\nPRS\nTKT                 9\nPASS.              20\nNET CASH.    28060\nUPI QR .          10025\nREFUND.          Nill\nC/TKT.              Nill\nC/PASS.            Nill\nDigi ref:-            nill  .."
+Output: {"prs":{"BFD":{"TKT":9,"PASS":20,"NET":28060,"UPI":10025}},"uts":{"BFD":{"TKT":200,"PASS":333,"NET":10485,"UPI":1230}},"osop":[],"goods":[]}
+
+Input: "Kown 4/11/26\nPsg-9\nTckt-7\nCash-20\nEcash-400"
+Output: {"prs":{},"uts":{"KOWN":{"TKT":7,"PASS":9,"NET":20,"UPI":400}},"osop":[],"goods":[]}
+
+Input: "Krht uts of 4.11.2026\nT 36\nP 58\nCash 1390\nE cas 340\nTtl 1730 only"
+Output: {"prs":{},"uts":{"KRHT":{"TKT":36,"PASS":58,"NET":1390,"UPI":340}},"osop":[],"goods":[]}
+
+Input: "Earnings Of NTSK \nDate:06/11/26\nPRS/NTSK \nT/TKT =81\nT/Pass =78\nC/TKT =04\nC/Pass =09\nRFD =6020\nNetcash =31580\nDigi CASH =56950\nDigi RFD =Nil\nVch=Nil\n\nUTS/NTSK \nT/jenny1132\nT/TKT =1429\nT/Pass =1651\nP/TKT =272AOUNT =2720\nMR=13AMOUNT=37960\nE/CASH =52145\nJ/AMOUNT =338765 "
+Output: {"prs":{"NTSK":{"TKT":81,"PASS":78,"C/TKT":4,"C/PASS":9,"REF":6020,"NET":31580,"UPI":56950}},"uts":{"NTSK":{"TKT":1429,"PASS":1651,"PF":272,"MR":13,"MR AMT":37960,"UPI":52145,"NET":338765}},"osop":[],"goods":[]}
+
+=== OSOP ===
+OSOP lines give, for a station and a date, a rupee amount (and only sometimes a unit/count). Put them in "osop": station CODE, date as written (omit if not written), amount = the rupee amount. Put "unit" ONLY if the message explicitly writes a unit/count — never calculate it, the system does that.
 
 === INWARD GOODS / IWOW ===
-Fields: from_stn, to_stn, wagons, placement_time, placement_date, commodity (RAW), line, party, (optional) wagon_type, weight, freight.
+Extract every goods placement into "goods" array.
 
-MULTI-LINE SAME COMMODITY + SAME TIME → MERGE:
-If SAME commodity, SAME from/to, SAME time+date across multiple lines → ONE entry, wagons = SUM, line = comma list.
+Fields:
+- from_stn / to_stn: station codes (to_stn = station where wagons were placed/received; if the text names none use STATION HINT)
+- wagons: number of wagons
+- placement_time: HH:MM 24-hour (convert "2:30 pm", "1430 hrs", "14.30" etc.)
+- placement_date: date as written (omit if not written)
+- commodity: ABBREVIATED uppercase (see below)
+- line: just the digit; if multiple lines mentioned together → "10,12"
+- party: uppercase (consignee / firm / party name if written, else "")
+- wagon_type: wagon code if written (BCNL, BCNA, BCN, BOXN, BTPN, BLC ...)
+- weight / freight: optional
+Do NOT calculate free time — the system does it.
 
-DIFFERENT COMMODITY → separate entries.
+COMMODITY ABBREVIATION RULES (IMPORTANT — apply always):
+- RICE (FCI) / FCI RICE / RICE FCI  → "FCI/R"
+- WHEAT (FCI) / FCI WHEAT / WHEAT FCI → "FCI/W"
+- RICE (PUB) / PUB RICE / RICE PUB → "PUB/R"
+- WHEAT (PUB) / PUB WHEAT / WHEAT PUB → "PUB/W"
+- RICE alone → "RICE"
+- WHEAT alone → "WHEAT"
+- FCI alone (no RICE/WHEAT) → "FCI"
+- PUB alone → "PUB"
+- CONTAINER / container wagons → "CONTAINER"
+- CEMENT → "CEMENT", COAL → "COAL", NAPHTHA → "NAPHTHA", FERT → "FERT"
+- Others → keep as UPPERCASE
 
-EXAMPLE (merge — CRACK THIS):
+MULTI-LINE WAGONS:
+If the message reports wagons on multiple line numbers with DIFFERENT counts each → create one goods entry per line.
+
+=== VERY IMPORTANT: SAME COMMODITY + SAME TIME ACROSS LINES → MERGE ===
+If the message reports the SAME commodity, SAME from_stn, SAME to_stn, SAME placement time+date across multiple line numbers → produce ONE entry with:
+- wagons = SUM of all those lines
+- line = comma-joined line numbers, e.g. "10,12"
+
+But if commodities DIFFER, keep them as separate entries.
+
+EXAMPLE 1 (merge case):
 Input:
 "55 BCNL RICE(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-10 AND 
 03 BCNL RICE(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-12 
 AT 12:50 HRS ON DATE-04/11/26"
-Output:
-[{{
-  "from_stn": "KNNN", "to_stn": "NTSK",
-  "wagons": 58, "placement_time": "12:50",
-  "placement_date": "04/11/26",
-  "commodity": "RICE(FCI)",
-  "line": "10,12", "party": ""
-}}]
-(NOTICE: "commodity" RAW hai — "RICE(FCI)". Abbreviate nahi kiya. 55+03=58 wagons merged, lines "10,12".)
 
-MESSAGE:
-\"\"\"{msg}\"\"\"
+Expected output — ONE entry:
+[
+  {
+    "from_stn": "KNNN",
+    "to_stn": "NTSK",
+    "wagons": 58,
+    "placement_time": "12:50",
+    "placement_date": "04/11/26",
+    "commodity": "FCI/R",
+    "line": "10,12",
+    "party": "",
+    "wagon_type": "BCNL"
+  }
+]
+
+EXAMPLE 2 (different commodities → separate):
+Input:
+"20 BCNL RICE(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-10
+10 BCNA WHEAT(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-12
+AT 12:50 HRS ON DATE-04/11/26"
+
+Expected — TWO entries:
+[
+  {"from_stn":"KNNN","to_stn":"NTSK","wagons":20,"placement_time":"12:50","placement_date":"04/11/26","commodity":"FCI/R","line":"10","party":"","wagon_type":"BCNL"},
+  {"from_stn":"KNNN","to_stn":"NTSK","wagons":10,"placement_time":"12:50","placement_date":"04/11/26","commodity":"FCI/W","line":"12","party":"","wagon_type":"BCNA"}
+]
+
+MESSAGE (between the tags):
+<message>
+__MSG__
+</message>
 
 JSON only, no markdown:"""
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 4096}
-    }
-    try:
-        res = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=45)
-        if res.status_code == 200:
-            txt = res.json()['candidates'][0]['content']['parts'][0]['text']
-            txt = re.sub(r'```json\n?', '', txt, flags=re.IGNORECASE)
-            txt = re.sub(r'```\n?', '', txt).strip()
-            match = re.search(r'\{[\s\S]*\}', txt)
-            if match:
-                parsed = json.loads(match.group(0))
-                parsed["prs"] = parsed.get("prs") or {}
-                parsed["uts"] = parsed.get("uts") or {}
-                parsed["osop"] = parsed.get("osop") or []
-                parsed["goods"] = parsed.get("goods") or []
-                if not isinstance(parsed["osop"], list):
-                    parsed["osop"] = [parsed["osop"]]
-                if not isinstance(parsed["goods"], list):
-                    parsed["goods"] = [parsed["goods"]]
-                return parsed
-            print("⚠️ Gemini returned no JSON")
-        else:
-            print(f"❌ Gemini HTTP {res.status_code}: {res.text[:250]}")
-    except Exception as e:
-        print(f"❌ Gemini Error: {e}")
-    return None
+_GEMINI_SEM = threading.Semaphore(GEMINI_PARALLEL)
 
-def apply_post_processing(data, msg):
+def _gemini_post(prompt, thinking=0):
+    """Return (json_or_None, error_text). 429/5xx par backoff ke saath retry."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+    headers = {"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY}
+    gen = {"temperature": 0, "maxOutputTokens": 8192, "responseMimeType": "application/json"}
+    if "2.5" in GEMINI_MODEL:
+        gen["thinkingConfig"] = {"thinkingBudget": thinking}
+    payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": gen}
+
+    err = ""
+    for attempt in range(5):
+        try:
+            with _GEMINI_SEM:
+                res = requests.post(url, json=payload, headers=headers, timeout=90)
+            if res.status_code == 200:
+                return res.json(), ""
+            err = f"HTTP {res.status_code}: {res.text[:160]}"
+            print(f"❌ Gemini {err}")
+            if res.status_code not in (429, 500, 502, 503, 504):
+                return None, err
+        except Exception as e:
+            err = f"{type(e).__name__}: {e}"
+            print(f"❌ Gemini Error: {err}")
+        time.sleep(min(2 ** attempt, 16) + random.random())
+    return None, err
+
+def _parse_gemini_json(txt):
+    txt = re.sub(r'```json\n?', '', txt or "", flags=re.IGNORECASE)
+    txt = re.sub(r'```\n?', '', txt).strip()
+    match = re.search(r'\{[\s\S]*\}', txt)
+    if not match:
+        return None
+    parsed = json.loads(match.group(0))
+    if not isinstance(parsed, dict):
+        return None
+    for k in ("prs", "uts"):
+        v = parsed.get(k)
+        parsed[k] = v if isinstance(v, dict) else {}
+    for k in ("osop", "goods"):
+        v = parsed.get(k) or []
+        if isinstance(v, dict):
+            v = [v]
+        parsed[k] = v if isinstance(v, list) else []
+    return parsed
+
+def call_gemini(msg, sender="", ts="", hint=None, thinking=0):
+    """Return (data_or_None, error_text)."""
+    if not GEMINI_API_KEY:
+        print("❌ GEMINI_API_KEY missing!")
+        return None, "GEMINI_API_KEY set nahi hai"
+
+    station_legend = "\n".join(f'{c} = {STATION_OFFICIAL[c]}' for c in ALL_STATIONS)
+    hint_line = (f"{hint} ({STATION_OFFICIAL.get(hint, '')})" if hint else "none")
+    ctx_line = (f"Sender name: {sender or 'unknown'} | Message time: {ts or 'unknown'} | "
+                f"Now (IST): {ist_now().strftime('%d/%m/%Y %H:%M')}")
+
+    prompt = (PROMPT_TEMPLATE
+              .replace("__CTX__", ctx_line)
+              .replace("__HINT__", hint_line)
+              .replace("__LEGEND__", station_legend)
+              .replace("__MSG__", msg))
+
+    err = ""
+    for attempt in range(2):          # JSON kharab aaye to ek baar aur
+        resp, err = _gemini_post(prompt, thinking)
+        if not resp:
+            return None, err
+        try:
+            parts = resp["candidates"][0]["content"]["parts"]
+            txt = "".join(p.get("text", "") for p in parts if not p.get("thought"))
+            parsed = _parse_gemini_json(txt)
+            if parsed is not None:
+                return parsed, ""
+            err = "Gemini ne JSON nahi diya"
+            print(f"⚠️ {err}")
+        except Exception as e:
+            err = f"Gemini response parse error: {e}"
+            print(f"⚠️ {err}")
+        time.sleep(1.0)
+    return None, err
+
+# ==============================================
+# ==============================================
+# POST-PROCESSING (sirf safai — Gemini ke data ko overwrite nahi karta)
+# ==============================================
+def _clean_fields(vals):
+    out = {}
+    if not isinstance(vals, dict):
+        return out
+    for k, v in vals.items():
+        f = _norm_field(k)
+        n = _clean_num(v)
+        if n is None:
+            continue
+        if f == "REF" and f in out:
+            out[f] = out[f] + n          # alag-alag refund lines ka total
+        else:
+            out[f] = n
+    return out
+
+def _norm_line(ln):
+    if ln is None:
+        return ""
+    nums = re.findall(r'\d+', str(ln))
+    if not nums:
+        return str(ln).strip().upper()
+    try:
+        nums = sorted(set(nums), key=int)
+    except Exception:
+        pass
+    return ",".join(nums)
+
+def apply_post_processing(data, msg, hint=None):
     if not data:
         return data
 
-    new_prs = {}
-    for st, vals in data.get("prs", {}).items():
-        code = resolve_station(st)
-        if code:
-            new_prs.setdefault(code, vals)
-    data["prs"] = new_prs
+    def _fix_station_dict(d):
+        out = {}
+        items = list((d or {}).items())
+        for st, vals in items:
+            code = resolve_station(st)
+            if not code and hint and len(items) == 1:
+                code = hint
+                print(f"ℹ️ Station '{st}' unresolved → hint {hint} use kiya")
+            if not code:
+                continue
+            cleaned = _clean_fields(vals)
+            if code in out:
+                for k, v in cleaned.items():
+                    out[code][k] = out[code].get(k, 0) + v if k == "REF" else v
+            else:
+                out[code] = cleaned
+        return out
 
-    new_uts = {}
-    for st, vals in data.get("uts", {}).items():
-        code = resolve_station(st)
-        if code:
-            new_uts.setdefault(code, vals)
-    data["uts"] = new_uts
+    data["prs"] = _fix_station_dict(data.get("prs"))
+    data["uts"] = _fix_station_dict(data.get("uts"))
 
     new_osop = []
     for e in data.get("osop", []):
         if not isinstance(e, dict):
             continue
-        code = resolve_station(e.get("station"))
+        code = resolve_station(e.get("station")) or hint
         if code:
             e["station"] = code
             new_osop.append(e)
@@ -549,38 +987,43 @@ def apply_post_processing(data, msg):
     for e in data.get("goods", []):
         if not isinstance(e, dict):
             continue
-        if e.get("from_stn"):
-            e["from_stn"] = resolve_station(e["from_stn"]) or str(e["from_stn"]).upper()
-        if e.get("to_stn"):
-            e["to_stn"] = resolve_station(e["to_stn"]) or str(e["to_stn"]).upper()
+        frm = str(e.get("from_stn") or "").strip()
+        to = str(e.get("to_stn") or "").strip()
+        e["from_stn"] = (resolve_station(frm) or frm.upper()) if frm else ""
+        e["to_stn"] = (resolve_station(to) or to.upper()) if to else (hint or "")
 
-        # Abbreviation 100% yahan hota hai — FIXED version
         e["commodity"] = abbreviate_commodity(e.get("commodity"))
-
-        wtype = str(e.get("wagon_type") or "").upper()
-        if wtype in CONTAINER_WAGON_CODES or "CONTAINER" in wtype:
+        wtype = str(e.get("wagon_type") or "").upper().strip()
+        e["wagon_type"] = wtype
+        if _is_container("", wtype):
             e["commodity"] = "CONTAINER"
+
+        wg = _clean_num(e.get("wagons"))
+        e["wagons"] = int(wg) if wg is not None else None
 
         ln = e.get("line")
         if ln is not None:
-            ln_str = str(ln).strip()
-            if "," in ln_str:
-                nums = re.findall(r'\d+', ln_str)
-                e["line"] = ",".join(nums) if nums else ln_str
-            else:
-                m = re.search(r'\d+', ln_str)
-                e["line"] = m.group(0) if m else ln_str
-
+            e["line"] = _norm_line(ln)
         new_goods.append(e)
     data["goods"] = new_goods
 
+    # ---- UTS/PRS label correction ----
     up = msg.upper()
-    if "UTS" in up and "PRS" not in up.replace("UTS", ""):
-        if not data["uts"] and len(data["prs"]) == 1:
-            st, vals = next(iter(data["prs"].items()))
-            if isinstance(vals, dict) and not any(k in vals for k in ("C/TKT", "C/PASS", "VCH", "POS", "REF")):
-                data["uts"] = {st: vals}
-                data["prs"] = {}
+    has_uts = bool(re.search(r'\bUTS\b', up))
+    has_prs = bool(re.search(r'\bPRS\b', up))
+    only_uts_label = has_uts and not has_prs
+    no_label = (not has_uts) and (not has_prs)
+
+    if (only_uts_label or no_label) and data["prs"] and not data["goods"] and not data["osop"]:
+        for st in list(data["prs"].keys()):
+            vals = data["prs"][st]
+            if isinstance(vals, dict) and not any(k in vals for k in PRS_ONLY_FIELDS):
+                existing = data["uts"].get(st) or {}
+                merged = dict(vals)
+                merged.update(existing)
+                data["uts"][st] = merged
+                del data["prs"][st]
+                print(f"ℹ️ {st}: label na hone se PRS → UTS me move kiya")
 
     return data
 
@@ -593,50 +1036,130 @@ def _merge_goods(entries):
     merged = {}
     order = []
     for e in entries:
+        t = parse_time_flexible(e.get("placement_time"))
+        d = parse_date_flexible(e.get("placement_date"))
         key = (
             str(e.get("from_stn") or "").upper().strip(),
             str(e.get("to_stn") or "").upper().strip(),
             abbreviate_commodity(e.get("commodity")),
-            str(e.get("placement_time") or "").strip(),
-            str(e.get("placement_date") or "").strip(),
+            t.strftime("%H:%M") if t else str(e.get("placement_time") or "").strip(),
+            d.isoformat() if d else str(e.get("placement_date") or "").strip(),
             str(e.get("party") or "").upper().strip(),
         )
         if key not in merged:
             merged[key] = dict(e)
-            merged[key]["commodity"] = abbreviate_commodity(e.get("commodity"))
             order.append(key)
         else:
-            existing = merged[key]
-            try:
-                existing["wagons"] = float(existing.get("wagons") or 0) + float(e.get("wagons") or 0)
-                if existing["wagons"] == int(existing["wagons"]):
-                    existing["wagons"] = int(existing["wagons"])
-            except Exception:
-                pass
-            lines = []
-            for ln in (existing.get("line"), e.get("line")):
-                if ln is None:
-                    continue
-                for part in re.split(r'[,\s]+', str(ln).strip()):
-                    if part and part not in lines:
-                        lines.append(part)
-            if lines:
-                try:
-                    lines_sorted = sorted(set(lines), key=lambda x: int(x) if x.isdigit() else 999)
-                except Exception:
-                    lines_sorted = sorted(set(lines))
-                existing["line"] = ",".join(lines_sorted)
+            ex = merged[key]
+            a, b = _clean_num(ex.get("wagons")), _clean_num(e.get("wagons"))
+            if a is not None or b is not None:
+                ex["wagons"] = int((a or 0) + (b or 0))
+            ex["line"] = _norm_line(",".join(str(x) for x in (ex.get("line"), e.get("line")) if x not in (None, "")))
+            if not ex.get("wagon_type") and e.get("wagon_type"):
+                ex["wagon_type"] = e["wagon_type"]
     return [merged[k] for k in order]
 
 # ==============================================
-# REGEX FALLBACK
+# REGEX FALLBACK — UTS / PRS
 # ==============================================
-def _to_float(s):
-    try:
-        return float(str(s).replace(",", "").strip())
-    except:
-        return None
+_FIELD_PATTERNS = [
+    ("C/TKT",  r'^(C\s*/?\s*(TKT|TCKT|TICKET)S?|CANCEL\w*\s*(TKT|TCKT|TICKET)\w*)$'),
+    ("C/PASS", r'^(C\s*/?\s*(PASS|PSG|PSGR)\w*|CANCEL\w*\s*(PASS|PSG)\w*)$'),
+    ("REF",    r'^(REF|RFD|REFUND|DIGI(TAL)?\s*(REF\w*|RFD))$'),
+    ("VCH",    r'^(VCH|VOUCHERS?)$'),
+    ("POS",    r'^POS$'),
+    ("MR AMT", r'^MR\s*(AMT|AMOUNT)$'),
+    ("MR",     r'^MR$'),
+    ("UPI",    r'^(E\s*/?\s*CAS\w*|ECAS\w*|DIGI(TAL)?\s*CASH|UPI.*|QR.*|DIGITAL.*|PAYTM|PHONEPE)$'),
+    ("NET",    r'^(NET\s*CASH|NETCASH|NET|CASH|NET\s*AMOUNT|J\s*/?\s*(AMOUNT|AMT))$'),
+    ("PF",     r'^(PF|PLATFORM|PLT|P\s*/?\s*TKT|PF\s*/?\s*TKT)$'),
+    ("PASS",   r'^(T\s*/?\s*(PASS|PSG|PSGR)\w*|PASS\w*|PSGR?|P|J\s*/?\s*PASS)$'),
+    ("TKT",    r'^(T\s*/?\s*(TKT|TCKT|TICKET)S?|TKTS?|TCKTS?|TICKETS?|T|J\s*/?\s*TKT)$'),
+]
 
+_KV_PAIR_RE = re.compile(r'([A-Za-z][A-Za-z/ .&]*?)\s*[=:\-]*\s*(-?\d[\d,]*(?:\.\d+)?)')
+
+def _clean_label(label):
+    lab = re.sub(r'[^A-Z/ ]', '', str(label).upper())
+    return re.sub(r'\s+', ' ', lab).strip()
+
+def _label_to_field(label):
+    lab = _clean_label(label)
+    for fld, pat in _FIELD_PATTERNS:
+        if re.match(pat, lab):
+            return fld
+    return None
+
+def _is_amount_word(label):
+    return bool(re.fullmatch(r'AM?O?U?N?T', _clean_label(label)))
+
+def _line_fields(line):
+    """Ek line se [(FIELD, number)] — 'MR=13AMOUNT=37960' jaise squished pairs bhi."""
+    out = []
+    prev = None
+    for m in _KV_PAIR_RE.finditer(line):
+        label, raw = m.group(1), m.group(2)
+        num = _to_float(raw)
+        if num is None:
+            continue
+        if _is_amount_word(label):
+            if prev == "MR":
+                out.append(("MR AMT", num))
+            prev = None
+            continue
+        fld = _label_to_field(label)
+        if fld:
+            out.append((fld, num))
+        prev = fld
+    return out
+
+def _parse_kv_fallback(body, hint=None):
+    """Gemini fail/adhoora ho to 'label number' lines se UTS/PRS (section + station samajhta hai)."""
+    cur = hint
+    section = None
+    res = {"prs": {}, "uts": {}}
+    for line in str(body or "").splitlines():
+        L = line.strip()
+        if not L:
+            continue
+        sec_m = re.search(r'\b(UTS|PRS)\b', L, re.IGNORECASE)
+        stns = _find_stations_in_text(L)
+        fields = _line_fields(L)
+
+        if sec_m:
+            section = sec_m.group(1).lower()
+        if len(stns) == 1 and not fields:
+            new = next(iter(stns))
+            if new != cur and not sec_m:
+                section = None
+            cur = new
+        if fields and cur is None and len(stns) == 1:
+            cur = next(iter(stns))
+        if not fields or not cur:
+            continue
+
+        for fld, num in fields:
+            kind = "prs" if fld in PRS_ONLY_FIELDS else (section or "uts")
+            d = res[kind].setdefault(cur, {})
+            if fld == "REF":
+                d["REF"] = d.get("REF", 0) + num
+            else:
+                d.setdefault(fld, num)
+
+    out = {"prs": {}, "uts": {}, "osop": [], "goods": []}
+    for kind in ("prs", "uts"):
+        for st, f in res[kind].items():
+            if f:
+                out[kind][st] = f
+    if not out["prs"] and not out["uts"]:
+        return None
+    print(f"🔧 Regex KV fallback: {out}")
+    return out
+
+# ==============================================
+# ==============================================
+# REGEX FALLBACK — GOODS (sirf jab Gemini kuch na de)
+# ==============================================
 def _parse_goods_regex(msg):
     up = msg.upper().replace("\n", " ")
     up = re.sub(r'\s+', ' ', up)
@@ -650,9 +1173,9 @@ def _parse_goods_regex(msg):
     shared_time = ptime_m.group(1) if ptime_m else ""
 
     pattern = re.compile(
-        r'(\d+)\s*(?:[A-Z0-9]{{2,6}}\s*)?'
-        r'(?:RICE\s*\([A-Z]+\)|WHEAT\s*\([A-Z]+\)|RICE|WHEAT|[A-Z]{{3,}})?\s*'
-        r'WAGONS?\s+EX\s*[-:]?\s*([A-Z]{{2,6}})\s+TO\s+([A-Z]{{2,6}})\s*'
+        r'(\d+)\s*(?:([A-Z0-9]{2,6})\s*)?'
+        r'(?:RICE\s*\([A-Z]+\)|WHEAT\s*\([A-Z]+\)|RICE|WHEAT|[A-Z]{3,})?\s*'
+        r'WAGONS?\s+EX\s*[-:]?\s*([A-Z]{2,6})\s+TO\s+([A-Z]{2,6})\s*'
         r'(?:.*?L\s*/\s*NO\s*[-:=]?\s*(\d+))?',
         re.IGNORECASE
     )
@@ -660,12 +1183,11 @@ def _parse_goods_regex(msg):
     entries = []
     for m in pattern.finditer(up):
         wagons = int(m.group(1))
-        from_raw = m.group(2)
-        to_raw = m.group(3)
-        line = m.group(4) or ""
+        wtype = m.group(2) or ""
+        from_raw, to_raw = m.group(3), m.group(4)
+        line = m.group(5) or ""
 
-        ctx_start = max(0, m.start() - 3)
-        ctx = up[ctx_start:m.end()]
+        ctx = up[max(0, m.start() - 3):m.end()]
         comm_match = re.search(r'(RICE|WHEAT)\s*\(\s*([A-Z]+)\s*\)', ctx)
         if comm_match:
             commodity = f"{comm_match.group(1)}({comm_match.group(2)})"
@@ -681,36 +1203,50 @@ def _parse_goods_regex(msg):
             "placement_date": shared_date,
             "commodity": abbreviate_commodity(commodity),
             "line": line,
-            "party": ""
+            "party": "",
+            "wagon_type": wtype if re.fullmatch(r'B[A-Z]{2,5}', wtype) else "",
         })
 
     if entries:
         entries = _merge_goods(entries)
+        print(f"🔧 Regex goods parsed → {len(entries)} entries")
     return entries
 
+_REFUND_RE = re.compile(
+    r'(?:DIGI(?:TAL)?\s*(?:REF\w*|RFD)|\bRFD|\bREFUND)[ \t=:\-\./]*([\d,]+(?:\.\d+)?)')
+
 def apply_fallback_fixes(data, msg):
-    if not data:
-        return data
+    """Gemini ka data primary hai; yahan sirf kami hone par madad."""
+    if data is None:
+        data = {"prs": {}, "uts": {}, "osop": [], "goods": []}
 
     up = msg.upper()
-    prs = data.get("prs") or {}
 
-    if len(prs) == 1:
-        st, vals = next(iter(prs.items()))
-        vals = vals if isinstance(vals, dict) else {}
-        if not vals.get("REF"):
-            amounts = re.findall(r'\b(?:RFD|REFUND|REF)\s*[=:]?\s*([\d,]+)', up)
-            nums = [n for n in (_to_float(a) for a in amounts) if n is not None]
-            if nums:
-                vals["REF"] = sum(nums)
-        prs[st] = vals
+    # ---- Refund safety-net: sirf single-station PRS me, aur sirf jab Gemini ka REF kam/missing ho ----
+    nums = [n for n in (_to_float(a) for a in _REFUND_RE.findall(up)) if n]
+    if nums:
+        total = sum(nums)
+        total = int(total) if float(total).is_integer() else total
+        prs = data.get("prs") or {}
+        if len(prs) == 1:
+            st = next(iter(prs))
+            cur = prs[st].get("REF") if isinstance(prs[st], dict) else None
+            if cur is None or cur < total:
+                prs[st]["REF"] = total
+                print(f"💰 PRS {st} REF corrected → {total}")
+        elif not prs and re.search(r'\bPRS\b', up):
+            found = _find_stations_in_text(msg)
+            if len(found) == 1:
+                prs[next(iter(found))] = {"REF": total}
+                data["prs"] = prs
 
+    # ---- OSOP fallback ----
     osop = data.get("osop") or []
     if "OSOP" in up and not osop:
         lines = msg.splitlines()
         for i, line in enumerate(lines):
             if re.search(r'\bOSOP\b', line, re.IGNORECASE):
-                window = "\n".join(lines[i:i+8])
+                window = "\n".join(lines[i:i + 8])
                 st_m = re.search(r'OSOP\s*[:\-]?\s*([A-Za-z][A-Za-z0-9 .]+)', window, re.IGNORECASE)
                 if not st_m:
                     continue
@@ -719,32 +1255,30 @@ def apply_fallback_fixes(data, msg):
                     continue
                 date_m = re.search(r'(\d{1,4}[-/\.]\d{1,2}[-/\.]\d{1,4})', window)
                 unit_m = re.search(r'(?:unit|u)\s*[:=\-]?\s*(\d+)', window, re.IGNORECASE)
-                amt_m  = re.search(r'(?:amt|amount|rs\.?)\s*[:=\-]?\s*([\d,]+)', window, re.IGNORECASE)
+                amt_m = re.search(r'(?:amt|amount|rs\.?)\s*[:=\-]?\s*([\d,]+)', window, re.IGNORECASE)
                 if date_m and amt_m:
-                    entry = {"station": code, "date": date_m.group(1),
-                             "amount": _to_float(amt_m.group(1))}
+                    entry = {"station": code, "date": date_m.group(1), "amount": _to_float(amt_m.group(1))}
                     if unit_m:
                         entry["unit"] = int(unit_m.group(1))
                     osop.append(entry)
         data["osop"] = osop
 
-    regex_goods = _parse_goods_regex(msg)
-    gemini_goods = data.get("goods") or []
-    if regex_goods:
-        data["goods"] = regex_goods
-    elif gemini_goods:
-        data["goods"] = _merge_goods(gemini_goods)
-
+    # ---- Goods: Gemini primary (merge karke), regex sirf fallback ----
+    gem_goods = data.get("goods") or []
+    if gem_goods:
+        data["goods"] = _merge_goods(gem_goods)
+    else:
+        data["goods"] = _parse_goods_regex(msg)
     return data
 
 # ==============================================
-# UPDATE SHEET (UTS&PRS)
+# UPDATE SHEET (PRS / UTS)
 # ==============================================
 def is_cell_empty(value):
     if value is None:
         return True
-    s = str(value).strip().replace(",", "").replace(" ", "")
-    if s == "" or s == "-":
+    s = str(value).strip().replace(",", "").replace(" ", "").replace("₹", "")
+    if s in ("", "-", "0", "0.0", "0.00"):      # 0 / dash = abhi tak kuch bhara nahi
         return True
     if s.lower() in ("nil", "none", "null", "n/a", "na"):
         return True
@@ -757,7 +1291,7 @@ def _has_any_nonzero(vals):
         try:
             if float(v) != 0:
                 return True
-        except:
+        except Exception:
             continue
     return False
 
@@ -768,130 +1302,157 @@ def _is_field_allowed(v, fld):
         return True
     return v > 0
 
+def _fmt_num(v):
+    n = _clean_num(v)
+    return str(n) if n is not None else str(v)
+
 def update_google_sheet(data):
-    sheet = get_sheet()
-    if not sheet:
-        return False
+    """Return (ok, report_lines). Sirf khaali cells bharta hai, kabhi overwrite nahi."""
+    lines = []
+    with file_lock(SHEET_LOCK_FILE):
+        sheet = get_sheet()
+        if not sheet:
+            return False, ["❌ Google Sheet connect nahi ho payi (credentials/sheet name check karein)"]
 
-    try:
-        matrix = sheet.get_all_values()
-    except Exception as e:
-        print(f"❌ Sheet read error: {e}")
-        return False
-
-    smap = get_station_map(sheet)
-
-    def get_current(r, c):
         try:
-            return matrix[r-1][c-1]
-        except:
-            return ""
-
-    updates = []
-    queued = set()
-
-    def queue(r, c, val):
-        key = (r, c)
-        if key in queued:
-            return
-        queued.add(key)
-        updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
-
-    for st, vals in data.get("prs", {}).items():
-        info = smap.get(st)
-        if not info or not _has_any_nonzero(vals):
-            continue
-        row = info["row"]
-        for fld, val in (vals or {}).items():
-            try:
-                v = float(val)
-            except:
-                continue
-            if fld not in PRS_COLS or not _is_field_allowed(v, fld):
-                continue
-            col = PRS_COLS[fld]
-            if is_cell_empty(get_current(row, col)):
-                queue(row, col, v)
-                print(f"✅ PRS {st} {fld}: wrote {v}")
-
-    for st, vals in data.get("uts", {}).items():
-        info = smap.get(st)
-        if not info or not _has_any_nonzero(vals):
-            continue
-        row = info["row"]
-        for fld, val in (vals or {}).items():
-            if fld == "PF" and not val:
-                continue
-            try:
-                v = float(val)
-            except:
-                continue
-            if not _is_field_allowed(v, fld):
-                continue
-            if info["nameCol"] == "C":
-                col = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12, "PF": 8, "MR": 19, "MR AMT": 20}.get(fld)
-            else:
-                col = UTS_COLS_NU.get(fld)
-            if not col:
-                continue
-            if is_cell_empty(get_current(row, col)):
-                queue(row, col, v)
-                print(f"✅ UTS {st} {fld}: wrote {v}")
-
-    if updates:
-        try:
-            sheet.batch_update(updates)
-            print(f"✅ Batch update successful ({len(updates)} cells)")
+            matrix = gs_retry(sheet.get_all_values)
         except Exception as e:
-            print(f"❌ Batch update failed: {e}")
-            return False
-    return True
+            print(f"❌ Sheet read error: {e}")
+            reset_caches()
+            return False, [f"❌ Sheet read error: {e}"]
 
-# ==============================================
-# OSOP UPDATE  (FIXED unit inference + order allocation)
-# ==============================================
-def update_osop_sheet(entries):
-    if not entries:
-        return True
-
-    lock_fd = open(OSOP_LOCK_FILE, "w")
-    try:
-        fcntl.flock(lock_fd, fcntl.LOCK_EX)
-
-        sh = get_spreadsheet()
-        if not sh:
-            return False
-
-        try:
-            ws = sh.worksheet("OSOP")
-        except gspread.WorksheetNotFound:
-            print("❌ 'OSOP' worksheet nahi mili")
-            return False
-
-        # Fresh read — saari entries ke liye ek baar (lock ke andar hi safe hai)
-        try:
-            matrix = ws.get_all_values()
-        except Exception as e:
-            print(f"❌ OSOP read error: {e}")
-            return False
-
-        if len(matrix) < 6:
-            print("❌ OSOP sheet me data nahi hai")
-            return False
+        smap = get_station_map(sheet, matrix)
 
         def get_current(r, c):
             try:
-                return matrix[r-1][c-1]
-            except:
+                return matrix[r - 1][c - 1]
+            except Exception:
                 return ""
 
-        # ---- Row 5: dates (har merged pair ka left cell) ----
-        row5 = matrix[4] if len(matrix) > 4 else []
+        updates = []
+        queued = set()
+        written, same = {}, {}
+
+        def queue(r, c, val):
+            key = (r, c)
+            if key in queued:
+                return False
+            queued.add(key)
+            updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
+            return True
+
+        for kind, cols in (("prs", PRS_COLS), ("uts", UTS_COLS_NU)):
+            for st, vals in data.get(kind, {}).items():
+                info = smap.get(st)
+                if not info:
+                    lines.append(f"❌ {kind.upper()} {st}: sheet me station ki row nahi mili (B7:B36 me naam/code check karein)")
+                    continue
+                if not _has_any_nonzero(vals):
+                    continue
+                row = info["row"]
+                for fld, val in (vals or {}).items():
+                    v = _to_float(val)
+                    if v is None or not _is_field_allowed(v, fld):
+                        continue
+                    if kind == "uts" and info["nameCol"] == "C":
+                        col = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12, "PF": 8, "MR": 19, "MR AMT": 20}.get(fld)
+                    else:
+                        col = cols.get(fld)
+                    if not col:
+                        continue
+                    cur = get_current(row, col)
+                    tag = (kind.upper(), st)
+                    if is_cell_empty(cur):
+                        if queue(row, col, v):
+                            written.setdefault(tag, []).append(fld)
+                            print(f"✅ {kind.upper()} {st} {fld}: wrote {v}")
+                    else:
+                        cv = _clean_num(cur)
+                        if cv is not None and abs(cv - v) < 0.005:
+                            same.setdefault(tag, []).append(fld)
+                        else:
+                            lines.append(f"⚠️ {kind.upper()} {st} {fld}: sheet me {cur} pehle se hai, naya {_fmt_num(v)} — overwrite nahi kiya")
+                            print(f"⏭️ {kind.upper()} {st} {fld}: cell already filled ({cur})")
+
+        if updates:
+            try:
+                gs_retry(sheet.batch_update, updates)
+                print(f"✅ Batch update successful ({len(updates)} cells)")
+            except Exception as e:
+                print(f"❌ Batch update failed: {e}")
+                reset_caches()
+                return False, [f"❌ Sheet write fail: {e}"]
+
+        out = []
+        for (kind, st), flds in written.items():
+            out.append(f"✅ {st} {kind}: {', '.join(flds)}")
+        for (kind, st), flds in same.items():
+            out.append(f"↩️ {st} {kind}: pehle se bhara (same value) — {', '.join(flds)}")
+        return True, out + lines
+
+# ==============================================
+# OSOP UPDATE
+# ==============================================
+def osop_units(amount):
+    """
+    Amount ko 100 ke units me, 50 par round-off:
+    1-150 -> 1, 151-250 -> 2, 251-350 -> 3 ... (kam se kam 1).
+    """
+    a = _clean_num(amount)
+    if a is None or a <= 0:
+        return None
+    return max(1, math.ceil((a - 50) / 100))
+
+def update_osop_sheet(entries):
+    """Return (ok, report_lines)."""
+    lines = []
+    if not entries:
+        return True, lines
+
+    with file_lock(OSOP_LOCK_FILE):
+        sh = get_spreadsheet()
+        if not sh:
+            return False, ["❌ OSOP: Google Sheet connect nahi ho payi"]
+
+        try:
+            ws = get_ws(sh, "OSOP")
+        except gspread.WorksheetNotFound:
+            print("❌ 'OSOP' worksheet nahi mili")
+            return False, ["❌ 'OSOP' tab sheet me nahi mili"]
+        except Exception as ex:
+            reset_caches()
+            return False, [f"❌ OSOP tab error: {ex}"]
+
+        try:
+            matrix = [list(r) for r in gs_retry(ws.get_all_values)]
+        except Exception as ex:
+            print(f"❌ OSOP read error: {ex}")
+            reset_caches()
+            return False, [f"❌ OSOP read error: {ex}"]
+
+        if len(matrix) < 6:
+            return False, ["❌ OSOP tab me header/station rows nahi mili"]
+
+        def get_current(r, c):
+            try:
+                return matrix[r - 1][c - 1]
+            except Exception:
+                return ""
+
+        def set_local(r, c, v):
+            while len(matrix) < r:
+                matrix.append([])
+            row = matrix[r - 1]
+            while len(row) < c:
+                row.append("")
+            row[c - 1] = v
+
+        row5 = matrix[4]
         date_cols = {}
         c = 3
         max_cols = max(len(row5), 40)
         while c <= max_cols:
-            raw = row5[c-1] if c-1 < len(row5) else ""
+            raw = row5[c - 1] if c - 1 < len(row5) else ""
             if not str(raw).strip() and c < len(row5):
                 raw = row5[c]
             d = parse_date_flexible(raw)
@@ -900,105 +1461,88 @@ def update_osop_sheet(entries):
             c += 2
 
         if not date_cols:
-            print("❌ OSOP row 5 me koi date nahi mili")
-            return False
+            return False, ["❌ OSOP: row 5 me date columns nahi mile"]
 
-        # ---- B column: station rows (code -> ordered row list, duplicates included) ----
         station_rows = {}
         for r in range(6, len(matrix) + 1):
-            if r-1 >= len(matrix):
-                break
-            cell = matrix[r-1][1] if len(matrix[r-1]) > 1 else ""
+            cell = matrix[r - 1][1] if len(matrix[r - 1]) > 1 else ""
             if not str(cell).strip():
                 continue
-            code = resolve_station(cell)
+            code = resolve_station(cell, quiet=True)
             if code:
                 station_rows.setdefault(code, []).append(r)
 
-        usage = {code: 0 for code in station_rows}
-
+        updates = []
         for e in entries:
             if not isinstance(e, dict):
                 continue
-
             code = e.get("station")
+            d = parse_date_flexible(e.get("date")) or ist_now().date()
+            label = f"OSOP {code} {d.strftime('%d/%m')}"
+
             if code not in station_rows:
-                print(f"⚠️ OSOP: '{code}' sheet me nahi mila → skip")
+                lines.append(f"❌ {label}: sheet me station nahi mila")
+                continue
+            if d not in date_cols:
+                lines.append(f"❌ {label}: row 5 me ye date nahi hai")
                 continue
 
             rows = station_rows[code]
-            d = parse_date_flexible(e.get("date"))
-            if not d or d not in date_cols:
-                print(f"⚠️ OSOP {code}: date '{e.get('date')}' row 5 me nahi mili → skip")
-                continue
-
             camt, cunit = date_cols[d]
-            amt = _to_float(e.get("amount")) if e.get("amount") is not None else None
+            amt = _clean_num(e.get("amount"))
 
-            # ---- Row choose karo: order-based, conflict par aage badho ----
-            row = None
-            idx = usage.get(code, 0)
-            while idx < len(rows):
-                r = rows[idx]
-                ex = get_current(r, camt)
-                ex_f = _to_float(ex)
-                if is_cell_empty(ex):
-                    row = r
-                    break
-                if amt is not None and ex_f is not None and ex_f == amt:
-                    print(f"⏭️ OSOP {code} {d}: amount {amt} already row {r} me → duplicate skip")
-                    row = "SKIP"
-                    break
-                idx += 1   # cell filled with different value → agli duplicate row try
-
-            if row == "SKIP":
+            # same station + date + same amount pehle se likha hai to dobara nahi
+            dup = False
+            if amt is not None:
+                for r in rows:
+                    cur = _clean_num(get_current(r, camt))
+                    if cur is not None and abs(cur - amt) < 0.005:
+                        dup = True
+                        break
+            if dup:
+                lines.append(f"↩️ {label}: {amt} pehle se likha hai")
                 continue
-            if row is None:
-                print(f"⚠️ OSOP {code}: saari duplicate rows filled → skip: {e}")
+
+            chosen_row = None
+            for r in rows:
+                if is_cell_empty(get_current(r, camt)) and is_cell_empty(get_current(r, cunit)):
+                    chosen_row = r
+                    break
+            if chosen_row is None:
+                for r in rows:
+                    if is_cell_empty(get_current(r, camt)):
+                        chosen_row = r
+                        break
+            if chosen_row is None:
+                lines.append(f"⚠️ {label}: cells pehle se bhare hain — overwrite nahi kiya")
                 continue
-            usage[code] = idx + 1
 
-            updates = []
+            row = chosen_row
+            unit = _clean_num(e.get("unit"))
+            if unit is None:
+                unit = osop_units(amt)
 
-            # ---- AMOUNT (left column) ----
-            if amt is not None and amt != 0:
+            wrote = []
+            if amt is not None and amt != 0 and is_cell_empty(get_current(row, camt)):
                 updates.append({"range": rowcol_to_a1(row, camt), "values": [[amt]]})
+                set_local(row, camt, amt)
+                wrote.append(f"₹{amt}")
+            if unit is not None and is_cell_empty(get_current(row, cunit)):
+                updates.append({"range": rowcol_to_a1(row, cunit), "values": [[unit]]})
+                set_local(row, cunit, unit)
+                wrote.append(f"unit {unit}")
+            if wrote:
+                lines.append(f"✅ {label}: {', '.join(wrote)}")
+                print(f"✅ OSOP {code} {d}: row {row} {wrote}")
 
-            # ---- UNIT (right column) — FIXED inference ----
-            unit = e.get("unit")
-            if unit is None or str(unit).strip() == "":
-                # Same station ki baki duplicate rows ke units se compare karke infer
-                used_units = set()
-                for rr in rows:
-                    if rr == row:
-                        continue
-                    uv = _to_float(get_current(rr, cunit))
-                    if uv is not None:
-                        used_units.add(int(uv))
-                if len(used_units) == 1:
-                    unit = used_units.pop() + 1
-                    print(f"🔧 OSOP {code} {d}: unit missing → existing units compare karke '{unit}' infer kiya")
-                else:
-                    print(f"⚠️ OSOP {code} {d}: unit missing, infer nahi hua → unit blank")
-
-            if unit is not None and str(unit).strip() != "":
-                if is_cell_empty(get_current(row, cunit)):
-                    updates.append({"range": rowcol_to_a1(row, cunit), "values": [[unit]]})
-                else:
-                    print(f"⏭️ OSOP {code} {d}: unit cell already filled")
-
-            if updates:
-                try:
-                    ws.batch_update(updates)
-                    print(f"✅ OSOP {code} {d}: row {row} written ({len(updates)} cells)")
-                except Exception as ex:
-                    print(f"❌ OSOP write failed: {ex}")
-
-    finally:
-        fcntl.flock(lock_fd, fcntl.LOCK_UN)
-        lock_fd.close()
-
-    return True
+        if updates:
+            try:
+                gs_retry(ws.batch_update, updates)
+            except Exception as ex:
+                print(f"❌ OSOP write failed: {ex}")
+                reset_caches()
+                return False, lines + [f"❌ OSOP write fail: {ex}"]
+    return True, lines
 
 # ==============================================
 # IWOW UPDATE
@@ -1006,40 +1550,82 @@ def update_osop_sheet(entries):
 def _norm_str(v):
     return str(v or "").strip().upper()
 
-def update_iwow_sheet(entries):
-    if not entries:
-        return True
+def _iwow_key(to, commodity, wagons, ptime, pdate):
+    """
+    Duplicate pehchaan: station + commodity + wagons + placement time + date.
+    Line / party / from / wagon type key me nahi hain (Gemini har baar alag likh sakta hai).
+    """
+    w = _clean_num(wagons)
+    return (_norm_str(to), _norm_str(abbreviate_commodity(commodity)),
+            int(w) if w is not None else "",
+            ptime.strftime("%H:%M") if ptime else "",
+            pdate.isoformat() if pdate else "")
 
-    lock_fd = open(IWOW_LOCK_FILE, "w")
+def _key_str(key):
+    return "|".join(str(x) for x in key)
+
+def _load_recent():
     try:
-        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        with open(IWOW_RECENT_FILE) as f:
+            d = json.load(f)
+    except Exception:
+        return {}
+    cutoff = time.time() - IWOW_DEDUPE_MINUTES * 60
+    return {k: t for k, t in d.items() if isinstance(t, (int, float)) and t >= cutoff}
 
+def _save_recent(d):
+    try:
+        tmp = IWOW_RECENT_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(d, f)
+        os.replace(tmp, IWOW_RECENT_FILE)
+    except Exception as e:
+        print(f"⚠️ recent-log save failed: {e}")
+
+def update_iwow_sheet(entries):
+    """Return (ok, report_lines)."""
+    lines = []
+    if not entries:
+        return True, lines
+
+    with file_lock(IWOW_LOCK_FILE):
         sh = get_spreadsheet()
         if not sh:
-            return False
+            return False, ["❌ IWOW: Google Sheet connect nahi ho payi"]
 
         try:
-            ws = sh.worksheet("IWOW")
+            ws = get_ws(sh, "IWOW")
         except gspread.WorksheetNotFound:
             print("❌ 'IWOW' worksheet nahi mili")
-            return False
+            return False, ["❌ 'IWOW' tab sheet me nahi mili"]
+        except Exception as ex:
+            reset_caches()
+            return False, [f"❌ IWOW tab error: {ex}"]
 
         try:
-            matrix = ws.get_all_values()
+            try:
+                # unformatted: date/time ka display format ya locale kuch bhi ho, compare sahi rahega
+                matrix = gs_retry(ws.get_all_values, value_render_option="UNFORMATTED_VALUE")
+            except TypeError:
+                matrix = gs_retry(ws.get_all_values)
         except Exception as e:
             print(f"❌ IWOW read error: {e}")
-            return False
+            reset_caches()
+            return False, [f"❌ IWOW read error: {e}"]
 
-        start_row = 4
-        for r in range(4, len(matrix) + 50):
-            bval = ""
-            if r - 1 < len(matrix) and len(matrix[r - 1]) > 1:
-                bval = str(matrix[r - 1][1]).strip()
-            if not bval:
-                start_row = r
-                break
-        else:
-            start_row = len(matrix) + 1
+        def cell(r, c):
+            try:
+                return matrix[r - 1][c - 1]
+            except Exception:
+                return ""
+
+        def row_is_free(r):
+            return all(is_cell_empty(cell(r, c)) for c in IWOW_CORE_COLS)
+
+        # pehli bilkul khaali row (kisi maujooda data par kabhi overwrite nahi)
+        current_row = 4
+        while current_row <= len(matrix) and not row_is_free(current_row):
+            current_row += 1
 
         now = ist_now()
         today = now.date()
@@ -1047,159 +1633,118 @@ def update_iwow_sheet(entries):
         tomorrow = today + timedelta(days=1)
         grace_cutoff = dt_time(IWOW_GRACE_HOUR, 0)
 
-        print(f"🕐 IWOW now (IST): {now.strftime('%Y-%m-%d %H:%M')} | today={today} | yesterday={yesterday} | grace_cutoff={grace_cutoff}")
+        print(f"🕐 IWOW now (IST): {now.strftime('%Y-%m-%d %H:%M')} | grace_cutoff={grace_cutoff} | first free row={current_row}")
 
+        existing = set()
+        for r in range(4, len(matrix) + 1):
+            if is_cell_empty(cell(r, 2)):
+                continue
+            existing.add(_iwow_key(cell(r, 2), cell(r, 5), cell(r, 6),
+                                   parse_time_flexible(cell(r, 11)), parse_date_flexible(cell(r, 12))))
+        recent = _load_recent()
+        pending = []
         updates = []
-        current_row = start_row
 
         for e in entries:
             if not isinstance(e, dict):
                 continue
 
-            from_stn  = _norm_str(e.get("from_stn"))
-            to_stn    = _norm_str(e.get("to_stn"))
-            wagons    = e.get("wagons")
-            ptime     = parse_time_flexible(e.get("placement_time"))
-            pdate     = parse_date_flexible(e.get("placement_date"))
+            from_stn = _norm_str(e.get("from_stn"))
+            to_stn = _norm_str(e.get("to_stn"))
+            wagons = _clean_num(e.get("wagons"))
+            ptime = parse_time_flexible(e.get("placement_time"))
+            pdate = parse_date_flexible(e.get("placement_date"))
             commodity = abbreviate_commodity(e.get("commodity"))
-            line      = _norm_str(e.get("line"))
-            party     = _norm_str(e.get("party"))
-            wtype     = _norm_str(e.get("wagon_type"))
-            ftime     = _norm_str(e.get("free_time"))
+            line = _norm_line(e.get("line"))
+            party = _norm_str(e.get("party"))
+            wtype = _norm_str(e.get("wagon_type"))
 
-            if not to_stn or not pdate:
-                print(f"⏭️ Missing to_stn/date → skip")
+            label = f"IWOW {from_stn or '?'}→{to_stn or '?'} {wagons if wagons is not None else '?'}W {commodity}".strip()
+
+            if not to_stn:
+                lines.append(f"⏭️ {label}: station (to_stn) samajh nahi aaya")
                 continue
+
+            # date likhi na ho to: time aage ka ho to kal ka, warna aaj ka
+            if not pdate:
+                if ptime and datetime.combine(today, ptime) > now + timedelta(minutes=5):
+                    pdate = yesterday
+                else:
+                    pdate = today
 
             print(f"🔎 {from_stn}→{to_stn} | date={pdate} time={ptime} wagons={wagons} line={line} commodity={commodity}")
 
-            # ---------- 24-hour clock acceptance ----------
             accept = False
             reason = ""
 
             if pdate == today:
-                if ptime:
-                    placement_dt = datetime.combine(pdate, ptime)
-                    if placement_dt > now + timedelta(minutes=5):
-                        reason = f"future time {placement_dt.strftime('%H:%M')} (now {now.strftime('%H:%M')})"
-                    else:
-                        accept = True
+                if ptime and datetime.combine(pdate, ptime) > now + timedelta(minutes=5):
+                    reason = f"placement time {ptime.strftime('%H:%M')} abhi (IST {now.strftime('%H:%M')}) se aage ka hai"
                 else:
                     accept = True
-
             elif pdate == yesterday:
                 if ptime and ptime >= dt_time(22, 0) and now.time() < grace_cutoff:
                     accept = True
-                    reason = f"yesterday 22:00+ within grace (now {now.strftime('%H:%M')})"
+                elif not ptime:
+                    reason = "kal ki date bina time ke"
+                elif ptime < dt_time(22, 0):
+                    reason = f"kal ki date, time {ptime.strftime('%H:%M')} (22:00 se pehle)"
                 else:
-                    if not ptime:
-                        reason = "yesterday without time"
-                    elif ptime < dt_time(22, 0):
-                        reason = f"yesterday pre-22:00 ({ptime.strftime('%H:%M')})"
-                    else:
-                        reason = f"yesterday 22:00+ but grace passed (now {now.strftime('%H:%M')})"
-
+                    reason = f"kal raat ka data, par grace time ({IWOW_GRACE_HOUR}:00 IST) nikal gaya"
             elif pdate == tomorrow:
-                if ptime:
-                    placement_dt = datetime.combine(pdate, ptime)
-                    if placement_dt <= now + timedelta(minutes=30):
-                        accept = True
-                    else:
-                        reason = "tomorrow pre-report"
+                if ptime and datetime.combine(pdate, ptime) <= now + timedelta(minutes=30):
+                    accept = True
                 else:
-                    reason = "tomorrow pre-report"
+                    reason = "agli date ka pre-report"
             else:
-                reason = f"date out of range ({pdate})"
+                reason = f"date range se bahar ({pdate.strftime('%d/%m/%Y')})"
 
             if not accept:
                 print(f"⏭️ Rejected ({reason})")
+                lines.append(f"⏭️ {label}: {reason}")
                 continue
 
-            pdate_str_check  = pdate.strftime("%d-%m-%Y")
-            ptime_str_check  = ptime.strftime("%H:%M") if ptime else ""
-            wagons_str_check = str(wagons or "").strip()
-
-            is_duplicate = False
-            for r in range(3, len(matrix)):
-                row = matrix[r]
-                existing_to        = _norm_str(row[1])   if len(row) > 1  else ""
-                existing_line      = _norm_str(row[2])   if len(row) > 2  else ""
-                existing_commodity = _norm_str(row[4])   if len(row) > 4  else ""
-                existing_wagons    = str(row[5]).strip() if len(row) > 5  else ""
-                existing_time      = str(row[10]).strip() if len(row) > 10 else ""
-                existing_date      = str(row[11]).strip() if len(row) > 11 else ""
-                existing_from      = _norm_str(row[20])  if len(row) > 20 else ""
-                existing_party     = _norm_str(row[22])  if len(row) > 22 else ""
-
-                if (existing_to        == to_stn and
-                    existing_date      == pdate_str_check and
-                    existing_time      == ptime_str_check and
-                    existing_wagons    == wagons_str_check and
-                    existing_from      == from_stn and
-                    existing_commodity == commodity and
-                    existing_line      == line and
-                    existing_party     == party):
-                    is_duplicate = True
-                    break
-
-            if is_duplicate:
-                print(f"⏭️ Duplicate (line {line})")
-                continue
-
-            if wtype in CONTAINER_WAGON_CODES or "CONTAINER" in wtype:
+            if _is_container(commodity, wtype):
                 commodity = "CONTAINER"
-            elif "CONTAINER" in commodity:
                 if not wtype:
                     wtype = "CONTAINER"
 
-            try:
-                wagons_num = int(float(wagons)) if wagons else 42
-            except Exception:
-                wagons_num = 42
+            key = _iwow_key(to_stn, commodity, wagons, ptime, pdate)
+            ks = _key_str(key)
+            if key in existing:
+                print(f"⏭️ Duplicate — sheet me pehle se hai ({ks})")
+                lines.append(f"↩️ {label}: sheet me pehle se hai (duplicate nahi likha)")
+                continue
+            if ks in recent:
+                print(f"⏭️ Duplicate — abhi hi process ho chuka ({ks})")
+                lines.append(f"↩️ {label}: abhi hi process ho chuka (duplicate nahi likha)")
+                continue
+            existing.add(key)
 
-            # ---------- FREE TIME RULES ----------
-            if "NAPHTHA" in commodity or "NAPTHA" in commodity:
-                ftime = "8 HRS"
-                if not wtype:
+            ftime = iwow_free_time(wagons, commodity, wtype)
+
+            if not wtype:
+                if "NAPHTHA" in commodity:
                     wtype = "BTPN"
-            elif "CONTAINER" in commodity:
-                if not ftime:
-                    ftime = "3 HRS"
-                if not wtype:
-                    wtype = "CONTAINER"
-            else:
-                if not ftime:
-                    if wagons_num > 50:
-                        ftime = "11 HRS"
-                    elif wagons_num <= 20:
-                        ftime = "5 HRS"
-                    elif wagons_num <= 30:
-                        ftime = "7 HRS"
-                    else:
-                        ftime = "9 HRS"
-                if not wtype:
-                    if "CEMENT" in commodity:
-                        wtype = "BCN"
-                    elif "COAL" in commodity:
-                        wtype = "BOXN"
-                    elif commodity.startswith("FCI/") or commodity.startswith("PUB/") or "RICE" in commodity or "WHEAT" in commodity:
-                        wtype = "BCN"
-                    elif "FERT" in commodity:
-                        wtype = "BCN"
-                    else:
-                        wtype = "BCN"
+                elif "COAL" in commodity:
+                    wtype = "BOXN"
+                else:
+                    wtype = "BCN"
 
             arrival_time_str = ""
             arrival_date_str = pdate.strftime("%d-%m-%Y")
-            ptime_str        = ptime.strftime("%H:%M") if ptime else ""
-            pdate_str        = pdate.strftime("%d-%m-%Y")
+            ptime_str = ptime.strftime("%H:%M") if ptime else ""
+            pdate_str = pdate.strftime("%d-%m-%Y")
 
             if ptime:
                 delta = random.choice([25, 30, 35, 40])
-                placement_dt = datetime.combine(pdate, ptime)
-                arrival_dt = placement_dt - timedelta(minutes=delta)
+                arrival_dt = datetime.combine(pdate, ptime) - timedelta(minutes=delta)
                 arrival_time_str = arrival_dt.strftime("%H:%M")
                 arrival_date_str = arrival_dt.strftime("%d-%m-%Y")
+
+            # agli bilkul khaali row par hi likho
+            while current_row <= len(matrix) and not row_is_free(current_row):
+                current_row += 1
 
             def q(col, val):
                 if val is not None and str(val).strip() != "":
@@ -1211,22 +1756,218 @@ def update_iwow_sheet(entries):
             q(11, ptime_str); q(12, pdate_str)
             q(18, ftime); q(21, from_stn); q(23, party)
 
-            print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | wagons={wagons} | line={line} | {commodity} | {ftime}")
+            pending.append(ks)
+            lines.append(f"✅ {label} line {line or '-'} → row {current_row} (free {ftime})")
+            print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | wagons={wagons} | line={line} | {commodity} | free={ftime}")
             current_row += 1
 
         if updates:
             try:
-                ws.batch_update(updates)
+                need = current_row + 2
+                if need > ws.row_count:           # grid se bahar likhne par error aata hai
+                    gs_retry(ws.add_rows, need - ws.row_count + 20)
+                gs_retry(ws.batch_update, updates)
                 print(f"✅ IWOW batch update successful ({len(updates)} cells)")
             except Exception as e:
                 print(f"❌ IWOW batch update failed: {e}")
-                return False
+                reset_caches()
+                return False, [l for l in lines if not l.startswith("✅")] + [f"❌ IWOW write fail: {e}"]
+            now_ts = time.time()
+            for ks in pending:
+                recent[ks] = now_ts
+            _save_recent(recent)
+    return True, lines
 
-    finally:
-        fcntl.flock(lock_fd, fcntl.LOCK_UN)
-        lock_fd.close()
+# ==============================================
+# MESSAGE PIPELINE
+# ==============================================
+def _empty_data():
+    return {"prs": {}, "uts": {}, "osop": [], "goods": []}
 
-    return True
+def _has_content(data):
+    return bool(data and (data.get("prs") or data.get("uts") or data.get("osop") or data.get("goods")))
+
+def merge_data(dst, src):
+    """Alag-alag message blocks ka data ek me (baad wala block same field ko override karta hai)."""
+    for kind in ("prs", "uts"):
+        for st, f in (src.get(kind) or {}).items():
+            dst[kind].setdefault(st, {}).update(f)
+    dst["osop"].extend(src.get("osop") or [])
+    dst["goods"].extend(src.get("goods") or [])
+    return dst
+
+_DATE_RE = re.compile(r'\b\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}\b')
+_TIME_RE = re.compile(r'\b\d{1,2}[:.]\d{2}\s*(?:[APap]\.?[Mm]\.?|hrs?|HRS?)?\b')
+
+def _data_numbers(d):
+    nums = []
+    for kind in ("prs", "uts"):
+        for f in (d.get(kind) or {}).values():
+            nums.extend(v for v in f.values() if isinstance(v, (int, float)))
+    for o in d.get("osop") or []:
+        for k in ("amount", "unit"):
+            n = _clean_num(o.get(k))
+            if n is not None:
+                nums.append(n)
+    for g in d.get("goods") or []:
+        for k in ("wagons", "weight", "freight"):
+            n = _clean_num(g.get(k))
+            if n is not None:
+                nums.append(n)
+    return nums
+
+def _big_numbers(body):
+    """Message ke 3+ digit numbers (date/time hata kar)."""
+    text = _DATE_RE.sub(" ", str(body or ""))
+    text = _TIME_RE.sub(" ", text)
+    toks = []
+    for t in re.findall(r'\d[\d,]*(?:\.\d+)?', text):
+        v = _to_float(t)
+        if v is not None and len(re.sub(r'\D', '', t.split('.')[0])) >= 3:
+            toks.append(v)
+    return toks
+
+def _looks_like_data(body):
+    return bool(_big_numbers(body)) or bool(re.search(r'\b(WAGONS?|OSOP|UTS|PRS)\b', str(body or ""), re.I))
+
+def coverage(d, body):
+    """Message ke 3+ digit numbers me se kitne nikale gaye data me aaye (0..1). Sanity check."""
+    toks = _big_numbers(body)
+    if not toks:
+        return 1.0
+    have = _data_numbers(d)
+    hit = sum(1 for t in toks if any(abs(t - h) < 0.005 for h in have))
+    return hit / len(toks)
+
+def _prepare(data, body, hint):
+    d = apply_post_processing(data or _empty_data(), body, hint)
+    return apply_fallback_fixes(d, body)
+
+def extract_block(body, sender="", ts=""):
+    """
+    Ek message block -> (data, notes).
+    Gemini (fast) -> agar khaali/adhoora to Gemini (deep thinking) -> phir bhi kamzor to regex; jiska coverage best, wo.
+    """
+    print(f"\n📩 Block | sender='{sender}' | ts='{ts}'\n{body[:400]}")
+    hint = guess_station_hint(body, sender)
+    print(f"📍 Station hint: {hint}")
+    notes = []
+
+    raw1, err1 = call_gemini(body, sender, ts, hint, GEMINI_THINK_FAST)
+    best = _prepare(raw1, body, hint) if raw1 else _empty_data()
+    best_cov = coverage(best, body) if _has_content(best) else 0.0
+    source = "gemini"
+    if err1:
+        notes.append(f"Gemini: {err1}")
+
+    looks = _looks_like_data(body)
+    if looks and best_cov < COVERAGE_MIN:
+        print(f"🔁 Coverage {best_cov:.2f} kam — deep thinking se dobara")
+        raw2, err2 = call_gemini(body, sender, ts, hint, GEMINI_THINK_DEEP)
+        if raw2:
+            d2 = _prepare(raw2, body, hint)
+            c2 = coverage(d2, body) if _has_content(d2) else 0.0
+            if c2 > best_cov:
+                best, best_cov, source = d2, c2, "gemini-deep"
+        elif err2 and not err1:
+            notes.append(f"Gemini: {err2}")
+
+    if looks and best_cov < COVERAGE_MIN:
+        fb = _parse_kv_fallback(body, hint)
+        if fb:
+            d3 = _prepare(fb, body, hint)
+            c3 = coverage(d3, body) if _has_content(d3) else 0.0
+            if c3 > best_cov:
+                best, best_cov, source = d3, c3, "regex"
+                notes.append("Gemini se pura data nahi mila, regex fallback use hua")
+
+    if not _has_content(best):
+        # goods/OSOP regex ek aakhri koshish
+        best = _prepare(None, body, hint)
+    print(f"✅ Final ({source}, coverage {best_cov:.2f}):", json.dumps(best, default=str))
+    return best, notes
+
+def process_incoming(text):
+    """Pura text process karke WhatsApp reply ka summary return karta hai."""
+    blocks = [b for b in split_chat_messages(text) if re.search(r'\d', b["body"])]
+    print(f"📦 {len(blocks)} message block(s) mile")
+    if not blocks:
+        return "⚠️ Message me koi data (number) nahi mila."
+
+    # Gemini calls parallel (lock ke bahar) — sheet likhna baad me ek saath
+    def work(b):
+        try:
+            return extract_block(b["body"], b["sender"], b["ts"])
+        except Exception as e:
+            print(f"❌ Block error: {e}")
+            return _empty_data(), [f"Block error: {e}"]
+
+    if len(blocks) == 1:
+        results = [work(blocks[0])]
+    else:
+        with ThreadPoolExecutor(max_workers=min(GEMINI_PARALLEL, len(blocks))) as ex:
+            results = list(ex.map(work, blocks))
+
+    agg = _empty_data()
+    notes = []
+    for data, n in results:
+        merge_data(agg, data)
+        notes.extend(n)
+
+    if not _has_content(agg):
+        msg = "⚠️ Data samajh nahi aaya. Message check karke dobara bhejiye."
+        if notes:
+            msg += "\n" + "\n".join(f"ℹ️ {n}" for n in dict.fromkeys(notes))
+        return msg
+
+    lines = []
+    with PROCESS_LOCK:
+        for fn, payload, name in ((update_google_sheet, agg if (agg["prs"] or agg["uts"]) else None, "UTS/PRS"),
+                                  (update_osop_sheet, agg["osop"], "OSOP"),
+                                  (update_iwow_sheet, agg["goods"], "IWOW")):
+            if not payload:
+                continue
+            try:
+                ok, rep = fn(payload)
+                lines.extend(rep)
+            except Exception as e:
+                print(f"❌ {name} write crashed: {e}")
+                reset_caches()
+                lines.append(f"❌ {name} update fail: {e}")
+
+    lines.extend(f"ℹ️ {n}" for n in dict.fromkeys(notes))
+    return "\n".join(lines) if lines else "⚠️ Kuch update nahi hua."
+
+# ==============================================
+# WHATSAPP REPLY
+# ==============================================
+def send_whatsapp(to, text):
+    if not (SEND_REPLY and WHATSAPP_TOKEN and PHONE_NUMBER_ID and to):
+        return False
+    try:
+        url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
+        headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
+        payload = {"messaging_product": "whatsapp", "to": to, "type": "text",
+                   "text": {"body": str(text)[:3800]}}
+        r = requests.post(url, headers=headers, json=payload, timeout=30)
+        if r.status_code >= 300:
+            print(f"❌ WhatsApp reply error {r.status_code}: {r.text[:200]}")
+            return False
+        return True
+    except Exception as e:
+        print(f"❌ WhatsApp reply exception: {e}")
+        return False
+
+def handle_message(text, reply_to=None):
+    try:
+        summary = process_incoming(text)
+    except Exception as e:
+        print(f"❌ process_incoming error: {e}")
+        summary = f"❌ Processing me error aaya: {e}"
+    print("📝 Summary:\n" + summary)
+    if reply_to:
+        send_whatsapp(reply_to, summary)
+    return summary
 
 # ==============================================
 # WEBHOOK
@@ -1235,12 +1976,16 @@ def update_iwow_sheet(entries):
 def home():
     return "Bot is running ✅", 200
 
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok", "time_ist": ist_now().strftime("%d/%m/%Y %H:%M")}), 200
+
 @app.route("/webhook", methods=["GET"])
 def webhook_verify():
     mode = request.args.get("hub.mode")
     token = request.args.get("hub.verify_token")
     challenge = request.args.get("hub.challenge")
-    if mode == "subscribe" and challenge and token == VERIFY_TOKEN:
+    if mode == "subscribe" and challenge and VERIFY_TOKEN and token == VERIFY_TOKEN:
         print("✅ Webhook verified")
         return challenge, 200
     return "Forbidden", 403
@@ -1254,31 +1999,16 @@ def webhook():
                 for m in change.get("value", {}).get("messages", []):
                     if m.get("type") != "text":
                         continue
-                    msg_id = m.get("id", "")
-                    if already_processed(msg_id):
+                    if already_processed(m.get("id", "")):
                         continue
 
                     text = (m.get("text") or {}).get("body", "").strip()
                     if not text:
                         continue
 
-                    print(f"\n📩 Incoming:\n{text[:400]}...")
-                    data = call_gemini(text)
-                    if not data:
-                        print("❌ Extraction failed")
-                        continue
-
-                    data = apply_post_processing(data, text)
-                    data = apply_fallback_fixes(data, text)
-                    print("✅ Final Data:", json.dumps(data))
-
-                    update_google_sheet(data)
-
-                    if data.get("osop"):
-                        update_osop_sheet(data["osop"])
-
-                    if data.get("goods"):
-                        update_iwow_sheet(data["goods"])
+                    # Meta ko turant 200 chahiye → processing background me (parallel)
+                    threading.Thread(target=handle_message, args=(text, m.get("from")),
+                                     daemon=True).start()
     except Exception as e:
         print(f"❌ Webhook Error: {e}")
 
@@ -1290,11 +2020,17 @@ def webhook():
 def startup_check():
     print("========== STARTUP CHECK ==========")
     print(f"SHEET_NAME      : {SHEET_NAME}")
-    print(f"GEMINI_API_KEY  : {bool(GEMINI_API_KEY)}")
+    print(f"GEMINI_API_KEY  : {bool(GEMINI_API_KEY)}  model={GEMINI_MODEL}")
     print(f"CREDENTIALS     : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
     print(f"IWOW_GRACE_HOUR : {IWOW_GRACE_HOUR}:00 IST")
+    print(f"WA REPLY        : {SEND_REPLY and bool(WHATSAPP_TOKEN and PHONE_NUMBER_ID)}")
     print(f"IST_NOW         : {ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
-    get_sheet()
+    try:
+        s = get_sheet()
+        if s:
+            print(f"✅ Google Sheet connected: tab '{s.title}'")
+    except Exception as e:
+        print(f"⚠️ Startup sheet check failed: {e}")
     print("===================================")
 
 startup_check()
