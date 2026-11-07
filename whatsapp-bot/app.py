@@ -1,5 +1,6 @@
 import os
 import re
+import math
 import json
 import time
 import base64
@@ -37,6 +38,11 @@ SHEET_LOCK_FILE = "/tmp/sheet_update.lock"
 OSOP_LOCK_FILE = "/tmp/osop_update.lock"
 IWOW_LOCK_FILE = "/tmp/iwow_update.lock"
 IWOW_GRACE_HOUR = int(os.environ.get("IWOW_GRACE_HOUR", "2"))
+# Same entry dobara aaye (forward / Meta retry / chat me do baar paste) to is sandarbh me bhi rok lo
+IWOW_RECENT_FILE = os.environ.get("IWOW_RECENT_FILE", "/tmp/iwow_recent.json")
+IWOW_DEDUPE_MINUTES = int(os.environ.get("IWOW_DEDUPE_MINUTES", "120"))
+# IWOW me "row khaali hai" tay karne wale columns (B to-stn, E commodity, F wagons, K/L placement time/date)
+IWOW_CORE_COLS = (2, 5, 6, 11, 12)
 
 PROCESS_LOCK = threading.Lock()   # ek time pe ek hi message sheet update kare
 
@@ -488,7 +494,11 @@ def ist_now():
         return datetime.utcnow() + timedelta(hours=5, minutes=30)
 
 def parse_date_flexible(s):
-    if s is None:
+    if s is None or isinstance(s, bool):
+        return None
+    if isinstance(s, (int, float)):          # Sheets serial date (UNFORMATTED_VALUE)
+        if 20000 < s < 80000:
+            return (datetime(1899, 12, 30) + timedelta(days=int(s))).date()
         return None
     s = str(s).strip()
     if not s:
@@ -500,6 +510,7 @@ def parse_date_flexible(s):
         "%Y-%m-%d", "%Y/%m/%d",
         "%d %b %Y", "%d %B %Y", "%d %b %y", "%d %B %y",
         "%d %m %Y", "%d %m %y",
+        "%d-%b-%Y", "%d-%b-%y", "%d/%b/%Y", "%d-%B-%Y",
     )
     for fmt in formats:
         try:
@@ -525,6 +536,11 @@ def parse_time_flexible(s):
         return None
     if isinstance(s, dt_time):
         return s
+    if isinstance(s, bool):
+        return None
+    if isinstance(s, float) and 0 <= s < 1:   # Sheets time fraction (UNFORMATTED_VALUE)
+        mins = int(round(s * 1440)) % 1440
+        return dt_time(mins // 60, mins % 60)
     s = str(s).strip().upper()
     if not s:
         return None
@@ -698,6 +714,9 @@ Output: {"prs":{},"uts":{"KOWN":{"TKT":7,"PASS":9,"NET":20,"UPI":400}},"osop":[]
 
 Input: "Krht uts of 4.11.2026\nT 36\nP 58\nCash 1390\nE cas 340\nTtl 1730 only"
 Output: {"prs":{},"uts":{"KRHT":{"TKT":36,"PASS":58,"NET":1390,"UPI":340}},"osop":[],"goods":[]}
+
+=== OSOP ===
+OSOP lines give, for a station and a date, a rupee amount (and only sometimes a unit/count). Put them in "osop": station CODE, date as written (omit if not written), amount = the rupee amount. Put "unit" ONLY if the message explicitly writes a unit/count — never calculate it, the system does that.
 
 === INWARD GOODS / IWOW ===
 Extract every goods placement into "goods" array.
@@ -1286,6 +1305,16 @@ def update_google_sheet(data):
 # ==============================================
 # OSOP UPDATE
 # ==============================================
+def osop_units(amount):
+    """
+    Amount ko 100 ke units me, 50 par round-off:
+    1-150 -> 1, 151-250 -> 2, 251-350 -> 3 ... (kam se kam 1).
+    """
+    a = _clean_num(amount)
+    if a is None or a <= 0:
+        return None
+    return max(1, math.ceil((a - 50) / 100))
+
 def update_osop_sheet(entries):
     if not entries:
         return True
@@ -1359,6 +1388,20 @@ def update_osop_sheet(entries):
 
             camt, cunit = date_cols[d]
 
+            amt = _clean_num(e.get("amount"))
+
+            # same station + date + same amount pehle se likha hai to dobara nahi
+            dup = False
+            if amt is not None:
+                for r in rows:
+                    cur = _clean_num(get_current(r, camt))
+                    if cur is not None and abs(cur - amt) < 0.005:
+                        dup = True
+                        break
+            if dup:
+                print(f"⏭️ OSOP {code} {d}: duplicate (amount {amt} already hai)")
+                continue
+
             chosen_row = None
             for r in rows:
                 if is_cell_empty(get_current(r, camt)) and is_cell_empty(get_current(r, cunit)):
@@ -1376,14 +1419,13 @@ def update_osop_sheet(entries):
             row = chosen_row
             updates = []
 
-            amt = _clean_num(e.get("amount"))
             if amt is not None and amt != 0:
                 if is_cell_empty(get_current(row, camt)):
                     updates.append({"range": rowcol_to_a1(row, camt), "values": [[amt]]})
 
             unit = _clean_num(e.get("unit"))
-            if unit is None and amt is not None:
-                unit = int(amt // 100)
+            if unit is None:
+                unit = osop_units(amt)
             if unit is not None:
                 if is_cell_empty(get_current(row, cunit)):
                     updates.append({"range": rowcol_to_a1(row, cunit), "values": [[unit]]})
@@ -1402,13 +1444,37 @@ def update_osop_sheet(entries):
 def _norm_str(v):
     return str(v or "").strip().upper()
 
-def _iwow_key(to, frm, commodity, line, wagons, ptime, pdate, party):
+def _iwow_key(to, commodity, wagons, ptime, pdate):
+    """
+    Duplicate pehchaan: station + commodity + wagons + placement time + date.
+    Line / party / from / wagon type key me nahi hain (Gemini har baar alag likh sakta hai).
+    """
     w = _clean_num(wagons)
-    return (_norm_str(to), _norm_str(frm), _norm_str(commodity), _norm_line(line),
+    return (_norm_str(to), _norm_str(abbreviate_commodity(commodity)),
             int(w) if w is not None else "",
             ptime.strftime("%H:%M") if ptime else "",
-            pdate.isoformat() if pdate else "",
-            _norm_str(party))
+            pdate.isoformat() if pdate else "")
+
+def _key_str(key):
+    return "|".join(str(x) for x in key)
+
+def _load_recent():
+    try:
+        with open(IWOW_RECENT_FILE) as f:
+            d = json.load(f)
+    except Exception:
+        return {}
+    cutoff = time.time() - IWOW_DEDUPE_MINUTES * 60
+    return {k: t for k, t in d.items() if isinstance(t, (int, float)) and t >= cutoff}
+
+def _save_recent(d):
+    try:
+        tmp = IWOW_RECENT_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(d, f)
+        os.replace(tmp, IWOW_RECENT_FILE)
+    except Exception as e:
+        print(f"⚠️ recent-log save failed: {e}")
 
 def update_iwow_sheet(entries):
     if not entries:
@@ -1426,19 +1492,28 @@ def update_iwow_sheet(entries):
             return False
 
         try:
-            matrix = gs_retry(ws.get_all_values)
+            try:
+                # unformatted: date/time ka display format ya locale kuch bhi ho, compare sahi rahega
+                matrix = gs_retry(ws.get_all_values, value_render_option="UNFORMATTED_VALUE")
+            except TypeError:
+                matrix = gs_retry(ws.get_all_values)
         except Exception as e:
             print(f"❌ IWOW read error: {e}")
             return False
 
-        start_row = len(matrix) + 1
-        for r in range(4, len(matrix) + 2):
-            bval = ""
-            if r - 1 < len(matrix) and len(matrix[r - 1]) > 1:
-                bval = str(matrix[r - 1][1]).strip()
-            if not bval:
-                start_row = r
-                break
+        def cell(r, c):
+            try:
+                return matrix[r - 1][c - 1]
+            except Exception:
+                return ""
+
+        def row_is_free(r):
+            return all(is_cell_empty(cell(r, c)) for c in IWOW_CORE_COLS)
+
+        # pehli bilkul khaali row (kisi maujooda data par kabhi overwrite nahi)
+        current_row = 4
+        while current_row <= len(matrix) and not row_is_free(current_row):
+            current_row += 1
 
         now = ist_now()
         today = now.date()
@@ -1446,20 +1521,18 @@ def update_iwow_sheet(entries):
         tomorrow = today + timedelta(days=1)
         grace_cutoff = dt_time(IWOW_GRACE_HOUR, 0)
 
-        print(f"🕐 IWOW now (IST): {now.strftime('%Y-%m-%d %H:%M')} | grace_cutoff={grace_cutoff}")
+        print(f"🕐 IWOW now (IST): {now.strftime('%Y-%m-%d %H:%M')} | grace_cutoff={grace_cutoff} | first free row={current_row}")
 
-        # sheet me pehle se maujood entries ki keys
+        # sheet me pehle se maujood entries
         existing = set()
-        for r in range(3, len(matrix)):
-            row = matrix[r]
-            g = lambda i: (row[i] if len(row) > i else "")
-            if not str(g(1)).strip():
+        for r in range(4, len(matrix) + 1):
+            if is_cell_empty(cell(r, 2)):
                 continue
-            existing.add(_iwow_key(g(1), g(20), g(4), g(2), g(5),
-                                   parse_time_flexible(g(10)), parse_date_flexible(g(11)), g(22)))
-
+            existing.add(_iwow_key(cell(r, 2), cell(r, 5), cell(r, 6),
+                                   parse_time_flexible(cell(r, 11)), parse_date_flexible(cell(r, 12))))
+        recent = _load_recent()
+        pending = []
         updates = []
-        current_row = start_row
 
         for e in entries:
             if not isinstance(e, dict):
@@ -1479,7 +1552,7 @@ def update_iwow_sheet(entries):
                 print("⏭️ Missing to_stn → skip")
                 continue
 
-            # date likhi na ho to: time agle moment se aage ka ho to kal ka, warna aaj ka
+            # date likhi na ho to: time aage ka ho to kal ka, warna aaj ka
             if not pdate:
                 if ptime and datetime.combine(today, ptime) > now + timedelta(minutes=5):
                     pdate = yesterday
@@ -1517,16 +1590,20 @@ def update_iwow_sheet(entries):
                 print(f"⏭️ Rejected ({reason})")
                 continue
 
-            key = _iwow_key(to_stn, from_stn, commodity, line, wagons, ptime, pdate, party)
-            if key in existing:
-                print(f"⏭️ Duplicate (line {line})")
-                continue
-            existing.add(key)
-
             if _is_container(commodity, wtype):
                 commodity = "CONTAINER"
                 if not wtype:
                     wtype = "CONTAINER"
+
+            key = _iwow_key(to_stn, commodity, wagons, ptime, pdate)
+            ks = _key_str(key)
+            if key in existing:
+                print(f"⏭️ Duplicate — sheet me pehle se hai ({ks})")
+                continue
+            if ks in recent:
+                print(f"⏭️ Duplicate — abhi hi process ho chuka ({ks})")
+                continue
+            existing.add(key)
 
             ftime = iwow_free_time(wagons, commodity, wtype)
 
@@ -1549,6 +1626,10 @@ def update_iwow_sheet(entries):
                 arrival_time_str = arrival_dt.strftime("%H:%M")
                 arrival_date_str = arrival_dt.strftime("%d-%m-%Y")
 
+            # agli bilkul khaali row par hi likho
+            while current_row <= len(matrix) and not row_is_free(current_row):
+                current_row += 1
+
             def q(col, val):
                 if val is not None and str(val).strip() != "":
                     updates.append({"range": rowcol_to_a1(current_row, col), "values": [[val]]})
@@ -1559,6 +1640,7 @@ def update_iwow_sheet(entries):
             q(11, ptime_str); q(12, pdate_str)
             q(18, ftime); q(21, from_stn); q(23, party)
 
+            pending.append(ks)
             print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | wagons={wagons} | line={line} | {commodity} | free={ftime}")
             current_row += 1
 
@@ -1572,6 +1654,10 @@ def update_iwow_sheet(entries):
             except Exception as e:
                 print(f"❌ IWOW batch update failed: {e}")
                 return False
+            now_ts = time.time()
+            for ks in pending:
+                recent[ks] = now_ts
+            _save_recent(recent)
     return True
 
 # ==============================================
