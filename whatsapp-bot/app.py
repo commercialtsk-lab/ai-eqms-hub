@@ -27,7 +27,9 @@ SHEET_NAME = os.environ.get("GOOGLE_SHEET_NAME", "") or os.environ.get("SHEET_NA
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "") or os.environ.get("SECRET_TOKEN", "")
 WHATSAPP_TOKEN = (os.environ.get("META_TOKEN") or os.environ.get("WHATSAPP_TOKEN")
                   or os.environ.get("BOT_TOKEN") or "")
-PHONE_NUMBER_ID = (os.environ.get("PHONE_NUMBER_ID") or os.environ.get("WHATSAPP_PHONE_NUMBER_ID") or "")
+# NOTE: ye sirf fallback hai. Asli reply ke liye webhook payload ka
+# metadata.phone_number_id use hota hai (wahi sahi ID hoti hai).
+PHONE_NUMBER_ID = (os.environ.get("PHONE_NUMBER_ID") or os.environ.get("WHATSAPP_PHONE_NUMBER_ID") or "").strip()
 
 GOOGLE_CREDENTIALS_B64 = os.environ.get("GOOGLE_CREDENTIALS_B64", "")
 GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
@@ -38,13 +40,12 @@ GEMINI_THINK_DEEP = int(os.environ.get("GEMINI_THINK_DEEP", "2048"))
 GEMINI_PARALLEL = int(os.environ.get("GEMINI_PARALLEL", "4"))
 COVERAGE_MIN = float(os.environ.get("COVERAGE_MIN", "0.55"))
 SEND_REPLY = os.environ.get("SEND_REPLY", "1") != "0"
+GRAPH_VERSION = os.environ.get("GRAPH_VERSION", "v20.0")
 
 SHEET_LOCK_FILE = "/tmp/sheet_update.lock"
 OSOP_LOCK_FILE = "/tmp/osop_update.lock"
 IWOW_LOCK_FILE = "/tmp/iwow_update.lock"
 IWOW_GRACE_HOUR = int(os.environ.get("IWOW_GRACE_HOUR", "2"))
-IWOW_RECENT_FILE = os.environ.get("IWOW_RECENT_FILE", "/tmp/iwow_recent.json")
-IWOW_DEDUPE_MINUTES = int(os.environ.get("IWOW_DEDUPE_MINUTES", "120"))
 IWOW_CORE_COLS = (2, 5, 6, 11, 12)
 
 PROCESS_LOCK = threading.Lock()
@@ -155,6 +156,11 @@ UTS_COLS_NU = {
     "PF": 14, "TKT": 16, "PASS": 17, "NET": 18,
     "MR": 19, "MR AMT": 20, "UPI": 21
 }
+
+# Chhote stations (Column B, rows 36-47): inka data sirf D (TKT), E (PASS), I (NET), L (UPI) me jayega
+SMALL_STATIONS = {"CGF", "DMGN", "TNGN", "NSBG", "KOWN", "NCH", "CMA", "KXL", "BBGN", "BLMR", "NMGY", "KRHT"}
+SMALL_STATION_COLS = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12}
+SMALL_ROW_MIN, SMALL_ROW_MAX = 36, 47   # B36:B47
 
 NEGATIVE_ALLOWED_FIELDS = {"NET"}
 PRS_ONLY_FIELDS = {"C/TKT", "C/PASS", "VCH", "POS", "REF"}
@@ -447,8 +453,7 @@ def get_sheet():
 
 def get_station_map(sheet, all_values=None):
     """
-    FIXED: Stations ab row 3 se start hote hain (B3 = DBRT, B5 = NTSK etc.)
-    Pehle galat range (row 7 se) thi isliye NTSK miss ho raha tha.
+    Stations row 3 se start hote hain (B3 = DBRT, B5 = NTSK etc.)
     """
     m = {}
     if all_values is None:
@@ -468,7 +473,7 @@ def get_station_map(sheet, all_values=None):
         if code:
             m.setdefault(code, info)
 
-    # Primary: Column B, starting from row 3 (index 2) — matches your actual sheet
+    # Primary: Column B, starting from row 3 (index 2)
     for i in range(2, min(60, len(all_values))):
         add(all_values[i][1] if len(all_values[i]) > 1 else "", i + 1, "B")
 
@@ -715,6 +720,7 @@ Always output the CODE, never the full name. Fix spelling mistakes and short for
     VCH, POS : vouchers / POS-machine amount (PRS)
     PF    : platform tickets COUNT (PF / P/TKT / PLT / PLATFORM / "M"). A platform AMOUNT next to it has no column → ignore it.
     MR / MR AMT : MR count / MR amount (both captured). "MR=13AMOUNT=37960" → MR 13, MR AMT 37960.
+- SMALL STATIONS (CGF, DMGN, TNGN, NSBG, KOWN, NCH, CMA, KXL, BBGN, BLMR, NMGY, KRHT) only report TKT, PASS, NET (cash amount) and UPI (E cash). They have NO MR, so a plain "Amount"/"Cash"/"Cash amount" there is NET, never MR AMT.
 - "Jenny" / "JTBS" lines (e.g. "T/jenny 1132") are only a sub-count of tickets already included in the total → ignore them, never add them to TKT.
 - "Ttl" / "Total" / "Grand total" lines are totals → IGNORE (never put them in NET or anywhere).
 - Nil / Nill / NIL / - / blank / "nill .." → omit that key.
@@ -948,6 +954,13 @@ def apply_post_processing(data, msg, hint=None):
         return out
     data["prs"] = _fix_station_dict(data.get("prs"))
     data["uts"] = _fix_station_dict(data.get("uts"))
+    # Chhote stations me MR hota hi nahi: agar amount "MR AMT" ban gaya aur NET nahi mila to wo NET hai
+    for kind in ("prs", "uts"):
+        for st, vals in data[kind].items():
+            if st in SMALL_STATIONS and isinstance(vals, dict):
+                if "NET" not in vals and "MR AMT" in vals and "MR" not in vals:
+                    vals["NET"] = vals.pop("MR AMT")
+                    print(f"ℹ️ {st}: MR AMT → NET (chhota station)")
     new_osop = []
     for e in data.get("osop", []):
         if not isinstance(e, dict):
@@ -1263,11 +1276,15 @@ def update_google_sheet(data):
                 return ""
         updates = []
         queued = set()
-        written, same = {}, {}
+        written, same, skipped = {}, {}, {}
+        queued_vals = {}
         def queue(r, c, val):
             key = (r, c)
             if key in queued:
+                if abs(queued_vals.get(key, val) - val) > 0.005:
+                    lines.append(f"⚠️ {rowcol_to_a1(r, c)}: ek hi cell ke liye do alag value mili ({queued_vals.get(key)} / {val}) — pehli rakhi")
                 return False
+            queued_vals[key] = val
             queued.add(key)
             updates.append({"range": rowcol_to_a1(r, c), "values": [[val]]})
             return True
@@ -1280,11 +1297,17 @@ def update_google_sheet(data):
                 if not _has_any_nonzero(vals):
                     continue
                 row = info["row"]
+                small = st in SMALL_STATIONS or (info["nameCol"] == "B" and SMALL_ROW_MIN <= row <= SMALL_ROW_MAX)
                 for fld, val in (vals or {}).items():
                     v = _to_float(val)
                     if v is None or not _is_field_allowed(v, fld):
                         continue
-                    if kind == "uts" and info["nameCol"] == "C":
+                    if small:
+                        col = SMALL_STATION_COLS.get(fld)
+                        if not col:
+                            skipped.setdefault(st, []).append(fld)
+                            continue
+                    elif kind == "uts" and info["nameCol"] == "C":
                         col = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12, "PF": 8, "MR": 19, "MR AMT": 20}.get(fld)
                     else:
                         col = cols.get(fld)
@@ -1312,6 +1335,8 @@ def update_google_sheet(data):
                 reset_caches()
                 return False, [f"❌ Sheet write fail: {e}"]
         out = []
+        for st, flds in skipped.items():
+            out.append(f"ℹ️ {st}: {', '.join(dict.fromkeys(flds))} ke liye sheet me column nahi — skip kiya")
         for (kind, st), flds in written.items():
             out.append(f"✅ {st} {kind}: {', '.join(flds)}")
         for (kind, st), flds in same.items():
@@ -1459,24 +1484,6 @@ def _iwow_key(to, commodity, wagons, ptime, pdate):
 def _key_str(key):
     return "|".join(str(x) for x in key)
 
-def _load_recent():
-    try:
-        with open(IWOW_RECENT_FILE) as f:
-            d = json.load(f)
-    except Exception:
-        return {}
-    cutoff = time.time() - IWOW_DEDUPE_MINUTES * 60
-    return {k: t for k, t in d.items() if isinstance(t, (int, float)) and t >= cutoff}
-
-def _save_recent(d):
-    try:
-        tmp = IWOW_RECENT_FILE + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(d, f)
-        os.replace(tmp, IWOW_RECENT_FILE)
-    except Exception as e:
-        print(f"⚠️ recent-log save failed: {e}")
-
 def update_iwow_sheet(entries):
     lines = []
     if not entries:
@@ -1524,8 +1531,6 @@ def update_iwow_sheet(entries):
                 continue
             existing.add(_iwow_key(cell(r, 2), cell(r, 5), cell(r, 6),
                                    parse_time_flexible(cell(r, 11)), parse_date_flexible(cell(r, 12))))
-        recent = _load_recent()
-        pending = []
         updates = []
         for e in entries:
             if not isinstance(e, dict):
@@ -1586,10 +1591,6 @@ def update_iwow_sheet(entries):
                 print(f"⏭️ Duplicate — sheet me pehle se hai ({ks})")
                 lines.append(f"↩️ {label}: sheet me pehle se hai (duplicate nahi likha)")
                 continue
-            if ks in recent:
-                print(f"⏭️ Duplicate — abhi hi process ho chuka ({ks})")
-                lines.append(f"↩️ {label}: abhi hi process ho chuka (duplicate nahi likha)")
-                continue
             existing.add(key)
             ftime = iwow_free_time(wagons, commodity, wtype)
             if not wtype:
@@ -1618,7 +1619,6 @@ def update_iwow_sheet(entries):
             q(9, arrival_time_str); q(10, arrival_date_str)
             q(11, ptime_str); q(12, pdate_str)
             q(18, ftime); q(21, from_stn); q(23, party)
-            pending.append(ks)
             lines.append(f"✅ {label} line {line or '-'} → row {current_row} (free {ftime})")
             print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | wagons={wagons} | line={line} | {commodity} | free={ftime}")
             current_row += 1
@@ -1633,10 +1633,6 @@ def update_iwow_sheet(entries):
                 print(f"❌ IWOW batch update failed: {e}")
                 reset_caches()
                 return False, [l for l in lines if not l.startswith("✅")] + [f"❌ IWOW write fail: {e}"]
-            now_ts = time.time()
-            for ks in pending:
-                recent[ks] = now_ts
-            _save_recent(recent)
     return True, lines
 
 # ==============================================
@@ -1804,24 +1800,56 @@ def process_incoming(text):
 # ==============================================
 # WHATSAPP + WEBHOOK
 # ==============================================
-def send_whatsapp(to, text):
-    if not (SEND_REPLY and WHATSAPP_TOKEN and PHONE_NUMBER_ID and to):
-        return False
-    try:
-        url = f"https://graph.facebook.com/v20.0/{PHONE_NUMBER_ID}/messages"
-        headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
-        payload = {"messaging_product": "whatsapp", "to": to, "type": "text",
-                   "text": {"body": str(text)[:3800]}}
-        r = requests.post(url, headers=headers, json=payload, timeout=30)
-        if r.status_code >= 300:
-            print(f"❌ WhatsApp reply error {r.status_code}: {r.text[:200]}")
-            return False
-        return True
-    except Exception as e:
-        print(f"❌ WhatsApp reply exception: {e}")
-        return False
+def _chunk_text(text, limit=3800):
+    text = str(text or "")
+    if len(text) <= limit:
+        return [text]
+    chunks, cur = [], ""
+    for ln in text.split("\n"):
+        if len(cur) + len(ln) + 1 > limit and cur:
+            chunks.append(cur)
+            cur = ""
+        cur += (ln[:limit] + "\n")
+    if cur.strip():
+        chunks.append(cur.rstrip("\n"))
+    return chunks
 
-def handle_message(text, reply_to=None):
+def send_whatsapp(to, text, phone_id=None):
+    """
+    FIX: reply hamesha usi phone_number_id se bhejo jis par message aaya tha
+    (webhook payload: value.metadata.phone_number_id). Env ki PHONE_NUMBER_ID
+    sirf fallback hai. Galat ID (jaise WABA ID) dene par Meta error 400
+    "Object with ID ... does not exist" deta hai.
+    """
+    pid = str(phone_id or PHONE_NUMBER_ID or "").strip()
+    if not (SEND_REPLY and WHATSAPP_TOKEN and pid and to):
+        print(f"ℹ️ Reply skip: SEND_REPLY={SEND_REPLY} token={bool(WHATSAPP_TOKEN)} phone_id={pid or 'missing'} to={bool(to)}")
+        return False
+    url = f"https://graph.facebook.com/{GRAPH_VERSION}/{pid}/messages"
+    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
+    ok_all = True
+    for chunk in _chunk_text(text):
+        payload = {"messaging_product": "whatsapp", "to": to, "type": "text",
+                   "text": {"body": chunk}}
+        try:
+            r = requests.post(url, headers=headers, json=payload, timeout=30)
+            if r.status_code >= 300:
+                ok_all = False
+                print(f"❌ WhatsApp reply error {r.status_code} (phone_id={pid}): {r.text[:300]}")
+                if r.status_code == 400 and "does not exist" in r.text:
+                    print("💡 Hint: PHONE_NUMBER_ID galat hai ya token us number ka access nahi rakhta. "
+                          "Meta → WhatsApp → API Setup me 'Phone number ID' copy karein (WABA ID nahi), "
+                          "aur token me whatsapp_business_messaging permission honi chahiye.")
+                if r.status_code in (401, 403):
+                    print("💡 Hint: WHATSAPP_TOKEN expire/invalid hai — permanent System User token use karein.")
+                break
+        except Exception as e:
+            ok_all = False
+            print(f"❌ WhatsApp reply exception: {e}")
+            break
+    return ok_all
+
+def handle_message(text, reply_to=None, phone_id=None):
     try:
         summary = process_incoming(text)
     except Exception as e:
@@ -1829,7 +1857,7 @@ def handle_message(text, reply_to=None):
         summary = f"❌ Processing me error aaya: {e}"
     print("📝 Summary:\n" + summary)
     if reply_to:
-        send_whatsapp(reply_to, summary)
+        send_whatsapp(reply_to, summary, phone_id)
     return summary
 
 @app.route("/", methods=["GET"])
@@ -1856,7 +1884,12 @@ def webhook():
     try:
         for entry in payload.get("entry", []):
             for change in entry.get("changes", []):
-                for m in change.get("value", {}).get("messages", []):
+                value = change.get("value", {}) or {}
+                # Sahi phone_number_id yahin se milta hai
+                incoming_pid = (value.get("metadata") or {}).get("phone_number_id") or ""
+                if incoming_pid and PHONE_NUMBER_ID and incoming_pid != PHONE_NUMBER_ID:
+                    print(f"⚠️ Env PHONE_NUMBER_ID ({PHONE_NUMBER_ID}) webhook ID ({incoming_pid}) se alag hai — webhook wali use hogi")
+                for m in value.get("messages", []):
                     if m.get("type") != "text":
                         continue
                     if already_processed(m.get("id", "")):
@@ -1864,7 +1897,8 @@ def webhook():
                     text = (m.get("text") or {}).get("body", "").strip()
                     if not text:
                         continue
-                    threading.Thread(target=handle_message, args=(text, m.get("from")),
+                    threading.Thread(target=handle_message,
+                                     args=(text, m.get("from"), incoming_pid or None),
                                      daemon=True).start()
     except Exception as e:
         print(f"❌ Webhook Error: {e}")
@@ -1876,13 +1910,12 @@ def startup_check():
     print(f"GEMINI_API_KEY  : {bool(GEMINI_API_KEY)}  model={GEMINI_MODEL}")
     print(f"CREDENTIALS     : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
     print(f"IWOW_GRACE_HOUR : {IWOW_GRACE_HOUR}:00 IST")
-    print(f"WA REPLY        : {SEND_REPLY and bool(WHATSAPP_TOKEN and PHONE_NUMBER_ID)}")
+    print(f"WA REPLY        : {SEND_REPLY and bool(WHATSAPP_TOKEN)} (phone_id env={'set' if PHONE_NUMBER_ID else 'not set — webhook se auto lega'})")
     print(f"IST_NOW         : {ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
     try:
         s = get_sheet()
         if s:
             print(f"✅ Google Sheet connected: tab '{s.title}'")
-            # Quick station map test
             smap = get_station_map(s)
             print(f"✅ NTSK in station map: {'NTSK' in smap}")
             if "NTSK" in smap:
