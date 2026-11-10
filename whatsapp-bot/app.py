@@ -158,16 +158,18 @@ UTS_COLS_NU = {
 }
 
 # ---- Sheet ke special blocks (UTS&PRS tab) ----
-# GROUP A: station naam B36:B47 me, data sirf D (TKT), E (PASS), I (NET), L (UPI) me
+# GROUP A: station naam C36:C47 me, data sirf D (TKT), E (PASS), I (NET), L (UPI) me
 GROUP_A_STATIONS = ["CGF", "DMGN", "TNGN", "NSBG", "KOWN", "NCH", "CMA", "KXL", "BBGN", "BLMR", "NMGY", "KRHT"]
 GROUP_A_COLS = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12}
-GROUP_A_NAME_COL, GROUP_A_ROWS, GROUP_A_LABEL = 2, (36, 47), "B36:B47"
+GROUP_A_NAME_COLS, GROUP_A_ROWS, GROUP_A_LABEL = (3, 2), (36, 47), "C36:C47"   # naam Column C me (B bhi chalega)
 
-# GROUP B: station naam N31:N47 me, data P31:U47 me (P=TKT, Q=PASS, R=NET, S=MR, T=MR AMT, U=UPI)
+# GROUP B: station naam M31:M47 me; UTS data N (PF) aur P:U (P=TKT, Q=PASS, R=NET, S=MR, T=MR AMT, U=UPI) me, usi row me
 GROUP_B_STATIONS = ["LBI", "BGND", "LMY", "SRPN", "SMCP", "TQM", "GOM", "BDLN", "CKW", "LHL",
                     "DKM", "PNT", "TII", "LXA", "SFR", "SLX", "NMT"]
-GROUP_B_COLS = {"TKT": 16, "PASS": 17, "NET": 18, "MR": 19, "MR AMT": 20, "UPI": 21}
-GROUP_B_NAME_COL, GROUP_B_ROWS, GROUP_B_LABEL = 14, (31, 47), "N31:N47"
+GROUP_B_COLS = {"PF": 14, "TKT": 16, "PASS": 17, "NET": 18, "MR": 19, "MR AMT": 20, "UPI": 21}
+GROUP_B_NAME_COLS, GROUP_B_ROWS, GROUP_B_LABEL = (13,), (31, 47), "M31:M47"
+# Column C ke baaki stations (ROING, TEZU...) ka mapping
+C_COL_UTS_MAP = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12, "PF": 8, "MR": 19, "MR AMT": 20}
 
 SMALL_STATIONS = set(GROUP_A_STATIONS)   # in stations me MR hota hi nahi
 GROUP_A_SET = set(GROUP_A_STATIONS)
@@ -487,6 +489,9 @@ def get_station_map(sheet, all_values=None):
     # Normal stations: Column B, row 3 se. (Group A / Group B ke stations alag se, apne fixed block me dhundhe jaate hain)
     for i in range(2, min(60, len(all_values))):
         add(all_values[i][1] if len(all_values[i]) > 1 else "", i + 1, "B")
+    # Column C ke stations (ROING, TEZU jaise) rows 30-55
+    for i in range(29, min(55, len(all_values))):
+        add(all_values[i][2] if len(all_values[i]) > 2 else "", i + 1, "C")
 
     print(f"✅ Station map ready: {len(m)} keys → NTSK present: {'NTSK' in m}")
     return m
@@ -1334,14 +1339,15 @@ def _fmt_num(v):
     n = _clean_num(v)
     return str(n) if n is not None else str(v)
 
-def _find_group_row(matrix, code, name_col, r1, r2):
-    """Station ka row sirf us block ke andar dhundho (jaise N31:N47)."""
+def _find_group_row(matrix, code, name_cols, r1, r2):
+    """Station ka row sirf us block ke andar dhundho (jaise M31:M47)."""
     for r in range(r1, min(r2, len(matrix)) + 1):
         row = matrix[r - 1]
-        if len(row) >= name_col:
-            val = row[name_col - 1]
-            if str(val).strip() and resolve_station(val, quiet=True) == code:
-                return r
+        for name_col in name_cols:
+            if len(row) >= name_col:
+                val = row[name_col - 1]
+                if str(val).strip() and resolve_station(val, quiet=True) == code:
+                    return r
     return None
 
 def update_google_sheet(data):
@@ -1379,16 +1385,18 @@ def update_google_sheet(data):
         for kind, cols in (("prs", PRS_COLS), ("uts", UTS_COLS_NU)):
             for st, vals in data.get(kind, {}).items():
                 group_cols = None
+                name_col = None
                 if st in GROUP_A_SET:
-                    row = _find_group_row(matrix, st, GROUP_A_NAME_COL, *GROUP_A_ROWS)
+                    row = _find_group_row(matrix, st, GROUP_A_NAME_COLS, *GROUP_A_ROWS)
                     group_cols, where = GROUP_A_COLS, GROUP_A_LABEL
-                elif st in GROUP_B_SET:
-                    row = _find_group_row(matrix, st, GROUP_B_NAME_COL, *GROUP_B_ROWS)
+                elif st in GROUP_B_SET and kind == "uts":
+                    row = _find_group_row(matrix, st, GROUP_B_NAME_COLS, *GROUP_B_ROWS)
                     group_cols, where = GROUP_B_COLS, GROUP_B_LABEL
                 else:
                     info = smap.get(st)
                     row = info["row"] if info else None
-                    where = "B column"
+                    name_col = info["nameCol"] if info else None
+                    where = "B/C column"
                 if not row:
                     lines.append(f"❌ {kind.upper()} {st}: sheet me {where} me station nahi mila")
                     continue
@@ -1403,6 +1411,8 @@ def update_google_sheet(data):
                         if not col:
                             skipped.setdefault(st, []).append(fld)
                             continue
+                    elif kind == "uts" and name_col == "C":
+                        col = C_COL_UTS_MAP.get(fld)
                     else:
                         col = cols.get(fld)
                     if not col:
