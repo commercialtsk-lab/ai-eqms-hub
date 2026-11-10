@@ -35,8 +35,8 @@ GOOGLE_CREDENTIALS_B64 = os.environ.get("GOOGLE_CREDENTIALS_B64", "")
 GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-GEMINI_THINK_FAST = int(os.environ.get("GEMINI_THINK_FAST", "0"))
-GEMINI_THINK_DEEP = int(os.environ.get("GEMINI_THINK_DEEP", "2048"))
+GEMINI_THINK_FAST = int(os.environ.get("GEMINI_THINK_FAST", "512"))
+GEMINI_THINK_DEEP = int(os.environ.get("GEMINI_THINK_DEEP", "4096"))
 GEMINI_PARALLEL = int(os.environ.get("GEMINI_PARALLEL", "4"))
 COVERAGE_MIN = float(os.environ.get("COVERAGE_MIN", "0.55"))
 SEND_REPLY = os.environ.get("SEND_REPLY", "1") != "0"
@@ -613,6 +613,28 @@ def _find_stations_in_text(msg):
             up = up.replace(a, " ")
     return found
 
+_LEAD_PREFIX_RE = re.compile(
+    r'^(?:(?:EARNINGS?|REVENUE|REPORT|DATA)\s+(?:OF\s+)?)?(?:(?:UTS|PRS)\s+)?(?:OF\s+)?')
+
+def _leading_station(line):
+    """Line station se shuru hoti ho (jaise 'Gom n/p 442 ...', 'UTS-BDLN', 'Earnings Of NTSK') to uska code."""
+    up = re.sub(r'[^A-Z0-9]+', ' ', str(line or "").upper()).strip()
+    up = _LEAD_PREFIX_RE.sub('', up).strip()
+    if not up:
+        return None
+    for alias, code in _ALIAS_LIST:
+        if up == alias or up.startswith(alias + " "):
+            return code
+    return None
+
+def _leading_stations(body):
+    out = set()
+    for ln in str(body or "").splitlines():
+        c = _leading_station(ln)
+        if c:
+            out.add(c)
+    return out
+
 def _norm_field(k):
     k = re.sub(r'\s+', ' ', str(k).upper().strip())
     return FIELD_ALIASES.get(k, k)
@@ -666,6 +688,9 @@ def split_chat_messages(text):
     return blocks
 
 def guess_station_hint(body, sender=""):
+    # Ek message me 2+ station ho to koi ek hint galat data de sakta hai → hint nahi
+    if len(_leading_stations(body)) > 1:
+        return None
     for pat in [
         r'(?:EARNINGS?|REVENUE|REPORT|DATA)\s+(?:OF\s+)?([A-Z]{2,6})\b',
         r'\b(?:PRS|UTS)\s*/\s*([A-Z]{2,6})\b',
@@ -722,10 +747,13 @@ Always output the CODE, never the full name. Fix spelling mistakes and short for
     MR / MR AMT : MR count / MR amount (both captured). "MR=13AMOUNT=37960" → MR 13, MR AMT 37960.
 - SMALL STATIONS (CGF, DMGN, TNGN, NSBG, KOWN, NCH, CMA, KXL, BBGN, BLMR, NMGY, KRHT) only report TKT, PASS, NET (cash amount) and UPI (E cash). They have NO MR, so a plain "Amount"/"Cash"/"Cash amount" there is NET, never MR AMT.
 - "Jenny" / "JTBS" lines (e.g. "T/jenny 1132") are only a sub-count of tickets already included in the total → ignore them, never add them to TKT.
-- "Ttl" / "Total" / "Grand total" lines are totals → IGNORE (never put them in NET or anywhere).
+- STATION POSITION: a station may be written as a heading ("UTS-BDLN", "Earnings Of NTSK") OR inline at the start of a data line ("Gom n/p 442 tkt 355 Ecash 3255 amt 26530"). Numbers belong to the station named on their own line, or to the most recent station heading above them, until a different station appears. One message may hold many stations — never move one station's numbers to another, and never use the STATION HINT when the text names stations itself. A lone "Date-09/11/26" line between stations is just a date.
+- More label spellings: N/P, NP, No of Pass → PASS. Amt / Amount / Cash amt / a bare "Amount" (not directly after MR or PF) → NET. Ecash → UPI.
+- TTL / Total has two meanings, decide by the value. (a) A rupee grand total equal to Cash + E-cash (e.g. "Ttl 1730" after Cash 1390 + Ecash 340) → IGNORE, never put it anywhere. (b) A COUNT sitting next to Pass (smaller than or equal to the passenger number, and no other tickets figure is given) → that is TKT. Example: "Pass-136 / TTL-96" → PASS 136, TKT 96.
+- Think like a careful accountant: passengers are normally >= tickets; one number goes to one field only; a nil/Nill/- value is omitted; an unknown label with nil (like "N/I-nil") is simply skipped; if a label is unknown but its number clearly fits one of the fields by meaning and position, use it.
 - Nil / Nill / NIL / - / blank / "nill .." → omit that key.
 - Date lines like "DATE. 04/11/2026" or "Date:06/11/26" → ignore (not a field).
-- Numbers must be plain numbers (remove commas, Rs, /-, spaces).
+- Numbers must be plain numbers (remove commas, Rs, /-, spaces). A hyphen/dash between label and number ("Pass-136", "Amount -5970") is only a separator, not a minus sign.
 - Missing → omit key. If a label is unusual or misspelt, decide by meaning and position, like a human accountant would. A number must go to exactly one field.
 
 PRS/UTS EXAMPLES:
@@ -737,6 +765,9 @@ Output: {"prs":{},"uts":{"KOWN":{"TKT":7,"PASS":9,"NET":20,"UPI":400}},"osop":[]
 
 Input: "Krht uts of 4.11.2026\nT 36\nP 58\nCash 1390\nE cas 340\nTtl 1730 only"
 Output: {"prs":{},"uts":{"KRHT":{"TKT":36,"PASS":58,"NET":1390,"UPI":340}},"osop":[],"goods":[]}
+
+Input: "Gom n/p 442 tkt 355 Ecash 3255 amt 26530\nDate-09/11/26\nUTS-BDLN \nPass-136\nTTL-96\nAmount -5970\nN/I-nil\nEcash-1595"
+Output: {"prs":{},"uts":{"GOM":{"TKT":355,"PASS":442,"NET":26530,"UPI":3255},"BDLN":{"TKT":96,"PASS":136,"NET":5970,"UPI":1595}},"osop":[],"goods":[]}
 
 Input: "Earnings Of NTSK \nDate:06/11/26\nPRS/NTSK \nT/TKT =81\nT/Pass =78\nC/TKT =04\nC/Pass =09\nRFD =6020\nNetcash =31580\nDigi CASH =56950\nDigi RFD =Nil\nVch=Nil\n\nUTS/NTSK \nT/jenny1132\nT/TKT =1429\nT/Pass =1651\nP/TKT =272AOUNT =2720\nMR=13AMOUNT=37960\nE/CASH =52145\nJ/AMOUNT =338765 "
 Output: {"prs":{"NTSK":{"TKT":81,"PASS":78,"C/TKT":4,"C/PASS":9,"REF":6020,"NET":31580,"UPI":56950}},"uts":{"NTSK":{"TKT":1429,"PASS":1651,"PF":272,"MR":13,"MR AMT":37960,"UPI":52145,"NET":338765}},"osop":[],"goods":[]}
@@ -1045,50 +1076,79 @@ _FIELD_PATTERNS = [
     ("MR AMT", r'^MR\s*(AMT|AMOUNT)$'),
     ("MR",     r'^MR$'),
     ("UPI",    r'^(E\s*/?\s*CAS\w*|ECAS\w*|DIGI(TAL)?\s*CASH|UPI.*|QR.*|DIGITAL.*|PAYTM|PHONEPE)$'),
-    ("NET",    r'^(NET\s*CASH|NETCASH|NET|CASH|NET\s*AMOUNT|J\s*/?\s*(AMOUNT|AMT))$'),
+    ("NET",    r'^(NET\s*CASH|NETCASH|NET|CASH|(NET|CASH)\s*(AMT|AMOUNT)|J\s*/?\s*(AMOUNT|AMT))$'),
     ("PF",     r'^(PF|PLATFORM|PLT|P\s*/?\s*TKT|PF\s*/?\s*TKT)$'),
-    ("PASS",   r'^(T\s*/?\s*(PASS|PSG|PSGR)\w*|PASS\w*|PSGR?|P|J\s*/?\s*PASS)$'),
-    ("TKT",    r'^(T\s*/?\s*(TKT|TCKT|TICKET)S?|TKTS?|TCKTS?|TICKETS?|T|J\s*/?\s*TKT)$'),
+    ("PASS",   r'^(T\s*/?\s*(PASS|PSG|PSGR)\w*|(TOTAL|TTL)\s*(PASS|PSG|PSGR)\w*|PASS\w*|PSGR?|P|J\s*/?\s*PASS|N\s*/\s*P|NP|NO\s*OF\s*(PASS|PSG)\w*)$'),
+    ("TTL",    r'^(TTL|TOTAL|TOT|GRAND\s*TOTAL|G\s*TOTAL|(TTL|TOTAL)\s*(AMT|AMOUNT|CASH))$'),
+    ("TKT",    r'^(T\s*/?\s*(TKT|TCKT|TICKET)S?|(TOTAL|TTL)\s*(TKT|TCKT|TICKET)S?|TKTS?|TCKTS?|TICKETS?|T|J\s*/?\s*TKT)$'),
 ]
 
 _KV_PAIR_RE = re.compile(r'([A-Za-z][A-Za-z/ .&]*?)\s*[=:\-]*\s*(-?\d[\d,]*(?:\.\d+)?)')
+_AMT_WORDS = {"AMT", "AMOUNT", "AOUNT", "AMONT", "AMNT", "AMUNT", "AMMOUNT"}
+_PLATFORM_WORDS = {"PF", "PLT", "PLATFORM", "P/TKT", "PF/TKT"}
 
 def _clean_label(label):
     lab = re.sub(r'[^A-Z/ ]', '', str(label).upper())
     return re.sub(r'\s+', ' ', lab).strip()
 
+def _strip_prefix(lab):
+    """Label ke aage station / UTS / PRS / DATE likha ho (jaise 'GOM N/P') to wo hata do."""
+    toks = lab.split()
+    for i in range(1, len(toks)):
+        pre = " ".join(toks[:i])
+        if pre in ("UTS", "PRS", "DATE") or resolve_station(pre, quiet=True):
+            return " ".join(toks[i:])
+    return lab
+
 def _label_to_field(label):
     lab = _clean_label(label)
-    for fld, pat in _FIELD_PATTERNS:
-        if re.match(pat, lab):
-            return fld
+    for cand in (lab, _strip_prefix(lab)):
+        for fld, pat in _FIELD_PATTERNS:
+            if re.match(pat, cand):
+                return fld
     return None
 
-def _is_amount_word(label):
-    return bool(re.fullmatch(r'AM?O?U?N?T', _clean_label(label)))
+def _amount_role(label, prev):
+    """Akela 'amt/amount' label: MR ke baad → MR AMT, platform ke baad → ignore, warna NET."""
+    toks = _strip_prefix(_clean_label(label)).split()
+    if not toks or toks[-1] not in _AMT_WORDS:
+        return None
+    head = toks[:-1]
+    if any(t in _PLATFORM_WORDS or t.startswith("PLAT") for t in head):
+        return "SKIP"
+    if "MR" in head or (not head and prev == "MR"):
+        return "MR AMT"
+    if not head and prev == "PF":
+        return "SKIP"
+    if not head or set(head) <= {"CASH", "NET"}:
+        return "NET"
+    return "SKIP"
 
-def _line_fields(line):
+def _line_fields(line, prev_in=None):
     out = []
-    prev = None
+    prev = prev_in
     for m in _KV_PAIR_RE.finditer(line):
         label, raw = m.group(1), m.group(2)
         num = _to_float(raw)
         if num is None:
             continue
-        if _is_amount_word(label):
-            if prev == "MR":
-                out.append(("MR AMT", num))
-            prev = None
-            continue
         fld = _label_to_field(label)
         if fld:
             out.append((fld, num))
-        prev = fld
-    return out
+            prev = fld
+            continue
+        role = _amount_role(label, prev)
+        if role in ("MR AMT", "NET"):
+            out.append((role, num))
+            prev = role
+        else:
+            prev = None
+    return out, prev
 
 def _parse_kv_fallback(body, hint=None):
     cur = hint
     section = None
+    prev_line = None
     res = {"prs": {}, "uts": {}}
     for line in str(body or "").splitlines():
         L = line.strip()
@@ -1096,16 +1156,22 @@ def _parse_kv_fallback(body, hint=None):
             continue
         sec_m = re.search(r'\b(UTS|PRS)\b', L, re.IGNORECASE)
         stns = _find_stations_in_text(L)
-        fields = _line_fields(L)
+        lead = _leading_station(L)
+        fields, prev_line = _line_fields(L, prev_line)
         if sec_m:
             section = sec_m.group(1).lower()
-        if len(stns) == 1 and not fields:
+        if lead:
+            new = lead
+        elif len(stns) == 1 and not fields:
             new = next(iter(stns))
+        elif len(stns) == 1 and cur is None:
+            new = next(iter(stns))
+        else:
+            new = None
+        if new:
             if new != cur and not sec_m:
                 section = None
             cur = new
-        if fields and cur is None and len(stns) == 1:
-            cur = next(iter(stns))
         if not fields or not cur:
             continue
         for fld, num in fields:
@@ -1118,6 +1184,13 @@ def _parse_kv_fallback(body, hint=None):
     out = {"prs": {}, "uts": {}, "osop": [], "goods": []}
     for kind in ("prs", "uts"):
         for st, f in res[kind].items():
+            f = dict(f)
+            ttl = f.pop("TTL", None)
+            # TTL: rupee total ho to ignore; Pass ke bagal ki ginti ho aur TKT na mile to wahi TKT
+            if ttl is not None and "TKT" not in f and "PASS" in f:
+                rupee = f.get("NET", 0) + f.get("UPI", 0)
+                if abs(ttl - rupee) > 0.5 and ttl <= f["PASS"]:
+                    f["TKT"] = ttl
             if f:
                 out[kind][st] = f
     if not out["prs"] and not out["uts"]:
@@ -1706,6 +1779,20 @@ def _field_count(d):
     n += len(d.get("goods") or [])
     return n
 
+def missing_stations(d, body):
+    """Message me jo station line ke shuru me likhe hain par data me nahi aaye."""
+    have = set((d.get("prs") or {}).keys()) | set((d.get("uts") or {}).keys())
+    for g in d.get("goods") or []:
+        have.add(str(g.get("from_stn") or "").upper())
+        have.add(str(g.get("to_stn") or "").upper())
+    for o in d.get("osop") or []:
+        have.add(str(o.get("station") or "").upper())
+    return sorted(_leading_stations(body) - have)
+
+def _score(d, body):
+    cov = coverage(d, body) if _has_content(d) else 0.0
+    return (-len(missing_stations(d, body)), cov, _field_count(d)), cov
+
 def extract_block(body, sender="", ts=""):
     print(f"\n📩 Block | sender='{sender}' | ts='{ts}'\n{body[:400]}")
     body = normalize_message(body)
@@ -1715,29 +1802,31 @@ def extract_block(body, sender="", ts=""):
 
     raw1, err1 = call_gemini(body, sender, ts, hint, GEMINI_THINK_FAST)
     best = _prepare(raw1, body, hint) if raw1 else _empty_data()
-    best_cov = coverage(best, body) if _has_content(best) else 0.0
+    best_score, best_cov = _score(best, body)
     source = "gemini"
     if err1:
         notes.append(f"Gemini: {err1}")
 
     looks = _looks_like_data(body)
-    if looks and best_cov < COVERAGE_MIN:
-        print(f"🔁 Coverage {best_cov:.2f} kam — deep thinking se dobara")
+    if looks and (best_cov < COVERAGE_MIN or best_score[0] < 0):
+        print(f"🔁 Coverage {best_cov:.2f} / missing stations {-best_score[0]} — deep thinking se dobara")
         raw2, err2 = call_gemini(body, sender, ts, hint, GEMINI_THINK_DEEP)
         if raw2:
             d2 = _prepare(raw2, body, hint)
-            c2 = coverage(d2, body) if _has_content(d2) else 0.0
-            if c2 > best_cov or (c2 == best_cov and _field_count(d2) > _field_count(best)):
-                best, best_cov, source = d2, c2, "gemini-deep"
+            s2, c2 = _score(d2, body)
+            if s2 > best_score:
+                best, best_score, best_cov, source = d2, s2, c2, "gemini-deep"
         elif err2 and not err1:
             notes.append(f"Gemini: {err2}")
 
     fb = _parse_kv_fallback(body, hint)
     if fb:
         d3 = _prepare(fb, body, hint)
-        c3 = coverage(d3, body) if _has_content(d3) else 0.0
-        if c3 > best_cov or (c3 >= best_cov - 0.05 and _field_count(d3) > _field_count(best)):
-            best, best_cov, source = d3, c3, "regex"
+        s3, c3 = _score(d3, body)
+        prefer = (s3[0] > best_score[0]) or (
+            s3[0] == best_score[0] and (c3 > best_cov or (c3 >= best_cov - 0.05 and _field_count(d3) > _field_count(best))))
+        if prefer:
+            best, best_score, best_cov, source = d3, s3, c3, "regex"
             notes.append("Regex fallback used / preferred")
         else:
             for kind in ("prs", "uts"):
@@ -1751,6 +1840,9 @@ def extract_block(body, sender="", ts=""):
 
     if not _has_content(best):
         best = _prepare(None, body, hint)
+    miss = missing_stations(best, body)
+    if miss and looks:
+        notes.append(f"{', '.join(miss)}: message me station mila par uska data samajh nahi aaya — message check karein")
     print(f"✅ Final ({source}, coverage {best_cov:.2f}, fields {_field_count(best)}):", json.dumps(best, default=str))
     return best, notes
 
