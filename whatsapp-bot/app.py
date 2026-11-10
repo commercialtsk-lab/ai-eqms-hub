@@ -157,10 +157,21 @@ UTS_COLS_NU = {
     "MR": 19, "MR AMT": 20, "UPI": 21
 }
 
-# Chhote stations (Column B, rows 36-47): inka data sirf D (TKT), E (PASS), I (NET), L (UPI) me jayega
-SMALL_STATIONS = {"CGF", "DMGN", "TNGN", "NSBG", "KOWN", "NCH", "CMA", "KXL", "BBGN", "BLMR", "NMGY", "KRHT"}
-SMALL_STATION_COLS = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12}
-SMALL_ROW_MIN, SMALL_ROW_MAX = 36, 47   # B36:B47
+# ---- Sheet ke special blocks (UTS&PRS tab) ----
+# GROUP A: station naam B36:B47 me, data sirf D (TKT), E (PASS), I (NET), L (UPI) me
+GROUP_A_STATIONS = ["CGF", "DMGN", "TNGN", "NSBG", "KOWN", "NCH", "CMA", "KXL", "BBGN", "BLMR", "NMGY", "KRHT"]
+GROUP_A_COLS = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12}
+GROUP_A_NAME_COL, GROUP_A_ROWS, GROUP_A_LABEL = 2, (36, 47), "B36:B47"
+
+# GROUP B: station naam N31:N47 me, data P31:U47 me (P=TKT, Q=PASS, R=NET, S=MR, T=MR AMT, U=UPI)
+GROUP_B_STATIONS = ["LBI", "BGND", "LMY", "SRPN", "SMCP", "TQM", "GOM", "BDLN", "CKW", "LHL",
+                    "DKM", "PNT", "TII", "LXA", "SFR", "SLX", "NMT"]
+GROUP_B_COLS = {"TKT": 16, "PASS": 17, "NET": 18, "MR": 19, "MR AMT": 20, "UPI": 21}
+GROUP_B_NAME_COL, GROUP_B_ROWS, GROUP_B_LABEL = 14, (31, 47), "N31:N47"
+
+SMALL_STATIONS = set(GROUP_A_STATIONS)   # in stations me MR hota hi nahi
+GROUP_A_SET = set(GROUP_A_STATIONS)
+GROUP_B_SET = set(GROUP_B_STATIONS)
 
 NEGATIVE_ALLOWED_FIELDS = {"NET"}
 PRS_ONLY_FIELDS = {"C/TKT", "C/PASS", "VCH", "POS", "REF"}
@@ -473,15 +484,9 @@ def get_station_map(sheet, all_values=None):
         if code:
             m.setdefault(code, info)
 
-    # Primary: Column B, starting from row 3 (index 2)
+    # Normal stations: Column B, row 3 se. (Group A / Group B ke stations alag se, apne fixed block me dhundhe jaate hain)
     for i in range(2, min(60, len(all_values))):
         add(all_values[i][1] if len(all_values[i]) > 1 else "", i + 1, "B")
-
-    # Fallback ranges (older layouts / extra stations)
-    for i in range(30, min(55, len(all_values))):
-        add(all_values[i][12] if len(all_values[i]) > 12 else "", i + 1, "M")
-    for i in range(30, min(55, len(all_values))):
-        add(all_values[i][2] if len(all_values[i]) > 2 else "", i + 1, "C")
 
     print(f"✅ Station map ready: {len(m)} keys → NTSK present: {'NTSK' in m}")
     return m
@@ -745,7 +750,7 @@ Always output the CODE, never the full name. Fix spelling mistakes and short for
     VCH, POS : vouchers / POS-machine amount (PRS)
     PF    : platform tickets COUNT (PF / P/TKT / PLT / PLATFORM / "M"). A platform AMOUNT next to it has no column → ignore it.
     MR / MR AMT : MR count / MR amount (both captured). "MR=13AMOUNT=37960" → MR 13, MR AMT 37960.
-- SMALL STATIONS (CGF, DMGN, TNGN, NSBG, KOWN, NCH, CMA, KXL, BBGN, BLMR, NMGY, KRHT) only report TKT, PASS, NET (cash amount) and UPI (E cash). They have NO MR, so a plain "Amount"/"Cash"/"Cash amount" there is NET, never MR AMT.
+- SMALL STATIONS (CGF, DMGN, TNGN, NSBG, KOWN, NCH, CMA, KXL, BBGN, BLMR, NMGY, KRHT) only report TKT, PASS, NET (cash amount) and UPI (E cash). They have NO MR, so a plain "Amount"/"Cash"/"Cash amount" there is NET, never MR AMT. Other small stations (LBI, BGND, LMY, SRPN, SMCP, TQM, GOM, BDLN, CKW, LHL, DKM, PNT, TII, LXA, SFR, SLX, NMT) report TKT, PASS, NET, UPI and only sometimes MR / MR AMT (MR AMT only when written next to MR).
 - "Jenny" / "JTBS" lines (e.g. "T/jenny 1132") are only a sub-count of tickets already included in the total → ignore them, never add them to TKT.
 - STATION POSITION: a station may be written as a heading ("UTS-BDLN", "Earnings Of NTSK") OR inline at the start of a data line ("Gom n/p 442 tkt 355 Ecash 3255 amt 26530"). Numbers belong to the station named on their own line, or to the most recent station heading above them, until a different station appears. One message may hold many stations — never move one station's numbers to another, and never use the STATION HINT when the text names stations itself. A lone "Date-09/11/26" line between stations is just a date.
 - More label spellings: N/P, NP, No of Pass → PASS. Amt / Amount / Cash amt / a bare "Amount" (not directly after MR or PF) → NET. Ecash → UPI.
@@ -1329,6 +1334,16 @@ def _fmt_num(v):
     n = _clean_num(v)
     return str(n) if n is not None else str(v)
 
+def _find_group_row(matrix, code, name_col, r1, r2):
+    """Station ka row sirf us block ke andar dhundho (jaise N31:N47)."""
+    for r in range(r1, min(r2, len(matrix)) + 1):
+        row = matrix[r - 1]
+        if len(row) >= name_col:
+            val = row[name_col - 1]
+            if str(val).strip() and resolve_station(val, quiet=True) == code:
+                return r
+    return None
+
 def update_google_sheet(data):
     lines = []
     with file_lock(SHEET_LOCK_FILE):
@@ -1363,25 +1378,31 @@ def update_google_sheet(data):
             return True
         for kind, cols in (("prs", PRS_COLS), ("uts", UTS_COLS_NU)):
             for st, vals in data.get(kind, {}).items():
-                info = smap.get(st)
-                if not info:
-                    lines.append(f"❌ {kind.upper()} {st}: sheet me station ki row nahi mili (B column check karein)")
+                group_cols = None
+                if st in GROUP_A_SET:
+                    row = _find_group_row(matrix, st, GROUP_A_NAME_COL, *GROUP_A_ROWS)
+                    group_cols, where = GROUP_A_COLS, GROUP_A_LABEL
+                elif st in GROUP_B_SET:
+                    row = _find_group_row(matrix, st, GROUP_B_NAME_COL, *GROUP_B_ROWS)
+                    group_cols, where = GROUP_B_COLS, GROUP_B_LABEL
+                else:
+                    info = smap.get(st)
+                    row = info["row"] if info else None
+                    where = "B column"
+                if not row:
+                    lines.append(f"❌ {kind.upper()} {st}: sheet me {where} me station nahi mila")
                     continue
                 if not _has_any_nonzero(vals):
                     continue
-                row = info["row"]
-                small = st in SMALL_STATIONS or (info["nameCol"] == "B" and SMALL_ROW_MIN <= row <= SMALL_ROW_MAX)
                 for fld, val in (vals or {}).items():
                     v = _to_float(val)
                     if v is None or not _is_field_allowed(v, fld):
                         continue
-                    if small:
-                        col = SMALL_STATION_COLS.get(fld)
+                    if group_cols is not None:
+                        col = group_cols.get(fld)
                         if not col:
                             skipped.setdefault(st, []).append(fld)
                             continue
-                    elif kind == "uts" and info["nameCol"] == "C":
-                        col = {"TKT": 4, "PASS": 5, "NET": 9, "UPI": 12, "PF": 8, "MR": 19, "MR AMT": 20}.get(fld)
                     else:
                         col = cols.get(fld)
                     if not col:
@@ -1391,7 +1412,7 @@ def update_google_sheet(data):
                     if is_cell_empty(cur):
                         if queue(row, col, v):
                             written.setdefault(tag, []).append(fld)
-                            print(f"✅ {kind.upper()} {st} {fld}: wrote {v}")
+                            print(f"✅ {kind.upper()} {st} {fld}: wrote {v} → {rowcol_to_a1(row, col)}")
                     else:
                         cv = _clean_num(cur)
                         if cv is not None and abs(cv - v) < 0.005:
