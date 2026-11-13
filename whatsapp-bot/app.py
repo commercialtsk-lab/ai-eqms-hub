@@ -188,7 +188,13 @@ FIELD_ALIASES = {
     "ECASH": "UPI", "E CASH": "UPI", "UPI QR": "UPI", "QR": "UPI",
     "NET CASH": "NET", "CASH": "NET",
     "PLATFORM": "PF",
+    "C/T": "C/TKT", "C/P": "C/PASS", "CT": "C/TKT", "CP": "C/PASS",
+    "C/TK": "C/TKT", "C/PS": "C/PASS",
+    "VOU": "VCH", "VOUCHER": "VCH", "VOUCHERS": "VCH",
+    "AMT": "NET", "AMOUNT": "NET",
+    "POS REF": "REF", "UPI REF": "REF", "QR REF": "REF",
 }
+KNOWN_FIELDS = set(PRS_COLS) | set(UTS_COLS_NU)
 
 # ==============================================
 # COMMODITY / FREE TIME
@@ -624,7 +630,7 @@ def _find_stations_in_text(msg):
     return found
 
 _LEAD_PREFIX_RE = re.compile(
-    r'^(?:(?:EARNINGS?|REVENUE|REPORT|DATA)\s+(?:OF\s+)?)?(?:(?:UTS|PRS)\s+)?(?:OF\s+)?')
+    r'^(?:(?:EARNINGS?|REVENUE|REPORT|DATA)\s+(?:OF\s+)?)?(?:(?:UTS|PRS)\s+)?(?:(?:STN|STATION)\s+)?(?:OF\s+)?')
 
 def _leading_station(line):
     """Line station se shuru hoti ho (jaise 'Gom n/p 442 ...', 'UTS-BDLN', 'Earnings Of NTSK') to uska code."""
@@ -648,6 +654,14 @@ def _leading_stations(body):
 def _norm_field(k):
     k = re.sub(r'\s+', ' ', str(k).upper().strip())
     return FIELD_ALIASES.get(k, k)
+
+def _canon_field(k):
+    """Gemini ya regex ka kaisa bhi label ho (C/T, Vou, Amt, UPI Ref...) → sheet ka asli field, ya None."""
+    f = _norm_field(k)
+    if f in KNOWN_FIELDS:
+        return f
+    g = _label_to_field(k)
+    return g if g in KNOWN_FIELDS else None
 
 # ==============================================
 # MESSAGE NORMALIZATION
@@ -749,14 +763,15 @@ Always output the CODE, never the full name. Fix spelling mistakes and short for
     TKT   : TKT / Tkts / Tckt / Ticket / T / T/TKT / J/TKT
     PASS  : PASS / Psg / Psgr / Passenger / P (when it sits beside T) / T/Pass / J/Pass
     NET   : NET CASH / Netcash / Net / Cash / Cash amount / J/Amount  — the cash collection amount (never the grand total)
-    UPI   : E CASH / E/CASH / Ecash / E-cash / E cas / Digi cash / Digital cash / UPI / UPI QR / QR / Digital / Paytm / PhonePe
-    REF   : REFUND / RFD / Digi ref / Digital refund / Digi refund / Digi RFD / Digital RFD — SUM OF ALL refund-type amounts found anywhere in the message. If multiple refund lines exist (e.g. REFUND 500 + Digi ref 200 + RFD 100), put the TOTAL (800) in REF. Never take only the first one.
-    C/TKT, C/PASS : cancelled tickets / cancelled passengers (PRS)
-    VCH, POS : vouchers / POS-machine amount (PRS)
+    UPI   : E CASH / E/CASH / Ecash / E-cash / E cas / Digi cash / Digital cash / UPI / UPI QR / QR / Digital / Paytm / PhonePe — if a section has both a "QR" line and a "UPI" line with values, the UPI field is their SUM
+    REF   : REF / Ref / REFUND / RFD / Digi ref / Digital refund / Digi RFD / UPI REF / POS REF / QR REF — SUM OF ALL refund-type amounts of THAT station's PRS section. If multiple refund lines exist (e.g. REF 500 + UPI REF 200 + RFD 100), put the TOTAL (800) in REF. Never take only the first one, and never add refunds of another station or of the UTS section.
+    C/TKT, C/PASS : cancelled tickets / cancelled passengers (PRS) — written C/TKT, C/T, CT, C/TK, Cancel tkt ... and C/PASS, C/P, CP, C/PS, Cancel pass ... Always capture them.
+    VCH, POS : vouchers (Vou / VCH / Voucher) / POS-machine amount (PRS). POS REF is a refund → goes into REF.
     PF    : platform tickets COUNT (PF / P/TKT / PLT / PLATFORM / "M"). A platform AMOUNT next to it has no column → ignore it.
     MR / MR AMT : MR count / MR amount (both captured). "MR=13AMOUNT=37960" → MR 13, MR AMT 37960.
 - SMALL STATIONS (CGF, DMGN, TNGN, NSBG, KOWN, NCH, CMA, KXL, BBGN, BLMR, NMGY, KRHT) only report TKT, PASS, NET (cash amount) and UPI (E cash). They have NO MR, so a plain "Amount"/"Cash"/"Cash amount" there is NET, never MR AMT. Other small stations (LBI, BGND, LMY, SRPN, SMCP, TQM, GOM, BDLN, CKW, LHL, DKM, PNT, TII, LXA, SFR, SLX, NMT) report TKT, PASS, NET, UPI and only sometimes MR / MR AMT (MR AMT only when written next to MR).
 - "Jenny" / "JTBS" lines (e.g. "T/jenny 1132") are only a sub-count of tickets already included in the total → ignore them, never add them to TKT.
+- KEY-VALUE LISTS: many stations send one field per line like "TKT--106", "AMT- 110585", "Ref-10665/-" ("/-" only means rupees), "STN-DBRT", "*PRS/DBRT". In such a list "AMT"/"Amount" is NET (cash amount). A line with nothing after the dash ("VOU--", "QR-", "AMT-") or with nil/Nill is simply omitted. "PF AMT" and "MR AMT"-less platform amounts: ignore PF AMT. The words "PRS" / "UTS" on their own line start a section that lasts until the next such marker; "STN-XYZ" names the station of that section. Several stations' PRS and UTS reports can be pasted one after another: keep every number with its own station AND its own PRS/UTS section.
 - STATION POSITION: a station may be written as a heading ("UTS-BDLN", "Earnings Of NTSK") OR inline at the start of a data line ("Gom n/p 442 tkt 355 Ecash 3255 amt 26530"). Numbers belong to the station named on their own line, or to the most recent station heading above them, until a different station appears. One message may hold many stations — never move one station's numbers to another, and never use the STATION HINT when the text names stations itself. A lone "Date-09/11/26" line between stations is just a date.
 - More label spellings: N/P, NP, No of Pass → PASS. Amt / Amount / Cash amt / a bare "Amount" (not directly after MR or PF) → NET. Ecash → UPI.
 - TTL / Total has two meanings, decide by the value. (a) A rupee grand total equal to Cash + E-cash (e.g. "Ttl 1730" after Cash 1390 + Ecash 340) → IGNORE, never put it anywhere. (b) A COUNT sitting next to Pass (smaller than or equal to the passenger number, and no other tickets figure is given) → that is TKT. Example: "Pass-136 / TTL-96" → PASS 136, TKT 96.
@@ -775,6 +790,9 @@ Output: {"prs":{},"uts":{"KOWN":{"TKT":7,"PASS":9,"NET":20,"UPI":400}},"osop":[]
 
 Input: "Krht uts of 4.11.2026\nT 36\nP 58\nCash 1390\nE cas 340\nTtl 1730 only"
 Output: {"prs":{},"uts":{"KRHT":{"TKT":36,"PASS":58,"NET":1390,"UPI":340}},"osop":[],"goods":[]}
+
+Input: "*PRS/DBRT\nDATE -12/11/2026\nPRS\nSTN-DBRT\nTKT--106\nPASS-174\nAMT-  110585\nC/T--13\nC/P--20\nREF--6090\nPOS--17480\nPOS REF--nil\nVOU--\nQR-\nUPI--78085\nUPI REF--5090\n*UTS/DBRT\nDATE- 12/11/2026\nUTS\nSTN- DBRT\nTKT --2\nAMT- \nQR-27648\nMR-1 \n*PRS/DBY\nDATE- 12/11/26\nPRS\nSTN- DBY\nTKT- 39/-\nPASS-56/-\nAMT-31880/-\nC/T-08/-\nC/P-17/-\nRef-10665/-\nPOS-  Nil\nPOS REF- Nil\nVOU- Nil\nQR-34980/-\nUPI-nil\nUPI Ref-12995/-\n*UTS/DBY\nDATE-12/11/26\nUTS\nSTN-DBY\nTKT-139/-\nPASS-216/-\nAMT-7460/-\nQR-1685/-\nUPI-NIL\nPF-Nil\nPF AMT-Nil\nMr-nil\nMr AMT -Nil"
+Output: {"prs":{"DBRT":{"TKT":106,"PASS":174,"NET":110585,"C/TKT":13,"C/PASS":20,"REF":11180,"POS":17480,"UPI":78085},"DBY":{"TKT":39,"PASS":56,"NET":31880,"C/TKT":8,"C/PASS":17,"REF":23660,"UPI":34980}},"uts":{"DBRT":{"TKT":2,"UPI":27648,"MR":1},"DBY":{"TKT":139,"PASS":216,"NET":7460,"UPI":1685}},"osop":[],"goods":[]}
 
 Input: "Gom n/p 442 tkt 355 Ecash 3255 amt 26530\nDate-09/11/26\nUTS-BDLN \nPass-136\nTTL-96\nAmount -5970\nN/I-nil\nEcash-1595"
 Output: {"prs":{},"uts":{"GOM":{"TKT":355,"PASS":442,"NET":26530,"UPI":3255},"BDLN":{"TKT":96,"PASS":136,"NET":5970,"UPI":1595}},"osop":[],"goods":[]}
@@ -951,9 +969,9 @@ def _clean_fields(vals):
     if not isinstance(vals, dict):
         return out
     for k, v in vals.items():
-        f = _norm_field(k)
+        f = _canon_field(k)
         n = _clean_num(v)
-        if n is None:
+        if f is None or n is None:
             continue
         if f == "REF" and f in out:
             out[f] = out[f] + n
@@ -1078,19 +1096,19 @@ def _merge_goods(entries):
     return [merged[k] for k in order]
 
 _FIELD_PATTERNS = [
-    ("C/TKT",  r'^(C\s*/?\s*(TKT|TCKT|TICKET)S?|CANCEL\w*\s*(TKT|TCKT|TICKET)\w*)$'),
-    ("C/PASS", r'^(C\s*/?\s*(PASS|PSG|PSGR)\w*|CANCEL\w*\s*(PASS|PSG)\w*)$'),
-    ("REF",    r'^(REF|RFD|REFUND|DIGI(TAL)?\s*(REF\w*|RFD))$'),
-    ("VCH",    r'^(VCH|VOUCHERS?)$'),
-    ("POS",    r'^POS$'),
+    ("C/TKT",  r'^((C|CAN|CNL|CANC)\s*/?\s*(T|TK|TKT|TCKT|TICKET)S?|(CANCEL\w*|CNL|CANC\w*)\s*(T|TK|TKT|TCKT|TICKET)\w*)$'),
+    ("C/PASS", r'^((C|CAN|CNL|CANC)\s*/?\s*(P|PS|PSG|PSGR|PASS|PASSENGER)S?|(CANCEL\w*|CNL|CANC\w*)\s*(P|PS|PSG|PSGR|PASS)\w*)$'),
+    ("REF",    r'^((UPI|POS|QR|CARD|DIGI(TAL)?|E\s*/?\s*CASH|ECASH|NET|CASH)\s*)?(REF|RFD|REFUND)\w*(\s*(AMT|AMOUNT))?$'),
+    ("VCH",    r'^(VCH|VOU\w*|VOUCHER\w*)$'),
+    ("POS",    r'^POS(\s*(AMT|AMOUNT))?$'),
     ("MR AMT", r'^MR\s*(AMT|AMOUNT)$'),
     ("MR",     r'^MR$'),
     ("UPI",    r'^(E\s*/?\s*CAS\w*|ECAS\w*|DIGI(TAL)?\s*CASH|UPI.*|QR.*|DIGITAL.*|PAYTM|PHONEPE)$'),
     ("NET",    r'^(NET\s*CASH|NETCASH|NET|CASH|(NET|CASH)\s*(AMT|AMOUNT)|J\s*/?\s*(AMOUNT|AMT))$'),
     ("PF",     r'^(PF|PLATFORM|PLT|P\s*/?\s*TKT|PF\s*/?\s*TKT)$'),
-    ("PASS",   r'^(T\s*/?\s*(PASS|PSG|PSGR)\w*|(TOTAL|TTL)\s*(PASS|PSG|PSGR)\w*|PASS\w*|PSGR?|P|J\s*/?\s*PASS|N\s*/\s*P|NP|NO\s*OF\s*(PASS|PSG)\w*)$'),
+    ("PASS",   r'^(T\s*/?\s*(PASS|PSG|PSGR|PS)\w*|(TOTAL|TTL)\s*(PASS|PSG|PSGR)\w*|PASS\w*|PSGR?|P|J\s*/?\s*(PASS|PS)\w*|N\s*/\s*P|NP|NO\s*OF\s*(PASS|PSG)\w*)$'),
     ("TTL",    r'^(TTL|TOTAL|TOT|GRAND\s*TOTAL|G\s*TOTAL|(TTL|TOTAL)\s*(AMT|AMOUNT|CASH))$'),
-    ("TKT",    r'^(T\s*/?\s*(TKT|TCKT|TICKET)S?|(TOTAL|TTL)\s*(TKT|TCKT|TICKET)S?|TKTS?|TCKTS?|TICKETS?|T|J\s*/?\s*TKT)$'),
+    ("TKT",    r'^(T\s*/?\s*(TKT|TK|TCKT|TICKET)S?|(TOTAL|TTL)\s*(TKT|TCKT|TICKET)S?|TKTS?|TCKTS?|TICKETS?|T|J\s*/?\s*(TKT|TK)S?)$'),
 ]
 
 _KV_PAIR_RE = re.compile(r'([A-Za-z][A-Za-z/ .&]*?)\s*[=:\-]*\s*(-?\d[\d,]*(?:\.\d+)?)')
@@ -1156,18 +1174,23 @@ def _line_fields(line, prev_in=None):
     return out, prev
 
 def _parse_kv_fallback(body, hint=None):
+    """Label-number wali lines ko rule se padho (Gemini ka doosra ray). Section (PRS/UTS) aur station line-by-line track hota hai."""
+    text = str(body or "")
+    # OSOP / goods message me ye parser kuch nahi karta (wahan 'amt' NET nahi hota)
+    if re.search(r'\b(OSOP|WAGONS?)\b', text, re.I) and not re.search(r'\b(UTS|PRS)\b', text, re.I):
+        return None
     cur = hint
     section = None
     prev_line = None
     res = {"prs": {}, "uts": {}}
-    for line in str(body or "").splitlines():
+    for line in text.splitlines():
         L = line.strip()
         if not L:
             continue
         sec_m = re.search(r'\b(UTS|PRS)\b', L, re.IGNORECASE)
         stns = _find_stations_in_text(L)
         lead = _leading_station(L)
-        fields, prev_line = _line_fields(L, prev_line)
+        fields, prev_line = _line_fields(L, None if (lead or sec_m) else prev_line)
         if sec_m:
             section = sec_m.group(1).lower()
         if lead:
@@ -1187,8 +1210,9 @@ def _parse_kv_fallback(body, hint=None):
         for fld, num in fields:
             kind = "prs" if fld in PRS_ONLY_FIELDS else (section or "uts")
             d = res[kind].setdefault(cur, {})
-            if fld == "REF":
-                d["REF"] = d.get("REF", 0) + num
+            if fld in ("REF", "UPI"):
+                # REF: saare refund (REF + UPI REF + POS REF ...) ka jod; UPI: QR + UPI ka jod
+                d[fld] = d.get(fld, 0) + num
             else:
                 d.setdefault(fld, num)
     out = {"prs": {}, "uts": {}, "osop": [], "goods": []}
@@ -1253,29 +1277,10 @@ def _parse_goods_regex(msg):
         print(f"🔧 Regex goods parsed → {len(entries)} entries")
     return entries
 
-_REFUND_RE = re.compile(
-    r'(?:DIGI(?:TAL)?\s*(?:REF\w*|RFD)|\bRFD|\bREFUND)[ \t=:\-\./]*([\d,]+(?:\.\d+)?)')
-
 def apply_fallback_fixes(data, msg):
     if data is None:
         data = {"prs": {}, "uts": {}, "osop": [], "goods": []}
     up = msg.upper()
-    nums = [n for n in (_to_float(a) for a in _REFUND_RE.findall(up)) if n]
-    if nums:
-        total = sum(nums)
-        total = int(total) if float(total).is_integer() else total
-        prs = data.get("prs") or {}
-        if len(prs) == 1:
-            st = next(iter(prs))
-            cur = prs[st].get("REF") if isinstance(prs[st], dict) else None
-            if cur is None or cur < total:
-                prs[st]["REF"] = total
-                print(f"💰 PRS {st} REF corrected → {total}")
-        elif not prs and re.search(r'\bPRS\b', up):
-            found = _find_stations_in_text(msg)
-            if len(found) == 1:
-                prs[next(iter(found))] = {"REF": total}
-                data["prs"] = prs
     osop = data.get("osop") or []
     if "OSOP" in up and not osop:
         lines = msg.splitlines()
@@ -1824,6 +1829,46 @@ def _score(d, body):
     cov = coverage(d, body) if _has_content(d) else 0.0
     return (-len(missing_stations(d, body)), cov, _field_count(d)), cov
 
+def _refund_numbers(body):
+    """Message ki refund-wali lines ke numbers (aur unka total) — Gemini ne galti se UPI/NET me jod diye ho to pakadne ke liye."""
+    nums = []
+    for line in str(body or "").splitlines():
+        fields, _ = _line_fields(line.strip(), None)
+        nums.extend(n for f, n in fields if f == "REF")
+    if nums:
+        nums.append(sum(nums))
+    return nums
+
+def reconcile(base, rx, body=None):
+    """Gemini (base) aur rule-parser (rx) ko milao.
+    - jo field ek me hai doosre me nahi → add
+    - REF / UPI me jo bada (jod wala) hai wahi
+    - baaki me value alag ho to rule-parser ki (label se seedha padhi hui) value"""
+    for kind in ("prs", "uts"):
+        for st, rfields in (rx.get(kind) or {}).items():
+            if not rfields:
+                continue
+            bf = base[kind].setdefault(st, {})
+            for k, rv in rfields.items():
+                bv = bf.get(k)
+                if bv is None:
+                    bf[k] = rv
+                elif abs(bv - rv) < 0.005:
+                    continue
+                elif k == "REF":
+                    bf[k] = max(bv, rv)
+                elif k == "UPI" and bv > rv and not any(abs((bv - rv) - n) < 0.005 for n in _refund_numbers(body)):
+                    # Gemini ko koi extra payment line mili jo rule-parser ne nahi padhi (refund ka jod nahi) → badi value
+                    pass
+                else:
+                    print(f"⚖️ {kind.upper()} {st} {k}: Gemini {bv} vs label-parser {rv} → {rv}")
+                    bf[k] = rv
+    if not base.get("goods") and rx.get("goods"):
+        base["goods"] = rx["goods"]
+    if not base.get("osop") and rx.get("osop"):
+        base["osop"] = rx["osop"]
+    return base
+
 def extract_block(body, sender="", ts=""):
     print(f"\n📩 Block | sender='{sender}' | ts='{ts}'\n{body[:400]}")
     body = normalize_message(body)
@@ -1851,26 +1896,18 @@ def extract_block(body, sender="", ts=""):
             notes.append(f"Gemini: {err2}")
 
     fb = _parse_kv_fallback(body, hint)
-    if fb:
-        d3 = _prepare(fb, body, hint)
-        s3, c3 = _score(d3, body)
-        prefer = (s3[0] > best_score[0]) or (
-            s3[0] == best_score[0] and (c3 > best_cov or (c3 >= best_cov - 0.05 and _field_count(d3) > _field_count(best))))
-        if prefer:
-            best, best_score, best_cov, source = d3, s3, c3, "regex"
-            notes.append("Regex fallback used / preferred")
+    rx = _prepare(fb, body, hint) if fb else None
+    if rx is not None and _has_content(rx):
+        if _has_content(best):
+            best = reconcile(best, rx, body)
+            source += "+labels"
         else:
-            for kind in ("prs", "uts"):
-                for st, fields in (d3.get(kind) or {}).items():
-                    if st not in best[kind]:
-                        best[kind][st] = fields
-                    else:
-                        for k, v in fields.items():
-                            if k not in best[kind][st]:
-                                best[kind][st][k] = v
-
+            best = rx
+            source = "labels"
+            notes.append("Gemini se data nahi mila — rule-parser use hua")
     if not _has_content(best):
         best = _prepare(None, body, hint)
+    best_score, best_cov = _score(best, body)
     miss = missing_stations(best, body)
     if miss and looks:
         notes.append(f"{', '.join(miss)}: message me station mila par uska data samajh nahi aaya — message check karein")
