@@ -224,6 +224,16 @@ def abbreviate_commodity(comm):
     if has_pub: return "PUB"
     return c
 
+def _commodity_with_party(commodity, party):
+    """Party me FCI likha ho to WHEAT → FCI/W, RICE → FCI/R."""
+    c = abbreviate_commodity(commodity)
+    if re.search(r'\bFCI\b', str(party or "").upper()):
+        if c == "WHEAT":
+            return "FCI/W"
+        if c == "RICE":
+            return "FCI/R"
+    return c
+
 def _is_container(commodity, wtype):
     tokens = set(re.split(r'[^A-Z0-9]+', str(wtype or "").upper()))
     return "CONTAINER" in str(commodity or "").upper() or "CONTAINER" in str(wtype or "").upper() \
@@ -818,6 +828,12 @@ Fields:
 - weight / freight: optional
 Do NOT calculate free time — the system does it.
 
+GOODS MAY ALSO COME AS A KEY-VALUE LIST (one item per line), for example:
+  DT-16/11/26 / EX SAG TO NLP / LOAD-21 / COMMODITY:-WHEAT / LINE NO-05 / PLACEMENT TIME:=06:00 HRS. / WEIGHT:-1344 / FREIGHT:-3986278 / PARTY:-M/S FCI/NLP
+  DT / DATE = placement_date; "EX A TO B" = from_stn A, to_stn B; LOAD / Wagons = number of wagons; PLACEMENT TIME = placement_time; LINE NO = line (digit without leading zero: "05" → "5"); WEIGHT = weight; FREIGHT = freight; PARTY = party (keep as written, uppercase). A station that is not in the official list (e.g. SAG) is still a valid from_stn: output it as written in uppercase. Remarks after the data ("DUE TO HEAVY RAIN UNLOADING NOT STARTED YET") are not data.
+  Such a message is GOODS only: never put its numbers (weight, freight, load, line) into "prs" or "uts".
+PARTY RULE (IMPORTANT): if the party name contains FCI (e.g. "M/S FCI/NLP"), then a commodity written only as WHEAT becomes "FCI/W" and a commodity written only as RICE becomes "FCI/R" — even when the commodity line itself does not say FCI.
+
 COMMODITY ABBREVIATION RULES (IMPORTANT — apply always):
 - RICE (FCI) / FCI RICE / RICE FCI  → "FCI/R"
 - WHEAT (FCI) / FCI WHEAT / WHEAT FCI → "FCI/W"
@@ -873,6 +889,13 @@ Expected — TWO entries:
   {"from_stn":"KNNN","to_stn":"NTSK","wagons":20,"placement_time":"12:50","placement_date":"04/11/26","commodity":"FCI/R","line":"10","party":"","wagon_type":"BCNL"},
   {"from_stn":"KNNN","to_stn":"NTSK","wagons":10,"placement_time":"12:50","placement_date":"04/11/26","commodity":"FCI/W","line":"12","party":"","wagon_type":"BCNA"}
 ]
+
+EXAMPLE 3 (key-value goods, party FCI):
+Input:
+"DT-16/11/26\nEX  SAG TO NLP\nLOAD-21\nCOMMODITY:-WHEAT\nLINE NO-05\nPLACEMENT TIME:=06:00 HRS.\nWEIGHT:-1344\nFREIGHT:-3986278\nPARTY:-M/S FCI/NLP\nDUE TO HEAVY RAIN UNLOADING NOT STARTED YET"
+
+Expected output:
+{"prs":{},"uts":{},"osop":[],"goods":[{"from_stn":"SAG","to_stn":"NLP","wagons":21,"placement_time":"06:00","placement_date":"16/11/26","commodity":"FCI/W","line":"5","party":"M/S FCI/NLP","wagon_type":"","weight":1344,"freight":3986278}]}
 
 MESSAGE (between the tags):
 <message>
@@ -985,11 +1008,7 @@ def _norm_line(ln):
     nums = re.findall(r'\d+', str(ln))
     if not nums:
         return str(ln).strip().upper()
-    try:
-        nums = sorted(set(nums), key=int)
-    except Exception:
-        pass
-    return ",".join(nums)
+    return ",".join(str(n) for n in sorted(set(int(x) for x in nums)))
 
 def apply_post_processing(data, msg, hint=None):
     if not data:
@@ -1037,7 +1056,7 @@ def apply_post_processing(data, msg, hint=None):
         to = str(e.get("to_stn") or "").strip()
         e["from_stn"] = (resolve_station(frm) or frm.upper()) if frm else ""
         e["to_stn"] = (resolve_station(to) or to.upper()) if to else (hint or "")
-        e["commodity"] = abbreviate_commodity(e.get("commodity"))
+        e["commodity"] = _commodity_with_party(e.get("commodity"), e.get("party"))
         wtype = str(e.get("wagon_type") or "").upper().strip()
         e["wagon_type"] = wtype
         if _is_container("", wtype):
@@ -1177,7 +1196,7 @@ def _parse_kv_fallback(body, hint=None):
     """Label-number wali lines ko rule se padho (Gemini ka doosra ray). Section (PRS/UTS) aur station line-by-line track hota hai."""
     text = str(body or "")
     # OSOP / goods message me ye parser kuch nahi karta (wahan 'amt' NET nahi hota)
-    if re.search(r'\b(OSOP|WAGONS?)\b', text, re.I) and not re.search(r'\b(UTS|PRS)\b', text, re.I):
+    if re.search(r'\b(OSOP|WAGONS?|LOAD|COMMODITY|PLACEMENT)\b', text, re.I) and not re.search(r'\b(UTS|PRS)\b', text, re.I):
         return None
     cur = hint
     section = None
@@ -1232,7 +1251,144 @@ def _parse_kv_fallback(body, hint=None):
     print(f"🔧 Regex KV fallback: {out}")
     return out
 
+def _pick_station(raw):
+    toks = re.findall(r"[A-Z0-9]+", str(raw or "").upper())
+    for n in (3, 2, 1):
+        if len(toks) >= n:
+            code = resolve_station(" ".join(toks[:n]), quiet=True)
+            if code:
+                return code
+    return toks[0] if toks else ""
+
+_G_SEP = r'[\s\-:=.]*'
+_G_DATE = re.compile(r'^\W*(?:DT|DATE|PLACEMENT\s*DATE|PLACED\s*DATE)\b' + _G_SEP + r'(\d{1,4}[-/.]\d{1,2}[-/.]\d{2,4})')
+_G_EX = re.compile(r'^\W*EX\b' + _G_SEP + r'(.+?)\s+TO\b' + _G_SEP + r'(.+)$')
+_G_TYPE = re.compile(r'^\W*(?:WAGON\s*TYPE|RAKE\s*TYPE|TYPE)\b' + _G_SEP + r'([A-Z]{2,6})\b')
+_G_WAGONS = re.compile(r'^\W*(?:LOAD|NO\.?\s*OF\s*WAGONS?|WAGONS?|WGNS?)\b' + _G_SEP + r'(\d+)')
+_G_COMM = re.compile(r'^\W*COMM(?:ODITY)?\b' + _G_SEP + r'(.+?)\W*$')
+_G_LINE = re.compile(r'^\W*(?:LINE\s*NO|LINE|L\s*/\s*NO)\b' + _G_SEP + r'(\d+(?:\s*(?:,|&|AND|/)\s*\d+)*)')
+_G_TIME = re.compile(r'^\W*(?:PLACEMENT\s*TIME|PLACED\s*(?:AT|TIME)|P\s*/?\s*TIME|TIME)\b' + _G_SEP + r'(\d{1,2}\s*[:.]\s*\d{2}|\d{3,4})\b')
+_G_WEIGHT = re.compile(r'^\W*(?:WEIGHT|WT)\b' + _G_SEP + r'([\d,]+(?:\.\d+)?)')
+_G_FREIGHT = re.compile(r'^\W*(?:FREIGHT|FRT)\b' + _G_SEP + r'([\d,]+(?:\.\d+)?)')
+_G_PARTY = re.compile(r'^\W*(?:PARTY|CONSIGNEE|FIRM)\b' + _G_SEP + r'(.+?)\s*$')
+
+def _parse_goods_kv(msg):
+    """Key-value goods message (DT / EX X TO Y / LOAD / COMMODITY / LINE NO / PLACEMENT TIME / WEIGHT / FREIGHT / PARTY)."""
+    entries, cur = [], {}
+    last_date = ""
+    def flush():
+        nonlocal cur
+        if cur.get("from_stn") and cur.get("wagons") is not None:
+            entries.append(cur)
+        cur = {}
+    for raw in str(msg or "").upper().splitlines():
+        L = raw.strip()
+        if not L:
+            continue
+        m = _G_DATE.match(L)
+        if m:
+            if cur.get("placement_date") or (cur.get("from_stn") and cur.get("wagons") is not None):
+                flush()
+            cur["placement_date"] = last_date = m.group(1)
+            continue
+        m = _G_EX.match(L)
+        if m:
+            if cur.get("from_stn"):
+                flush()
+            cur["from_stn"] = _pick_station(m.group(1))
+            cur["to_stn"] = _pick_station(m.group(2))
+            if "placement_date" not in cur and last_date:
+                cur["placement_date"] = last_date
+            continue
+        m = _G_TYPE.match(L)
+        if m:
+            cur["wagon_type"] = m.group(1)
+            continue
+        m = _G_WAGONS.match(L)
+        if m:
+            cur["wagons"] = int(m.group(1))
+            continue
+        m = _G_COMM.match(L)
+        if m:
+            cur["commodity"] = m.group(1).strip()
+            continue
+        m = _G_LINE.match(L)
+        if m:
+            cur["line"] = _norm_line(m.group(1))
+            continue
+        m = _G_TIME.match(L)
+        if m:
+            cur["placement_time"] = m.group(1)
+            continue
+        m = _G_WEIGHT.match(L)
+        if m:
+            cur["weight"] = _to_float(m.group(1))
+            continue
+        m = _G_FREIGHT.match(L)
+        if m:
+            cur["freight"] = _to_float(m.group(1))
+            continue
+        m = _G_PARTY.match(L)
+        if m:
+            cur["party"] = m.group(1).strip()
+            continue
+    flush()
+    out = []
+    for e in entries:
+        party = e.get("party", "")
+        out.append({
+            "from_stn": e.get("from_stn", ""),
+            "to_stn": e.get("to_stn", ""),
+            "wagons": e.get("wagons"),
+            "placement_time": e.get("placement_time", ""),
+            "placement_date": e.get("placement_date", ""),
+            "commodity": _commodity_with_party(e.get("commodity", ""), party),
+            "line": e.get("line", ""),
+            "party": party,
+            "wagon_type": e.get("wagon_type", ""),
+            "weight": e.get("weight"),
+            "freight": e.get("freight"),
+        })
+    return out
+
+def _fill_goods(goods, kv):
+    """Gemini ke goods me jo khali ho wo label-parser se bharo; label se saaf padhe huye fields me label-parser ki value."""
+    if not goods or not kv or len(goods) != len(kv):
+        return goods
+    for g, k in zip(goods, kv):
+        for key, trust in (("from_stn", False), ("to_stn", False), ("wagons", True), ("placement_time", True),
+                           ("placement_date", True), ("commodity", False), ("line", True), ("party", False),
+                           ("wagon_type", False), ("weight", True), ("freight", True)):
+            kvv = k.get(key)
+            if kvv in (None, ""):
+                continue
+            gv = g.get(key)
+            if gv in (None, ""):
+                g[key] = kvv
+            elif trust and str(gv).strip().upper() != str(kvv).strip().upper():
+                if key in ("wagons", "weight", "freight", "line"):
+                    same = _clean_num(gv) == _clean_num(kvv) if key != "line" else _norm_line(gv) == _norm_line(kvv)
+                    if same:
+                        continue
+                elif key in ("placement_time",):
+                    t1, t2 = parse_time_flexible(gv), parse_time_flexible(kvv)
+                    if t1 == t2:
+                        continue
+                elif key == "placement_date":
+                    d1, d2 = parse_date_flexible(gv), parse_date_flexible(kvv)
+                    if d1 == d2:
+                        continue
+                print(f"⚖️ GOODS {key}: Gemini {gv} vs label-parser {kvv} → {kvv}")
+                g[key] = kvv
+        g["commodity"] = _commodity_with_party(g.get("commodity"), g.get("party"))
+    return goods
+
 def _parse_goods_regex(msg):
+    kv = _parse_goods_kv(msg)
+    if kv:
+        kv = _merge_goods(kv)
+        print(f"🔧 Key-value goods parsed → {len(kv)} entries")
+        return kv
     up = msg.upper().replace("\n", " ")
     up = re.sub(r'\s+', ' ', up)
     pdate_m = re.search(r'(?:ON\s+DATE|DATE)\s*[-:=]?\s*(\d{1,4}[-/\.]\d{1,2}[-/\.]\d{2,4})', up)
@@ -1649,7 +1805,7 @@ def update_iwow_sheet(entries):
             wagons = _clean_num(e.get("wagons"))
             ptime = parse_time_flexible(e.get("placement_time"))
             pdate = parse_date_flexible(e.get("placement_date"))
-            commodity = abbreviate_commodity(e.get("commodity"))
+            commodity = _commodity_with_party(e.get("commodity"), e.get("party"))
             line = _norm_line(e.get("line"))
             party = _norm_str(e.get("party"))
             wtype = _norm_str(e.get("wagon_type"))
@@ -1907,6 +2063,8 @@ def extract_block(body, sender="", ts=""):
             notes.append("Gemini se data nahi mila — rule-parser use hua")
     if not _has_content(best):
         best = _prepare(None, body, hint)
+    if best.get("goods"):
+        best["goods"] = _fill_goods(best["goods"], _parse_goods_kv(body))
     best_score, best_cov = _score(best, body)
     miss = missing_stations(best, body)
     if miss and looks:
