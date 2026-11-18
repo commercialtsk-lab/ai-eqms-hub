@@ -47,6 +47,7 @@ OSOP_LOCK_FILE = "/tmp/osop_update.lock"
 IWOW_LOCK_FILE = "/tmp/iwow_update.lock"
 IWOW_GRACE_HOUR = int(os.environ.get("IWOW_GRACE_HOUR", "2"))
 IWOW_CORE_COLS = (2, 5, 6, 11, 12)
+IWOW_REMARK_COL = 24   # column X
 
 PROCESS_LOCK = threading.Lock()
 
@@ -176,7 +177,8 @@ GROUP_A_SET = set(GROUP_A_STATIONS)
 GROUP_B_SET = set(GROUP_B_STATIONS)
 
 NEGATIVE_ALLOWED_FIELDS = {"NET"}
-PRS_ONLY_FIELDS = {"C/TKT", "C/PASS", "VCH", "POS", "REF"}
+PRS_ONLY_FIELDS = {"C/TKT", "C/PASS", "VCH", "POS", "REF"}   # UTS me ye columns hote hi nahi
+UTS_ONLY_FIELDS = {"PF", "MR", "MR AMT"}                     # PRS me ye columns nahi
 CONTAINER_WAGON_CODES = {"BLC", "BFKN", "BLL", "BLH", "BLCN", "BLCA", "BLLA", "CFN", "CONTR", "CONT"}
 
 FIELD_ALIASES = {
@@ -223,6 +225,21 @@ def abbreviate_commodity(comm):
     if has_fci: return "FCI"
     if has_pub: return "PUB"
     return c
+
+_REMARK_KW = re.compile(r'\b(UNLOAD\w*|RAIN\w*|DELAY\w*|DETAIN\w*|STARTED|COMPLET\w*|PENDING|LABOU?R|SHORTAGE|WAITING|STRIKE|BANDH|FLOOD\w*|HEAVY|DUE TO|CLEARED|PROGRESS|TRUCKS?|HOLD\w*)\b', re.I)
+
+def clean_remark(text):
+    """Remark ko chhota, chhote akshar (lowercase) aur saaf English me karo (sheet column X)."""
+    t = str(text or "").strip()
+    if not t:
+        return ""
+    t = re.sub(r'[\r\n]+', '; ', t)
+    t = re.sub(r'\s+', ' ', t).lower().strip(" ;,.-:*")
+    m = re.match(r'^due to (.+?),?\s+(unloading .+?)(?:\s+yet)?$', t)
+    if m:
+        t = f"{m.group(2)} due to {m.group(1)}"
+    t = re.sub(r'\s+yet$', '', t)
+    return t[:120].strip(" ;,.")
 
 def _commodity_with_party(commodity, party):
     """Party me FCI likha ho to WHEAT → FCI/W, RICE → FCI/R."""
@@ -640,7 +657,7 @@ def _find_stations_in_text(msg):
     return found
 
 _LEAD_PREFIX_RE = re.compile(
-    r'^(?:(?:EARNINGS?|REVENUE|REPORT|DATA)\s+(?:OF\s+)?)?(?:(?:UTS|PRS)\s+)?(?:(?:STN|STATION)\s+)?(?:OF\s+)?')
+    r'^(?:(?:EARNINGS?|REVENUE|REPORT|DATA)\s+(?:OF\s+)?)?(?:(?:UTS|PRS|PMS)\s+)?(?:(?:STN|STATION)\s+)?(?:OF\s+)?')
 
 def _leading_station(line):
     """Line station se shuru hoti ho (jaise 'Gom n/p 442 ...', 'UTS-BDLN', 'Earnings Of NTSK') to uska code."""
@@ -685,6 +702,10 @@ def normalize_message(text):
             .replace("\r\n", "\n").replace("\r", "\n"))
     text = re.sub(r'(\d)([A-Za-z])', r'\1 \2', text)
     text = re.sub(r'([A-Za-z])(\d)', r'\1 \2', text)
+    # "E-cash", "J-TKT", "UTS-BDLN" → hyphen label ke andar ho to space (warna "cash" akela NET ban jaata hai)
+    text = re.sub(r'(?<=[A-Za-z])-(?=[A-Za-z])', ' ', text)
+    # "E - cash", "Net - cash", "Can - tkt" (space wala hyphen) — sirf label ke shabdon ke baad
+    text = re.sub(r'(?i)\b(E|DIGI|DIGITAL|NET|T|J|C|P|TOTAL|TTL|CAN|CANCEL|MR|PF|UPI|QR|POS|MISC)\s+[-–—]\s+(?=[A-Za-z])', r'\1 ', text)
     text = re.sub(r'\bAOUNT\b', 'AMOUNT', text, flags=re.I)
     text = re.sub(r'\bAMONT\b', 'AMOUNT', text, flags=re.I)
     text = re.sub(r'[ \t]+', ' ', text)
@@ -754,7 +775,7 @@ Return ONE JSON object with these keys (all present, empty if nothing found):
   "prs"   : { "<STATION_CODE>": { "TKT":num, "PASS":num, "C/TKT":num, "C/PASS":num, "REF":num, "NET":num, "VCH":num, "POS":num, "UPI":num } }
   "uts"   : { "<STATION_CODE>": { "PF":num, "TKT":num, "PASS":num, "NET":num, "MR":num, "MR AMT":num, "UPI":num } }
   "osop"  : [ { "station":"CODE", "date":"as written", "amount":num, "unit":num or omit } ]
-  "goods" : [ { "from_stn":"CODE", "to_stn":"CODE", "wagons":num, "placement_time":"HH:MM", "placement_date":"as written", "commodity":"ABBREVIATED UPPERCASE", "line":"number or comma list", "party":"UPPERCASE", "wagon_type":"optional", "weight":num or omit, "freight":num or omit } ]
+  "goods" : [ { "from_stn":"CODE", "to_stn":"CODE", "wagons":num, "placement_time":"HH:MM", "placement_date":"as written", "commodity":"ABBREVIATED UPPERCASE", "line":"number or comma list", "party":"UPPERCASE", "wagon_type":"optional", "weight":num or omit, "freight":num or omit, "remark":"short lowercase text" or omit } ]
 
 === CONTEXT ===
 __CTX__
@@ -782,6 +803,9 @@ Always output the CODE, never the full name. Fix spelling mistakes and short for
 - SMALL STATIONS (CGF, DMGN, TNGN, NSBG, KOWN, NCH, CMA, KXL, BBGN, BLMR, NMGY, KRHT) only report TKT, PASS, NET (cash amount) and UPI (E cash). They have NO MR, so a plain "Amount"/"Cash"/"Cash amount" there is NET, never MR AMT. Other small stations (LBI, BGND, LMY, SRPN, SMCP, TQM, GOM, BDLN, CKW, LHL, DKM, PNT, TII, LXA, SFR, SLX, NMT) report TKT, PASS, NET, UPI and only sometimes MR / MR AMT (MR AMT only when written next to MR).
 - "Jenny" / "JTBS" lines (e.g. "T/jenny 1132") are only a sub-count of tickets already included in the total → ignore them, never add them to TKT.
 - KEY-VALUE LISTS: many stations send one field per line like "TKT--106", "AMT- 110585", "Ref-10665/-" ("/-" only means rupees), "STN-DBRT", "*PRS/DBRT". In such a list "AMT"/"Amount" is NET (cash amount). A line with nothing after the dash ("VOU--", "QR-", "AMT-") or with nil/Nill is simply omitted. "PF AMT" and "MR AMT"-less platform amounts: ignore PF AMT. The words "PRS" / "UTS" on their own line start a section that lasts until the next such marker; "STN-XYZ" names the station of that section. Several stations' PRS and UTS reports can be pasted one after another: keep every number with its own station AND its own PRS/UTS section.
+- UTS HAS NO COLUMNS for VCH, REF/RFD, C/TKT, C/PASS, POS. If such lines appear under a UTS heading (e.g. UTS: "VCH -12232", "RFD -12232") IGNORE them completely — never copy them into PRS and never into UTS. These fields belong to PRS only, and only when they are written under the PRS heading. Likewise PF / MR / MR AMT exist only for UTS.
+- LABEL SPELLINGS: "E - cash", "E-cash", "E cash", "Ecash" are all UPI (never NET). "Net cash" is NET. When both are written each goes to its own field — a number written once is never copied into two fields. "Total tkt / Total pass" = TKT / PASS counts. "Can tkt / Can pass" = C/TKT / C/PASS. "Misc. tkt" and similar miscellaneous counts have no column → ignore. A section headed PMS (e.g. "*PMS/SLGR*" with Inward / Outward / Scanned / Booking counts) is not revenue → ignore it completely.
+- SPLIT REFUNDS: a refund written over several lines or modes ("Rfd :- 6100/ ( cash )" and below it "2780/- (digi )") → ADD them all: REF 8880. A bare number line under a refund line belongs to that refund.
 - STATION POSITION: a station may be written as a heading ("UTS-BDLN", "Earnings Of NTSK") OR inline at the start of a data line ("Gom n/p 442 tkt 355 Ecash 3255 amt 26530"). Numbers belong to the station named on their own line, or to the most recent station heading above them, until a different station appears. One message may hold many stations — never move one station's numbers to another, and never use the STATION HINT when the text names stations itself. A lone "Date-09/11/26" line between stations is just a date.
 - More label spellings: N/P, NP, No of Pass → PASS. Amt / Amount / Cash amt / a bare "Amount" (not directly after MR or PF) → NET. Ecash → UPI.
 - TTL / Total has two meanings, decide by the value. (a) A rupee grand total equal to Cash + E-cash (e.g. "Ttl 1730" after Cash 1390 + Ecash 340) → IGNORE, never put it anywhere. (b) A COUNT sitting next to Pass (smaller than or equal to the passenger number, and no other tickets figure is given) → that is TKT. Example: "Pass-136 / TTL-96" → PASS 136, TKT 96.
@@ -800,6 +824,12 @@ Output: {"prs":{},"uts":{"KOWN":{"TKT":7,"PASS":9,"NET":20,"UPI":400}},"osop":[]
 
 Input: "Krht uts of 4.11.2026\nT 36\nP 58\nCash 1390\nE cas 340\nTtl 1730 only"
 Output: {"prs":{},"uts":{"KRHT":{"TKT":36,"PASS":58,"NET":1390,"UPI":340}},"osop":[],"goods":[]}
+
+Input: "*Date:-17/11/2026*\n\n*PRS/SLGR*\n\nTotal tkt :- 57\nTotal pass :- 104\nCan tkt :- 06\nCan pass :- 10\nE - cash :- 22820/-\nNet cash :- 77235/-\nRfd :- 6100/ ( cash )\n            2780/- (digi )\n\n\n*UTS/SLGR*\n\nTotal tkt :- 781\nTotal pass :- 1211\nMisc. tkt :- 15\nMR :- 01 \nAmount :- 500/-\nE - cash :- 34400/-\nNet cash :- 78125/-\n\n*PMS/SLGR*\n\nInward :- 01\nScanned :- 01\n\nBooking :- 00\n\nOutward :- 00"
+Output: {"prs":{"SLGR":{"TKT":57,"PASS":104,"C/TKT":6,"C/PASS":10,"UPI":22820,"NET":77235,"REF":8880}},"uts":{"SLGR":{"TKT":781,"PASS":1211,"MR":1,"MR AMT":500,"UPI":34400,"NET":78125}},"osop":[],"goods":[]}
+
+Input: "Revenue of MXN STN ON 17/11/26\nPRS..........\nT/TKT -98\nT/Pass -146\nNet Cash -71760\nRFD -27545\nUPI -74745\nUPI RFD -Nil \nVCH - Nil \nC/TKT -8\nC/Pass -14\nUTS........\nPF TKT -49\nJ/TKT -629\nJ/Pass -871\nJ/Amount -81650\nMR -15\nMR Amount -20595\nEcash -35925\nVCH -12232\nRFD -12232"
+Output: {"prs":{"MXN":{"TKT":98,"PASS":146,"NET":71760,"REF":27545,"UPI":74745,"C/TKT":8,"C/PASS":14}},"uts":{"MXN":{"PF":49,"TKT":629,"PASS":871,"NET":81650,"MR":15,"MR AMT":20595,"UPI":35925}},"osop":[],"goods":[]}
 
 Input: "*PRS/DBRT\nDATE -12/11/2026\nPRS\nSTN-DBRT\nTKT--106\nPASS-174\nAMT-  110585\nC/T--13\nC/P--20\nREF--6090\nPOS--17480\nPOS REF--nil\nVOU--\nQR-\nUPI--78085\nUPI REF--5090\n*UTS/DBRT\nDATE- 12/11/2026\nUTS\nSTN- DBRT\nTKT --2\nAMT- \nQR-27648\nMR-1 \n*PRS/DBY\nDATE- 12/11/26\nPRS\nSTN- DBY\nTKT- 39/-\nPASS-56/-\nAMT-31880/-\nC/T-08/-\nC/P-17/-\nRef-10665/-\nPOS-  Nil\nPOS REF- Nil\nVOU- Nil\nQR-34980/-\nUPI-nil\nUPI Ref-12995/-\n*UTS/DBY\nDATE-12/11/26\nUTS\nSTN-DBY\nTKT-139/-\nPASS-216/-\nAMT-7460/-\nQR-1685/-\nUPI-NIL\nPF-Nil\nPF AMT-Nil\nMr-nil\nMr AMT -Nil"
 Output: {"prs":{"DBRT":{"TKT":106,"PASS":174,"NET":110585,"C/TKT":13,"C/PASS":20,"REF":11180,"POS":17480,"UPI":78085},"DBY":{"TKT":39,"PASS":56,"NET":31880,"C/TKT":8,"C/PASS":17,"REF":23660,"UPI":34980}},"uts":{"DBRT":{"TKT":2,"UPI":27648,"MR":1},"DBY":{"TKT":139,"PASS":216,"NET":7460,"UPI":1685}},"osop":[],"goods":[]}
@@ -832,6 +862,7 @@ GOODS MAY ALSO COME AS A KEY-VALUE LIST (one item per line), for example:
   DT-16/11/26 / EX SAG TO NLP / LOAD-21 / COMMODITY:-WHEAT / LINE NO-05 / PLACEMENT TIME:=06:00 HRS. / WEIGHT:-1344 / FREIGHT:-3986278 / PARTY:-M/S FCI/NLP
   DT / DATE = placement_date; "EX A TO B" = from_stn A, to_stn B; LOAD / Wagons = number of wagons; PLACEMENT TIME = placement_time; LINE NO = line (digit without leading zero: "05" → "5"); WEIGHT = weight; FREIGHT = freight; PARTY = party (keep as written, uppercase). A station that is not in the official list (e.g. SAG) is still a valid from_stn: output it as written in uppercase. Remarks after the data ("DUE TO HEAVY RAIN UNLOADING NOT STARTED YET") are not data.
   Such a message is GOODS only: never put its numbers (weight, freight, load, line) into "prs" or "uts".
+REMARK (goes to column X of the sheet): any note about unloading / placement / delay that is NOT one of the data fields (e.g. "DUE TO HEAVY RAIN UNLOADING NOT STARTED YET", "unloading started 08:30", "labour shortage unloading slow", "wagons detained") goes in "remark". Write ONE short plain-English phrase in lowercase with spelling/grammar corrected, cause kept, filler words ("yet") removed, e.g. "unloading not started due to heavy rain". Several notes → join with "; " (max about 100 characters). Keep facts (times, causes) exactly, never invent. No remark in the message → omit the key. One remark with several goods entries → give the same remark to each entry.
 PARTY RULE (IMPORTANT): if the party name contains FCI (e.g. "M/S FCI/NLP"), then a commodity written only as WHEAT becomes "FCI/W" and a commodity written only as RICE becomes "FCI/R" — even when the commodity line itself does not say FCI.
 
 COMMODITY ABBREVIATION RULES (IMPORTANT — apply always):
@@ -895,7 +926,7 @@ Input:
 "DT-16/11/26\nEX  SAG TO NLP\nLOAD-21\nCOMMODITY:-WHEAT\nLINE NO-05\nPLACEMENT TIME:=06:00 HRS.\nWEIGHT:-1344\nFREIGHT:-3986278\nPARTY:-M/S FCI/NLP\nDUE TO HEAVY RAIN UNLOADING NOT STARTED YET"
 
 Expected output:
-{"prs":{},"uts":{},"osop":[],"goods":[{"from_stn":"SAG","to_stn":"NLP","wagons":21,"placement_time":"06:00","placement_date":"16/11/26","commodity":"FCI/W","line":"5","party":"M/S FCI/NLP","wagon_type":"","weight":1344,"freight":3986278}]}
+{"prs":{},"uts":{},"osop":[],"goods":[{"from_stn":"SAG","to_stn":"NLP","wagons":21,"placement_time":"06:00","placement_date":"16/11/26","commodity":"FCI/W","line":"5","party":"M/S FCI/NLP","wagon_type":"","weight":1344,"freight":3986278,"remark":"unloading not started due to heavy rain"}]}
 
 MESSAGE (between the tags):
 <message>
@@ -1066,6 +1097,7 @@ def apply_post_processing(data, msg, hint=None):
         ln = e.get("line")
         if ln is not None:
             e["line"] = _norm_line(ln)
+        e["remark"] = clean_remark(e.get("remark"))
         new_goods.append(e)
     data["goods"] = new_goods
     up = msg.upper()
@@ -1083,6 +1115,13 @@ def apply_post_processing(data, msg, hint=None):
                 data["uts"][st] = merged
                 del data["prs"][st]
                 print(f"ℹ️ {st}: label na hone se PRS → UTS me move kiya")
+    # UTS me PRS-only columns (VCH, REF, C/TKT, C/PASS, POS) nahi hote; PRS me PF/MR nahi
+    for vals in data["uts"].values():
+        for k in [k for k in vals if k in PRS_ONLY_FIELDS]:
+            del vals[k]
+    for vals in data["prs"].values():
+        for k in [k for k in vals if k in UTS_ONLY_FIELDS]:
+            del vals[k]
     return data
 
 def _merge_goods(entries):
@@ -1112,6 +1151,9 @@ def _merge_goods(entries):
             ex["line"] = _norm_line(",".join(str(x) for x in (ex.get("line"), e.get("line")) if x not in (None, "")))
             if not ex.get("wagon_type") and e.get("wagon_type"):
                 ex["wagon_type"] = e["wagon_type"]
+            r2 = str(e.get("remark") or "").strip()
+            if r2 and r2.lower() not in str(ex.get("remark") or "").lower():
+                ex["remark"] = (str(ex.get("remark") or "").strip() + "; " + r2).strip("; ")
     return [merged[k] for k in order]
 
 _FIELD_PATTERNS = [
@@ -1192,24 +1234,28 @@ def _line_fields(line, prev_in=None):
             prev = None
     return out, prev
 
-def _parse_kv_fallback(body, hint=None):
-    """Label-number wali lines ko rule se padho (Gemini ka doosra ray). Section (PRS/UTS) aur station line-by-line track hota hai."""
-    text = str(body or "")
-    # OSOP / goods message me ye parser kuch nahi karta (wahan 'amt' NET nahi hota)
-    if re.search(r'\b(OSOP|WAGONS?|LOAD|COMMODITY|PLACEMENT)\b', text, re.I) and not re.search(r'\b(UTS|PRS)\b', text, re.I):
-        return None
+_ORPHAN_RE = re.compile(r'^\W*(?:RS\.?\s*)?(\d[\d,]*(?:\.\d+)?)\s*(?:/-?|-)?\s*(?:\(\s*[A-Za-z ]{1,15}\s*\))?\W*$', re.I)
+
+def _walk_report(body, hint=None):
+    """Message ko line-by-line chalao: har line par (line, station, section, fields). Section = prs / uts / pms / None."""
     cur = hint
     section = None
     prev_line = None
-    res = {"prs": {}, "uts": {}}
-    for line in text.splitlines():
+    for line in str(body or "").splitlines():
         L = line.strip()
         if not L:
             continue
-        sec_m = re.search(r'\b(UTS|PRS)\b', L, re.IGNORECASE)
+        sec_m = re.search(r'\b(UTS|PRS|PMS)\b', L, re.IGNORECASE)
         stns = _find_stations_in_text(L)
         lead = _leading_station(L)
         fields, prev_line = _line_fields(L, None if (lead or sec_m) else prev_line)
+        # Refund do line me ho ("Rfd :- 6100/ ( cash )" ke neeche "2780/- (digi )") → neeche wali bhi refund
+        if not fields and prev_line == "REF" and not (lead or sec_m):
+            om = _ORPHAN_RE.match(L)
+            if om:
+                n = _to_float(om.group(1))
+                if n is not None:
+                    fields = [("REF", n)]
         if sec_m:
             section = sec_m.group(1).lower()
         if lead:
@@ -1224,13 +1270,58 @@ def _parse_kv_fallback(body, hint=None):
             if new != cur and not sec_m:
                 section = None
             cur = new
-        if not fields or not cur:
+        yield L, cur, section, fields
+
+def _section_numbers(body):
+    """Har (section, station) ke andar likhe saare numbers — galat section me gaye fields pakadne ke liye."""
+    out = {}
+    for L, cur, section, _f in _walk_report(body, None):
+        if not cur or section not in ("prs", "uts"):
+            continue
+        txt = _DATE_RE.sub(" ", L)
+        for t in re.findall(r'\d[\d,]*(?:\.\d+)?', txt):
+            v = _to_float(t)
+            if v is not None:
+                out.setdefault((section, cur), set()).add(v)
+    return out
+
+def _prune_misplaced(d, body):
+    """PRS-only field (VCH, REF, C/TKT...) agar uska number message me UTS section me likha hai (PRS me nahi) to hata do."""
+    secs = _section_numbers(body)
+    for st, f in (d.get("prs") or {}).items():
+        un, pn = secs.get(("uts", st), set()), secs.get(("prs", st), set())
+        for k in list(f):
+            if k in PRS_ONLY_FIELDS and isinstance(f[k], (int, float)):
+                v = float(f[k])
+                if any(abs(v - x) < 0.005 for x in un) and not any(abs(v - x) < 0.005 for x in pn):
+                    print(f"🧹 PRS {st} {k}={f[k]} UTS section ka tha → hata diya")
+                    del f[k]
+    return d
+
+def _parse_kv_fallback(body, hint=None):
+    """Label-number wali lines ko rule se padho (Gemini ka doosra ray). Section (PRS/UTS/PMS) aur station line-by-line track hota hai."""
+    text = str(body or "")
+    # OSOP / goods message me ye parser kuch nahi karta (wahan 'amt' NET nahi hota)
+    if re.search(r'\b(OSOP|WAGONS?|LOAD|COMMODITY|PLACEMENT)\b', text, re.I) and not re.search(r'\b(UTS|PRS)\b', text, re.I):
+        return None
+    res = {"prs": {}, "uts": {}}
+    for L, cur, section, fields in _walk_report(text, hint):
+        if not fields or not cur or section == "pms":
             continue
         for fld, num in fields:
-            kind = "prs" if fld in PRS_ONLY_FIELDS else (section or "uts")
+            if fld in PRS_ONLY_FIELDS:
+                if section == "uts":
+                    continue            # UTS me VCH / REF / C/TKT / C/PASS / POS hote hi nahi → skip
+                kind = "prs"
+            elif fld in UTS_ONLY_FIELDS:
+                if section == "prs":
+                    continue            # PRS me PF / MR nahi
+                kind = "uts"
+            else:
+                kind = section or "uts"
             d = res[kind].setdefault(cur, {})
             if fld in ("REF", "UPI"):
-                # REF: saare refund (REF + UPI REF + POS REF ...) ka jod; UPI: QR + UPI ka jod
+                # REF: saare refund (REF + UPI REF + POS REF + alag lines) ka jod; UPI: QR + UPI ka jod
                 d[fld] = d.get(fld, 0) + num
             else:
                 d.setdefault(fld, num)
@@ -1271,6 +1362,21 @@ _G_TIME = re.compile(r'^\W*(?:PLACEMENT\s*TIME|PLACED\s*(?:AT|TIME)|P\s*/?\s*TIM
 _G_WEIGHT = re.compile(r'^\W*(?:WEIGHT|WT)\b' + _G_SEP + r'([\d,]+(?:\.\d+)?)')
 _G_FREIGHT = re.compile(r'^\W*(?:FREIGHT|FRT)\b' + _G_SEP + r'([\d,]+(?:\.\d+)?)')
 _G_PARTY = re.compile(r'^\W*(?:PARTY|CONSIGNEE|FIRM)\b' + _G_SEP + r'(.+?)\s*$')
+
+def _is_goods_data_line(L):
+    for rx in (_G_DATE, _G_EX, _G_TYPE, _G_WAGONS, _G_COMM, _G_LINE, _G_TIME, _G_WEIGHT, _G_FREIGHT, _G_PARTY):
+        if rx.match(L):
+            return True
+    return bool(re.search(r'\bWAGONS?\b.*\bEX\b|\bEX\b.*\bTO\b', L)) and bool(re.search(r'\d', L))
+
+def _remark_from_text(msg):
+    """Fallback: goods message me data ke alawa unloading/delay se judi lines → remark."""
+    out = []
+    for raw in str(msg or "").upper().splitlines():
+        L = raw.strip()
+        if L and _REMARK_KW.search(L) and not _is_goods_data_line(L):
+            out.append(L)
+    return clean_remark("; ".join(out))
 
 def _parse_goods_kv(msg):
     """Key-value goods message (DT / EX X TO Y / LOAD / COMMODITY / LINE NO / PLACEMENT TIME / WEIGHT / FREIGHT / PARTY)."""
@@ -1348,6 +1454,7 @@ def _parse_goods_kv(msg):
             "wagon_type": e.get("wagon_type", ""),
             "weight": e.get("weight"),
             "freight": e.get("freight"),
+            "remark": _remark_from_text(msg),
         })
     return out
 
@@ -1358,7 +1465,7 @@ def _fill_goods(goods, kv):
     for g, k in zip(goods, kv):
         for key, trust in (("from_stn", False), ("to_stn", False), ("wagons", True), ("placement_time", True),
                            ("placement_date", True), ("commodity", False), ("line", True), ("party", False),
-                           ("wagon_type", False), ("weight", True), ("freight", True)):
+                           ("wagon_type", False), ("weight", True), ("freight", True), ("remark", False)):
             kvv = k.get(key)
             if kvv in (None, ""):
                 continue
@@ -1430,6 +1537,10 @@ def _parse_goods_regex(msg):
         })
     if entries:
         entries = _merge_goods(entries)
+        rem = _remark_from_text(msg)
+        if rem:
+            for en in entries:
+                en["remark"] = rem
         print(f"🔧 Regex goods parsed → {len(entries)} entries")
     return entries
 
@@ -1790,12 +1901,13 @@ def update_iwow_sheet(entries):
         tomorrow = today + timedelta(days=1)
         grace_cutoff = dt_time(IWOW_GRACE_HOUR, 0)
         print(f"🕐 IWOW now (IST): {now.strftime('%Y-%m-%d %H:%M')} | grace_cutoff={grace_cutoff} | first free row={current_row}")
-        existing = set()
+        existing = {}
         for r in range(4, len(matrix) + 1):
             if is_cell_empty(cell(r, 2)):
                 continue
-            existing.add(_iwow_key(cell(r, 2), cell(r, 5), cell(r, 6),
-                                   parse_time_flexible(cell(r, 11)), parse_date_flexible(cell(r, 12))))
+            existing.setdefault(_iwow_key(cell(r, 2), cell(r, 5), cell(r, 6),
+                                          parse_time_flexible(cell(r, 11)), parse_date_flexible(cell(r, 12))), r)
+        new_rows = set()
         updates = []
         for e in entries:
             if not isinstance(e, dict):
@@ -1809,6 +1921,7 @@ def update_iwow_sheet(entries):
             line = _norm_line(e.get("line"))
             party = _norm_str(e.get("party"))
             wtype = _norm_str(e.get("wagon_type"))
+            remark = clean_remark(e.get("remark"))
             label = f"IWOW {from_stn or '?'}→{to_stn or '?'} {wagons if wagons is not None else '?'}W {commodity}".strip()
             if not to_stn:
                 lines.append(f"⏭️ {label}: station (to_stn) samajh nahi aaya")
@@ -1853,10 +1966,16 @@ def update_iwow_sheet(entries):
             key = _iwow_key(to_stn, commodity, wagons, ptime, pdate)
             ks = _key_str(key)
             if key in existing:
-                print(f"⏭️ Duplicate — sheet me pehle se hai ({ks})")
-                lines.append(f"↩️ {label}: sheet me pehle se hai (duplicate nahi likha)")
+                erow = existing[key]
+                if remark and erow and erow not in new_rows and is_cell_empty(cell(erow, IWOW_REMARK_COL)):
+                    updates.append({"range": rowcol_to_a1(erow, IWOW_REMARK_COL), "values": [[remark]]})
+                    print(f"⏭️ Duplicate ({ks}) — sirf remark (col X) row {erow} me likha")
+                    lines.append(f"↩️ {label}: sheet me pehle se hai — remark column X me likha: {remark}")
+                else:
+                    print(f"⏭️ Duplicate — sheet me pehle se hai ({ks})")
+                    lines.append(f"↩️ {label}: sheet me pehle se hai (duplicate nahi likha)")
                 continue
-            existing.add(key)
+            existing[key] = None
             ftime = iwow_free_time(wagons, commodity, wtype)
             if not wtype:
                 if "NAPHTHA" in commodity:
@@ -1883,8 +2002,10 @@ def update_iwow_sheet(entries):
             q(6, wagons); q(8, wagons)
             q(9, arrival_time_str); q(10, arrival_date_str)
             q(11, ptime_str); q(12, pdate_str)
-            q(18, ftime); q(21, from_stn); q(23, party)
-            lines.append(f"✅ {label} line {line or '-'} → row {current_row} (free {ftime})")
+            q(18, ftime); q(21, from_stn); q(23, party); q(IWOW_REMARK_COL, remark)
+            existing[key] = current_row
+            new_rows.add(current_row)
+            lines.append(f"✅ {label} line {line or '-'} → row {current_row} (free {ftime})" + (f" | remark: {remark}" if remark else ""))
             print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | wagons={wagons} | line={line} | {commodity} | free={ftime}")
             current_row += 1
         if updates:
@@ -2012,7 +2133,13 @@ def reconcile(base, rx, body=None):
                 elif abs(bv - rv) < 0.005:
                     continue
                 elif k == "REF":
-                    bf[k] = max(bv, rv)
+                    # Gemini ne UTS section ka refund PRS me jod diya ho to rule-parser ki value; warna jod wali badi value
+                    uts_nums = _section_numbers(body).get(("uts", st), set()) if (kind == "prs" and body) else set()
+                    if bv > rv and any(abs((bv - rv) - x) < 0.005 for x in uts_nums):
+                        print(f"⚖️ PRS {st} REF: Gemini {bv} me UTS ka refund juda tha → {rv}")
+                        bf[k] = rv
+                    else:
+                        bf[k] = max(bv, rv)
                 elif k == "UPI" and bv > rv and not any(abs((bv - rv) - n) < 0.005 for n in _refund_numbers(body)):
                     # Gemini ko koi extra payment line mili jo rule-parser ne nahi padhi (refund ka jod nahi) → badi value
                     pass
@@ -2057,6 +2184,7 @@ def extract_block(body, sender="", ts=""):
         if _has_content(best):
             best = reconcile(best, rx, body)
             source += "+labels"
+            best = _prune_misplaced(best, body)
         else:
             best = rx
             source = "labels"
@@ -2065,6 +2193,9 @@ def extract_block(body, sender="", ts=""):
         best = _prepare(None, body, hint)
     if best.get("goods"):
         best["goods"] = _fill_goods(best["goods"], _parse_goods_kv(body))
+        rem = _remark_from_text(body)
+        for g in best["goods"]:
+            g["remark"] = clean_remark(g.get("remark")) or rem
     best_score, best_cov = _score(best, body)
     miss = missing_stations(best, body)
     if miss and looks:
@@ -2107,143 +2238,4 @@ def process_incoming(text):
                 continue
             try:
                 ok, rep = fn(payload)
-                lines.extend(rep)
-            except Exception as e:
-                print(f"❌ {name} write crashed: {e}")
-                reset_caches()
-                lines.append(f"❌ {name} update fail: {e}")
-    lines.extend(f"ℹ️ {n}" for n in dict.fromkeys(notes))
-    return "\n".join(lines) if lines else "⚠️ Kuch update nahi hua."
-
-# ==============================================
-# WHATSAPP + WEBHOOK
-# ==============================================
-def _chunk_text(text, limit=3800):
-    text = str(text or "")
-    if len(text) <= limit:
-        return [text]
-    chunks, cur = [], ""
-    for ln in text.split("\n"):
-        if len(cur) + len(ln) + 1 > limit and cur:
-            chunks.append(cur)
-            cur = ""
-        cur += (ln[:limit] + "\n")
-    if cur.strip():
-        chunks.append(cur.rstrip("\n"))
-    return chunks
-
-def send_whatsapp(to, text, phone_id=None):
-    """
-    FIX: reply hamesha usi phone_number_id se bhejo jis par message aaya tha
-    (webhook payload: value.metadata.phone_number_id). Env ki PHONE_NUMBER_ID
-    sirf fallback hai. Galat ID (jaise WABA ID) dene par Meta error 400
-    "Object with ID ... does not exist" deta hai.
-    """
-    pid = str(phone_id or PHONE_NUMBER_ID or "").strip()
-    if not (SEND_REPLY and WHATSAPP_TOKEN and pid and to):
-        print(f"ℹ️ Reply skip: SEND_REPLY={SEND_REPLY} token={bool(WHATSAPP_TOKEN)} phone_id={pid or 'missing'} to={bool(to)}")
-        return False
-    url = f"https://graph.facebook.com/{GRAPH_VERSION}/{pid}/messages"
-    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
-    ok_all = True
-    for chunk in _chunk_text(text):
-        payload = {"messaging_product": "whatsapp", "to": to, "type": "text",
-                   "text": {"body": chunk}}
-        try:
-            r = requests.post(url, headers=headers, json=payload, timeout=30)
-            if r.status_code >= 300:
-                ok_all = False
-                print(f"❌ WhatsApp reply error {r.status_code} (phone_id={pid}): {r.text[:300]}")
-                if r.status_code == 400 and "does not exist" in r.text:
-                    print("💡 Hint: PHONE_NUMBER_ID galat hai ya token us number ka access nahi rakhta. "
-                          "Meta → WhatsApp → API Setup me 'Phone number ID' copy karein (WABA ID nahi), "
-                          "aur token me whatsapp_business_messaging permission honi chahiye.")
-                if r.status_code in (401, 403):
-                    print("💡 Hint: WHATSAPP_TOKEN expire/invalid hai — permanent System User token use karein.")
-                break
-        except Exception as e:
-            ok_all = False
-            print(f"❌ WhatsApp reply exception: {e}")
-            break
-    return ok_all
-
-def handle_message(text, reply_to=None, phone_id=None):
-    try:
-        summary = process_incoming(text)
-    except Exception as e:
-        print(f"❌ process_incoming error: {e}")
-        summary = f"❌ Processing me error aaya: {e}"
-    print("📝 Summary:\n" + summary)
-    if reply_to:
-        send_whatsapp(reply_to, summary, phone_id)
-    return summary
-
-@app.route("/", methods=["GET"])
-def home():
-    return "Bot is running ✅", 200
-
-@app.route("/health", methods=["GET"])
-def health():
-    return jsonify({"status": "ok", "time_ist": ist_now().strftime("%d/%m/%Y %H:%M")}), 200
-
-@app.route("/webhook", methods=["GET"])
-def webhook_verify():
-    mode = request.args.get("hub.mode")
-    token = request.args.get("hub.verify_token")
-    challenge = request.args.get("hub.challenge")
-    if mode == "subscribe" and challenge and VERIFY_TOKEN and token == VERIFY_TOKEN:
-        print("✅ Webhook verified")
-        return challenge, 200
-    return "Forbidden", 403
-
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    payload = request.get_json(silent=True) or {}
-    try:
-        for entry in payload.get("entry", []):
-            for change in entry.get("changes", []):
-                value = change.get("value", {}) or {}
-                # Sahi phone_number_id yahin se milta hai
-                incoming_pid = (value.get("metadata") or {}).get("phone_number_id") or ""
-                if incoming_pid and PHONE_NUMBER_ID and incoming_pid != PHONE_NUMBER_ID:
-                    print(f"⚠️ Env PHONE_NUMBER_ID ({PHONE_NUMBER_ID}) webhook ID ({incoming_pid}) se alag hai — webhook wali use hogi")
-                for m in value.get("messages", []):
-                    if m.get("type") != "text":
-                        continue
-                    if already_processed(m.get("id", "")):
-                        continue
-                    text = (m.get("text") or {}).get("body", "").strip()
-                    if not text:
-                        continue
-                    threading.Thread(target=handle_message,
-                                     args=(text, m.get("from"), incoming_pid or None),
-                                     daemon=True).start()
-    except Exception as e:
-        print(f"❌ Webhook Error: {e}")
-    return jsonify({"status": "ok"}), 200
-
-def startup_check():
-    print("========== STARTUP CHECK ==========")
-    print(f"SHEET_NAME      : {SHEET_NAME}")
-    print(f"GEMINI_API_KEY  : {bool(GEMINI_API_KEY)}  model={GEMINI_MODEL}")
-    print(f"CREDENTIALS     : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
-    print(f"IWOW_GRACE_HOUR : {IWOW_GRACE_HOUR}:00 IST")
-    print(f"WA REPLY        : {SEND_REPLY and bool(WHATSAPP_TOKEN)} (phone_id env={'set' if PHONE_NUMBER_ID else 'not set — webhook se auto lega'})")
-    print(f"IST_NOW         : {ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
-    try:
-        s = get_sheet()
-        if s:
-            print(f"✅ Google Sheet connected: tab '{s.title}'")
-            smap = get_station_map(s)
-            print(f"✅ NTSK in station map: {'NTSK' in smap}")
-            if "NTSK" in smap:
-                print(f"   → NTSK row = {smap['NTSK']['row']}")
-    except Exception as e:
-        print(f"⚠️ Startup sheet check failed: {e}")
-    print("===================================")
-
-startup_check()
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+                lines.exte
