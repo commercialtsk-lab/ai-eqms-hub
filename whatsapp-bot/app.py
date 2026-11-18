@@ -10,6 +10,7 @@ import requests
 import gspread
 import fcntl
 import random
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, time as dt_time
 from gspread.utils import rowcol_to_a1
@@ -35,8 +36,15 @@ GOOGLE_CREDENTIALS_B64 = os.environ.get("GOOGLE_CREDENTIALS_B64", "")
 GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
-GEMINI_THINK_FAST = int(os.environ.get("GEMINI_THINK_FAST", "512"))
-GEMINI_THINK_DEEP = int(os.environ.get("GEMINI_THINK_DEEP", "4096"))
+GEMINI_THINK_FAST = int(os.environ.get("GEMINI_THINK_FAST", "1024"))
+GEMINI_THINK_DEEP = int(os.environ.get("GEMINI_THINK_DEEP", "8192"))
+GEMINI_MAX_OUT = int(os.environ.get("GEMINI_MAX_OUT", "32768"))
+GEMINI_TIMEOUT = int(os.environ.get("GEMINI_TIMEOUT", "90"))
+# primary model fail/overload ho to ye models try hote hain (comma separated)
+GEMINI_FALLBACK_MODELS = os.environ.get("GEMINI_FALLBACK_MODELS", "gemini-2.5-flash-lite,gemini-2.0-flash")
+GOOGLE_TIMEOUT = int(os.environ.get("GOOGLE_TIMEOUT", "40"))
+PROCESS_LOCK_TIMEOUT = int(os.environ.get("PROCESS_LOCK_TIMEOUT", "600"))
+RECENT_LOG = deque(maxlen=40)
 GEMINI_PARALLEL = int(os.environ.get("GEMINI_PARALLEL", "4"))
 COVERAGE_MIN = float(os.environ.get("COVERAGE_MIN", "0.55"))
 SEND_REPLY = os.environ.get("SEND_REPLY", "1") != "0"
@@ -421,6 +429,13 @@ def _get_gc(force=False):
                   "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         _GC = gspread.authorize(creds)
+        try:
+            _GC.set_timeout(GOOGLE_TIMEOUT)          # koi Sheets call hamesha ke liye atak kar baaki messages na roke
+        except Exception:
+            try:
+                _GC.http_client.timeout = GOOGLE_TIMEOUT
+            except Exception:
+                pass
         _GC_TIME = time.time()
         return _GC
 
@@ -436,8 +451,13 @@ def gs_retry(fn, *args, **kwargs):
                 time.sleep(min(2 ** attempt, 20) + random.random())
                 continue
             raise
-        except requests.RequestException as e:
+        except getattr(gspread.exceptions, "GSpreadException", ()):
+            raise                                   # WorksheetNotFound etc — caller khud sambhalta hai
+        except (TypeError, ValueError, KeyError, AttributeError, IndexError):
+            raise                                   # programming / signature errors (retry se theek nahi honge)
+        except Exception as e:                      # network, timeout, auth-transport — dobara try
             last = e
+            print(f"⚠️ Sheets call transient error ({type(e).__name__}): {e} — retry {attempt + 1}/5")
             time.sleep(min(2 ** attempt, 10) + random.random())
     raise last
 
@@ -942,43 +962,166 @@ __MSG__
 JSON only, no markdown:"""
 
 _GEMINI_SEM = threading.Semaphore(GEMINI_PARALLEL)
+_GEMINI_COOLDOWN_UNTIL = 0.0
+_GEMINI_CD_LOCK = threading.Lock()
 
-def _gemini_post(prompt, thinking=0):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+def _gemini_wait_cooldown():
+    """429 aane par saare threads milkar thodi der ruk jaate hain (rate limit ko aur na todne ke liye)."""
+    while True:
+        with _GEMINI_CD_LOCK:
+            wait = _GEMINI_COOLDOWN_UNTIL - time.time()
+        if wait <= 0:
+            return
+        time.sleep(min(wait, 5))
+
+def _gemini_set_cooldown(seconds):
+    global _GEMINI_COOLDOWN_UNTIL
+    with _GEMINI_CD_LOCK:
+        _GEMINI_COOLDOWN_UNTIL = max(_GEMINI_COOLDOWN_UNTIL, time.time() + seconds)
+
+def _retry_delay_seconds(res):
+    try:
+        ra = res.headers.get("Retry-After")
+        if ra and str(ra).replace(".", "", 1).isdigit():
+            return min(float(ra), 60.0)
+    except Exception:
+        pass
+    m = re.search(r'"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"', getattr(res, "text", "") or "")
+    if m:
+        return min(float(m.group(1)) + 1.0, 60.0)
+    return 15.0
+
+def _gemini_models():
+    out = [GEMINI_MODEL]
+    for m in str(GEMINI_FALLBACK_MODELS or "").split(","):
+        m = m.strip()
+        if m and m not in out:
+            out.append(m)
+    return out
+
+def _gen_config(model, thinking, max_tokens):
+    gen = {"temperature": 0, "maxOutputTokens": max_tokens, "responseMimeType": "application/json"}
+    if "2.5" in model:
+        budget = thinking
+        if "pro" in model and budget == 0:
+            budget = 128                              # 2.5-pro me thinking band nahi hoti
+        gen["thinkingConfig"] = {"thinkingBudget": budget}
+    return gen
+
+def _gemini_post(prompt, thinking=0, max_tokens=None):
+    """Primary model, fail/overload par fallback models. (response_json, error_text) lautata hai."""
+    max_tokens = max_tokens or GEMINI_MAX_OUT
     headers = {"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY}
-    gen = {"temperature": 0, "maxOutputTokens": 8192, "responseMimeType": "application/json"}
-    if "2.5" in GEMINI_MODEL:
-        gen["thinkingConfig"] = {"thinkingBudget": thinking}
-    payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": gen}
     err = ""
-    for attempt in range(5):
-        try:
-            with _GEMINI_SEM:
-                res = requests.post(url, json=payload, headers=headers, timeout=90)
-            if res.status_code == 200:
-                return res.json(), ""
-            err = f"HTTP {res.status_code}: {res.text[:160]}"
+    for mi, model in enumerate(_gemini_models()):
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        use_thinking = True
+        tries = 5 if mi == 0 else 3
+        for attempt in range(tries):
+            _gemini_wait_cooldown()
+            gen = _gen_config(model, thinking, max_tokens)
+            if not use_thinking:
+                gen.pop("thinkingConfig", None)
+            payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": gen}
+            try:
+                with _GEMINI_SEM:
+                    res = requests.post(url, json=payload, headers=headers, timeout=GEMINI_TIMEOUT)
+            except Exception as e:
+                err = f"{type(e).__name__}: {e}"
+                print(f"❌ Gemini ({model}) Error: {err}")
+                time.sleep(min(2 ** attempt, 12) + random.random())
+                continue
+            code = res.status_code
+            if code == 200:
+                try:
+                    if mi:
+                        print(f"ℹ️ Gemini fallback model use hua: {model}")
+                    return res.json(), ""
+                except Exception as e:
+                    err = f"Gemini response JSON nahi: {e}"
+                    time.sleep(1.0)
+                    continue
+            err = f"HTTP {code} ({model}): {res.text[:200]}"
             print(f"❌ Gemini {err}")
-            if res.status_code not in (429, 500, 502, 503, 504):
-                return None, err
-        except Exception as e:
-            err = f"{type(e).__name__}: {e}"
-            print(f"❌ Gemini Error: {err}")
-        time.sleep(min(2 ** attempt, 16) + random.random())
+            low = (res.text or "").lower()
+            if code == 429:
+                if "perday" in low.replace(" ", "") or "per day" in low:
+                    break                              # roz ka quota khatam → agla model
+                _gemini_set_cooldown(_retry_delay_seconds(res))
+                continue
+            if code in (500, 502, 503, 504):
+                time.sleep(min(2 ** attempt, 12) + random.random())
+                continue
+            if code == 400 and "think" in low and use_thinking:
+                use_thinking = False                   # is model me thinking setting supported nahi
+                continue
+            if code in (401, 403) and mi == 0 and "api key" in low:
+                return None, err                       # key hi galat/band hai
+            break                                      # 400/404/other → agla model
     return None, err
+
+def _repair_json(s):
+    """Adhura (truncated) JSON band karne ki koshish."""
+    stack, in_str, esc = [], False, False
+    for ch in s:
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+        else:
+            if ch == '"':
+                in_str = True
+            elif ch in "{[":
+                stack.append("}" if ch == "{" else "]")
+            elif ch in "}]" and stack:
+                stack.pop()
+    res = s + ('"' if in_str else "")
+    for _ in range(3):
+        res = re.sub(r',\s*$', '', res)
+        res = re.sub(r'"[^"]*"\s*:\s*$', '', res)
+    return res + "".join(reversed(stack))
 
 def _parse_gemini_json(txt):
     txt = re.sub(r'```json\n?', '', txt or "", flags=re.IGNORECASE)
     txt = re.sub(r'```\n?', '', txt).strip()
-    match = re.search(r'\{[\s\S]*\}', txt)
-    if not match:
+    start = txt.find("{")
+    if start < 0:
         return None
-    try:
-        parsed = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return None
+    cand = txt[start:]
+    parsed = None
+    m = re.search(r'\{[\s\S]*\}', txt)
+    for attempt in ([m.group(0)] if m else []) + [cand]:
+        try:
+            parsed = json.loads(attempt)
+            break
+        except json.JSONDecodeError:
+            pass
+    if parsed is None:
+        try:
+            parsed, _ = json.JSONDecoder().raw_decode(cand)
+        except json.JSONDecodeError:
+            pass
+    if parsed is None:
+        try:
+            parsed = json.loads(_repair_json(cand))
+            print("ℹ️ Gemini ka adhura JSON repair karke padha")
+        except json.JSONDecodeError:
+            return None
+    if isinstance(parsed, list):
+        parsed = next((x for x in parsed if isinstance(x, dict)), None)
     if not isinstance(parsed, dict):
         return None
+    parsed = {str(k).lower(): v for k, v in parsed.items()}
+    if not any(k in parsed for k in ("prs", "uts", "osop", "goods")):
+        for v in parsed.values():                    # {"result": {...}} / {"data": {...}} jaisa wrapper
+            if isinstance(v, dict):
+                inner = {str(k).lower(): x for k, x in v.items()}
+                if any(k in inner for k in ("prs", "uts", "osop", "goods")):
+                    parsed = inner
+                    break
     for k in ("prs", "uts"):
         v = parsed.get(k)
         parsed[k] = v if isinstance(v, dict) else {}
@@ -988,6 +1131,18 @@ def _parse_gemini_json(txt):
             v = [v]
         parsed[k] = v if isinstance(v, list) else []
     return parsed
+
+def _gemini_text(resp):
+    cands = (resp or {}).get("candidates") or []
+    if not cands:
+        fb = (resp or {}).get("promptFeedback") or {}
+        return "", f"Gemini ne jawab nahi diya ({fb.get('blockReason') or 'no candidates'})"
+    c = cands[0] or {}
+    parts = (c.get("content") or {}).get("parts") or []
+    txt = "".join(p.get("text", "") for p in parts if isinstance(p, dict) and not p.get("thought"))
+    if not txt.strip():
+        return "", f"Gemini ne text nahi diya (finishReason={c.get('finishReason')})"
+    return txt, ""
 
 def call_gemini(msg, sender="", ts="", hint=None, thinking=0):
     if not GEMINI_API_KEY:
@@ -1003,21 +1158,17 @@ def call_gemini(msg, sender="", ts="", hint=None, thinking=0):
               .replace("__LEGEND__", station_legend)
               .replace("__MSG__", msg))
     err = ""
-    for attempt in range(2):
-        resp, err = _gemini_post(prompt, thinking)
+    # 1st: jaisa maanga; agar jawab adhura/khali aaye to 2nd: thinking band (poora token output ke liye)
+    for th in (thinking, 0):
+        resp, err = _gemini_post(prompt, th)
         if not resp:
             return None, err
-        try:
-            parts = resp["candidates"][0]["content"]["parts"]
-            txt = "".join(p.get("text", "") for p in parts if not p.get("thought"))
-            parsed = _parse_gemini_json(txt)
-            if parsed is not None:
-                return parsed, ""
-            err = "Gemini ne JSON nahi diya"
-            print(f"⚠️ {err}")
-        except Exception as e:
-            err = f"Gemini response parse error: {e}"
-            print(f"⚠️ {err}")
+        txt, why = _gemini_text(resp)
+        parsed = _parse_gemini_json(txt) if txt else None
+        if parsed is not None:
+            return parsed, ""
+        err = why or "Gemini ne JSON nahi diya"
+        print(f"⚠️ {err} (thinking={th}) — dobara")
         time.sleep(1.0)
     return None, err
 
@@ -2224,6 +2375,18 @@ def extract_block(body, sender="", ts=""):
     print(f"✅ Final ({source}, coverage {best_cov:.2f}, fields {_field_count(best)}):", json.dumps(best, default=str))
     return best, notes
 
+@contextlib.contextmanager
+def _process_lock(timeout=600):
+    """Ek message atak jaye to baaki hamesha ke liye na ruke: lock ke liye max timeout tak intezaar."""
+    got = PROCESS_LOCK.acquire(timeout=timeout)
+    if not got:
+        print("⚠️ PROCESS_LOCK timeout — bina lock ke aage badh rahe hain (har tab ka file-lock phir bhi bachata hai)")
+    try:
+        yield got
+    finally:
+        if got:
+            PROCESS_LOCK.release()
+
 def process_incoming(text):
     blocks = [b for b in split_chat_messages(text) if re.search(r'\d', b["body"])]
     print(f"📦 {len(blocks)} message block(s) mile")
@@ -2251,7 +2414,7 @@ def process_incoming(text):
             msg += "\n" + "\n".join(f"ℹ️ {n}" for n in dict.fromkeys(notes))
         return msg
     lines = []
-    with PROCESS_LOCK:
+    with _process_lock(PROCESS_LOCK_TIMEOUT):
         for fn, payload, name in ((update_google_sheet, agg if (agg["prs"] or agg["uts"]) else None, "UTS/PRS"),
                                   (update_osop_sheet, agg["osop"], "OSOP"),
                                   (update_iwow_sheet, agg["goods"], "IWOW")):
@@ -2319,12 +2482,33 @@ def send_whatsapp(to, text, phone_id=None):
             break
     return ok_all
 
+def _message_text(m):
+    """WhatsApp message se text nikalo: text, ya image/document/video ka caption, button/list reply."""
+    t = m.get("type")
+    if t == "text":
+        return ((m.get("text") or {}).get("body") or "").strip()
+    if t in ("image", "document", "video", "audio"):
+        return ((m.get(t) or {}).get("caption") or "").strip()
+    if t == "button":
+        return ((m.get("button") or {}).get("text") or "").strip()
+    if t == "interactive":
+        ir = m.get("interactive") or {}
+        rep_ = ir.get("button_reply") or ir.get("list_reply") or {}
+        return (rep_.get("title") or "").strip()
+    return ""
+
 def handle_message(text, reply_to=None, phone_id=None):
+    t0 = time.time()
     try:
         summary = process_incoming(text)
-    except Exception as e:
+    except BaseException as e:
         print(f"❌ process_incoming error: {e}")
         summary = f"❌ Processing me error aaya: {e}"
+    try:
+        RECENT_LOG.append({"time_ist": ist_now().strftime("%d/%m %H:%M:%S"), "secs": round(time.time() - t0, 1),
+                           "from": str(reply_to or "")[-4:], "text": str(text)[:300], "result": summary[:600]})
+    except Exception:
+        pass
     print("📝 Summary:\n" + summary)
     if reply_to:
         send_whatsapp(reply_to, summary, phone_id)
@@ -2337,6 +2521,13 @@ def home():
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "time_ist": ist_now().strftime("%d/%m/%Y %H:%M")}), 200
+
+@app.route("/recent", methods=["GET"])
+def recent():
+    """Pichle 40 messages ka natija (debug): /recent?token=<VERIFY_TOKEN>"""
+    if not VERIFY_TOKEN or request.args.get("token") != VERIFY_TOKEN:
+        return "Forbidden", 403
+    return jsonify(list(RECENT_LOG)), 200
 
 @app.route("/webhook", methods=["GET"])
 def webhook_verify():
@@ -2360,12 +2551,11 @@ def webhook():
                 if incoming_pid and PHONE_NUMBER_ID and incoming_pid != PHONE_NUMBER_ID:
                     print(f"⚠️ Env PHONE_NUMBER_ID ({PHONE_NUMBER_ID}) webhook ID ({incoming_pid}) se alag hai — webhook wali use hogi")
                 for m in value.get("messages", []):
-                    if m.get("type") != "text":
+                    text = _message_text(m)
+                    if not text:
+                        print(f"ℹ️ Message type '{m.get('type')}' me text nahi — skip")
                         continue
                     if already_processed(m.get("id", "")):
-                        continue
-                    text = (m.get("text") or {}).get("body", "").strip()
-                    if not text:
                         continue
                     threading.Thread(target=handle_message,
                                      args=(text, m.get("from"), incoming_pid or None),
@@ -2392,7 +2582,7 @@ def startup_check():
     print("========== STARTUP CHECK ==========")
     try:
         print(f"SHEET_NAME      : {SHEET_NAME}")
-        print(f"GEMINI_API_KEY  : {bool(GEMINI_API_KEY)}  model={GEMINI_MODEL}")
+        print(f"GEMINI_API_KEY  : {bool(GEMINI_API_KEY)}  models={_gemini_models()} think={GEMINI_THINK_FAST}/{GEMINI_THINK_DEEP}")
         print(f"CREDENTIALS     : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
         print(f"IWOW_GRACE_HOUR : {IWOW_GRACE_HOUR}:00 IST")
         print(f"WA REPLY        : {SEND_REPLY and bool(WHATSAPP_TOKEN)} (phone_id env={'set' if PHONE_NUMBER_ID else 'not set — webhook se auto lega'})")
@@ -2407,3 +2597,5 @@ startup_check()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
+# ===== END OF app.py (2601 lines) — agar ye line nahi dikhti to file adhoori copy hui hai =====
