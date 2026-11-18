@@ -706,6 +706,8 @@ def normalize_message(text):
     text = re.sub(r'(?<=[A-Za-z])-(?=[A-Za-z])', ' ', text)
     # "E - cash", "Net - cash", "Can - tkt" (space wala hyphen) — sirf label ke shabdon ke baad
     text = re.sub(r'(?i)\b(E|DIGI|DIGITAL|NET|T|J|C|P|TOTAL|TTL|CAN|CANCEL|MR|PF|UPI|QR|POS|MISC)\s+[-–—]\s+(?=[A-Za-z])', r'\1 ', text)
+    # "QR -- Amt = 215", "UPI :- Amt 215" → label ke beech ka dash/barabar hata do
+    text = re.sub(r'(?i)\b(QR|UPI|E|NET|CASH|TOTAL|TTL|DIGI|DIGITAL|POS)\s*[-–—=:]+\s*(?=(?:AMT|AMOUNT|CASH|REF|RFD)\b)', r'\1 ', text)
     text = re.sub(r'\bAOUNT\b', 'AMOUNT', text, flags=re.I)
     text = re.sub(r'\bAMONT\b', 'AMOUNT', text, flags=re.I)
     text = re.sub(r'[ \t]+', ' ', text)
@@ -803,6 +805,7 @@ Always output the CODE, never the full name. Fix spelling mistakes and short for
 - SMALL STATIONS (CGF, DMGN, TNGN, NSBG, KOWN, NCH, CMA, KXL, BBGN, BLMR, NMGY, KRHT) only report TKT, PASS, NET (cash amount) and UPI (E cash). They have NO MR, so a plain "Amount"/"Cash"/"Cash amount" there is NET, never MR AMT. Other small stations (LBI, BGND, LMY, SRPN, SMCP, TQM, GOM, BDLN, CKW, LHL, DKM, PNT, TII, LXA, SFR, SLX, NMT) report TKT, PASS, NET, UPI and only sometimes MR / MR AMT (MR AMT only when written next to MR).
 - "Jenny" / "JTBS" lines (e.g. "T/jenny 1132") are only a sub-count of tickets already included in the total → ignore them, never add them to TKT.
 - KEY-VALUE LISTS: many stations send one field per line like "TKT--106", "AMT- 110585", "Ref-10665/-" ("/-" only means rupees), "STN-DBRT", "*PRS/DBRT". In such a list "AMT"/"Amount" is NET (cash amount). A line with nothing after the dash ("VOU--", "QR-", "AMT-") or with nil/Nill is simply omitted. "PF AMT" and "MR AMT"-less platform amounts: ignore PF AMT. The words "PRS" / "UTS" on their own line start a section that lasts until the next such marker; "STN-XYZ" names the station of that section. Several stations' PRS and UTS reports can be pasted one after another: keep every number with its own station AND its own PRS/UTS section.
+- NARRATIVE FORMAT: the station may be named in words ("Station :- New Sisiborgaon." → NSBG) and values may sit under a header line: "Ticket" then "   UTS--78" means TKT 78 (here UTS is a ticket-type label, NOT a section heading); other ticket types with nil (BPT-- NIL) are omitted. "Passenger=163" = PASS. "Cash Amt" = NET. "QR -- Amt = 215" = UPI (QR/UPI amount). "Total Amt" = grand total of cash + QR → ignore. "From SS/NSBG." is a signature (sender), not data.
 - UTS HAS NO COLUMNS for VCH, REF/RFD, C/TKT, C/PASS, POS. If such lines appear under a UTS heading (e.g. UTS: "VCH -12232", "RFD -12232") IGNORE them completely — never copy them into PRS and never into UTS. These fields belong to PRS only, and only when they are written under the PRS heading. Likewise PF / MR / MR AMT exist only for UTS.
 - LABEL SPELLINGS: "E - cash", "E-cash", "E cash", "Ecash" are all UPI (never NET). "Net cash" is NET. When both are written each goes to its own field — a number written once is never copied into two fields. "Total tkt / Total pass" = TKT / PASS counts. "Can tkt / Can pass" = C/TKT / C/PASS. "Misc. tkt" and similar miscellaneous counts have no column → ignore. A section headed PMS (e.g. "*PMS/SLGR*" with Inward / Outward / Scanned / Booking counts) is not revenue → ignore it completely.
 - SPLIT REFUNDS: a refund written over several lines or modes ("Rfd :- 6100/ ( cash )" and below it "2780/- (digi )") → ADD them all: REF 8880. A bare number line under a refund line belongs to that refund.
@@ -824,6 +827,9 @@ Output: {"prs":{},"uts":{"KOWN":{"TKT":7,"PASS":9,"NET":20,"UPI":400}},"osop":[]
 
 Input: "Krht uts of 4.11.2026\nT 36\nP 58\nCash 1390\nE cas 340\nTtl 1730 only"
 Output: {"prs":{},"uts":{"KRHT":{"TKT":36,"PASS":58,"NET":1390,"UPI":340}},"osop":[],"goods":[]}
+
+Input: "Station :- New Sisiborgaon.\n(UTS Earnings)\nDate:-18/11/26\n\nTicket \n   UTS--78\n   BPT-- NIL \nPassenger=163\nCash Amt  =2445.00/-\nQR -- Amt = 215.00/-\nTotal Amt= 2660.00/-.\n\nFrom \nSS/NSBG."
+Output: {"prs":{},"uts":{"NSBG":{"TKT":78,"PASS":163,"NET":2445,"UPI":215}},"osop":[],"goods":[]}
 
 Input: "*Date:-17/11/2026*\n\n*PRS/SLGR*\n\nTotal tkt :- 57\nTotal pass :- 104\nCan tkt :- 06\nCan pass :- 10\nE - cash :- 22820/-\nNet cash :- 77235/-\nRfd :- 6100/ ( cash )\n            2780/- (digi )\n\n\n*UTS/SLGR*\n\nTotal tkt :- 781\nTotal pass :- 1211\nMisc. tkt :- 15\nMR :- 01 \nAmount :- 500/-\nE - cash :- 34400/-\nNet cash :- 78125/-\n\n*PMS/SLGR*\n\nInward :- 01\nScanned :- 01\n\nBooking :- 00\n\nOutward :- 00"
 Output: {"prs":{"SLGR":{"TKT":57,"PASS":104,"C/TKT":6,"C/PASS":10,"UPI":22820,"NET":77235,"REF":8880}},"uts":{"SLGR":{"TKT":781,"PASS":1211,"MR":1,"MR AMT":500,"UPI":34400,"NET":78125}},"osop":[],"goods":[]}
@@ -1236,15 +1242,28 @@ def _line_fields(line, prev_in=None):
 
 _ORPHAN_RE = re.compile(r'^\W*(?:RS\.?\s*)?(\d[\d,]*(?:\.\d+)?)\s*(?:/-?|-)?\s*(?:\(\s*[A-Za-z ]{1,15}\s*\))?\W*$', re.I)
 
+_HDR_UTS_RE = re.compile(r'^\W*UTS\b\W*?(\d[\d,]*(?:\.\d+)?)', re.I)
+
 def _walk_report(body, hint=None):
     """Message ko line-by-line chalao: har line par (line, station, section, fields). Section = prs / uts / pms / None."""
     cur = hint
     section = None
     prev_line = None
+    hdr = False
     for line in str(body or "").splitlines():
         L = line.strip()
         if not L:
             continue
+        # "Ticket" akela header, uske neeche "UTS--78" → ye UTS ki ticket ginti hai (section heading nahi)
+        if re.match(r'^\W*(TICKETS?|TKTS?|TCKTS?)\W*$', L, re.I):
+            hdr = True
+            continue
+        if hdr:
+            um = _HDR_UTS_RE.match(L)
+            if um and _to_float(um.group(1)) is not None:
+                hdr = False
+                yield L, cur, section, [("TKT", _to_float(um.group(1)))]
+                continue
         sec_m = re.search(r'\b(UTS|PRS|PMS)\b', L, re.IGNORECASE)
         stns = _find_stations_in_text(L)
         lead = _leading_station(L)
@@ -1256,6 +1275,8 @@ def _walk_report(body, hint=None):
                 n = _to_float(om.group(1))
                 if n is not None:
                     fields = [("REF", n)]
+        if fields:
+            hdr = False
         if sec_m:
             section = sec_m.group(1).lower()
         if lead:
@@ -2200,7 +2221,7 @@ def extract_block(body, sender="", ts=""):
     miss = missing_stations(best, body)
     if miss and looks:
         notes.append(f"{', '.join(miss)}: message me station mila par uska data samajh nahi aaya — message check karein")
-    print(f"✅ Final ({source}, coverage {best_cov:.2f}, fields {_field_count(best)}):", json.dumps(best, default=str))
+    print(f"✅ Final (({source}, coverage {best_cov:.2f}, fields {_field_count(best)}):", json.dumps(best, default=str))
     return best, notes
 
 def process_incoming(text):
@@ -2386,3 +2407,5 @@ startup_check()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
+# ===== END OF app.py (2411 lines) — agar ye line nahi dikhti to file adhoori copy hui hai =====
