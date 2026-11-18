@@ -2407,5 +2407,3 @@ startup_check()
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-
-# ===== END OF app.py (2411 lines) — agar ye line nahi dikhti to file adhoori copy hui hai =====
