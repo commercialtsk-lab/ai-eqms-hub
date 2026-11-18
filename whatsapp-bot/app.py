@@ -2238,4 +2238,149 @@ def process_incoming(text):
                 continue
             try:
                 ok, rep = fn(payload)
-                lines.exte
+                lines.extend(rep)
+            except Exception as e:
+                print(f"❌ {name} write crashed: {e}")
+                reset_caches()
+                lines.append(f"❌ {name} update fail: {e}")
+    lines.extend(f"ℹ️ {n}" for n in dict.fromkeys(notes))
+    return "\n".join(lines) if lines else "⚠️ Kuch update nahi hua."
+
+# ==============================================
+# WHATSAPP + WEBHOOK
+# ==============================================
+def _chunk_text(text, limit=3800):
+    text = str(text or "")
+    if len(text) <= limit:
+        return [text]
+    chunks, cur = [], ""
+    for ln in text.split("\n"):
+        if len(cur) + len(ln) + 1 > limit and cur:
+            chunks.append(cur)
+            cur = ""
+        cur += (ln[:limit] + "\n")
+    if cur.strip():
+        chunks.append(cur.rstrip("\n"))
+    return chunks
+
+def send_whatsapp(to, text, phone_id=None):
+    """
+    FIX: reply hamesha usi phone_number_id se bhejo jis par message aaya tha
+    (webhook payload: value.metadata.phone_number_id). Env ki PHONE_NUMBER_ID
+    sirf fallback hai. Galat ID (jaise WABA ID) dene par Meta error 400
+    "Object with ID ... does not exist" deta hai.
+    """
+    pid = str(phone_id or PHONE_NUMBER_ID or "").strip()
+    if not (SEND_REPLY and WHATSAPP_TOKEN and pid and to):
+        print(f"ℹ️ Reply skip: SEND_REPLY={SEND_REPLY} token={bool(WHATSAPP_TOKEN)} phone_id={pid or 'missing'} to={bool(to)}")
+        return False
+    url = f"https://graph.facebook.com/{GRAPH_VERSION}/{pid}/messages"
+    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
+    ok_all = True
+    for chunk in _chunk_text(text):
+        payload = {"messaging_product": "whatsapp", "to": to, "type": "text",
+                   "text": {"body": chunk}}
+        try:
+            r = requests.post(url, headers=headers, json=payload, timeout=30)
+            if r.status_code >= 300:
+                ok_all = False
+                print(f"❌ WhatsApp reply error {r.status_code} (phone_id={pid}): {r.text[:300]}")
+                if r.status_code == 400 and "does not exist" in r.text:
+                    print("💡 Hint: PHONE_NUMBER_ID galat hai ya token us number ka access nahi rakhta. "
+                          "Meta → WhatsApp → API Setup me 'Phone number ID' copy karein (WABA ID nahi), "
+                          "aur token me whatsapp_business_messaging permission honi chahiye.")
+                if r.status_code in (401, 403):
+                    print("💡 Hint: WHATSAPP_TOKEN expire/invalid hai — permanent System User token use karein.")
+                break
+        except Exception as e:
+            ok_all = False
+            print(f"❌ WhatsApp reply exception: {e}")
+            break
+    return ok_all
+
+def handle_message(text, reply_to=None, phone_id=None):
+    try:
+        summary = process_incoming(text)
+              print(summary)
+        if reply_to:
+            send_whatsapp(reply_to, summary, phone_id=phone_id)
+        return summary
+    except Exception as e:
+        print(f"❌ handle_message error: {e}")
+        try:
+            if reply_to:
+                send_whatsapp(reply_to, f"❌ Internal error: {e}", phone_id=phone_id)
+        except Exception:
+            pass
+        return f"❌ Internal error: {e}"
+
+@app.route("/webhook", methods=["GET", "POST"])
+def webhook():
+    if request.method == "GET":
+        mode = request.args.get("hub.mode")
+        token = request.args.get("hub.verify_token")
+        challenge = request.args.get("hub.challenge")
+        if mode == "subscribe" and token == VERIFY_TOKEN and challenge:
+            print("✅ Webhook verified")
+            return challenge, 200
+        print(f"❌ Webhook verification failed (mode={mode}, token match={token == VERIFY_TOKEN})")
+        return "Forbidden", 403
+
+    try:
+        data = request.get_json(silent=True) or {}
+    except Exception:
+        data = {}
+
+    try:
+        for entry in data.get("entry", []):
+            for change in entry.get("changes", []):
+                value = change.get("value", {}) or {}
+                metadata = value.get("metadata", {}) or {}
+                phone_id = metadata.get("phone_number_id") or PHONE_NUMBER_ID
+
+                for msg in value.get("messages", []) or []:
+                    msg_id = msg.get("id")
+                    if already_processed(msg_id):
+                        print(f"⏭️ Duplicate message ignored: {msg_id}")
+                        continue
+                    frm = msg.get("from")
+                    mtype = msg.get("type")
+                    text = ""
+                    if mtype == "text":
+                        text = (msg.get("text") or {}).get("body", "")
+                    elif mtype == "button":
+                        text = (msg.get("button") or {}).get("text", "")
+                    elif mtype == "interactive":
+                        inter = msg.get("interactive") or {}
+                        if inter.get("type") == "button_reply":
+                            text = (inter.get("button_reply") or {}).get("title", "")
+                        elif inter.get("type") == "list_reply":
+                            text = (inter.get("list_reply") or {}).get("title", "")
+                    if not text:
+                        print(f"ℹ️ Skipping non-text message type: {mtype}")
+                        continue
+                    print(f"📥 Message from {frm} (phone_id={phone_id}): {text[:120]}")
+                    threading.Thread(
+                        target=handle_message,
+                        args=(text, frm, phone_id),
+                        daemon=True
+                    ).start()
+    except Exception as e:
+        print(f"❌ Webhook processing error: {e}")
+
+    return jsonify({"status": "ok"}), 200
+
+@app.route("/", methods=["GET"])
+def health():
+    return jsonify({
+        "status": "ok",
+        "sheet": SHEET_NAME,
+        "gemini_model": GEMINI_MODEL,
+        "send_reply": SEND_REPLY,
+        "time_ist": ist_now().strftime("%Y-%m-%d %H:%M:%S"),
+    }), 200
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", "5000"))
+    print(f"🚀 Starting app on port {port}")
+    app.run(host="0.0.0.0", port=port)
