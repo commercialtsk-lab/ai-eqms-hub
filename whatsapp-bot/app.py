@@ -2301,86 +2301,88 @@ def send_whatsapp(to, text, phone_id=None):
 def handle_message(text, reply_to=None, phone_id=None):
     try:
         summary = process_incoming(text)
-              print(summary)
-        if reply_to:
-            send_whatsapp(reply_to, summary, phone_id=phone_id)
-        return summary
     except Exception as e:
-        print(f"❌ handle_message error: {e}")
-        try:
-            if reply_to:
-                send_whatsapp(reply_to, f"❌ Internal error: {e}", phone_id=phone_id)
-        except Exception:
-            pass
-        return f"❌ Internal error: {e}"
-
-@app.route("/webhook", methods=["GET", "POST"])
-def webhook():
-    if request.method == "GET":
-        mode = request.args.get("hub.mode")
-        token = request.args.get("hub.verify_token")
-        challenge = request.args.get("hub.challenge")
-        if mode == "subscribe" and token == VERIFY_TOKEN and challenge:
-            print("✅ Webhook verified")
-            return challenge, 200
-        print(f"❌ Webhook verification failed (mode={mode}, token match={token == VERIFY_TOKEN})")
-        return "Forbidden", 403
-
-    try:
-        data = request.get_json(silent=True) or {}
-    except Exception:
-        data = {}
-
-    try:
-        for entry in data.get("entry", []):
-            for change in entry.get("changes", []):
-                value = change.get("value", {}) or {}
-                metadata = value.get("metadata", {}) or {}
-                phone_id = metadata.get("phone_number_id") or PHONE_NUMBER_ID
-
-                for msg in value.get("messages", []) or []:
-                    msg_id = msg.get("id")
-                    if already_processed(msg_id):
-                        print(f"⏭️ Duplicate message ignored: {msg_id}")
-                        continue
-                    frm = msg.get("from")
-                    mtype = msg.get("type")
-                    text = ""
-                    if mtype == "text":
-                        text = (msg.get("text") or {}).get("body", "")
-                    elif mtype == "button":
-                        text = (msg.get("button") or {}).get("text", "")
-                    elif mtype == "interactive":
-                        inter = msg.get("interactive") or {}
-                        if inter.get("type") == "button_reply":
-                            text = (inter.get("button_reply") or {}).get("title", "")
-                        elif inter.get("type") == "list_reply":
-                            text = (inter.get("list_reply") or {}).get("title", "")
-                    if not text:
-                        print(f"ℹ️ Skipping non-text message type: {mtype}")
-                        continue
-                    print(f"📥 Message from {frm} (phone_id={phone_id}): {text[:120]}")
-                    threading.Thread(
-                        target=handle_message,
-                        args=(text, frm, phone_id),
-                        daemon=True
-                    ).start()
-    except Exception as e:
-        print(f"❌ Webhook processing error: {e}")
-
-    return jsonify({"status": "ok"}), 200
+        print(f"❌ process_incoming error: {e}")
+        summary = f"❌ Processing me error aaya: {e}"
+    print("📝 Summary:\n" + summary)
+    if reply_to:
+        send_whatsapp(reply_to, summary, phone_id)
+    return summary
 
 @app.route("/", methods=["GET"])
+def home():
+    return "Bot is running ✅", 200
+
+@app.route("/health", methods=["GET"])
 def health():
-    return jsonify({
-        "status": "ok",
-        "sheet": SHEET_NAME,
-        "gemini_model": GEMINI_MODEL,
-        "send_reply": SEND_REPLY,
-        "time_ist": ist_now().strftime("%Y-%m-%d %H:%M:%S"),
-    }), 200
+    return jsonify({"status": "ok", "time_ist": ist_now().strftime("%d/%m/%Y %H:%M")}), 200
+
+@app.route("/webhook", methods=["GET"])
+def webhook_verify():
+    mode = request.args.get("hub.mode")
+    token = request.args.get("hub.verify_token")
+    challenge = request.args.get("hub.challenge")
+    if mode == "subscribe" and challenge and VERIFY_TOKEN and token == VERIFY_TOKEN:
+        print("✅ Webhook verified")
+        return challenge, 200
+    return "Forbidden", 403
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    payload = request.get_json(silent=True) or {}
+    try:
+        for entry in payload.get("entry", []):
+            for change in entry.get("changes", []):
+                value = change.get("value", {}) or {}
+                # Sahi phone_number_id yahin se milta hai
+                incoming_pid = (value.get("metadata") or {}).get("phone_number_id") or ""
+                if incoming_pid and PHONE_NUMBER_ID and incoming_pid != PHONE_NUMBER_ID:
+                    print(f"⚠️ Env PHONE_NUMBER_ID ({PHONE_NUMBER_ID}) webhook ID ({incoming_pid}) se alag hai — webhook wali use hogi")
+                for m in value.get("messages", []):
+                    if m.get("type") != "text":
+                        continue
+                    if already_processed(m.get("id", "")):
+                        continue
+                    text = (m.get("text") or {}).get("body", "").strip()
+                    if not text:
+                        continue
+                    threading.Thread(target=handle_message,
+                                     args=(text, m.get("from"), incoming_pid or None),
+                                     daemon=True).start()
+    except Exception as e:
+        print(f"❌ Webhook Error: {e}")
+    return jsonify({"status": "ok"}), 200
+
+def _startup_sheet_check():
+    """Sheet connection check background me chalta hai — taaki Render/gunicorn start hote hi port khul jaye
+    (Google Sheets slow / rate-limited ho tab bhi deploy timeout na ho)."""
+    try:
+        s = get_sheet()
+        if s:
+            print(f"✅ Google Sheet connected: tab '{s.title}'")
+            smap = get_station_map(s)
+            print(f"✅ NTSK in station map: {'NTSK' in smap}")
+            if "NTSK" in smap:
+                print(f"   → NTSK row = {smap['NTSK']['row']}")
+    except BaseException as e:
+        print(f"⚠️ Startup sheet check failed: {e}")
+
+def startup_check():
+    print("========== STARTUP CHECK ==========")
+    try:
+        print(f"SHEET_NAME      : {SHEET_NAME}")
+        print(f"GEMINI_API_KEY  : {bool(GEMINI_API_KEY)}  model={GEMINI_MODEL}")
+        print(f"CREDENTIALS     : {bool(GOOGLE_CREDENTIALS_STR or GOOGLE_CREDENTIALS_B64)}")
+        print(f"IWOW_GRACE_HOUR : {IWOW_GRACE_HOUR}:00 IST")
+        print(f"WA REPLY        : {SEND_REPLY and bool(WHATSAPP_TOKEN)} (phone_id env={'set' if PHONE_NUMBER_ID else 'not set — webhook se auto lega'})")
+        print(f"IST_NOW         : {ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
+    except Exception as e:
+        print(f"⚠️ Startup info print failed: {e}")
+    threading.Thread(target=_startup_sheet_check, daemon=True).start()
+    print("===================================")
+
+startup_check()
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "5000"))
-    print(f"🚀 Starting app on port {port}")
+    port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
