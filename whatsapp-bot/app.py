@@ -2221,7 +2221,7 @@ def extract_block(body, sender="", ts=""):
     miss = missing_stations(best, body)
     if miss and looks:
         notes.append(f"{', '.join(miss)}: message me station mila par uska data samajh nahi aaya — message check karein")
-    print(f"✅ Final (({source}, coverage {best_cov:.2f}, fields {_field_count(best)}):", json.dumps(best, default=str))
+    print(f"✅ Final ({source}, coverage {best_cov:.2f}, fields {_field_count(best)}):", json.dumps(best, default=str))
     return best, notes
 
 def process_incoming(text):
