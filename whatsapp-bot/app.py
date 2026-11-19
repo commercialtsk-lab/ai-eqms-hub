@@ -52,6 +52,13 @@ GEMINI_FALLBACK_MODELS = os.environ.get("GEMINI_FALLBACK_MODELS", "gemini-2.5-fl
 GOOGLE_TIMEOUT = int(os.environ.get("GOOGLE_TIMEOUT", "40"))
 PROCESS_LOCK_TIMEOUT = int(os.environ.get("PROCESS_LOCK_TIMEOUT", "600"))
 RECENT_LOG = deque(maxlen=40)
+# Ek saath kai message forward hon: 3 sec ruk kar ek group (batch) me process, ek hi reply
+BATCH_WINDOW = float(os.environ.get("BATCH_WINDOW_SECS", "3"))      # 0 = batching band
+BATCH_MAX_WAIT = float(os.environ.get("BATCH_MAX_WAIT_SECS", "15"))
+MSG_WORKERS = int(os.environ.get("MSG_WORKERS", "3"))                # ek saath kitne batch/message process hon
+GEMINI_MIN_INTERVAL = float(os.environ.get("GEMINI_MIN_INTERVAL", "0"))   # Gemini calls ke beech min seconds (0 = bina limit)
+GEMINI_ADAPT_INTERVAL = float(os.environ.get("GEMINI_ADAPT_INTERVAL", "6.5"))  # 429 aane ke baad 10 min tak itna gap
+REPLY_GAP = float(os.environ.get("REPLY_GAP_SECS", "2"))             # WhatsApp replies ke beech gap
 GEMINI_PARALLEL = int(os.environ.get("GEMINI_PARALLEL", "4"))
 COVERAGE_MIN = float(os.environ.get("COVERAGE_MIN", "0.55"))
 SEND_REPLY = os.environ.get("SEND_REPLY", "1") != "0"
@@ -436,21 +443,37 @@ def _get_gc(force=False):
                   "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         _GC = gspread.authorize(creds)
-        try:
-            _GC.set_timeout(GOOGLE_TIMEOUT)          # koi Sheets call hamesha ke liye atak kar baaki messages na roke
-        except Exception:
+        # Koi Sheets call hamesha ke liye atak kar baaki messages na roke: connect 10s, read GOOGLE_TIMEOUT s
+        for tmo in ((10, GOOGLE_TIMEOUT), GOOGLE_TIMEOUT):
             try:
-                _GC.http_client.timeout = GOOGLE_TIMEOUT
+                _GC.set_timeout(tmo)
+                break
             except Exception:
-                pass
+                try:
+                    _GC.http_client.timeout = tmo
+                    break
+                except Exception:
+                    pass
+        # Render par idle ke baad purani (stale) keep-alive connection black-hole ho jaati hai → har call nayi connection se
+        try:
+            sess = getattr(_GC, "session", None) or getattr(getattr(_GC, "http_client", None), "session", None)
+            if sess is not None:
+                sess.headers["Connection"] = "close"
+        except Exception:
+            pass
         _GC_TIME = time.time()
         return _GC
 
 def gs_retry(fn, *args, **kwargs):
     last = None
     for attempt in range(5):
+        t0 = time.time()
         try:
-            return fn(*args, **kwargs)
+            res = fn(*args, **kwargs)
+            dt = time.time() - t0
+            if dt > 5:
+                print(f"🐢 Sheets call {getattr(fn, '__name__', 'fn')} slow: {dt:.1f}s")
+            return res
         except gspread.exceptions.APIError as e:
             last = e
             code = getattr(getattr(e, "response", None), "status_code", 0)
@@ -972,6 +995,31 @@ _GEMINI_SEM = threading.Semaphore(GEMINI_PARALLEL)
 _GEMINI_COOLDOWN_UNTIL = 0.0
 _GEMINI_CD_LOCK = threading.Lock()
 
+_GEMINI_NEXT_SLOT = 0.0
+_GEMINI_ADAPT_UNTIL = 0.0
+_GEMINI_PACE_LOCK = threading.Lock()
+
+def _gemini_note_rate_limited():
+    """429 mila → agle 10 minute tak Gemini calls ek-ek karke thode gap se jayengi (sab ek saath tootne se bachne ke liye)."""
+    global _GEMINI_ADAPT_UNTIL
+    with _GEMINI_PACE_LOCK:
+        _GEMINI_ADAPT_UNTIL = time.time() + 600
+
+def _gemini_pace():
+    global _GEMINI_NEXT_SLOT
+    now = time.time()
+    interval = GEMINI_MIN_INTERVAL
+    if now < _GEMINI_ADAPT_UNTIL:
+        interval = max(interval, GEMINI_ADAPT_INTERVAL)
+    if interval <= 0:
+        return
+    with _GEMINI_PACE_LOCK:
+        slot = max(now, _GEMINI_NEXT_SLOT)
+        _GEMINI_NEXT_SLOT = slot + interval
+    wait = slot - now
+    if wait > 0:
+        time.sleep(wait)
+
 def _gemini_wait_cooldown():
     """429 aane par saare threads milkar thodi der ruk jaate hain (rate limit ko aur na todne ke liye)."""
     while True:
@@ -1026,6 +1074,7 @@ def _gemini_post(prompt, thinking=0, max_tokens=None):
         tries = 5 if mi == 0 else 3
         for attempt in range(tries):
             _gemini_wait_cooldown()
+            _gemini_pace()
             gen = _gen_config(model, thinking, max_tokens)
             if not use_thinking:
                 gen.pop("thinkingConfig", None)
@@ -1054,6 +1103,7 @@ def _gemini_post(prompt, thinking=0, max_tokens=None):
             if code == 429:
                 if "perday" in low.replace(" ", "") or "per day" in low:
                     break                              # roz ka quota khatam → agla model
+                _gemini_note_rate_limited()
                 _gemini_set_cooldown(_retry_delay_seconds(res))
                 continue
             if code in (500, 502, 503, 504):
@@ -1807,12 +1857,15 @@ def update_google_sheet(data):
         sheet = get_sheet()
         if not sheet:
             return False, ["❌ Google Sheet connect nahi ho payi (credentials/sheet name check karein)"]
+        t_read = time.time()
+        print("📥 UTS&PRS sheet padh rahe hain...")
         try:
             matrix = gs_retry(sheet.get_all_values)
         except Exception as e:
             print(f"❌ Sheet read error: {e}")
             reset_caches()
             return False, [f"❌ Sheet read error: {e}"]
+        print(f"📥 UTS&PRS sheet padhi ({time.time() - t_read:.1f}s)")
         smap = get_station_map(sheet, matrix)
         def get_current(r, c):
             try:
@@ -2385,6 +2438,8 @@ def extract_block(body, sender="", ts=""):
 @contextlib.contextmanager
 def _process_lock(timeout=600):
     """Ek message atak jaye to baaki hamesha ke liye na ruke: lock ke liye max timeout tak intezaar."""
+    if PROCESS_LOCK.locked():
+        print("⏳ Doosra message sheet update kar raha hai — baari ka intezaar")
     got = PROCESS_LOCK.acquire(timeout=timeout)
     if not got:
         print("⚠️ PROCESS_LOCK timeout — bina lock ke aage badh rahe hain (har tab ka file-lock phir bhi bachata hai)")
@@ -2394,11 +2449,12 @@ def _process_lock(timeout=600):
         if got:
             PROCESS_LOCK.release()
 
-def process_incoming(text):
+def _extract_text(text):
+    """Phase 1 (Gemini + parsers, sheet ko haath nahi lagata). {"early": msg} ya {"agg":..., "notes":[...]}"""
     blocks = [b for b in split_chat_messages(text) if re.search(r'\d', b["body"])]
     print(f"📦 {len(blocks)} message block(s) mile")
     if not blocks:
-        return "⚠️ Message me koi data (number) nahi mila."
+        return {"early": "⚠️ Message me koi data (number) nahi mila."}
     def work(b):
         try:
             return extract_block(b["body"], b["sender"], b["ts"])
@@ -2419,7 +2475,14 @@ def process_incoming(text):
         msg = "⚠️ Data samajh nahi aaya. Message check karke dobara bhejiye."
         if notes:
             msg += "\n" + "\n".join(f"ℹ️ {n}" for n in dict.fromkeys(notes))
-        return msg
+        return {"early": msg}
+    return {"agg": agg, "notes": notes}
+
+def _write_extracted(ex):
+    """Phase 2: sheets me likho (lock ke andar, ek-ek karke). Summary text lautata hai."""
+    if ex.get("early"):
+        return ex["early"]
+    agg, notes = ex["agg"], ex["notes"]
     lines = []
     with _process_lock(PROCESS_LOCK_TIMEOUT):
         for fn, payload, name in ((update_google_sheet, agg if (agg["prs"] or agg["uts"]) else None, "UTS/PRS"),
@@ -2436,6 +2499,9 @@ def process_incoming(text):
                 lines.append(f"❌ {name} update fail: {e}")
     lines.extend(f"ℹ️ {n}" for n in dict.fromkeys(notes))
     return "\n".join(lines) if lines else "⚠️ Kuch update nahi hua."
+
+def process_incoming(text):
+    return _write_extracted(_extract_text(text))
 
 # ==============================================
 # WHATSAPP + WEBHOOK
@@ -2454,12 +2520,20 @@ def _chunk_text(text, limit=3800):
         chunks.append(cur.rstrip("\n"))
     return chunks
 
+_REPLY_LOCK = threading.Lock()
+_LAST_REPLY = {}
+
+def _wa_error_code(r):
+    try:
+        return int((r.json().get("error") or {}).get("code") or 0)
+    except Exception:
+        return 0
+
 def send_whatsapp(to, text, phone_id=None):
     """
-    FIX: reply hamesha usi phone_number_id se bhejo jis par message aaya tha
-    (webhook payload: value.metadata.phone_number_id). Env ki PHONE_NUMBER_ID
-    sirf fallback hai. Galat ID (jaise WABA ID) dene par Meta error 400
-    "Object with ID ... does not exist" deta hai.
+    Reply hamesha usi phone_number_id se bhejo jis par message aaya tha
+    (webhook payload: value.metadata.phone_number_id). Env ki PHONE_NUMBER_ID sirf fallback hai.
+    Replies ek-ek karke thode gap se jaate hain; Meta ka "pair rate limit" (131056/130429) aaye to dobara try.
     """
     pid = str(phone_id or PHONE_NUMBER_ID or "").strip()
     if not (SEND_REPLY and WHATSAPP_TOKEN and pid and to):
@@ -2468,29 +2542,44 @@ def send_whatsapp(to, text, phone_id=None):
     url = f"https://graph.facebook.com/{GRAPH_VERSION}/{pid}/messages"
     headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
     ok_all = True
-    for chunk in _chunk_text(text):
-        payload = {"messaging_product": "whatsapp", "to": to, "type": "text",
-                   "text": {"body": chunk}}
-        try:
-            r = requests.post(url, headers=headers, json=payload, timeout=30)
-            if r.status_code >= 300:
-                ok_all = False
+    with _REPLY_LOCK:
+        for chunk in _chunk_text(text):
+            wait = _LAST_REPLY.get(to, 0) + REPLY_GAP - time.time()
+            if wait > 0:
+                time.sleep(wait)
+            payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": chunk}}
+            sent = False
+            for attempt in range(3):
+                try:
+                    r = requests.post(url, headers=headers, json=payload, timeout=30)
+                except Exception as e:
+                    print(f"❌ WhatsApp reply exception: {e}")
+                    time.sleep(2)
+                    continue
+                _LAST_REPLY[to] = time.time()
+                if r.status_code < 300:
+                    sent = True
+                    break
+                code = _wa_error_code(r)
                 print(f"❌ WhatsApp reply error {r.status_code} (phone_id={pid}): {r.text[:300]}")
+                if code in (131056, 130429, 131048) and attempt < 2:
+                    print("ℹ️ WhatsApp rate limit — 7 sec baad dobara bhej rahe hain")
+                    time.sleep(7)
+                    continue
                 if r.status_code == 400 and "does not exist" in r.text:
                     print("💡 Hint: PHONE_NUMBER_ID galat hai ya token us number ka access nahi rakhta. "
                           "Meta → WhatsApp → API Setup me 'Phone number ID' copy karein (WABA ID nahi), "
                           "aur token me whatsapp_business_messaging permission honi chahiye.")
-                if r.status_code == 400 and ("Authorization Error" in r.text or '"code":100' in r.text.replace(" ", "")):
+                if r.status_code == 400 and ("Authorization Error" in r.text or code == 100):
                     print("💡 Hint: Meta 'Authorization Error' — WHATSAPP_TOKEN is phone number (ID {}) ke liye authorized nahi hai. "
                           "Token usi app/WhatsApp Business Account ka hona chahiye jiska ye number hai: System User token banayein, "
                           "WhatsApp account asset assign karein, permissions whatsapp_business_messaging + whatsapp_business_management dein.".format(pid))
                 if r.status_code in (401, 403):
                     print("💡 Hint: WHATSAPP_TOKEN expire/invalid hai — permanent System User token use karein.")
                 break
-        except Exception as e:
-            ok_all = False
-            print(f"❌ WhatsApp reply exception: {e}")
-            break
+            if not sent:
+                ok_all = False
+                break
     return ok_all
 
 def _message_text(m):
@@ -2508,6 +2597,13 @@ def _message_text(m):
         return (rep_.get("title") or "").strip()
     return ""
 
+def _remember(text, summary, secs, reply_to=None):
+    try:
+        RECENT_LOG.append({"time_ist": ist_now().strftime("%d/%m %H:%M:%S"), "secs": round(secs, 1),
+                           "from": str(reply_to or "")[-4:], "text": str(text)[:300], "result": str(summary)[:600]})
+    except Exception:
+        pass
+
 def handle_message(text, reply_to=None, phone_id=None):
     t0 = time.time()
     try:
@@ -2515,15 +2611,98 @@ def handle_message(text, reply_to=None, phone_id=None):
     except BaseException as e:
         print(f"❌ process_incoming error: {e}")
         summary = f"❌ Processing me error aaya: {e}"
-    try:
-        RECENT_LOG.append({"time_ist": ist_now().strftime("%d/%m %H:%M:%S"), "secs": round(time.time() - t0, 1),
-                           "from": str(reply_to or "")[-4:], "text": str(text)[:300], "result": summary[:600]})
-    except Exception:
-        pass
+    _remember(text, summary, time.time() - t0, reply_to)
     print("📝 Summary:\n" + summary)
     if reply_to:
         send_whatsapp(reply_to, summary, phone_id)
     return summary
+
+MESSAGE_EXECUTOR = ThreadPoolExecutor(max_workers=max(1, MSG_WORKERS), thread_name_prefix="msg")
+_BATCH = {}
+_BATCH_LOCK = threading.Lock()
+
+def _safe_extract(text):
+    try:
+        return _extract_text(text)
+    except BaseException as e:
+        print(f"❌ extract error: {e}")
+        return {"early": f"❌ Processing me error aaya: {e}"}
+
+def _label_for(ex, text):
+    names = []
+    agg = ex.get("agg")
+    if agg:
+        names += list(agg["prs"].keys()) + list(agg["uts"].keys())
+        names += [str(g.get("to_stn") or "") for g in agg["goods"]]
+        names += [str(o.get("station") or "") for o in agg["osop"]]
+    names = [n for n in dict.fromkeys(names) if n]
+    if names:
+        return ", ".join(names[:6])
+    first = next((ln.strip() for ln in str(text).splitlines() if ln.strip()), "")
+    return first[:30]
+
+def handle_batch(texts, reply_to=None, phone_id=None):
+    """Ek saath aaye kai messages: pehle sabka Gemini/parsing saath-saath, phir sheet me ek-ek karke (order me), ek combined reply."""
+    try:
+        uniq = list(dict.fromkeys(t.strip() for t in texts if t and t.strip()))
+        if not uniq:
+            return ""
+        if len(uniq) == 1:
+            return handle_message(uniq[0], reply_to, phone_id)
+        t0 = time.time()
+        print(f"📨 Batch: {len(uniq)} messages ek saath")
+        with ThreadPoolExecutor(max_workers=min(GEMINI_PARALLEL, len(uniq))) as pool:
+            extracted = list(pool.map(_safe_extract, uniq))
+        parts = [f"📨 {len(uniq)} messages process hue"]
+        for i, (text, ex) in enumerate(zip(uniq, extracted), 1):
+            t1 = time.time()
+            try:
+                summary = _write_extracted(ex)
+            except BaseException as e:
+                print(f"❌ write error: {e}")
+                reset_caches()
+                summary = f"❌ Sheet update me error aaya: {e}"
+            _remember(text, summary, time.time() - t1, reply_to)
+            parts.append(f"━━ {i}) {_label_for(ex, text)}\n{summary}")
+        reply = "\n\n".join(parts)
+        print(f"📝 Batch summary ({time.time() - t0:.0f}s):\n" + reply)
+        if reply_to:
+            send_whatsapp(reply_to, reply, phone_id)
+        return reply
+    except BaseException as e:
+        print(f"❌ handle_batch error: {e}")
+        return ""
+
+def _batch_waiter(key):
+    while True:
+        time.sleep(0.4)
+        now = time.time()
+        with _BATCH_LOCK:
+            b = _BATCH.get(key)
+            if b is None:
+                return
+            if now - b["last"] >= BATCH_WINDOW or now - b["first"] >= BATCH_MAX_WAIT or len(b["texts"]) >= 60:
+                _BATCH.pop(key, None)
+                break
+    MESSAGE_EXECUTOR.submit(handle_batch, b["texts"], key, b["pid"])
+
+def enqueue_message(text, reply_to, phone_id):
+    """Webhook se aaya message: bounded workers + (same sender ke) messages ka group."""
+    if BATCH_WINDOW <= 0 or not reply_to:
+        MESSAGE_EXECUTOR.submit(handle_message, text, reply_to, phone_id)
+        return
+    now = time.time()
+    with _BATCH_LOCK:
+        b = _BATCH.get(reply_to)
+        if b is None:
+            _BATCH[reply_to] = {"texts": [text], "first": now, "last": now, "pid": phone_id}
+            start = True
+        else:
+            b["texts"].append(text)
+            b["last"] = now
+            start = False
+    if start:
+        threading.Thread(target=_batch_waiter, args=(reply_to,), daemon=True).start()
 
 @app.route("/", methods=["GET"])
 def home():
@@ -2568,9 +2747,7 @@ def webhook():
                         continue
                     if already_processed(m.get("id", "")):
                         continue
-                    threading.Thread(target=handle_message,
-                                     args=(text, m.get("from"), incoming_pid or None),
-                                     daemon=True).start()
+                    enqueue_message(text, m.get("from"), incoming_pid or None)
     except Exception as e:
         print(f"❌ Webhook Error: {e}")
     return jsonify({"status": "ok"}), 200
@@ -2598,6 +2775,7 @@ def startup_check():
         print(f"IWOW_GRACE_HOUR : {IWOW_GRACE_HOUR}:00 IST")
         print(f"WA REPLY        : {SEND_REPLY and bool(WHATSAPP_TOKEN)} (phone_id env={'set' if PHONE_NUMBER_ID else 'not set — webhook se auto lega'})")
         print(f"IST_NOW         : {ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"BATCH           : window={BATCH_WINDOW}s workers={MSG_WORKERS} gemini_parallel={GEMINI_PARALLEL}")
     except Exception as e:
         print(f"⚠️ Startup info print failed: {e}")
     threading.Thread(target=_startup_sheet_check, daemon=True).start()
@@ -2609,4 +2787,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
-# ===== END OF app.py (2612 lines) — agar ye line nahi dikhti to file adhoori copy hui hai =====
+# ===== END OF app.py (2790 lines) — agar ye line nahi dikhti to file adhoori copy hui hai =====
