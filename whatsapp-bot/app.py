@@ -1,6 +1,8 @@
 import os
 import sys
 import re
+import socket
+import traceback
 import math
 import json
 import time
@@ -68,7 +70,12 @@ GEMINI_TOTAL_BUDGET = int(os.environ.get("GEMINI_TOTAL_BUDGET", "70"))     # ek 
 # primary model fail/overload ho to ye models try hote hain (comma separated)
 GEMINI_FALLBACK_MODELS = os.environ.get("GEMINI_FALLBACK_MODELS", "gemini-2.5-flash-lite,gemini-2.0-flash")
 GOOGLE_TIMEOUT = int(os.environ.get("GOOGLE_TIMEOUT", "30"))
-PROCESS_LOCK_TIMEOUT = int(os.environ.get("PROCESS_LOCK_TIMEOUT", "240"))
+PROCESS_LOCK_TIMEOUT = int(os.environ.get("PROCESS_LOCK_TIMEOUT", "120"))  # lock ke liye max intezaar
+LEASE_SECS = int(os.environ.get("LEASE_SECS", "100"))                       # lock itne sec baad apne aap chhoot jaata hai (renew na ho to)
+SHEET_OP_TIMEOUT = int(os.environ.get("SHEET_OP_TIMEOUT", "75"))            # ek sheet-update ka hard deadline
+EXTRACT_TIMEOUT = int(os.environ.get("EXTRACT_TIMEOUT", "150"))             # ek message ki parsing ka hard deadline
+STUCK_WARN_SECS = int(os.environ.get("STUCK_WARN_SECS", "40"))              # itne sec se zyada chalne wala kaam 🚨 STUCK log hoga
+WATCHDOG_INTERVAL = float(os.environ.get("WATCHDOG_INTERVAL", "15"))
 RECENT_LOG = deque(maxlen=40)
 # Ek saath kai message forward hon: 3 sec ruk kar ek group (batch) me process, ek hi reply
 BATCH_WINDOW = float(os.environ.get("BATCH_WINDOW_SECS", "3"))      # 0 = batching band
@@ -89,7 +96,50 @@ IWOW_GRACE_HOUR = int(os.environ.get("IWOW_GRACE_HOUR", "2"))
 IWOW_CORE_COLS = (2, 5, 6, 11, 12)
 IWOW_REMARK_COL = 24   # column X
 
-PROCESS_LOCK = threading.Lock()
+class LeaseLock:
+    """Ek time par ek kaam. Par holder atak jaye to lease (LEASE_SECS) khatam hote hi lock apne aap chhoot jaata hai,
+    taaki ek atka hua kaam baaki messages ko hamesha ke liye na roke. Holder ka naam/samay log me dikhta hai."""
+    def __init__(self):
+        self._cv = threading.Condition()
+        self._owner = None
+        self._expires = 0.0
+        self.label = ""
+        self.since = 0.0
+
+    def info(self):
+        with self._cv:
+            if self._owner is None:
+                return None
+            now = time.time()
+            return {"label": self.label, "held_for": round(now - self.since, 1), "lease_left": round(self._expires - now, 1)}
+
+    def acquire(self, lease, wait, label=""):
+        token = object()
+        end = time.time() + wait
+        with self._cv:
+            while True:
+                now = time.time()
+                if self._owner is None or now >= self._expires:
+                    if self._owner is not None:
+                        print(f"⚠️ Purana lock ('{self.label}', {now - self.since:.0f}s se pakda hua) lease khatam hone par hata diya")
+                    self._owner, self._expires, self.label, self.since = token, now + lease, label, now
+                    return token
+                if now >= end:
+                    return None
+                self._cv.wait(timeout=max(0.05, min(1.0, end - now, self._expires - now)))
+
+    def renew(self, token, lease):
+        with self._cv:
+            if self._owner is token:
+                self._expires = time.time() + lease
+
+    def release(self, token):
+        with self._cv:
+            if self._owner is token:
+                self._owner = None
+                self._cv.notify_all()
+
+PROCESS_LOCK = LeaseLock()
 
 # ==============================================
 # STATION ALIASES
@@ -381,8 +431,97 @@ def already_processed(msg_id):
         PROCESSED_MSG_IDS[msg_id] = now
         return False
 
+# ==============================================
+# KAAM TRACKER + HARD DEADLINE + WATCHDOG (har atka hua kaam log me dikhe)
+# ==============================================
+_OPS = {}
+_OPS_LOCK = threading.Lock()
+_OP_SEQ = [0]
+_tls = threading.local()
+
+class _Cancelled(Exception):
+    pass
+
+def op_check_cancel():
+    """Deadline cross kar chuke (zombie) kaam ko sheet me likhne se roko."""
+    ev = getattr(_tls, "cancel", None)
+    if ev is not None and ev.is_set():
+        raise _Cancelled("deadline nikal chuki — likha nahi")
+
 @contextlib.contextmanager
-def file_lock(path, timeout=60):
+def track_op(name):
+    with _OPS_LOCK:
+        _OP_SEQ[0] += 1
+        oid = _OP_SEQ[0]
+        _OPS[oid] = {"name": name, "ident": threading.get_ident(), "tname": threading.current_thread().name,
+                     "start": time.time(), "warned": 0}
+    try:
+        yield
+    finally:
+        with _OPS_LOCK:
+            _OPS.pop(oid, None)
+
+def _thread_stack(ident):
+    try:
+        frame = sys._current_frames().get(ident)
+        return "".join(traceback.format_stack(frame)) if frame else "(thread khatam ho chuka)"
+    except Exception as e:
+        return f"(stack nahi mila: {e})"
+
+def run_with_deadline(name, fn, args=(), timeout=60):
+    """fn ko alag thread me chalao. timeout tak na ho to: stack log karo, kaam ko cancel mark karo, TimeoutError uthao.
+    (Python thread ko maar nahi sakta, par cancel flag se wo baad me sheet me kuch likh nahi paata.)"""
+    box = {}
+    cancel = threading.Event()
+    def target():
+        _tls.cancel = cancel
+        try:
+            with track_op(name):
+                box["value"] = fn(*args)
+        except BaseException as e:
+            box["error"] = e
+    t = threading.Thread(target=target, name=f"op-{name}", daemon=True)
+    t0 = time.time()
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        cancel.set()
+        print(f"🚨 '{name}' {timeout}s me poora nahi hua ({time.time() - t0:.0f}s) — ye kaam atka hai. Wo yahan ruka hai:\n{_thread_stack(t.ident)}")
+        try:
+            reset_caches()
+        except Exception:
+            pass
+        raise TimeoutError(f"{name} {timeout}s me poora nahi hua")
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
+
+_LAST_LOCK_WARN = [0.0]
+
+def _watchdog():
+    while True:
+        time.sleep(WATCHDOG_INTERVAL)
+        try:
+            now = time.time()
+            with _OPS_LOCK:
+                ops = [(k, dict(v)) for k, v in _OPS.items()]
+            for oid, o in ops:
+                age = now - o["start"]
+                level = int(age // max(1, STUCK_WARN_SECS))
+                if level >= 1 and level > o["warned"]:
+                    with _OPS_LOCK:
+                        if oid in _OPS:
+                            _OPS[oid]["warned"] = level
+                    print(f"🚨 STUCK: '{o['name']}' {age:.0f}s se chal raha hai (thread {o['tname']}). Wo yahan ruka hai:\n{_thread_stack(o['ident'])}")
+            holder = PROCESS_LOCK.info()
+            if holder and holder["held_for"] > STUCK_WARN_SECS and now - _LAST_LOCK_WARN[0] > 60:
+                _LAST_LOCK_WARN[0] = now
+                print(f"🚨 Sheet lock '{holder['label']}' {holder['held_for']:.0f}s se pakda hua hai (lease bacha {holder['lease_left']:.0f}s)")
+        except Exception as e:
+            print(f"⚠️ watchdog error: {e}")
+
+@contextlib.contextmanager
+def file_lock(path, timeout=3):
     """Cross-process lock; kisi ke hamesha na chhodne par bhi max `timeout` sec baad aage badh jaata hai."""
     f = open(path, "w")
     locked = False
@@ -524,7 +663,8 @@ def gs_retry(fn, *args, **kwargs):
     for attempt in range(5):
         t0 = time.time()
         try:
-            res = fn(*args, **kwargs)
+            with track_op(f"sheets:{getattr(fn, '__name__', 'call')}"):
+                res = fn(*args, **kwargs)
             dt = time.time() - t0
             if dt > 5:
                 print(f"🐢 Sheets call {getattr(fn, '__name__', 'fn')} slow: {dt:.1f}s")
@@ -1153,7 +1293,7 @@ def _gemini_post(prompt, thinking=0, max_tokens=None, deadline=None):
                 gen.pop("thinkingConfig", None)
             payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": gen}
             try:
-                with _GEMINI_SEM:
+                with _GEMINI_SEM, track_op(f"gemini:{model}"):
                     res = requests.post(url, json=payload, headers=headers,
                                         timeout=(GEMINI_CONNECT_TIMEOUT, read_t))
             except Exception as e:
@@ -2009,6 +2149,7 @@ def update_google_sheet(data):
                         else:
                             lines.append(f"⚠️ {kind.upper()} {st} {fld}: sheet me {cur} pehle se hai, naya {_fmt_num(v)} — overwrite nahi kiya")
                             print(f"⏭️ {kind.upper()} {st} {fld}: cell already filled ({cur})")
+        op_check_cancel()
         if updates:
             try:
                 gs_retry(sheet.batch_update, updates)
@@ -2145,6 +2286,7 @@ def update_osop_sheet(entries):
             if wrote:
                 lines.append(f"✅ {label}: {', '.join(wrote)}")
                 print(f"✅ OSOP {code} {d}: row {row} {wrote}")
+        op_check_cancel()
         if updates:
             try:
                 gs_retry(ws.batch_update, updates)
@@ -2315,6 +2457,7 @@ def update_iwow_sheet(entries):
             lines.append(f"✅ {label} line {line or '-'} → row {current_row} (free {ftime})" + (f" | remark: {remark}" if remark else ""))
             print(f"✅ IWOW row {current_row}: {from_stn}→{to_stn} | wagons={wagons} | line={line} | {commodity} | free={ftime}")
             current_row += 1
+        op_check_cancel()
         if updates:
             try:
                 need = current_row + 2
@@ -2459,14 +2602,17 @@ def reconcile(base, rx, body=None):
         base["osop"] = rx["osop"]
     return base
 
-def extract_block(body, sender="", ts=""):
+def extract_block(body, sender="", ts="", use_gemini=True):
     print(f"\n📩 Block | sender='{sender}' | ts='{ts}'\n{body[:400]}")
     body = normalize_message(body)
     hint = guess_station_hint(body, sender)
     print(f"📍 Station hint: {hint}")
     notes = []
 
-    raw1, err1 = call_gemini(body, sender, ts, hint, GEMINI_THINK_FAST)
+    if use_gemini:
+        raw1, err1 = call_gemini(body, sender, ts, hint, GEMINI_THINK_FAST)
+    else:
+        raw1, err1 = None, "Gemini chhoda (time)"
     best = _prepare(raw1, body, hint) if raw1 else _empty_data()
     best_score, best_cov = _score(best, body)
     source = "gemini"
@@ -2474,7 +2620,7 @@ def extract_block(body, sender="", ts=""):
         notes.append(f"Gemini: {err1}")
 
     looks = _looks_like_data(body)
-    if looks and (best_cov < COVERAGE_MIN or best_score[0] < 0):
+    if use_gemini and looks and (best_cov < COVERAGE_MIN or best_score[0] < 0):
         print(f"🔁 Coverage {best_cov:.2f} / missing stations {-best_score[0]} — deep thinking se dobara")
         raw2, err2 = call_gemini(body, sender, ts, hint, GEMINI_THINK_DEEP)
         if raw2:
@@ -2511,18 +2657,19 @@ def extract_block(body, sender="", ts=""):
     return best, notes
 
 @contextlib.contextmanager
-def _process_lock(timeout=600):
-    """Ek message atak jaye to baaki hamesha ke liye na ruke: lock ke liye max timeout tak intezaar."""
-    if PROCESS_LOCK.locked():
-        print("⏳ Doosra message sheet update kar raha hai — baari ka intezaar")
-    got = PROCESS_LOCK.acquire(timeout=timeout)
-    if not got:
-        print("⚠️ PROCESS_LOCK timeout — bina lock ke aage badh rahe hain (har tab ka file-lock phir bhi bachata hai)")
+def _process_lock(timeout=120, label=""):
+    """Sheet likhne ki baari. Holder atak jaye to lease khatam hote hi lock chhoot jaata hai; kaun pakde hai ye log me aata hai."""
+    holder = PROCESS_LOCK.info()
+    if holder:
+        print(f"⏳ Sheet lock abhi '{holder['label']}' ke paas hai ({holder['held_for']:.0f}s se) — baari ka intezaar")
+    token = PROCESS_LOCK.acquire(LEASE_SECS, timeout, label or threading.current_thread().name)
+    if token is None:
+        print("⚠️ Lock nahi mila (intezaar khatam) — bina lock ke aage badh rahe hain")
     try:
-        yield got
+        yield token
     finally:
-        if got:
-            PROCESS_LOCK.release()
+        if token is not None:
+            PROCESS_LOCK.release(token)
 
 def _extract_text(text):
     """Phase 1 (Gemini + parsers, sheet ko haath nahi lagata). {"early": msg} ya {"agg":..., "notes":[...]}"""
@@ -2532,7 +2679,12 @@ def _extract_text(text):
         return {"early": "⚠️ Message me koi data (number) nahi mila."}
     def work(b):
         try:
-            return extract_block(b["body"], b["sender"], b["ts"])
+            try:
+                return run_with_deadline("extract", extract_block, (b["body"], b["sender"], b["ts"]), EXTRACT_TIMEOUT)
+            except TimeoutError:
+                print("⏱️ Parsing time se zyada laga — Gemini chhod kar rule-parser se kar rahe hain")
+                data, notes = extract_block(b["body"], b["sender"], b["ts"], False)
+                return data, list(notes) + ["Gemini bahut der laga raha tha — rule-parser use hua"]
         except Exception as e:
             print(f"❌ Block error: {e}")
             return _empty_data(), [f"Block error: {e}"]
@@ -2554,22 +2706,31 @@ def _extract_text(text):
     return {"agg": agg, "notes": notes}
 
 def _write_extracted(ex):
-    """Phase 2: sheets me likho (lock ke andar, ek-ek karke). Summary text lautata hai."""
+    """Phase 2: sheets me likho (lock ke andar, ek-ek karke, har kaam par hard deadline). Summary text lautata hai."""
     if ex.get("early"):
         return ex["early"]
     agg, notes = ex["agg"], ex["notes"]
     lines = []
-    with _process_lock(PROCESS_LOCK_TIMEOUT):
+    with _process_lock(PROCESS_LOCK_TIMEOUT, "sheet-write") as token:
         for fn, payload, name in ((update_google_sheet, agg if (agg["prs"] or agg["uts"]) else None, "UTS/PRS"),
                                   (update_osop_sheet, agg["osop"], "OSOP"),
                                   (update_iwow_sheet, agg["goods"], "IWOW")):
             if not payload:
                 continue
+            if token is not None:
+                PROCESS_LOCK.renew(token, LEASE_SECS)
+            t0 = time.time()
             try:
-                ok, rep = fn(payload)
+                ok, rep = run_with_deadline(f"sheet:{name}", fn, (payload,), SHEET_OP_TIMEOUT)
                 lines.extend(rep)
+                print(f"⏱️ {name} sheet update {time.time() - t0:.1f}s")
+            except TimeoutError:
+                lines.append(f"❌ {name}: Google Sheets {SHEET_OP_TIMEOUT}s me jawab nahi diya — data likha NAHI gaya. "
+                             f"Thodi der baad ye message dobara bhejein")
+            except _Cancelled:
+                lines.append(f"❌ {name}: update cancel hua (deadline) — data likha NAHI gaya, dobara bhejein")
             except Exception as e:
-                print(f"❌ {name} write crashed: {e}")
+                print(f"❌ {name} write crashed: {type(e).__name__}: {e}")
                 reset_caches()
                 lines.append(f"❌ {name} update fail: {e}")
     lines.extend(f"ℹ️ {n}" for n in dict.fromkeys(notes))
@@ -2794,6 +2955,95 @@ def recent():
         return "Forbidden", 403
     return jsonify(list(RECENT_LOG)), 200
 
+def _net_check(host):
+    out = {"host": host}
+    t0 = time.time()
+    try:
+        infos = socket.getaddrinfo(host, 443, socket.AF_UNSPEC, socket.SOCK_STREAM)
+    except Exception as e:
+        out["dns"] = f"FAIL {type(e).__name__}: {e}"
+        return out
+    out["dns"] = f"ok {int((time.time() - t0) * 1000)}ms"
+    for fam, label in ((socket.AF_INET, "ipv4"), (socket.AF_INET6, "ipv6")):
+        addrs = [i[4] for i in infos if i[0] == fam]
+        if not addrs:
+            out[label] = "no address"
+            continue
+        t1 = time.time()
+        try:
+            so = socket.socket(fam, socket.SOCK_STREAM)
+            so.settimeout(4)
+            so.connect(addrs[0])
+            so.close()
+            out[label] = f"ok {int((time.time() - t1) * 1000)}ms"
+        except Exception as e:
+            out[label] = f"FAIL {type(e).__name__} after {int((time.time() - t1) * 1000)}ms"
+    return out
+
+def _diag_gemini():
+    t0 = time.time()
+    payload = {"contents": [{"parts": [{"text": "reply with one word: ok"}]}],
+               "generationConfig": {"maxOutputTokens": 32, "temperature": 0}}
+    if "2.5" in GEMINI_MODEL:
+        payload["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 0}
+    r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+                      json=payload, headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+                      timeout=(GEMINI_CONNECT_TIMEOUT, 25))
+    return f"HTTP {r.status_code} in {time.time() - t0:.1f}s"
+
+def _diag_sheet():
+    t0 = time.time()
+    sh = get_sheet()
+    if not sh:
+        return "FAIL: sheet connect nahi hui"
+    v = sh.acell("A1").value
+    return f"ok in {time.time() - t0:.1f}s (A1={str(v)[:20]!r})"
+
+def _diag_payload(deep=False):
+    hosts = ["generativelanguage.googleapis.com", "sheets.googleapis.com", "oauth2.googleapis.com", "graph.facebook.com"]
+    with ThreadPoolExecutor(max_workers=len(hosts)) as ex:
+        futs = [ex.submit(_net_check, h) for h in hosts]
+        net = []
+        for h, f in zip(hosts, futs):
+            try:
+                net.append(f.result(timeout=15))
+            except Exception as e:
+                net.append({"host": h, "error": f"{type(e).__name__}"})
+    now = time.time()
+    with _OPS_LOCK:
+        ops = [{"name": v["name"], "age_s": round(now - v["start"], 1), "thread": v["tname"]} for v in _OPS.values()]
+    try:
+        backlog = MESSAGE_EXECUTOR._work_queue.qsize()
+    except Exception:
+        backlog = None
+    out = {
+        "time_ist": ist_now().strftime("%d/%m/%Y %H:%M:%S"),
+        "network": net,
+        "ops_in_flight": ops,
+        "sheet_lock": PROCESS_LOCK.info(),
+        "executor_backlog": backlog,
+        "threads": threading.active_count(),
+        "gemini_cooldown_s": round(_gemini_cooldown_remaining(), 1),
+        "config": {"ipv4_only": os.environ.get("FORCE_IPV4", "1") != "0", "gemini_models": _gemini_models(),
+                   "gemini_budget_s": GEMINI_TOTAL_BUDGET, "sheet_op_timeout_s": SHEET_OP_TIMEOUT,
+                   "lease_s": LEASE_SECS, "batch_window_s": BATCH_WINDOW, "google_timeout_s": GOOGLE_TIMEOUT},
+        "recent_failed": sum(1 for r in list(RECENT_LOG) if "❌" in str(r.get("result", ""))),
+    }
+    if deep:
+        for key, fn, tmo in (("gemini_ping", _diag_gemini, 30), ("sheet_ping", _diag_sheet, 40)):
+            try:
+                out[key] = run_with_deadline(f"diag-{key}", fn, (), tmo)
+            except BaseException as e:
+                out[key] = f"FAIL {type(e).__name__}: {e}"
+    return out
+
+@app.route("/diag", methods=["GET"])
+def diag():
+    """Poori sehat ki report: /diag?token=<VERIFY_TOKEN>  (aur &deep=1 se Gemini + Sheet ka asli test)"""
+    if not VERIFY_TOKEN or request.args.get("token") != VERIFY_TOKEN:
+        return "Forbidden", 403
+    return jsonify(_diag_payload(request.args.get("deep") == "1")), 200
+
 @app.route("/webhook", methods=["GET"])
 def webhook_verify():
     mode = request.args.get("hub.mode")
@@ -2830,7 +3080,7 @@ def webhook():
 def _startup_sheet_check():
     """Sheet connection check background me chalta hai — taaki Render/gunicorn start hote hi port khul jaye
     (Google Sheets slow / rate-limited ho tab bhi deploy timeout na ho)."""
-    try:
+    def _check():
         s = get_sheet()
         if s:
             print(f"✅ Google Sheet connected: tab '{s.title}'")
@@ -2838,8 +3088,10 @@ def _startup_sheet_check():
             print(f"✅ NTSK in station map: {'NTSK' in smap}")
             if "NTSK" in smap:
                 print(f"   → NTSK row = {smap['NTSK']['row']}")
+    try:
+        run_with_deadline("startup-sheet-check", _check, (), 60)
     except BaseException as e:
-        print(f"⚠️ Startup sheet check failed: {e}")
+        print(f"⚠️ Startup sheet check failed: {type(e).__name__}: {e}")
 
 def startup_check():
     print("========== STARTUP CHECK ==========")
@@ -2855,6 +3107,7 @@ def startup_check():
     except Exception as e:
         print(f"⚠️ Startup info print failed: {e}")
     threading.Thread(target=_startup_sheet_check, daemon=True).start()
+    threading.Thread(target=_watchdog, daemon=True, name="watchdog").start()
     print("===================================")
 
 startup_check()
@@ -2863,4 +3116,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
-# ===== END OF app.py (2866 lines) — agar ye line nahi dikhti to file adhoori copy hui hai =====
+# ===== END OF app.py (3119 lines) — agar ye line nahi dikhti to file adhoori copy hui hai =====
