@@ -423,64 +423,97 @@ def resolve_station(name, quiet=False):
 # META RETRY PROTECTION + LOCKS
 # ==============================================
 # ==============================================
-# PROCESSED MESSAGE IDs (persistent across sleep/restart)
+# PROCESSED MESSAGE IDs — Google Sheet backed (survives everything)
 # ==============================================
 PROCESSED_MSG_IDS = {}
 _PROC_LOCK = threading.Lock()
-_PROCESSED_FILE = "/tmp/processed_msg_ids.json"
-_PROCESSED_MAX_AGE = 7 * 24 * 3600   # 7 din tak yaad rakhega
+_PROCESSED_MAX_AGE = 5 * 24 * 3600   # 5 din
 _PROCESSED_LOADED = False
+_PROCESSED_SHEET_TAB = "BotMeta"     # yeh tab automatically banega
+_PROCESSED_CELL = "A1"
+
+def _get_meta_ws():
+    """BotMeta tab laao (nahi hai to bana do)."""
+    try:
+        sh = get_spreadsheet()
+        if not sh:
+            return None
+        try:
+            return get_ws(sh, _PROCESSED_SHEET_TAB)
+        except Exception:
+            # tab nahi hai → banao
+            try:
+                ws = gs_retry(sh.add_worksheet, title=_PROCESSED_SHEET_TAB, rows=10, cols=3)
+                gs_retry(ws.update, _PROCESSED_CELL, [["{}"]])
+                print(f"✅ '{_PROCESSED_SHEET_TAB}' tab banaya (processed message IDs ke liye)")
+                return ws
+            except Exception as e:
+                print(f"⚠️ BotMeta tab nahi bana paya: {e}")
+                return None
+    except Exception as e:
+        print(f"⚠️ meta ws error: {e}")
+        return None
 
 def _load_processed():
-    """Disk se pehle se process hue message IDs load karo (Render sleep ke baad bhi kaam kare)."""
+    """Google Sheet se processed message IDs load karo."""
     global _PROCESSED_LOADED
     if _PROCESSED_LOADED:
         return
     try:
-        if os.path.exists(_PROCESSED_FILE):
-            with open(_PROCESSED_FILE, "r") as f:
-                data = json.load(f)
+        ws = _get_meta_ws()
+        if ws:
+            raw = gs_retry(ws.acell, _PROCESSED_CELL).value or "{}"
+            data = json.loads(raw) if raw.strip().startswith("{") else {}
             now = time.time()
-            # purane entries hatao
-            cleaned = {k: v for k, v in data.items() if now - v < _PROCESSED_MAX_AGE}
-            PROCESSED_MSG_IDS.update(cleaned)
-            print(f"ℹ️ Loaded {len(cleaned)} processed message IDs from disk")
+            cleaned = {k: float(v) for k, v in data.items() if now - float(v) < _PROCESSED_MAX_AGE}
+            with _PROC_LOCK:
+                PROCESSED_MSG_IDS.clear()
+                PROCESSED_MSG_IDS.update(cleaned)
+            print(f"ℹ️ Sheet se {len(cleaned)} processed message IDs load hue")
+        else:
+            print("⚠️ BotMeta tab nahi mila — memory only mode")
     except Exception as e:
-        print(f"⚠️ Could not load processed IDs: {e}")
+        print(f"⚠️ processed IDs load fail: {e}")
     _PROCESSED_LOADED = True
 
 def _save_processed():
-    """Processed IDs ko disk pe save karo taaki restart ke baad bhi yaad rahe."""
+    """Processed IDs ko Google Sheet me save karo."""
     try:
         now = time.time()
         with _PROC_LOCK:
             cleaned = {k: v for k, v in PROCESSED_MSG_IDS.items() if now - v < _PROCESSED_MAX_AGE}
-            # sirf last 2000 rakho (memory + file size control)
-            if len(cleaned) > 2000:
-                cleaned = dict(sorted(cleaned.items(), key=lambda x: x[1], reverse=True)[:2000])
+            if len(cleaned) > 1500:
+                # sabse naye 1500 rakho
+                cleaned = dict(sorted(cleaned.items(), key=lambda x: x[1], reverse=True)[:1500])
             PROCESSED_MSG_IDS.clear()
             PROCESSED_MSG_IDS.update(cleaned)
-        with open(_PROCESSED_FILE, "w") as f:
-            json.dump(cleaned, f)
+            payload = json.dumps(cleaned)
+        ws = _get_meta_ws()
+        if ws:
+            gs_retry(ws.update, _PROCESSED_CELL, [[payload]])
+            print(f"💾 {len(cleaned)} processed IDs sheet me save hue")
     except Exception as e:
-        print(f"⚠️ Could not save processed IDs: {e}")
+        print(f"⚠️ processed IDs save fail: {e}")
 
 def already_processed(msg_id):
-    """True return kare to message skip ho jata hai (dobara process nahi hota)."""
+    """True → message pehle process ho chuka hai, skip karo."""
     if not msg_id:
         return False
     _load_processed()
     now = time.time()
     with _PROC_LOCK:
-        # purane entries clean
-        for k in [k for k, t in PROCESSED_MSG_IDS.items() if now - t > _PROCESSED_MAX_AGE]:
+        # purane clean
+        expired = [k for k, t in PROCESSED_MSG_IDS.items() if now - t > _PROCESSED_MAX_AGE]
+        for k in expired:
             del PROCESSED_MSG_IDS[k]
         if msg_id in PROCESSED_MSG_IDS:
             return True
         PROCESSED_MSG_IDS[msg_id] = now
-    # har 10th message pe disk pe save (performance ke liye)
-    if len(PROCESSED_MSG_IDS) % 10 == 0:
+    # naya message mark hote hi save karo (taaki crash/restart se pehle bhi save ho jaye)
+    try:
         _save_processed()
+    except Exception:
+        pass
     return False
 
 # ==============================================
