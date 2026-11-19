@@ -13,6 +13,12 @@ import requests
 import gspread
 import fcntl
 import random
+
+# Render par netrc / proxy env se requests crash karta hai (NetrcParseError).
+# Gemini ke liye alag session jo environment ko ignore karta hai.
+_GEMINI_SESSION = requests.Session()
+_GEMINI_SESSION.trust_env = False
+_GEMINI_SESSION.headers.update({"Connection": "close"})
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, time as dt_time
@@ -86,7 +92,7 @@ GEMINI_ADAPT_INTERVAL = float(os.environ.get("GEMINI_ADAPT_INTERVAL", "6.5"))  #
 REPLY_GAP = float(os.environ.get("REPLY_GAP_SECS", "2"))             # WhatsApp replies ke beech gap
 GEMINI_PARALLEL = int(os.environ.get("GEMINI_PARALLEL", "4"))
 COVERAGE_MIN = float(os.environ.get("COVERAGE_MIN", "0.55"))
-SEND_REPLY = os.environ.get("SEND_REPLY", "1") != "0"
+SEND_REPLY = os.environ.get("SEND_REPLY", "0") != "0"  # default OFF — no WhatsApp auto-replies
 GRAPH_VERSION = os.environ.get("GRAPH_VERSION", "v20.0")
 
 SHEET_LOCK_FILE = "/tmp/sheet_update.lock"
@@ -416,20 +422,99 @@ def resolve_station(name, quiet=False):
 # ==============================================
 # META RETRY PROTECTION + LOCKS
 # ==============================================
+# ==============================================
+# PROCESSED MESSAGE IDs — Google Sheet backed (survives everything)
+# ==============================================
 PROCESSED_MSG_IDS = {}
 _PROC_LOCK = threading.Lock()
+_PROCESSED_MAX_AGE = 5 * 24 * 3600   # 5 din
+_PROCESSED_LOADED = False
+_PROCESSED_SHEET_TAB = "BotMeta"     # yeh tab automatically banega
+_PROCESSED_CELL = "A1"
+
+def _get_meta_ws():
+    """BotMeta tab laao (nahi hai to bana do)."""
+    try:
+        sh = get_spreadsheet()
+        if not sh:
+            return None
+        try:
+            return get_ws(sh, _PROCESSED_SHEET_TAB)
+        except Exception:
+            # tab nahi hai → banao
+            try:
+                ws = gs_retry(sh.add_worksheet, title=_PROCESSED_SHEET_TAB, rows=10, cols=3)
+                gs_retry(ws.update, _PROCESSED_CELL, [["{}"]])
+                print(f"✅ '{_PROCESSED_SHEET_TAB}' tab banaya (processed message IDs ke liye)")
+                return ws
+            except Exception as e:
+                print(f"⚠️ BotMeta tab nahi bana paya: {e}")
+                return None
+    except Exception as e:
+        print(f"⚠️ meta ws error: {e}")
+        return None
+
+def _load_processed():
+    """Google Sheet se processed message IDs load karo."""
+    global _PROCESSED_LOADED
+    if _PROCESSED_LOADED:
+        return
+    try:
+        ws = _get_meta_ws()
+        if ws:
+            raw = gs_retry(ws.acell, _PROCESSED_CELL).value or "{}"
+            data = json.loads(raw) if raw.strip().startswith("{") else {}
+            now = time.time()
+            cleaned = {k: float(v) for k, v in data.items() if now - float(v) < _PROCESSED_MAX_AGE}
+            with _PROC_LOCK:
+                PROCESSED_MSG_IDS.clear()
+                PROCESSED_MSG_IDS.update(cleaned)
+            print(f"ℹ️ Sheet se {len(cleaned)} processed message IDs load hue")
+        else:
+            print("⚠️ BotMeta tab nahi mila — memory only mode")
+    except Exception as e:
+        print(f"⚠️ processed IDs load fail: {e}")
+    _PROCESSED_LOADED = True
+
+def _save_processed():
+    """Processed IDs ko Google Sheet me save karo."""
+    try:
+        now = time.time()
+        with _PROC_LOCK:
+            cleaned = {k: v for k, v in PROCESSED_MSG_IDS.items() if now - v < _PROCESSED_MAX_AGE}
+            if len(cleaned) > 1500:
+                # sabse naye 1500 rakho
+                cleaned = dict(sorted(cleaned.items(), key=lambda x: x[1], reverse=True)[:1500])
+            PROCESSED_MSG_IDS.clear()
+            PROCESSED_MSG_IDS.update(cleaned)
+            payload = json.dumps(cleaned)
+        ws = _get_meta_ws()
+        if ws:
+            gs_retry(ws.update, _PROCESSED_CELL, [[payload]])
+            print(f"💾 {len(cleaned)} processed IDs sheet me save hue")
+    except Exception as e:
+        print(f"⚠️ processed IDs save fail: {e}")
 
 def already_processed(msg_id):
+    """True → message pehle process ho chuka hai, skip karo."""
     if not msg_id:
         return False
+    _load_processed()
     now = time.time()
     with _PROC_LOCK:
-        for k in [k for k, t in PROCESSED_MSG_IDS.items() if now - t > 600]:
+        # purane clean
+        expired = [k for k, t in PROCESSED_MSG_IDS.items() if now - t > _PROCESSED_MAX_AGE]
+        for k in expired:
             del PROCESSED_MSG_IDS[k]
         if msg_id in PROCESSED_MSG_IDS:
             return True
         PROCESSED_MSG_IDS[msg_id] = now
-        return False
+    # naya message mark hote hi save karo (taaki crash/restart se pehle bhi save ho jaye)
+    try:
+        _save_processed()
+    except Exception:
+        pass
+    return False
 
 # ==============================================
 # KAAM TRACKER + HARD DEADLINE + WATCHDOG (har atka hua kaam log me dikhe)
@@ -1294,8 +1379,8 @@ def _gemini_post(prompt, thinking=0, max_tokens=None, deadline=None):
             payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": gen}
             try:
                 with _GEMINI_SEM, track_op(f"gemini:{model}"):
-                    res = requests.post(url, json=payload, headers=headers,
-                                        timeout=(GEMINI_CONNECT_TIMEOUT, read_t))
+                    res = _GEMINI_SESSION.post(url, json=payload, headers=headers,
+                                               timeout=(GEMINI_CONNECT_TIMEOUT, read_t))
             except Exception as e:
                 err = f"{type(e).__name__}: {e}"
                 print(f"❌ Gemini ({model}) Error: {err}")
@@ -1419,30 +1504,34 @@ def call_gemini(msg, sender="", ts="", hint=None, thinking=0):
     if not GEMINI_API_KEY:
         print("❌ GEMINI_API_KEY missing!")
         return None, "GEMINI_API_KEY set nahi hai"
-    station_legend = "\n".join(f'{c} = {STATION_OFFICIAL[c]}' for c in ALL_STATIONS)
-    hint_line = (f"{hint} ({STATION_OFFICIAL.get(hint, '')})" if hint else "none")
-    ctx_line = (f"Sender name: {sender or 'unknown'} | Message time: {ts or 'unknown'} | "
-                f"Now (IST): {ist_now().strftime('%d/%m/%Y %H:%M')}")
-    prompt = (PROMPT_TEMPLATE
-              .replace("__CTX__", ctx_line)
-              .replace("__HINT__", hint_line)
-              .replace("__LEGEND__", station_legend)
-              .replace("__MSG__", msg))
-    err = ""
-    # 1st: jaisa maanga; agar jawab adhura/khali aaye to 2nd: thinking band (poora token output ke liye)
-    deadline = time.time() + GEMINI_TOTAL_BUDGET
-    for th in (thinking, 0):
-        resp, err = _gemini_post(prompt, th, None, deadline)
-        if not resp:
-            return None, err
-        txt, why = _gemini_text(resp)
-        parsed = _parse_gemini_json(txt) if txt else None
-        if parsed is not None:
-            return parsed, ""
-        err = why or "Gemini ne JSON nahi diya"
-        print(f"⚠️ {err} (thinking={th}) — dobara")
-        time.sleep(1.0)
-    return None, err
+    try:
+        station_legend = "\n".join(f'{c} = {STATION_OFFICIAL[c]}' for c in ALL_STATIONS)
+        hint_line = (f"{hint} ({STATION_OFFICIAL.get(hint, '')})" if hint else "none")
+        ctx_line = (f"Sender name: {sender or 'unknown'} | Message time: {ts or 'unknown'} | "
+                    f"Now (IST): {ist_now().strftime('%d/%m/%Y %H:%M')}")
+        prompt = (PROMPT_TEMPLATE
+                  .replace("__CTX__", ctx_line)
+                  .replace("__HINT__", hint_line)
+                  .replace("__LEGEND__", station_legend)
+                  .replace("__MSG__", msg))
+        err = ""
+        # 1st: jaisa maanga; agar jawab adhura/khali aaye to 2nd: thinking band (poora token output ke liye)
+        deadline = time.time() + GEMINI_TOTAL_BUDGET
+        for th in (thinking, 0):
+            resp, err = _gemini_post(prompt, th, None, deadline)
+            if not resp:
+                return None, err
+            txt, why = _gemini_text(resp)
+            parsed = _parse_gemini_json(txt) if txt else None
+            if parsed is not None:
+                return parsed, ""
+            err = why or "Gemini ne JSON nahi diya"
+            print(f"⚠️ {err} (thinking={th}) — dobara")
+            time.sleep(1.0)
+        return None, err
+    except Exception as e:
+        print(f"❌ call_gemini unexpected error: {type(e).__name__}: {e}")
+        return None, f"{type(e).__name__}: {e}"
 
 # ==============================================
 # POST-PROCESSING + FALLBACKS
@@ -2608,49 +2697,75 @@ def extract_block(body, sender="", ts="", use_gemini=True):
     hint = guess_station_hint(body, sender)
     print(f"📍 Station hint: {hint}")
     notes = []
+    best = _empty_data()
+    best_score, best_cov = (0, 0.0, 0), 0.0
+    source = "none"
 
+    # --- Gemini (crash-proof) ---
     if use_gemini:
-        raw1, err1 = call_gemini(body, sender, ts, hint, GEMINI_THINK_FAST)
+        try:
+            raw1, err1 = call_gemini(body, sender, ts, hint, GEMINI_THINK_FAST)
+            if raw1:
+                best = _prepare(raw1, body, hint)
+                best_score, best_cov = _score(best, body)
+                source = "gemini"
+            if err1:
+                notes.append(f"Gemini: {err1}")
+        except Exception as e:
+            print(f"⚠️ Gemini call crashed (ignored): {type(e).__name__}: {e}")
+            notes.append(f"Gemini crash: {type(e).__name__}")
+            err1 = str(e)
+
+        looks = _looks_like_data(body)
+        if looks and (best_cov < COVERAGE_MIN or best_score[0] < 0):
+            print(f"🔁 Coverage {best_cov:.2f} / missing stations {-best_score[0]} — deep thinking se dobara")
+            try:
+                raw2, err2 = call_gemini(body, sender, ts, hint, GEMINI_THINK_DEEP)
+                if raw2:
+                    d2 = _prepare(raw2, body, hint)
+                    s2, c2 = _score(d2, body)
+                    if s2 > best_score:
+                        best, best_score, best_cov, source = d2, s2, c2, "gemini-deep"
+                elif err2 and not err1:
+                    notes.append(f"Gemini: {err2}")
+            except Exception as e:
+                print(f"⚠️ Gemini deep call crashed (ignored): {type(e).__name__}: {e}")
+                notes.append(f"Gemini deep crash: {type(e).__name__}")
     else:
-        raw1, err1 = None, "Gemini chhoda (time)"
-    best = _prepare(raw1, body, hint) if raw1 else _empty_data()
-    best_score, best_cov = _score(best, body)
-    source = "gemini"
-    if err1:
-        notes.append(f"Gemini: {err1}")
+        notes.append("Gemini chhoda (time)")
 
-    looks = _looks_like_data(body)
-    if use_gemini and looks and (best_cov < COVERAGE_MIN or best_score[0] < 0):
-        print(f"🔁 Coverage {best_cov:.2f} / missing stations {-best_score[0]} — deep thinking se dobara")
-        raw2, err2 = call_gemini(body, sender, ts, hint, GEMINI_THINK_DEEP)
-        if raw2:
-            d2 = _prepare(raw2, body, hint)
-            s2, c2 = _score(d2, body)
-            if s2 > best_score:
-                best, best_score, best_cov, source = d2, s2, c2, "gemini-deep"
-        elif err2 and not err1:
-            notes.append(f"Gemini: {err2}")
+    # --- Rule parser (hamesha chalta hai) ---
+    try:
+        fb = _parse_kv_fallback(body, hint)
+        rx = _prepare(fb, body, hint) if fb else None
+        if rx is not None and _has_content(rx):
+            if _has_content(best):
+                best = reconcile(best, rx, body)
+                source += "+labels"
+                best = _prune_misplaced(best, body)
+            else:
+                best = rx
+                source = "labels"
+                notes.append("Gemini se data nahi mila — rule-parser use hua")
+    except Exception as e:
+        print(f"⚠️ Rule parser error: {e}")
+        notes.append(f"Rule parser error: {e}")
 
-    fb = _parse_kv_fallback(body, hint)
-    rx = _prepare(fb, body, hint) if fb else None
-    if rx is not None and _has_content(rx):
-        if _has_content(best):
-            best = reconcile(best, rx, body)
-            source += "+labels"
-            best = _prune_misplaced(best, body)
-        else:
-            best = rx
-            source = "labels"
-            notes.append("Gemini se data nahi mila — rule-parser use hua")
     if not _has_content(best):
         best = _prepare(None, body, hint)
+
     if best.get("goods"):
-        best["goods"] = _fill_goods(best["goods"], _parse_goods_kv(body))
-        rem = _remark_from_text(body)
-        for g in best["goods"]:
-            g["remark"] = clean_remark(g.get("remark")) or rem
+        try:
+            best["goods"] = _fill_goods(best["goods"], _parse_goods_kv(body))
+            rem = _remark_from_text(body)
+            for g in best["goods"]:
+                g["remark"] = clean_remark(g.get("remark")) or rem
+        except Exception as e:
+            print(f"⚠️ Goods fill error: {e}")
+
     best_score, best_cov = _score(best, body)
     miss = missing_stations(best, body)
+    looks = _looks_like_data(body)
     if miss and looks:
         notes.append(f"{', '.join(miss)}: message me station mila par uska data samajh nahi aaya — message check karein")
     print(f"✅ Final ({source}, coverage {best_cov:.2f}, fields {_field_count(best)}):", json.dumps(best, default=str))
@@ -2849,6 +2964,11 @@ def handle_message(text, reply_to=None, phone_id=None):
         summary = f"❌ Processing me error aaya: {e}"
     _remember(text, summary, time.time() - t0, reply_to)
     print("📝 Summary:\n" + summary)
+    # successful process ke baad IDs disk pe save karo
+    try:
+        _save_processed()
+    except Exception:
+        pass
     if reply_to:
         send_whatsapp(reply_to, summary, phone_id)
     return summary
@@ -2902,6 +3022,10 @@ def handle_batch(texts, reply_to=None, phone_id=None):
             parts.append(f"━━ {i}) {_label_for(ex, text)}\n{summary}")
         reply = "\n\n".join(parts)
         print(f"📝 Batch summary ({time.time() - t0:.0f}s):\n" + reply)
+        try:
+            _save_processed()
+        except Exception:
+            pass
         if reply_to:
             send_whatsapp(reply_to, reply, phone_id)
         return reply
@@ -2986,9 +3110,9 @@ def _diag_gemini():
                "generationConfig": {"maxOutputTokens": 32, "temperature": 0}}
     if "2.5" in GEMINI_MODEL:
         payload["generationConfig"]["thinkingConfig"] = {"thinkingBudget": 0}
-    r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-                      json=payload, headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
-                      timeout=(GEMINI_CONNECT_TIMEOUT, 25))
+    r = _GEMINI_SESSION.post(f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+                             json=payload, headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+                             timeout=(GEMINI_CONNECT_TIMEOUT, 25))
     return f"HTTP {r.status_code} in {time.time() - t0:.1f}s"
 
 def _diag_sheet():
@@ -3104,6 +3228,9 @@ def startup_check():
         print(f"IST_NOW         : {ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"NETWORK         : ipv4_only={os.environ.get('FORCE_IPV4', '1') != '0'} gemini_budget={GEMINI_TOTAL_BUDGET}s google_timeout={GOOGLE_TIMEOUT}s")
         print(f"BATCH           : window={BATCH_WINDOW}s workers={MSG_WORKERS} gemini_parallel={GEMINI_PARALLEL}")
+        # pehle se process hue messages load karo (sleep ke baad dubara na likhe)
+        _load_processed()
+        print(f"PROCESSED_MSGS  : {len(PROCESSED_MSG_IDS)} IDs loaded (7 din tak yaad)")
     except Exception as e:
         print(f"⚠️ Startup info print failed: {e}")
     threading.Thread(target=_startup_sheet_check, daemon=True).start()
@@ -3117,4 +3244,3 @@ if __name__ == "__main__":
     app.run(host="0.0.0.0", port=port)
 
 # ===== END OF app.py (3119 lines) — agar ye line nahi dikhti to file adhoori copy hui hai =====
-            
