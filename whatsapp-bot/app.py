@@ -422,20 +422,66 @@ def resolve_station(name, quiet=False):
 # ==============================================
 # META RETRY PROTECTION + LOCKS
 # ==============================================
+# ==============================================
+# PROCESSED MESSAGE IDs (persistent across sleep/restart)
+# ==============================================
 PROCESSED_MSG_IDS = {}
 _PROC_LOCK = threading.Lock()
+_PROCESSED_FILE = "/tmp/processed_msg_ids.json"
+_PROCESSED_MAX_AGE = 7 * 24 * 3600   # 7 din tak yaad rakhega
+_PROCESSED_LOADED = False
+
+def _load_processed():
+    """Disk se pehle se process hue message IDs load karo (Render sleep ke baad bhi kaam kare)."""
+    global _PROCESSED_LOADED
+    if _PROCESSED_LOADED:
+        return
+    try:
+        if os.path.exists(_PROCESSED_FILE):
+            with open(_PROCESSED_FILE, "r") as f:
+                data = json.load(f)
+            now = time.time()
+            # purane entries hatao
+            cleaned = {k: v for k, v in data.items() if now - v < _PROCESSED_MAX_AGE}
+            PROCESSED_MSG_IDS.update(cleaned)
+            print(f"ℹ️ Loaded {len(cleaned)} processed message IDs from disk")
+    except Exception as e:
+        print(f"⚠️ Could not load processed IDs: {e}")
+    _PROCESSED_LOADED = True
+
+def _save_processed():
+    """Processed IDs ko disk pe save karo taaki restart ke baad bhi yaad rahe."""
+    try:
+        now = time.time()
+        with _PROC_LOCK:
+            cleaned = {k: v for k, v in PROCESSED_MSG_IDS.items() if now - v < _PROCESSED_MAX_AGE}
+            # sirf last 2000 rakho (memory + file size control)
+            if len(cleaned) > 2000:
+                cleaned = dict(sorted(cleaned.items(), key=lambda x: x[1], reverse=True)[:2000])
+            PROCESSED_MSG_IDS.clear()
+            PROCESSED_MSG_IDS.update(cleaned)
+        with open(_PROCESSED_FILE, "w") as f:
+            json.dump(cleaned, f)
+    except Exception as e:
+        print(f"⚠️ Could not save processed IDs: {e}")
 
 def already_processed(msg_id):
+    """True return kare to message skip ho jata hai (dobara process nahi hota)."""
     if not msg_id:
         return False
+    _load_processed()
     now = time.time()
     with _PROC_LOCK:
-        for k in [k for k, t in PROCESSED_MSG_IDS.items() if now - t > 600]:
+        # purane entries clean
+        for k in [k for k, t in PROCESSED_MSG_IDS.items() if now - t > _PROCESSED_MAX_AGE]:
             del PROCESSED_MSG_IDS[k]
         if msg_id in PROCESSED_MSG_IDS:
             return True
         PROCESSED_MSG_IDS[msg_id] = now
-        return False
+    # har 10th message pe disk pe save (performance ke liye)
+    if len(PROCESSED_MSG_IDS) % 10 == 0:
+        _save_processed()
+    return False
 
 # ==============================================
 # KAAM TRACKER + HARD DEADLINE + WATCHDOG (har atka hua kaam log me dikhe)
@@ -2885,6 +2931,11 @@ def handle_message(text, reply_to=None, phone_id=None):
         summary = f"❌ Processing me error aaya: {e}"
     _remember(text, summary, time.time() - t0, reply_to)
     print("📝 Summary:\n" + summary)
+    # successful process ke baad IDs disk pe save karo
+    try:
+        _save_processed()
+    except Exception:
+        pass
     if reply_to:
         send_whatsapp(reply_to, summary, phone_id)
     return summary
@@ -2938,6 +2989,10 @@ def handle_batch(texts, reply_to=None, phone_id=None):
             parts.append(f"━━ {i}) {_label_for(ex, text)}\n{summary}")
         reply = "\n\n".join(parts)
         print(f"📝 Batch summary ({time.time() - t0:.0f}s):\n" + reply)
+        try:
+            _save_processed()
+        except Exception:
+            pass
         if reply_to:
             send_whatsapp(reply_to, reply, phone_id)
         return reply
@@ -3140,6 +3195,9 @@ def startup_check():
         print(f"IST_NOW         : {ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"NETWORK         : ipv4_only={os.environ.get('FORCE_IPV4', '1') != '0'} gemini_budget={GEMINI_TOTAL_BUDGET}s google_timeout={GOOGLE_TIMEOUT}s")
         print(f"BATCH           : window={BATCH_WINDOW}s workers={MSG_WORKERS} gemini_parallel={GEMINI_PARALLEL}")
+        # pehle se process hue messages load karo (sleep ke baad dubara na likhe)
+        _load_processed()
+        print(f"PROCESSED_MSGS  : {len(PROCESSED_MSG_IDS)} IDs loaded (7 din tak yaad)")
     except Exception as e:
         print(f"⚠️ Startup info print failed: {e}")
     threading.Thread(target=_startup_sheet_check, daemon=True).start()
