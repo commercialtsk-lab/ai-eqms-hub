@@ -86,7 +86,7 @@ GEMINI_ADAPT_INTERVAL = float(os.environ.get("GEMINI_ADAPT_INTERVAL", "6.5"))  #
 REPLY_GAP = float(os.environ.get("REPLY_GAP_SECS", "2"))             # WhatsApp replies ke beech gap
 GEMINI_PARALLEL = int(os.environ.get("GEMINI_PARALLEL", "4"))
 COVERAGE_MIN = float(os.environ.get("COVERAGE_MIN", "0.55"))
-SEND_REPLY = os.environ.get("SEND_REPLY", "1") != "0"
+SEND_REPLY = os.environ.get("SEND_REPLY", "0") != "0"  # default OFF — no WhatsApp auto-replies
 GRAPH_VERSION = os.environ.get("GRAPH_VERSION", "v20.0")
 
 SHEET_LOCK_FILE = "/tmp/sheet_update.lock"
