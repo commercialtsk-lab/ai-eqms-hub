@@ -18,6 +18,22 @@ from gspread.utils import rowcol_to_a1
 from google.oauth2.service_account import Credentials
 from flask import Flask, request, jsonify
 
+# Render par IPv6 route aksar black-hole hota hai: Gemini/Google ke kai IPv6 addresses ek-ek karke try hote hain aur
+# har ek par poora timeout lagta hai → message minuton atka rehta tha. Isliye sirf IPv4.
+if os.environ.get("FORCE_IPV4", "1") != "0":
+    try:
+        import socket as _socket
+        import urllib3.util.connection as _u3c
+        _u3c.HAS_IPV6 = False
+        _u3c.allowed_gai_family = lambda: _socket.AF_INET
+    except Exception:
+        pass
+
+try:
+    from google.auth.transport.requests import Request as _GRequest
+except Exception:
+    _GRequest = None
+
 try:                                   # logs turant dikhein (Render par stdout warna 8KB bharne par hi flush hota hai)
     sys.stdout.reconfigure(line_buffering=True)
     sys.stderr.reconfigure(line_buffering=True)
@@ -46,11 +62,13 @@ GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_THINK_FAST = int(os.environ.get("GEMINI_THINK_FAST", "1024"))
 GEMINI_THINK_DEEP = int(os.environ.get("GEMINI_THINK_DEEP", "8192"))
 GEMINI_MAX_OUT = int(os.environ.get("GEMINI_MAX_OUT", "32768"))
-GEMINI_TIMEOUT = int(os.environ.get("GEMINI_TIMEOUT", "90"))
+GEMINI_TIMEOUT = int(os.environ.get("GEMINI_TIMEOUT", "45"))               # read timeout (seconds)
+GEMINI_CONNECT_TIMEOUT = int(os.environ.get("GEMINI_CONNECT_TIMEOUT", "8"))
+GEMINI_TOTAL_BUDGET = int(os.environ.get("GEMINI_TOTAL_BUDGET", "70"))     # ek Gemini call ka kul time; phir rule-parser
 # primary model fail/overload ho to ye models try hote hain (comma separated)
 GEMINI_FALLBACK_MODELS = os.environ.get("GEMINI_FALLBACK_MODELS", "gemini-2.5-flash-lite,gemini-2.0-flash")
-GOOGLE_TIMEOUT = int(os.environ.get("GOOGLE_TIMEOUT", "40"))
-PROCESS_LOCK_TIMEOUT = int(os.environ.get("PROCESS_LOCK_TIMEOUT", "600"))
+GOOGLE_TIMEOUT = int(os.environ.get("GOOGLE_TIMEOUT", "30"))
+PROCESS_LOCK_TIMEOUT = int(os.environ.get("PROCESS_LOCK_TIMEOUT", "240"))
 RECENT_LOG = deque(maxlen=40)
 # Ek saath kai message forward hon: 3 sec ruk kar ek group (batch) me process, ek hi reply
 BATCH_WINDOW = float(os.environ.get("BATCH_WINDOW_SECS", "3"))      # 0 = batching band
@@ -364,14 +382,27 @@ def already_processed(msg_id):
         return False
 
 @contextlib.contextmanager
-def file_lock(path):
+def file_lock(path, timeout=60):
+    """Cross-process lock; kisi ke hamesha na chhodne par bhi max `timeout` sec baad aage badh jaata hai."""
     f = open(path, "w")
+    locked = False
     try:
-        fcntl.flock(f, fcntl.LOCK_EX)
+        t0 = time.time()
+        while True:
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                locked = True
+                break
+            except OSError:
+                if time.time() - t0 > timeout:
+                    print(f"⚠️ file_lock timeout ({path}) — bina lock ke aage badh rahe hain")
+                    break
+                time.sleep(0.1)
         yield
     finally:
         try:
-            fcntl.flock(f, fcntl.LOCK_UN)
+            if locked:
+                fcntl.flock(f, fcntl.LOCK_UN)
         finally:
             f.close()
 
@@ -430,6 +461,27 @@ def load_credentials_dict():
 _GC = None
 _GC_TIME = 0.0
 _GC_LOCK = threading.RLock()
+_CREDS = None
+
+if _GRequest is not None:
+    class _TimedRequest(_GRequest):
+        """Token refresh bhi chhote timeout ke saath (default 120s x retries me message atak jaata tha)."""
+        def __call__(self, url, method="GET", body=None, headers=None, timeout=None, **kwargs):
+            return super().__call__(url, method=method, body=body, headers=headers, timeout=(8, 20), **kwargs)
+
+def _ensure_token_fresh():
+    creds = _CREDS
+    if creds is None or _GRequest is None:
+        return
+    try:
+        exp = getattr(creds, "expiry", None)
+        need = (not getattr(creds, "valid", False)) or exp is None or (exp - datetime.utcnow()) < timedelta(minutes=5)
+        if need:
+            t0 = time.time()
+            creds.refresh(_TimedRequest())
+            print(f"🔑 Google token refresh hua ({time.time() - t0:.1f}s)")
+    except Exception as e:
+        print(f"⚠️ Google token refresh fail: {e}")
 
 def _get_gc(force=False):
     global _GC, _GC_TIME
@@ -442,9 +494,12 @@ def _get_gc(force=False):
         scopes = ["https://www.googleapis.com/auth/spreadsheets",
                   "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+        global _CREDS
+        _CREDS = creds
+        _ensure_token_fresh()
         _GC = gspread.authorize(creds)
         # Koi Sheets call hamesha ke liye atak kar baaki messages na roke: connect 10s, read GOOGLE_TIMEOUT s
-        for tmo in ((10, GOOGLE_TIMEOUT), GOOGLE_TIMEOUT):
+        for tmo in ((8, GOOGLE_TIMEOUT), GOOGLE_TIMEOUT):
             try:
                 _GC.set_timeout(tmo)
                 break
@@ -487,8 +542,10 @@ def gs_retry(fn, *args, **kwargs):
             raise                                   # programming / signature errors (retry se theek nahi honge)
         except Exception as e:                      # network, timeout, auth-transport — dobara try
             last = e
-            print(f"⚠️ Sheets call transient error ({type(e).__name__}): {e} — retry {attempt + 1}/5")
-            time.sleep(min(2 ** attempt, 10) + random.random())
+            print(f"⚠️ Sheets call transient error ({type(e).__name__}): {e} — retry {attempt + 1}/3")
+            if attempt >= 2:
+                break
+            time.sleep(min(2 ** attempt, 6) + random.random())
     raise last
 
 _SH = None
@@ -507,6 +564,7 @@ def get_spreadsheet():
     global _SH, _SH_TIME
     try:
         with _GC_LOCK:
+            _ensure_token_fresh()
             if _SH is not None and time.time() - _SH_TIME < 2700:
                 return _SH
             gc = _get_gc()
@@ -1063,29 +1121,45 @@ def _gen_config(model, thinking, max_tokens):
         gen["thinkingConfig"] = {"thinkingBudget": budget}
     return gen
 
-def _gemini_post(prompt, thinking=0, max_tokens=None):
-    """Primary model, fail/overload par fallback models. (response_json, error_text) lautata hai."""
+def _gemini_cooldown_remaining():
+    with _GEMINI_CD_LOCK:
+        return max(0.0, _GEMINI_COOLDOWN_UNTIL - time.time())
+
+def _gemini_post(prompt, thinking=0, max_tokens=None, deadline=None):
+    """Primary model, fail/overload par fallback models. (response_json, error_text) lautata hai.
+    `deadline` (epoch) ke baad aur koshish nahi — taaki message minuton na atke; rule-parser aage sambhal leta hai."""
     max_tokens = max_tokens or GEMINI_MAX_OUT
+    deadline = deadline or (time.time() + GEMINI_TOTAL_BUDGET)
     headers = {"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY}
     err = ""
     for mi, model in enumerate(_gemini_models()):
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         use_thinking = True
-        tries = 5 if mi == 0 else 3
+        tries = 4 if mi == 0 else 2
         for attempt in range(tries):
-            _gemini_wait_cooldown()
+            remaining = deadline - time.time()
+            if remaining < 5:
+                return None, err or "Gemini ka time budget khatam"
+            cd = _gemini_cooldown_remaining()
+            if cd > 0:
+                if cd + 5 > remaining:
+                    return None, err or f"Gemini rate limit ({cd:.0f}s) — time budget khatam"
+                _gemini_wait_cooldown()
             _gemini_pace()
+            remaining = deadline - time.time()
+            read_t = max(5.0, min(float(GEMINI_TIMEOUT), remaining))
             gen = _gen_config(model, thinking, max_tokens)
             if not use_thinking:
                 gen.pop("thinkingConfig", None)
             payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": gen}
             try:
                 with _GEMINI_SEM:
-                    res = requests.post(url, json=payload, headers=headers, timeout=GEMINI_TIMEOUT)
+                    res = requests.post(url, json=payload, headers=headers,
+                                        timeout=(GEMINI_CONNECT_TIMEOUT, read_t))
             except Exception as e:
                 err = f"{type(e).__name__}: {e}"
                 print(f"❌ Gemini ({model}) Error: {err}")
-                time.sleep(min(2 ** attempt, 12) + random.random())
+                time.sleep(min(2 ** attempt, 6) + random.random())
                 continue
             code = res.status_code
             if code == 200:
@@ -1107,7 +1181,7 @@ def _gemini_post(prompt, thinking=0, max_tokens=None):
                 _gemini_set_cooldown(_retry_delay_seconds(res))
                 continue
             if code in (500, 502, 503, 504):
-                time.sleep(min(2 ** attempt, 12) + random.random())
+                time.sleep(min(2 ** attempt, 6) + random.random())
                 continue
             if code == 400 and "think" in low and use_thinking:
                 use_thinking = False                   # is model me thinking setting supported nahi
@@ -1216,8 +1290,9 @@ def call_gemini(msg, sender="", ts="", hint=None, thinking=0):
               .replace("__MSG__", msg))
     err = ""
     # 1st: jaisa maanga; agar jawab adhura/khali aaye to 2nd: thinking band (poora token output ke liye)
+    deadline = time.time() + GEMINI_TOTAL_BUDGET
     for th in (thinking, 0):
-        resp, err = _gemini_post(prompt, th)
+        resp, err = _gemini_post(prompt, th, None, deadline)
         if not resp:
             return None, err
         txt, why = _gemini_text(resp)
@@ -2775,6 +2850,7 @@ def startup_check():
         print(f"IWOW_GRACE_HOUR : {IWOW_GRACE_HOUR}:00 IST")
         print(f"WA REPLY        : {SEND_REPLY and bool(WHATSAPP_TOKEN)} (phone_id env={'set' if PHONE_NUMBER_ID else 'not set — webhook se auto lega'})")
         print(f"IST_NOW         : {ist_now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"NETWORK         : ipv4_only={os.environ.get('FORCE_IPV4', '1') != '0'} gemini_budget={GEMINI_TOTAL_BUDGET}s google_timeout={GOOGLE_TIMEOUT}s")
         print(f"BATCH           : window={BATCH_WINDOW}s workers={MSG_WORKERS} gemini_parallel={GEMINI_PARALLEL}")
     except Exception as e:
         print(f"⚠️ Startup info print failed: {e}")
@@ -2787,4 +2863,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
-# ===== END OF app.py (2790 lines) — agar ye line nahi dikhti to file adhoori copy hui hai =====
+# ===== END OF app.py (2866 lines) — agar ye line nahi dikhti to file adhoori copy hui hai =====
