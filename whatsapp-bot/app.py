@@ -2260,7 +2260,7 @@ def osop_units(amount):
     a = _clean_num(amount)
     if a is None or a <= 0:
         return None
-    return max(1, math.ceil((a - 50) / 100))
+    return max(1, round(a / 100))
 
 def update_osop_sheet(entries):
     lines = []
