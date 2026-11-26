@@ -2807,8 +2807,11 @@ def _review_note(best, issues, miss, cov, unplaced=None, um=None):
             "COMPLETE corrected JSON (all stations, all goods). Anything you truly cannot place goes into \"unmapped\".")
 
 def extract_block(body, sender="", ts="", use_gemini=True):
-    print(f"\n📩 Block | sender='{sender}' | ts='{ts}'\\n{body[:400]}")
-    body = normalize_message(body)
+    source_body = str(body or "")
+    print(f"\n📩 Block | sender='{sender}' | ts='{ts}'\\n{source_body[:400]}")
+    # Preserve the exact incoming message for Gemini; normalize a separate copy
+    # only for station hints, quality checks and deterministic recovery.
+    body = normalize_message(source_body)
     hint = guess_station_hint(body, sender)
     notes = []
     raw1 = raw2 = None
