@@ -283,9 +283,7 @@ CONTAINER_WAGON_CODES = {"BLC", "BFKN", "BLL", "BLH", "BLCN", "BLCA", "BLLA", "C
 FIELD_ALIASES = {
     "TICKET": "TKT", "TICKETS": "TKT", "TKTS": "TKT", "TCKT": "TKT",
     "PSG": "PASS", "PSGR": "PASS", "PASSENGER": "PASS", "PASSENGERS": "PASS",
-    "PSGN": "PASS", "PSGF": "PASS", "PSNGR": "PASS", "PSENGER": "PASS",
     "CTKT": "C/TKT", "C TKT": "C/TKT", "CPASS": "C/PASS", "C PASS": "C/PASS",
-    "C/PSGN": "C/PASS", "CPSGN": "C/PASS", "C PSGN": "C/PASS",
     "MRAMT": "MR AMT", "MR_AMT": "MR AMT",
     "REFUND": "REF", "RFD": "REF",
     "ECASH": "UPI", "E CASH": "UPI", "UPI QR": "UPI", "QR": "UPI",
@@ -1110,216 +1108,53 @@ def guess_station_hint(body, sender=""):
 # ==============================================
 # GEMINI
 # ==============================================
-PROMPT_TEMPLATE = r"""You are an expert Indian Railway data extraction engine for the Tinsukia Division.
-You read WhatsApp messages like a seasoned railway accountant — messy formats, broken lines, Hinglish, typos, garbled paste, squished text, merged words ("272AOUNT"), copied/forwarded chat text, random spacing, mixed labels, missing separators. You understand naturally, the way a human who has done this job for years does. Trust your own judgement and extract EVERYTHING that is really present. Never invent numbers that are not in the message.
+PROMPT_TEMPLATE = r"""You are the user's intelligent railway data-reading partner. Read the complete WhatsApp content naturally, as an experienced human railway commercial/accounts colleague would. Your job is to understand what the sender means, not to force the message into a rigid pattern.
 
-Return ONE JSON object with these keys (all present, empty if nothing found):
-  "prs"   : { "<STATION_CODE>": { "TKT":num, "PASS":num, "C/TKT":num, "C/PASS":num, "REF":num, "NET":num, "VCH":num, "POS":num, "UPI":num } }
-  "uts"   : { "<STATION_CODE>": { "PF":num, "TKT":num, "PASS":num, "NET":num, "MR":num, "MR AMT":num, "UPI":num } }
-  "osop"  : [ { "station":"CODE", "date":"as written", "amount":num, "unit":num or omit } ]
-  "goods" : [ { "from_stn":"CODE", "to_stn":"CODE", "wagons":num, "placement_time":"HH:MM", "placement_date":"as written", "commodity":"ABBREVIATED UPPERCASE", "line":"number or comma list", "party":"UPPERCASE", "wagon_type":"optional", "weight":num or omit, "freight":num or omit, "remark":"short lowercase text" or omit } ]
+Think independently. The message may be fragmented, misspelled, abbreviated, multilingual, Hinglish, voice-typed, copied from several chats, arranged in tables, or have values separated from their labels. A label may be unfamiliar or badly broken. Use surrounding context, sequence, nearby values, section headings, station names, arithmetic relationships, and railway domain understanding to infer the most sensible meaning.
 
-=== HOW TO UNDERSTAND ANY MESSAGE (most important - read this first) ===
-You are NOT matching a fixed list of words. You UNDERSTAND meaning, like a senior railway accountant reading a colleague's WhatsApp. Senders invent new spellings, abbreviations and styles every day. Every label list in this prompt is only a set of EXAMPLES, never a limit.
-1. Every number in the message is either (a) data that belongs to exactly ONE field of ONE station/section/goods entry, or (b) noise (date, time, serial, rupee grand total, sub-count, line number...). Decide this for EVERY number. Never silently drop a number that has a meaning.
-2. Decide the field by MEANING, not by spelling:
-   - TKT  = count of tickets: tkt, tick, tikt, tckt, ticket, t, total tkt, no of tickets, j/tkt, issued ...
-   - PASS = count of passengers: pass, psg, psgr, passenger, pax, n/p, no of pass, yatri ...
-   - NET  = rupees collected in CASH over the counter: cash, net, net cash, n/cash, amt, amount, collection, j/amount, nakad ...
-   - UPI  = rupees collected DIGITALLY: digi, digital, d/cash, d cash, dcash, dig cash, e cash, e/cash, ecash, e-cash, online, qr, upi, phonepe, paytm, gpay, bhim, wallet ... whatever the spelling, if it means digital/online money and has NO refund word, it is UPI. If a section has both a QR line and a UPI line, UPI = their sum.
-   - REF  = rupees REFUNDED: ref, rfd, refund, refnd, return, digi ref, digital refund, d/ref, upi ref, pos ref, qr ref ... (add all refund lines of that PRS section; never put UTS refunds in PRS)
-   - Rupee grand total (cash + digital): total, ttl, gross, grand total, g total, total amt ... -> IGNORE it.
-3. A label may have a typo, a missing vowel, extra dash / colon / dot / space, odd capitals, or Hinglish ("kul", "nakad", "yatri", "tikat"). Fix it silently and understand it.
-4. Verify with common sense: cash + digital = the stated total/gross; passengers >= tickets; a refund is never bigger than the collections. When a label is ambiguous, use these checks and the position of the line to decide.
-5. Digital COLLECTION vs digital REFUND: "Digi 6175", "D/cash 6175", "Digital 6175" is collection (UPI). "Digi ref 500", "digital refund 500" is a refund (REF). One number goes to one field only.
-6. If, after thinking hard, a labelled number still cannot be placed, do NOT guess wildly and do NOT drop it silently: add it to an extra top-level key "unmapped" (list of short strings such as "Tick : 84 (BBGN)"). If you can decide by meaning, place it instead. "unmapped" is [] when everything is placed.
-7. Station names come in any form ("Earning of Bbgn station", "UTS Earnings of TTB", "Revenue of ...", "PRS/NTSK"). Everything below a station heading belongs to that station until the next heading. One message may hold revenue of several stations AND goods wagon sentences AND chat commentary (e.g. "isme ye nahi aya") - handle each part independently; commentary is not data.
-8. Goods sentences are free text; read them like a human: "<N> <wagon type> <COMMODITY> WAGONS EX-<from> TO <to> PLACED AT <time> HRS ON <date> ON LINE NO <n>". The word(s) between the wagon type (BCN, BCNA, BCNAHS, BCNL, BOXN, BTPN, BRN, BLC ...) and the word WAGONS are the commodity (SALT, COAL, CEMENT, RICE(FCI), SUGAR ... any cargo name, even one you never saw). "L/NO", "LINE NO", "LN", "Line-" all mean the line number. Time may be 23/40, 23.40, 2340 or 11:40 PM -> "23:40". A station code that is not in the official list (e.g. SNLR) is still a valid from_stn: keep it as written.
-9. Every goods entry MUST carry commodity, line and placement_time whenever the message states them anywhere - re-read the whole sentence before leaving one empty.
-10. Final self-check before answering: go through the message line by line and tick off every number against your JSON; whatever is left over goes to "unmapped".
+Do not depend on a fixed vocabulary or examples. Treat all examples and station/field hints as helpful context, never as limits. You may make your own reasonable interpretation when the message is clear from context. Do not ask the user to explain data that can reasonably be understood. Do not invent facts or numbers. If something genuinely cannot be interpreted, preserve it in "unmapped" rather than silently losing it.
+
+Read the entire message, not just the first lines. One message can contain multiple stations, multiple PRS/UTS reports, OSOP entries, goods placements, corrections, follow-up fragments, and unrelated commentary. Connect fragments when context makes the relationship clear. Keep separate entries separate when they refer to different stations, dates, sections, commodities, or placements. If two fragments clearly describe the same entry, combine them sensibly and avoid double counting.
+
+Use the official station list as a reference for spelling and codes. Recognize station codes, full names, local spellings, phonetic spellings, abbreviations, and typos. A station not in the supplied list can still be a valid station: preserve its written code/name in uppercase rather than discarding it. Use the supplied station hint only when the message itself gives no reliable station.
+
+Understand fields by their real-world meaning:
+- PRS/UTS revenue: ticket counts, passenger counts, cancelled counts, platform tickets, cash collections, digital/UPI collections, refunds, vouchers, POS, MR counts and MR amounts.
+- Distinguish cash from digital collection, collection from refund, count from rupee amount, and a section subtotal from an actual field. A grand total that merely repeats the sum of collections is not an additional collection.
+- Interpret abbreviations, misspellings, shorthand, mixed labels and unlabeled continuation values using context. A number must not be copied into multiple fields unless the source clearly represents separate amounts.
+- Respect the actual section/station to which a value belongs. Do not move a value from one station or PRS/UTS section to another just to make the output look complete.
+- OSOP: capture station, date, amount and unit only when stated.
+- Goods/IWOW: understand both sentence-style and key-value reports. Capture origin, destination, wagon count, wagon type, commodity, line(s), placement time/date, party, weight, freight and remarks wherever stated. Commodity and station names are not limited to the supplied examples. Preserve all meaningful details. If multiple lines belong to the same placement, combine them only when the context clearly shows they are one placement; otherwise keep separate entries.
+- Remarks should preserve the actual cause/status in concise, clear lowercase English. Do not add a cause or status that the sender did not state.
+
+Use common sense as a guide, not as a rigid rule. For example, passenger count is often at least ticket count, but unusual values can be genuine; do not alter them solely to satisfy a general expectation. Likewise, do not discard a value merely because it is unusual. Prefer the interpretation best supported by the message as a whole.
+
+Before responding, independently review the complete source and check that every meaningful number, station, section and goods detail has been accounted for. Dates, times, serial numbers, line numbers, wagon counts, weights and freight are not revenue merely because they are numeric. Do not force them into revenue fields. Keep ambiguous material in "unmapped" with enough original wording to identify it.
+
+OUTPUT CONTRACT
+Return one valid JSON object only, with these keys:
+{
+  "prs": {"STATION_CODE": {"TKT": number, "PASS": number, "C/TKT": number, "C/PASS": number, "REF": number, "NET": number, "VCH": number, "POS": number, "UPI": number}},
+  "uts": {"STATION_CODE": {"PF": number, "TKT": number, "PASS": number, "NET": number, "MR": number, "MR AMT": number, "UPI": number}},
+  "osop": [{"station": "CODE", "date": "as written", "amount": number, "unit": number}],
+  "goods": [{"from_stn": "CODE", "to_stn": "CODE", "wagons": number, "placement_time": "HH:MM", "placement_date": "as written", "commodity": "UPPERCASE", "line": "line numbers", "party": "UPPERCASE", "wagon_type": "CODE", "weight": number, "freight": number, "remark": "short lowercase remark"}],
+  "unmapped": ["original fragment and why it could not be placed"]
+}
+
+All five keys must always be present. Use empty objects/arrays when nothing is found. Omit optional properties that are not stated or cannot reasonably be inferred. Numbers must be JSON numbers, not formatted strings. Normalize times to 24-hour HH:MM when possible. Keep station/commodity/party text uppercase where the schema asks for it. Never output markdown or explanatory text outside JSON.
 
 === CONTEXT ===
 __CTX__
-STATION HINT (use ONLY if the message text itself names no station): __HINT__
-The message may begin with chat-export noise like "[04/11, 7:03 pm] Name:" — ignore it. Sender names/designations (Sr CTC, SM, SS, Pradip Mishra) are NOT data.
-One message can contain several things at once (PRS + UTS + OSOP + goods, or several stations, or several forwarded reports pasted one after another). Extract all of them.
+STATION HINT (use only if the message itself does not identify a station): __HINT__
 
-=== OFFICIAL STATIONS (CODE = Full Name) ===
+=== STATION REFERENCE (helpful, not restrictive) ===
 __LEGEND__
-Always output the CODE, never the full name. Fix spelling mistakes and short forms yourself (Kown/Khowang → KOWN, Krht → KRHT). Headings like "Earnings Of NTSK", "REVENUE OF BFD", "PRS/NTSK", "UTS/NTSK" tell you the station and the section.
 
-=== PRS / UTS READING GUIDE ===
-- Normally ONE station's daily revenue report. Station key = CODE (from the text or from STATION HINT). Multi-station bundles are possible → one key per station.
-- Lines under a "UTS" heading → "uts". Lines under a "PRS" heading → "prs". Headings can look like "PRS", "PRS/NTSK", "PRS :", "UTS REPORT". If the message has NO UTS/PRS label at all (small stations) → treat as UTS.
-- Field meanings (people write them in many ways; a leading "T/" means Total, e.g. T/TKT = total tickets):
-    TKT   : TKT / Tkts / Tckt / Ticket / T / T/TKT / J/TKT
-    PASS  : PASS / Psg / Psgr / Passenger / P (when it sits beside T) / T/Pass / J/Pass
-    NET   : NET CASH / Netcash / N cash / N/cash / Net / Cash / Cash amount / AMT / Amount / J/Amount  — the cash collection amount (never the grand total). A bare "AMT"/"Amount" line is NET (except right after PF → platform amount, ignore; right after MR → MR AMT).
-    UPI   : E CASH / E/CASH / Ecash / E-cash / E cas / Digi cash / Digital cash / UPI / UPI QR / QR / Digital / Paytm / PhonePe — if a section has both a "QR" line and a "UPI" line with values, the UPI field is their SUM
-    REF   : REF / Ref / REFUND / RFD / Digi ref / Digital refund / Digi RFD / UPI REF / POS REF / QR REF — SUM OF ALL refund-type amounts of THAT station's PRS section. If multiple refund lines exist (e.g. REF 500 + UPI REF 200 + RFD 100), put the TOTAL (800) in REF. Never take only the first one, and never add refunds of another station or of the UTS section.
-    C/TKT, C/PASS : cancelled tickets / cancelled passengers (PRS) — written C/TKT, C/T, CT, C/TK, Cancel tkt ... and C/PASS, C/P, CP, C/PS, Cancel pass ... Always capture them.
-    CRITICAL: When a line is written like "C/tkt=1, psgn=5 & Ref=530" or "Can tkt 2, pass 4", the second number after a cancel-ticket label is ALWAYS C/PASS (not normal PASS). The cancel context continues on the same line. Always sum every refund (Ref + UPI Ref + POS Ref + Digi Ref) into one REF total.
-    VCH, POS : vouchers (Vou / VCH / Voucher) / POS-machine amount (PRS). POS REF is a refund → goes into REF.
-    PF    : platform tickets COUNT (PF / P/TKT / PLT / PLATFORM / "M"). A platform AMOUNT next to it has no column → ignore it.
-    MR / MR AMT : MR count / MR amount (both captured). "MR=13AMOUNT=37960" → MR 13, MR AMT 37960.
-- SMALL STATIONS (CGF, DMGN, TNGN, NSBG, KOWN, NCH, CMA, KXL, BBGN, BLMR, NMGY, KRHT) only report TKT, PASS, NET (cash amount) and UPI (E cash). They have NO MR, so a plain "Amount"/"Cash"/"Cash amount" there is NET, never MR AMT. Other small stations (LBI, BGND, LMY, SRPN, SMCP, TQM, GOM, BDLN, CKW, LHL, DKM, PNT, TII, LXA, SFR, SLX, NMT) report TKT, PASS, NET, UPI and only sometimes MR / MR AMT (MR AMT only when written next to MR).
-- "Jenny" / "JTBS" lines (e.g. "T/jenny 1132") are only a sub-count of tickets already included in the total → ignore them, never add them to TKT.
-- KEY-VALUE LISTS: many stations send one field per line like "TKT--106", "AMT- 110585", "Ref-10665/-" ("/-" only means rupees), "STN-DBRT", "*PRS/DBRT". In such a list "AMT"/"Amount" is NET (cash amount). A line with nothing after the dash ("VOU--", "QR-", "AMT-") or with nil/Nill is simply omitted. "PF AMT" and "MR AMT"-less platform amounts: ignore PF AMT. The words "PRS" / "UTS" on their own line start a section that lasts until the next such marker; "STN-XYZ" names the station of that section. Several stations' PRS and UTS reports can be pasted one after another: keep every number with its own station AND its own PRS/UTS section.
-- NARRATIVE FORMAT: the station may be named in words ("Station :- New Sisiborgaon." → NSBG) and values may sit under a header line: "Ticket" then "   UTS--78" means TKT 78 (here UTS is a ticket-type label, NOT a section heading); other ticket types with nil (BPT-- NIL) are omitted. "Passenger=163" = PASS. "Cash Amt" = NET. "QR -- Amt = 215" = UPI (QR/UPI amount). "Total Amt" = grand total of cash + QR → ignore. "From SS/NSBG." is a signature (sender), not data.
-- UTS HAS NO COLUMNS for VCH, REF/RFD, C/TKT, C/PASS, POS. If such lines appear under a UTS heading (e.g. UTS: "VCH -12232", "RFD -12232") IGNORE them completely — never copy them into PRS and never into UTS. These fields belong to PRS only, and only when they are written under the PRS heading. Likewise PF / MR / MR AMT exist only for UTS.
-- LABEL SPELLINGS: "E - cash", "E-cash", "E cash", "Ecash" are all UPI (never NET). "Net cash" is NET. When both are written each goes to its own field — a number written once is never copied into two fields. "Total tkt / Total pass" = TKT / PASS counts. "Can tkt / Can pass" = C/TKT / C/PASS. "Misc. tkt" and similar miscellaneous counts have no column → ignore. A section headed PMS (e.g. "*PMS/SLGR*" with Inward / Outward / Scanned / Booking counts) is not revenue → ignore it completely.
-- SPLIT REFUNDS: a refund written over several lines or modes ("Rfd :- 6100/ ( cash )" and below it "2780/- (digi )") → ADD them all: REF 8880. A bare number line under a refund line belongs to that refund.
-- STATION POSITION: a station may be written as a heading ("UTS-BDLN", "Earnings Of NTSK") OR inline at the start of a data line ("Gom n/p 442 tkt 355 Ecash 3255 amt 26530"). Numbers belong to the station named on their own line, or to the most recent station heading above them, until a different station appears. One message may hold many stations — never move one station's numbers to another, and never use the STATION HINT when the text names stations itself. A lone "Date-09/11/26" line between stations is just a date.
-- More label spellings: N/P, NP, No of Pass → PASS. Amt / Amount / Cash amt / a bare "Amount" (not directly after MR or PF) → NET. Ecash → UPI.
-- TTL / Total has two meanings, decide by the value. (a) A rupee grand total equal to Cash + E-cash (e.g. "Ttl 1730" after Cash 1390 + Ecash 340) → IGNORE, never put it anywhere. (b) A COUNT sitting next to Pass (smaller than or equal to the passenger number, and no other tickets figure is given) → that is TKT. Example: "Pass-136 / TTL-96" → PASS 136, TKT 96.
-- Think like a careful accountant: passengers are normally >= tickets; one number goes to one field only; a nil/Nill/- value is omitted; an unknown label with nil (like "N/I-nil") is simply skipped; if a label is unknown but its number clearly fits one of the fields by meaning and position, use it.
-- Nil / Nill / NIL / - / blank / "nill .." → omit that key.
-- Date lines like "DATE. 04/11/2026" or "Date:06/11/26" → ignore (not a field).
-- Numbers must be plain numbers (remove commas, Rs, /-, spaces). A hyphen/dash between label and number ("Pass-136", "Amount -5970") is only a separator, not a minus sign.
-- Missing → omit key. If a label is unusual or misspelt, decide by meaning and position, like a human accountant would. A number must go to exactly one field.
-
-PRS/UTS EXAMPLES:
-Input: "REVENUE OF BFD\nDATE.     04/11/2026\nUTS\nTKT                  200\nPASS.               333\nNET CASH.    10485\nE CASH.          1230\n\nPRS\nTKT                 9\nPASS.              20\nNET CASH.    28060\nUPI QR .          10025\nREFUND.          Nill\nC/TKT.              Nill\nC/PASS.            Nill\nDigi ref:-            nill  .."
-Output: {"prs":{"BFD":{"TKT":9,"PASS":20,"NET":28060,"UPI":10025}},"uts":{"BFD":{"TKT":200,"PASS":333,"NET":10485,"UPI":1230}},"osop":[],"goods":[]}
-
-Input: "Kown 4/11/26\nPsg-9\nTckt-7\nCash-20\nEcash-400"
-Output: {"prs":{},"uts":{"KOWN":{"TKT":7,"PASS":9,"NET":20,"UPI":400}},"osop":[],"goods":[]}
-
-Input: "Krht uts of 4.11.2026\nT 36\nP 58\nCash 1390\nE cas 340\nTtl 1730 only"
-Output: {"prs":{},"uts":{"KRHT":{"TKT":36,"PASS":58,"NET":1390,"UPI":340}},"osop":[],"goods":[]}
-
-Input: "Station :- New Sisiborgaon.\n(UTS Earnings)\nDate:-18/11/26\n\nTicket \n   UTS--78\n   BPT-- NIL \nPassenger=163\nCash Amt  =2445.00/-\nQR -- Amt = 215.00/-\nTotal Amt= 2660.00/-.\n\nFrom \nSS/NSBG."
-Output: {"prs":{},"uts":{"NSBG":{"TKT":78,"PASS":163,"NET":2445,"UPI":215}},"osop":[],"goods":[]}
-
-Input: "*Date:-17/11/2026*\n\n*PRS/SLGR*\n\nTotal tkt :- 57\nTotal pass :- 104\nCan tkt :- 06\nCan pass :- 10\nE - cash :- 22820/-\nNet cash :- 77235/-\nRfd :- 6100/ ( cash )\n            2780/- (digi )\n\n\n*UTS/SLGR*\n\nTotal tkt :- 781\nTotal pass :- 1211\nMisc. tkt :- 15\nMR :- 01 \nAmount :- 500/-\nE - cash :- 34400/-\nNet cash :- 78125/-\n\n*PMS/SLGR*\n\nInward :- 01\nScanned :- 01\n\nBooking :- 00\n\nOutward :- 00"
-Output: {"prs":{"SLGR":{"TKT":57,"PASS":104,"C/TKT":6,"C/PASS":10,"UPI":22820,"NET":77235,"REF":8880}},"uts":{"SLGR":{"TKT":781,"PASS":1211,"MR":1,"MR AMT":500,"UPI":34400,"NET":78125}},"osop":[],"goods":[]}
-
-Input: "Revenue of MXN STN ON 17/11/26\nPRS..........\nT/TKT -98\nT/Pass -146\nNet Cash -71760\nRFD -27545\nUPI -74745\nUPI RFD -Nil \nVCH - Nil \nC/TKT -8\nC/Pass -14\nUTS........\nPF TKT -49\nJ/TKT -629\nJ/Pass -871\nJ/Amount -81650\nMR -15\nMR Amount -20595\nEcash -35925\nVCH -12232\nRFD -12232"
-Output: {"prs":{"MXN":{"TKT":98,"PASS":146,"NET":71760,"REF":27545,"UPI":74745,"C/TKT":8,"C/PASS":14}},"uts":{"MXN":{"PF":49,"TKT":629,"PASS":871,"NET":81650,"MR":15,"MR AMT":20595,"UPI":35925}},"osop":[],"goods":[]}
-
-Input: "*PRS/DBRT\nDATE -12/11/2026\nPRS\nSTN-DBRT\nTKT--106\nPASS-174\nAMT-  110585\nC/T--13\nC/P--20\nREF--6090\nPOS--17480\nPOS REF--nil\nVOU--\nQR-\nUPI--78085\nUPI REF--5090\n*UTS/DBRT\nDATE- 12/11/2026\nUTS\nSTN- DBRT\nTKT --2\nAMT- \nQR-27648\nMR-1 \n*PRS/DBY\nDATE- 12/11/26\nPRS\nSTN- DBY\nTKT- 39/-\nPASS-56/-\nAMT-31880/-\nC/T-08/-\nC/P-17/-\nRef-10665/-\nPOS-  Nil\nPOS REF- Nil\nVOU- Nil\nQR-34980/-\nUPI-nil\nUPI Ref-12995/-\n*UTS/DBY\nDATE-12/11/26\nUTS\nSTN-DBY\nTKT-139/-\nPASS-216/-\nAMT-7460/-\nQR-1685/-\nUPI-NIL\nPF-Nil\nPF AMT-Nil\nMr-nil\nMr AMT -Nil"
-Output: {"prs":{"DBRT":{"TKT":106,"PASS":174,"NET":110585,"C/TKT":13,"C/PASS":20,"REF":11180,"POS":17480,"UPI":78085},"DBY":{"TKT":39,"PASS":56,"NET":31880,"C/TKT":8,"C/PASS":17,"REF":23660,"UPI":34980}},"uts":{"DBRT":{"TKT":2,"UPI":27648,"MR":1},"DBY":{"TKT":139,"PASS":216,"NET":7460,"UPI":1685}},"osop":[],"goods":[]}
-
-Input: "Gom n/p 442 tkt 355 Ecash 3255 amt 26530\nDate-09/11/26\nUTS-BDLN \nPass-136\nTTL-96\nAmount -5970\nN/I-nil\nEcash-1595"
-Output: {"prs":{},"uts":{"GOM":{"TKT":355,"PASS":442,"NET":26530,"UPI":3255},"BDLN":{"TKT":96,"PASS":136,"NET":5970,"UPI":1595}},"osop":[],"goods":[]}
-
-Input: "Earnings Of NTSK \nDate:06/11/26\nPRS/NTSK \nT/TKT =81\nT/Pass =78\nC/TKT =04\nC/Pass =09\nRFD =6020\nNetcash =31580\nDigi CASH =56950\nDigi RFD =Nil\nVch=Nil\n\nUTS/NTSK \nT/jenny1132\nT/TKT =1429\nT/Pass =1651\nP/TKT =272AOUNT =2720\nMR=13AMOUNT=37960\nE/CASH =52145\nJ/AMOUNT =338765 "
-Output: {"prs":{"NTSK":{"TKT":81,"PASS":78,"C/TKT":4,"C/PASS":9,"REF":6020,"NET":31580,"UPI":56950}},"uts":{"NTSK":{"TKT":1429,"PASS":1651,"PF":272,"MR":13,"MR AMT":37960,"UPI":52145,"NET":338765}},"osop":[],"goods":[]}
-
-MORE EXAMPLES (odd labels):
-Input: "Earning of Bbgn station\nDate : 23/11/2026\nTick : 84\nPass : 139\nCash : 8235\nE- cash : 3130\nTotal : 11365\nUTS Earnings of TTB \nDate :23/11/2026\nTKT: 253\nPass: 391\nNet: 17835\nDigi: 6175\nGross: 24010\nRefnd :Nil"
-Output: {"prs":{},"uts":{"BBGN":{"TKT":84,"PASS":139,"NET":8235,"UPI":3130},"TTB":{"TKT":253,"PASS":391,"NET":17835,"UPI":6175}},"osop":[],"goods":[],"unmapped":[]}
-
-Input: "UTS NSBG 22/11/26\nTiket 41\nPsngr 66\nD/cash 900\nCash 1500\nTtl 2400"
-Output: {"prs":{},"uts":{"NSBG":{"TKT":41,"PASS":66,"NET":1500,"UPI":900}},"osop":[],"goods":[],"unmapped":[]}
-
-Input: "PRS/TTB.\nDate:26/11/2026.\nTkt=14\nPsgn=22\nNet cash =9320\nC/tkt=1, psgn =5 & Ref =530\nUPI=9520\nUPI Ref =1550\nVch=Nil.\n\nUTS:\nTkt=160\nPsgf=258\nNet cash =13310\nE/cash =2275\nVch=Nil"
-Output: {"prs":{"TTB":{"TKT":14,"PASS":22,"NET":9320,"C/TKT":1,"C/PASS":5,"REF":2080,"UPI":9520}},"uts":{"TTB":{"TKT":160,"PASS":258,"NET":13310,"UPI":2275}},"osop":[],"goods":[],"unmapped":[]}
-
-IMPORTANT RULE for combined cancel lines:
-When a line starts with C/tkt / Can tkt / C/T and then later has "psgn" or "pass" without C/ (example: "C/tkt=1, psgn=5 & Ref=530"), the second number is ALWAYS C/PASS, not normal PASS. Also sum all refund lines (Ref + UPI Ref + POS Ref) into a single REF total.
-
-=== OSOP ===
-OSOP lines give, for a station and a date, a rupee amount (and only sometimes a unit/count). Put them in "osop": station CODE, date as written (omit if not written), amount = the rupee amount. Put "unit" ONLY if the message explicitly writes a unit/count — never calculate it, the system does that.
-
-=== INWARD GOODS / IWOW ===
-Extract every goods placement into "goods" array.
-
-Fields:
-- from_stn / to_stn: station codes (to_stn = station where wagons were placed/received; if the text names none use STATION HINT)
-- wagons: number of wagons
-- placement_time: HH:MM 24-hour (convert "2:30 pm", "1430 hrs", "14.30" etc.)
-- placement_date: date as written (omit if not written)
-- commodity: ABBREVIATED uppercase (see below)
-- line: just the digit; if multiple lines mentioned together → "10,12"
-- party: uppercase (consignee / firm / party name if written, else "")
-- wagon_type: wagon code if written (BCNL, BCNA, BCN, BOXN, BTPN, BLC ...)
-- weight / freight: optional
-Do NOT calculate free time — the system does it.
-
-GOODS MAY ALSO COME AS A KEY-VALUE LIST (one item per line), for example:
-  DT-16/11/26 / EX SAG TO NLP / LOAD-21 / COMMODITY:-WHEAT / LINE NO-05 / PLACEMENT TIME:=06:00 HRS. / WEIGHT:-1344 / FREIGHT:-3986278 / PARTY:-M/S FCI/NLP
-  DT / DATE = placement_date; "EX A TO B" = from_stn A, to_stn B; LOAD / Wagons = number of wagons; PLACEMENT TIME = placement_time; LINE NO = line (digit without leading zero: "05" → "5"); WEIGHT = weight; FREIGHT = freight; PARTY = party (keep as written, uppercase). A station that is not in the official list (e.g. SAG) is still a valid from_stn: output it as written in uppercase. Remarks after the data ("DUE TO HEAVY RAIN UNLOADING NOT STARTED YET") are not data.
-  Such a message is GOODS only: never put its numbers (weight, freight, load, line) into "prs" or "uts".
-REMARK (goes to column X of the sheet): any note about unloading / placement / delay that is NOT one of the data fields (e.g. "DUE TO HEAVY RAIN UNLOADING NOT STARTED YET", "unloading started 08:30", "labour shortage unloading slow", "wagons detained") goes in "remark". Write ONE short plain-English phrase in lowercase with spelling/grammar corrected, cause kept, filler words ("yet") removed, e.g. "unloading not started due to heavy rain". Several notes → join with "; " (max about 100 characters). Keep facts (times, causes) exactly, never invent. No remark in the message → omit the key. One remark with several goods entries → give the same remark to each entry.
-PARTY RULE (IMPORTANT): if the party name contains FCI (e.g. "M/S FCI/NLP"), then a commodity written only as WHEAT becomes "FCI/W" and a commodity written only as RICE becomes "FCI/R" — even when the commodity line itself does not say FCI.
-
-COMMODITY ABBREVIATION RULES (IMPORTANT — apply always):
-- RICE (FCI) / FCI RICE / RICE FCI  → "FCI/R"
-- WHEAT (FCI) / FCI WHEAT / WHEAT FCI → "FCI/W"
-- RICE (PUB) / PUB RICE / RICE PUB → "PUB/R"
-- WHEAT (PUB) / PUB WHEAT / WHEAT PUB → "PUB/W"
-- RICE alone → "RICE"
-- WHEAT alone → "WHEAT"
-- FCI alone (no RICE/WHEAT) → "FCI"
-- PUB alone → "PUB"
-- CONTAINER / container wagons → "CONTAINER"
-- CEMENT → "CEMENT", COAL → "COAL", NAPHTHA → "NAPHTHA", FERT → "FERT"
-- Others → keep as UPPERCASE
-
-MULTI-LINE WAGONS:
-If the message reports wagons on multiple line numbers with DIFFERENT counts each → create one goods entry per line.
-
-=== VERY IMPORTANT: SAME COMMODITY + SAME TIME ACROSS LINES → MERGE ===
-If the message reports the SAME commodity, SAME from_stn, SAME to_stn, SAME placement time+date across multiple line numbers → produce ONE entry with:
-- wagons = SUM of all those lines
-- line = comma-joined line numbers, e.g. "10,12"
-
-But if commodities DIFFER, keep them as separate entries.
-
-EXAMPLE 1 (merge case):
-Input:
-"55 BCNL RICE(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-10 AND 
-03 BCNL RICE(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-12 
-AT 12:50 HRS ON DATE-04/11/26"
-
-Expected output — ONE entry:
-[
-  {
-    "from_stn": "KNNN",
-    "to_stn": "NTSK",
-    "wagons": 58,
-    "placement_time": "12:50",
-    "placement_date": "04/11/26",
-    "commodity": "FCI/R",
-    "line": "10,12",
-    "party": "",
-    "wagon_type": "BCNL"
-  }
-]
-
-EXAMPLE 2 (different commodities → separate):
-Input:
-"20 BCNL RICE(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-10
-10 BCNA WHEAT(FCI) WAGONS EX-KNNN TO NTSK PLACED ON L/NO-12
-AT 12:50 HRS ON DATE-04/11/26"
-
-Expected — TWO entries:
-[
-  {"from_stn":"KNNN","to_stn":"NTSK","wagons":20,"placement_time":"12:50","placement_date":"04/11/26","commodity":"FCI/R","line":"10","party":"","wagon_type":"BCNL"},
-  {"from_stn":"KNNN","to_stn":"NTSK","wagons":10,"placement_time":"12:50","placement_date":"04/11/26","commodity":"FCI/W","line":"12","party":"","wagon_type":"BCNA"}
-]
-
-EXAMPLE 3 (key-value goods, party FCI):
-Input:
-"DT-16/11/26\nEX  SAG TO NLP\nLOAD-21\nCOMMODITY:-WHEAT\nLINE NO-05\nPLACEMENT TIME:=06:00 HRS.\nWEIGHT:-1344\nFREIGHT:-3986278\nPARTY:-M/S FCI/NLP\nDUE TO HEAVY RAIN UNLOADING NOT STARTED YET"
-
-Expected output:
-{"prs":{},"uts":{},"osop":[],"goods":[{"from_stn":"SAG","to_stn":"NLP","wagons":21,"placement_time":"06:00","placement_date":"16/11/26","commodity":"FCI/W","line":"5","party":"M/S FCI/NLP","wagon_type":"","weight":1344,"freight":3986278,"remark":"unloading not started due to heavy rain"}]}
-
-EXAMPLE 4 (free-text goods, commodity between wagon type and WAGONS, line written as LINE NO):
-Input:
-"21 BCNAHS SALT WAGONS EX- SNLR TO NTSK PLACED AT 23/40 HRS ON DATED- 23/11/26 ON LINE NO 10"
-
-Expected output:
-{"prs":{},"uts":{},"osop":[],"goods":[{"from_stn":"SNLR","to_stn":"NTSK","wagons":21,"placement_time":"23:40","placement_date":"23/11/26","commodity":"SALT","line":"10","party":"","wagon_type":"BCNAHS"}],"unmapped":[]}
-
-MESSAGE (between the tags):
+=== SOURCE MESSAGE ===
 <message>
 __MSG__
 </message>
-
-JSON only, no markdown:"""
+"""
 
 _GEMINI_SEM = threading.Semaphore(GEMINI_PARALLEL)
 _GEMINI_COOLDOWN_UNTIL = 0.0
@@ -1387,7 +1222,7 @@ def _gemini_models(first=None):
     return out
 
 def _gen_config(model, thinking, max_tokens):
-    gen = {"temperature": 0, "maxOutputTokens": max_tokens, "responseMimeType": "application/json"}
+    gen = {"temperature": 0.2, "maxOutputTokens": max_tokens, "responseMimeType": "application/json"}
     if "2.5" in model:
         budget = thinking
         if "pro" in model and budget == 0:
@@ -1608,7 +1443,7 @@ def _norm_line(ln):
         return str(ln).strip().upper()
     return ",".join(str(n) for n in sorted(set(int(x) for x in nums)))
 
-def apply_post_processing(data, msg, hint=None):
+def apply_post_processing(data, msg, hint=None, autoclassify=True):
     if not data:
         return data
     def _fix_station_dict(d):
@@ -1672,7 +1507,7 @@ def apply_post_processing(data, msg, hint=None):
     has_prs = bool(re.search(r'\bPRS\b', up))
     only_uts_label = has_uts and not has_prs
     no_label = (not has_uts) and (not has_prs)
-    if (only_uts_label or no_label) and data["prs"] and not data["goods"] and not data["osop"]:
+    if autoclassify and (only_uts_label or no_label) and data["prs"] and not data["goods"] and not data["osop"]:
         for st in list(data["prs"].keys()):
             vals = data["prs"][st]
             if isinstance(vals, dict) and (only_uts_label or not any(k in vals for k in PRS_ONLY_FIELDS)):
@@ -1766,7 +1601,7 @@ def _label_to_field(label):
 
 _FUZZY_WORDS = {
     "TKT": ("TICKET", "TICKETS", "TIKIT", "TICKIT", "TICKT", "TIKET", "TIKAT", "TIKT", "TICK", "TCKT", "TKTS"),
-    "PASS": ("PASSENGER", "PASSENGERS", "PASENGER", "PASS", "PSNGR", "PSG", "PSGR", "PAX", "PSGN", "PSGF", "PSENGER"),
+    "PASS": ("PASSENGER", "PASSENGERS", "PASENGER", "PASS", "PSNGR", "PSG", "PSGR", "PAX"),
     "REF": ("REFUND", "REFND", "REFUNDS"),
     "VCH": ("VOUCHER", "VOUCHERS"),
     "UPI": ("DIGITAL", "ECASH", "DIGICASH"),
@@ -1825,68 +1660,24 @@ def _amount_role(label, prev):
     return "SKIP"
 
 def _line_fields(line, prev_in=None):
-    """
-    Ek line se saare (field, value) pairs nikaalo.
-    Special case: "C/tkt=1, psgn=5 & Ref=530" → C/TKT=1, C/PASS=5, REF=530
-    Cancel context (C/TKT) ke baad aane wala PASS/PSGN ko C/PASS banata hai.
-    """
     out = []
     prev = prev_in
-    in_cancel_context = False
-
-    # Pehle se cancel context le aaye ho to use rakho
-    if prev in ("C/TKT", "C/PASS"):
-        in_cancel_context = True
-
     for m in _KV_PAIR_RE.finditer(line):
         label, raw = m.group(1), m.group(2)
         num = _to_float(raw)
         if num is None:
             continue
-
-        lab_clean = _clean_label(label)
         fld = _label_to_field(label)
-
-        # --- Cancel context logic ---
-        # Agar label khud cancel type ka hai
-        if fld in ("C/TKT", "C/PASS"):
-            in_cancel_context = True
-            out.append((fld, num))
-            prev = fld
-            continue
-
-        # Agar pehle C/TKT aaya tha aur ab PASS/PSGN aa raha hai → C/PASS
-        if in_cancel_context and fld == "PASS":
-            out.append(("C/PASS", num))
-            prev = "C/PASS"
-            # cancel context continue rahe (multiple psgn possible)
-            continue
-
-        # Agar label mein "psgn" / "pass" hai lekin C/ nahi, aur cancel context active hai
-        if in_cancel_context and re.search(r'\b(PSGN|PSG|PASS|PASSENGER|P)\b', lab_clean):
-            out.append(("C/PASS", num))
-            prev = "C/PASS"
-            continue
-
-        # Normal field
         if fld:
-            # Cancel context break only when we see a non-related field
-            if fld not in ("REF", "UPI", "NET", "VCH", "POS"):
-                in_cancel_context = False
             out.append((fld, num))
             prev = fld
             continue
-
-        # Amount role (AMT etc.)
         role = _amount_role(label, prev)
         if role in ("MR AMT", "NET"):
             out.append((role, num))
             prev = role
-            in_cancel_context = False
         else:
             prev = None
-            in_cancel_context = False
-
     return out, prev
 
 _ORPHAN_RE = re.compile(r'^\W*(?:RS\.?\s*)?(\d[\d,]*(?:\.\d+)?)\s*(?:/-?|-)?\s*(?:\(\s*[A-Za-z ]{1,15}\s*\))?\W*$', re.I)
@@ -2812,6 +2603,23 @@ def coverage(d, body):
     hit = sum(1 for t in toks if any(abs(t - h) < 0.005 for h in have))
     return hit / len(toks)
 
+def _prepare_gemini(data, body, hint):
+    """Normalize Gemini's interpretation without letting the regex parser overrule it."""
+    d = data if isinstance(data, dict) else _empty_data()
+    d = {
+        "prs": d.get("prs") if isinstance(d.get("prs"), dict) else {},
+        "uts": d.get("uts") if isinstance(d.get("uts"), dict) else {},
+        "osop": d.get("osop") if isinstance(d.get("osop"), list) else [],
+        "goods": d.get("goods") if isinstance(d.get("goods"), list) else [],
+        "unmapped": d.get("unmapped") if isinstance(d.get("unmapped"), list) else [],
+    }
+    d = apply_post_processing(d, body, hint, autoclassify=False)
+    # Merge only clearly identical goods placements; never fill missing Gemini fields
+    # from a regex interpretation.
+    d["goods"] = _merge_goods(d.get("goods") or [])
+    return d
+
+
 def _prepare(data, body, hint):
     d = apply_post_processing(data or _empty_data(), body, hint)
     return apply_fallback_fixes(d, body)
@@ -2999,117 +2807,102 @@ def _review_note(best, issues, miss, cov, unplaced=None, um=None):
             "COMPLETE corrected JSON (all stations, all goods). Anything you truly cannot place goes into \"unmapped\".")
 
 def extract_block(body, sender="", ts="", use_gemini=True):
-    print(f"\n📩 Block | sender='{sender}' | ts='{ts}'\n{body[:400]}")
+    print(f"\n📩 Block | sender='{sender}' | ts='{ts}'\\n{body[:400]}")
     body = normalize_message(body)
     hint = guess_station_hint(body, sender)
-    print(f"📍 Station hint: {hint}")
     notes = []
+    raw1 = raw2 = None
     err1 = ""
 
-    # --- Rule parser pehle (sasta, har baar chalta hai) ---
-    rx = None
-    try:
-        fb = _parse_kv_fallback(body, hint)
-        rx = _prepare(fb, body, hint) if fb else None
-        if rx is not None and not _has_content(rx):
-            rx = None
-    except Exception as e:
-        print(f"⚠️ Rule parser error: {e}")
-        notes.append(f"Rule parser error: {e}")
+    def gemini_candidate(raw):
+        if not isinstance(raw, dict):
+            return None
+        try:
+            return _prepare_gemini(raw, body, hint)
+        except Exception as e:
+            print(f"⚠️ Gemini output normalization issue: {type(e).__name__}: {e}")
+            return None
 
-    def finish(d):
-        _infer_missing(d, body, hint)
-        if d.get("goods"):
-            try:
-                kv = _parse_goods_kv(body)
-                if kv:
-                    d["goods"] = _fill_goods(d["goods"], _merge_goods(kv), True)
-                else:
-                    d["goods"] = _fill_goods(d["goods"], _merge_goods(_parse_goods_freeform(body)), False)
-                rem = _remark_from_text(body)
-                for g in d["goods"]:
-                    g["remark"] = clean_remark(g.get("remark")) or rem
-            except Exception as e:
-                print(f"⚠️ Goods fill error: {e}")
-        return d
-
-    def combine(gem):
-        """Gemini ka data + rule-parser ka data milao (gem None ho to sirf rule-parser)."""
-        d = _prepare(gem, body, hint) if gem else None
-        rxc = json.loads(json.dumps(rx)) if rx is not None else None
-        if d is not None and _has_content(d):
-            if rxc is not None:
-                d = reconcile(d, rxc, body)
-                d = _prune_misplaced(d, body)
-            return finish(d)
-        if rxc is not None:
-            return finish(rxc)
-        return finish(_prepare(None, body, hint))
-
-    def score(d):
-        sc, cov = _score(d, body)
-        return (sc[0], -len(_quality_issues(d)), sc[1], sc[2]), cov
-
-    # --- Gemini ---
-    raw1, raw2 = None, None
+    # Gemini gets the first and primary decision. No regex result is merged into or
+    # allowed to overwrite a valid Gemini interpretation.
     if use_gemini:
         try:
-            raw1, err1 = call_gemini(body, sender, ts, hint, GEMINI_THINK_FAST)
+            raw1, err1 = call_gemini(source_body, sender, ts, hint, GEMINI_THINK_DEEP)
             if err1:
                 notes.append(f"Gemini: {err1}")
         except Exception as e:
-            print(f"⚠️ Gemini call crashed (ignored): {type(e).__name__}: {e}")
-            notes.append(f"Gemini crash: {type(e).__name__}")
-    else:
-        notes.append("Gemini chhoda (time)")
+            err1 = f"{type(e).__name__}: {e}"
+            notes.append(f"Gemini error: {err1}")
+            print(f"⚠️ Gemini call failed: {err1}")
 
-    best = combine(raw1)
-    best_score, best_cov = score(best)
-    source = ("gemini" if raw1 else "") + ("+labels" if rx is not None and raw1 else ("labels" if rx is not None else ""))
-    if raw1 is None and rx is not None and use_gemini:
-        notes.append("Gemini se data nahi mila — rule-parser use hua")
+    best = gemini_candidate(raw1)
+    source = "gemini" if best is not None else ""
+
     looks = _looks_like_data(body)
-    issues = _quality_issues(best)
-    miss = missing_stations(best, body)
-    unplaced = _unplaced_lines(body, hint, best) if _has_content(best) else []
-    um = _unmapped_notes(raw1.get("unmapped"), best) if isinstance(raw1, dict) else []
+    if use_gemini and best is not None and looks:
+        issues = _quality_issues(best, body)
+        miss = missing_stations(best, body)
+        unplaced = _unplaced_lines(body, hint, best) if _has_content(best) else []
+        unmapped = _unmapped_notes(raw1.get("unmapped"), best) if isinstance(raw1, dict) else []
+        cov = coverage(best, body) if _has_content(best) else 0.0
 
-    # --- Review: kuch adhoora/shak wala lage to Gemini se dobara (deep thinking + kya galat laga wo bata kar) ---
-    if use_gemini and looks and (best_cov < COVERAGE_MIN or miss or (raw1 is not None and (issues or unplaced or um))):
-        why = f"coverage {best_cov:.2f}, missing stations {miss}, issues {len(issues)}"
-        print(f"🔁 Review pass ({why})")
+        # Give Gemini a second independent read when the first result appears incomplete.
+        # A valid review is preferred because it has the full source plus explicit gaps;
+        # the rule parser does not participate in choosing the answer.
+        if issues or miss or unplaced or unmapped or cov < COVERAGE_MIN:
+            review = _review_note(best, issues, miss, cov, unplaced, unmapped)
+            try:
+                raw2, err2 = call_gemini(source_body, sender, ts, hint, GEMINI_THINK_DEEP, review=review)
+                candidate2 = gemini_candidate(raw2)
+                if candidate2 is not None:
+                    best = candidate2
+                    source = "gemini-review"
+                elif err2:
+                    notes.append(f"Gemini review: {err2}")
+            except Exception as e:
+                notes.append(f"Gemini review error: {type(e).__name__}: {e}")
+
+    # Deterministic parser is a last-resort recovery path only. It is never mixed
+    # into Gemini's answer, never used to silently change Gemini's field choices.
+    if best is None:
+        if use_gemini:
+            notes.append("Gemini ka valid result nahi mila; recovery parser se koshish ki gayi")
         try:
-            review = _review_note(best, issues, miss, best_cov, unplaced, um) if raw1 else ""
-            raw2, err2 = call_gemini(body, sender, ts, hint, GEMINI_THINK_DEEP, review=review)
-            if raw2:
-                d2 = combine(raw2)
-                s2, c2 = score(d2)
-                if s2 > best_score:
-                    best, best_score, best_cov = d2, s2, c2
-                    source = "gemini-review" + ("+labels" if rx is not None else "")
-            elif err2 and not err1:
-                notes.append(f"Gemini: {err2}")
+            fallback = _parse_kv_fallback(body, hint)
+            if fallback:
+                best = _prepare(fallback, body, hint)
+                source = "recovery-parser"
         except Exception as e:
-            print(f"⚠️ Gemini review crashed (ignored): {type(e).__name__}: {e}")
-            notes.append(f"Gemini review crash: {type(e).__name__}")
+            notes.append(f"Recovery parser error: {type(e).__name__}: {e}")
 
-    # --- Final report: jo samajh nahi aaya wo chup-chaap gayab nahi hoga ---
-    issues = _quality_issues(best)
+    if best is None:
+        best = _empty_data()
+        # Goods/OSOP fallback is allowed only when Gemini did not return usable JSON.
+        try:
+            best = _prepare(None, body, hint)
+            source = "recovery-parser"
+        except Exception as e:
+            notes.append(f"Recovery preparation error: {type(e).__name__}: {e}")
+
+    issues = _quality_issues(best, body)
     miss = missing_stations(best, body)
     if miss and looks:
-        notes.append(f"{', '.join(miss)}: message me station mila par uska data samajh nahi aaya — message check karein")
+        notes.append(f"{', '.join(miss)}: message me station/entry mila par output me nahi aaya — source check karein")
     notes.extend(f"⚠️ {x}" for x in issues)
+
     if _has_content(best):
-        notes.extend(f"⚠️ {x}" for x in _unknown_label_notes(body, hint, best))
         for raw in (raw2, raw1):
             if isinstance(raw, dict) and raw.get("unmapped"):
                 notes.extend(f"⚠️ {x}" for x in _unmapped_notes(raw.get("unmapped"), best))
                 break
+        if source != "gemini" and source != "gemini-review":
+            notes.extend(f"⚠️ {x}" for x in _unknown_label_notes(body, hint, best))
+
     best_cov = coverage(best, body) if _has_content(best) else 0.0
-    print(f"✅ Final ({source or 'none'}, coverage {best_cov:.2f}, fields {_field_count(best)}):", json.dumps(best, default=str))
+    print(f"✅ Final ({source or 'none'}, coverage {best_cov:.2f}, fields {_field_count(best)}):",
+          json.dumps(best, ensure_ascii=False, default=str))
     return best, list(dict.fromkeys(notes))
 
-@contextlib.contextmanager
 def _process_lock(timeout=120, label=""):
     """Sheet likhne ki baari. Holder atak jaye to lease khatam hote hi lock chhoot jaata hai; kaun pakde hai ye log me aata hai."""
     holder = PROCESS_LOCK.info()
