@@ -67,6 +67,7 @@ GOOGLE_CREDENTIALS_B64 = os.environ.get("GOOGLE_CREDENTIALS_B64", "")
 GOOGLE_CREDENTIALS_STR = os.environ.get("GOOGLE_CREDENTIALS", "")
 
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_REVIEW_MODEL = os.environ.get("GEMINI_REVIEW_MODEL", "gemini-2.5-pro")   # review pass ke liye bada model (na mile to normal model)
 GEMINI_THINK_FAST = int(os.environ.get("GEMINI_THINK_FAST", "1024"))
 GEMINI_THINK_DEEP = int(os.environ.get("GEMINI_THINK_DEEP", "8192"))
 GEMINI_MAX_OUT = int(os.environ.get("GEMINI_MAX_OUT", "32768"))
@@ -101,6 +102,8 @@ IWOW_LOCK_FILE = "/tmp/iwow_update.lock"
 IWOW_GRACE_HOUR = int(os.environ.get("IWOW_GRACE_HOUR", "2"))
 IWOW_CORE_COLS = (2, 5, 6, 11, 12)
 IWOW_REMARK_COL = 24   # column X
+IWOW_ZERO_COL = 7       # column G: har nayi IWOW row me 0 likha jaata hai
+IWOW_DATE_FMT = "%d-%m-%y"   # IWOW me date 26-11-26 jaisi likhi jaati hai
 
 class LeaseLock:
     """Ek time par ek kaam. Par holder atak jaye to lease (LEASE_SECS) khatam hote hi lock apne aap chhoot jaata hai,
@@ -1364,8 +1367,10 @@ def _retry_delay_seconds(res):
         return min(float(m.group(1)) + 1.0, 60.0)
     return 15.0
 
-def _gemini_models():
-    out = [GEMINI_MODEL]
+def _gemini_models(first=None):
+    out = [first] if first else []
+    if GEMINI_MODEL not in out:
+        out.append(GEMINI_MODEL)
     for m in str(GEMINI_FALLBACK_MODELS or "").split(","):
         m = m.strip()
         if m and m not in out:
@@ -1385,14 +1390,14 @@ def _gemini_cooldown_remaining():
     with _GEMINI_CD_LOCK:
         return max(0.0, _GEMINI_COOLDOWN_UNTIL - time.time())
 
-def _gemini_post(prompt, thinking=0, max_tokens=None, deadline=None):
+def _gemini_post(prompt, thinking=0, max_tokens=None, deadline=None, first_model=None):
     """Primary model, fail/overload par fallback models. (response_json, error_text) lautata hai.
     `deadline` (epoch) ke baad aur koshish nahi — taaki message minuton na atke; rule-parser aage sambhal leta hai."""
     max_tokens = max_tokens or GEMINI_MAX_OUT
     deadline = deadline or (time.time() + GEMINI_TOTAL_BUDGET)
     headers = {"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY}
     err = ""
-    for mi, model in enumerate(_gemini_models()):
+    for mi, model in enumerate(_gemini_models(first_model)):
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         use_thinking = True
         tries = 4 if mi == 0 else 2
@@ -1553,7 +1558,7 @@ def call_gemini(msg, sender="", ts="", hint=None, thinking=0, review=""):
         # 1st: jaisa maanga; agar jawab adhura/khali aaye to 2nd: thinking band (poora token output ke liye)
         deadline = time.time() + GEMINI_TOTAL_BUDGET
         for th in (thinking, 0):
-            resp, err = _gemini_post(prompt, th, None, deadline)
+            resp, err = _gemini_post(prompt, th, None, deadline, GEMINI_REVIEW_MODEL if review else None)
             if not resp:
                 return None, err
             txt, why = _gemini_text(resp)
@@ -1750,23 +1755,49 @@ def _label_to_field(label):
                 return fld
     return _fuzzy_field(_strip_prefix(lab))
 
-_FUZZY_VOCAB = {"TICKET": "TKT", "TIKIT": "TKT", "TICKIT": "TKT", "TICKT": "TKT", "TIKAT": "TKT", "TIKET": "TKT",
-                "PASSENGER": "PASS", "PASENGER": "PASS", "REFUND": "REF", "VOUCHER": "VCH",
-                "DIGITAL": "UPI", "PLATFORM": "PF", "NETCASH": "NET"}
+_FUZZY_WORDS = {
+    "TKT": ("TICKET", "TICKETS", "TIKIT", "TICKIT", "TICKT", "TIKET", "TIKAT", "TIKT", "TICK", "TCKT", "TKTS"),
+    "PASS": ("PASSENGER", "PASSENGERS", "PASENGER", "PASS", "PSNGR", "PSG", "PSGR", "PAX"),
+    "REF": ("REFUND", "REFND", "REFUNDS"),
+    "VCH": ("VOUCHER", "VOUCHERS"),
+    "UPI": ("DIGITAL", "ECASH", "DIGICASH"),
+    "PF": ("PLATFORM",),
+    "NET": ("NETCASH",),
+}
+_FUZZY_PREFIX = {"T", "J", "TOTAL", "TTL", "NO", "OF", "N"}
+_FUZZY_CANCEL = {"C", "CAN", "CNL", "CANC", "CANCEL", "CANCELLED", "CANCELED"}
 _FUZZY_STOP = {"DATE", "TOTAL", "STATION", "GROSS", "AMOUNT", "EARNING", "EARNINGS", "REVENUE", "REPORT",
                "CASH", "TIME", "LINE", "LOAD", "WEIGHT", "FREIGHT", "PARTY", "GRAND"}
 
 def _fuzzy_field(lab):
-    """Spelling galat ho (Tickit, Passanger, Refnd, Digtal...) to sabse paas ke field par le jao (sirf ek shabd ke label par)."""
+    """Spelling galat ho (T/paas, Tickit, Passanger, Refnd...) to sabse paas ke field par le jao.
+    T/ J/ Total/ No of jaise aage ke shabd aur C/ Can/ (cancelled) bhi samajhta hai."""
     import difflib
-    w = str(lab or "").strip()
-    if not w or " " in w or "/" in w or len(w) < 4 or w in _FUZZY_STOP:
+    toks = [t for t in re.split(r'[/ ]+', str(lab or "").strip()) if t]
+    if not toks:
         return None
-    hit = difflib.get_close_matches(w, list(_FUZZY_VOCAB), n=1, cutoff=0.8)
-    if hit:
-        print(f"🔤 Label '{w}' ko '{hit[0]}' samjha → {_FUZZY_VOCAB[hit[0]]}")
-        return _FUZZY_VOCAB[hit[0]]
-    return None
+    cancel = False
+    if toks[0] in _FUZZY_CANCEL and len(toks) > 1:
+        cancel = True
+        toks = toks[1:]
+    while len(toks) > 1 and toks[0] in _FUZZY_PREFIX:
+        toks = toks[1:]
+    if len(toks) != 1:
+        return None
+    w = toks[0]
+    if len(w) < 4 or w in _FUZZY_STOP:
+        return None
+    vocab = {v: f for f, vs in _FUZZY_WORDS.items() for v in vs}
+    hit = difflib.get_close_matches(w, list(vocab), n=1, cutoff=0.75)
+    if not hit:
+        return None
+    f = vocab[hit[0]]
+    if cancel:
+        f = {"TKT": "C/TKT", "PASS": "C/PASS"}.get(f)
+        if not f:
+            return None
+    print(f"🔤 Label '{lab}' ko '{hit[0]}' samjha → {f}")
+    return f
 
 def _amount_role(label, prev):
     """Akela 'amt/amount' label: MR ke baad → MR AMT, platform ke baad → ignore, warna NET."""
@@ -2633,21 +2664,21 @@ def update_iwow_sheet(entries):
                 else:
                     wtype = "BCN"
             arrival_time_str = ""
-            arrival_date_str = pdate.strftime("%d-%m-%Y")
+            arrival_date_str = pdate.strftime(IWOW_DATE_FMT)
             ptime_str = ptime.strftime("%H:%M") if ptime else ""
-            pdate_str = pdate.strftime("%d-%m-%Y")
+            pdate_str = pdate.strftime(IWOW_DATE_FMT)
             if ptime:
                 delta = random.choice([25, 30, 35, 40])
                 arrival_dt = datetime.combine(pdate, ptime) - timedelta(minutes=delta)
                 arrival_time_str = arrival_dt.strftime("%H:%M")
-                arrival_date_str = arrival_dt.strftime("%d-%m-%Y")
+                arrival_date_str = arrival_dt.strftime(IWOW_DATE_FMT)
             while current_row <= len(matrix) and not row_is_free(current_row):
                 current_row += 1
             def q(col, val):
                 if val is not None and str(val).strip() != "":
                     updates.append({"range": rowcol_to_a1(current_row, col), "values": [[val]]})
             q(2, to_stn); q(3, line); q(4, wtype); q(5, commodity)
-            q(6, wagons); q(8, wagons)
+            q(6, wagons); q(IWOW_ZERO_COL, 0); q(8, wagons)
             q(9, arrival_time_str); q(10, arrival_date_str)
             q(11, ptime_str); q(12, pdate_str)
             q(18, ftime); q(21, from_stn); q(23, party); q(IWOW_REMARK_COL, remark)
@@ -2828,8 +2859,8 @@ def _quality_issues(d, body=""):
 _IGNORE_LABEL_RE = re.compile(r'\b(DATE|DT|STN|STATION|UTS|PRS|PMS|JENNY|JTBS|MISC|INWARD|OUTWARD|SCANNED|BOOKING|'
                               r'PF|PLAT\w*|FROM|SS|SM|NO|SR|TIME|HRS?|LINE|LOAD|WEIGHT|FREIGHT)\b')
 
-def _unknown_label_notes(body, hint, d):
-    """Station ke andar aisi 'label number' line jo kisi field me nahi gayi — chup-chaap gayab na ho, reply me dikhe."""
+def _unplaced_lines(body, hint, d):
+    """Station ke andar aisi 'label number' lines jo kisi field me nahi gayi (aur number data me bhi nahi aaya)."""
     have = _data_numbers(d)
     out = []
     try:
@@ -2844,11 +2875,39 @@ def _unknown_label_notes(body, hint, d):
                     continue
                 if any(abs(num - h) < 0.005 for h in have):
                     continue
-                out.append(f"{cur}: line '{L.strip()[:40]}' samajh nahi aayi — sheet me nahi likhi")
+                out.append({"station": cur, "kind": section if section in ("prs", "uts") else "uts",
+                            "label": label, "num": num, "line": L.strip()})
                 break
     except Exception as e:
-        print(f"⚠️ unknown-label check error: {e}")
+        print(f"⚠️ unplaced-lines check error: {e}")
     return out
+
+def _unknown_label_notes(body, hint, d):
+    return [f"{x['station']}: line '{x['line'][:40]}' samajh nahi aayi — sheet me nahi likhi"
+            for x in _unplaced_lines(body, hint, d)]
+
+def _infer_missing(d, body, hint):
+    """Elimination: kisi station me TKT/PASS me se sirf ek missing ho aur ek hi anjaan label wali line bachi ho,
+    to wo number wahi field hai (PASS >= TKT ka common-sense check ke saath)."""
+    try:
+        un = _unplaced_lines(body, hint, d)
+        for kind in ("prs", "uts"):
+            for st, f in (d.get(kind) or {}).items():
+                if not isinstance(f, dict) or not f:
+                    continue
+                cand = [x for x in un if x["station"] == st and x["kind"] == kind]
+                if len(cand) != 1:
+                    continue
+                n = cand[0]["num"]
+                if "TKT" in f and "PASS" not in f and n >= f["TKT"]:
+                    f["PASS"] = _clean_num(n)
+                    print(f"🧩 {st} {kind.upper()}: '{cand[0]['line']}' → PASS (elimination)")
+                elif "PASS" in f and "TKT" not in f and n <= f["PASS"]:
+                    f["TKT"] = _clean_num(n)
+                    print(f"🧩 {st} {kind.upper()}: '{cand[0]['line']}' → TKT (elimination)")
+    except Exception as e:
+        print(f"⚠️ elimination error: {e}")
+    return d
 
 def _unmapped_notes(items, d):
     """Gemini ne khud bataya ki ye number place nahi kar paya (jo data me aa chuka ya rupee-total hai wo chhod do)."""
@@ -2869,8 +2928,12 @@ def _unmapped_notes(items, d):
         out.append(f"Gemini ne ye place nahi kiya: {s[:80]}")
     return out
 
-def _review_note(best, issues, miss, cov):
+def _review_note(best, issues, miss, cov, unplaced=None, um=None):
     probs = list(issues)
+    for x in (unplaced or []):
+        probs.append(f"this line of the message was NOT used by anyone: \"{x['line'][:60]}\" (station {x['station']}) - decide what it means")
+    for x in (um or []):
+        probs.append(x)
     if miss:
         probs.append("station(s) with no data: " + ", ".join(miss))
     if cov < COVERAGE_MIN:
@@ -2902,6 +2965,7 @@ def extract_block(body, sender="", ts="", use_gemini=True):
         notes.append(f"Rule parser error: {e}")
 
     def finish(d):
+        _infer_missing(d, body, hint)
         if d.get("goods"):
             try:
                 kv = _parse_goods_kv(body)
@@ -2954,13 +3018,15 @@ def extract_block(body, sender="", ts="", use_gemini=True):
     looks = _looks_like_data(body)
     issues = _quality_issues(best)
     miss = missing_stations(best, body)
+    unplaced = _unplaced_lines(body, hint, best) if _has_content(best) else []
+    um = _unmapped_notes(raw1.get("unmapped"), best) if isinstance(raw1, dict) else []
 
     # --- Review: kuch adhoora/shak wala lage to Gemini se dobara (deep thinking + kya galat laga wo bata kar) ---
-    if use_gemini and looks and (best_cov < COVERAGE_MIN or miss or issues):
+    if use_gemini and looks and (best_cov < COVERAGE_MIN or miss or (raw1 is not None and (issues or unplaced or um))):
         why = f"coverage {best_cov:.2f}, missing stations {miss}, issues {len(issues)}"
         print(f"🔁 Review pass ({why})")
         try:
-            review = _review_note(best, issues, miss, best_cov) if raw1 else ""
+            review = _review_note(best, issues, miss, best_cov, unplaced, um) if raw1 else ""
             raw2, err2 = call_gemini(body, sender, ts, hint, GEMINI_THINK_DEEP, review=review)
             if raw2:
                 d2 = combine(raw2)
@@ -3462,4 +3528,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
-# ===== END OF app.py (3465 lines) — agar ye line nahi dikhti to file adhoori copy hui hai =====
+# ===== END OF app.py (3532 lines) — agar ye line nahi dikhti to file adhoori copy hui hai =====
