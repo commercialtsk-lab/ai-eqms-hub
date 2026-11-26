@@ -429,6 +429,7 @@ def resolve_station(name, quiet=False):
 # PROCESSED MESSAGE IDs — Google Sheet backed (survives everything)
 # ==============================================
 PROCESSED_MSG_IDS = {}
+_PENDING_MSG_IDS = set()  # IDs being processed; not persisted until successful completion
 _PROC_LOCK = threading.Lock()
 _PROCESSED_MAX_AGE = 5 * 24 * 3600   # 5 din
 _PROCESSED_LOADED = False
@@ -499,25 +500,38 @@ def _save_processed():
         print(f"⚠️ processed IDs save fail: {e}")
 
 def already_processed(msg_id):
-    """True → message pehle process ho chuka hai, skip karo."""
+    """True -> completed or currently in-flight; new IDs are only marked pending."""
     if not msg_id:
         return False
     _load_processed()
     now = time.time()
     with _PROC_LOCK:
-        # purane clean
         expired = [k for k, t in PROCESSED_MSG_IDS.items() if now - t > _PROCESSED_MAX_AGE]
         for k in expired:
             del PROCESSED_MSG_IDS[k]
-        if msg_id in PROCESSED_MSG_IDS:
+        if msg_id in PROCESSED_MSG_IDS or msg_id in _PENDING_MSG_IDS:
             return True
-        PROCESSED_MSG_IDS[msg_id] = now
-    # naya message mark hote hi save karo (taaki crash/restart se pehle bhi save ho jaye)
-    try:
-        _save_processed()
-    except Exception:
-        pass
+        _PENDING_MSG_IDS.add(msg_id)
     return False
+
+def _finish_message_id(msg_id, success):
+    """Persist an ID only after extraction and all requested sheet writes succeed."""
+    if not msg_id:
+        return
+    with _PROC_LOCK:
+        _PENDING_MSG_IDS.discard(msg_id)
+        if success:
+            PROCESSED_MSG_IDS[msg_id] = time.time()
+    if success:
+        _save_processed()
+    else:
+        print(f"↩️ Message ID {msg_id}: processing incomplete — ID save nahi hui; dobara process ho sakta hai")
+
+def _processing_succeeded(summary):
+    text = str(summary or "")
+    if not text.strip() or "❌" in text or "Data samajh nahi aaya" in text or "Kuch update nahi hua" in text:
+        return False
+    return True
 
 # ==============================================
 # KAAM TRACKER + HARD DEADLINE + WATCHDOG (har atka hua kaam log me dikhe)
@@ -2961,6 +2975,7 @@ def _write_extracted(ex):
         return ex["early"]
     agg, notes = ex["agg"], ex["notes"]
     lines = []
+    all_ok = True
     with _process_lock(PROCESS_LOCK_TIMEOUT, "sheet-write") as token:
         for fn, payload, name in ((update_google_sheet, agg if (agg["prs"] or agg["uts"]) else None, "UTS/PRS"),
                                   (update_osop_sheet, agg["osop"], "OSOP"),
@@ -2973,18 +2988,26 @@ def _write_extracted(ex):
             try:
                 ok, rep = run_with_deadline(f"sheet:{name}", fn, (payload,), SHEET_OP_TIMEOUT)
                 lines.extend(rep)
+                if not ok:
+                    all_ok = False
                 print(f"⏱️ {name} sheet update {time.time() - t0:.1f}s")
             except TimeoutError:
+                all_ok = False
                 lines.append(f"❌ {name}: Google Sheets {SHEET_OP_TIMEOUT}s me jawab nahi diya — data likha NAHI gaya. "
                              f"Thodi der baad ye message dobara bhejein")
             except _Cancelled:
+                all_ok = False
                 lines.append(f"❌ {name}: update cancel hua (deadline) — data likha NAHI gaya, dobara bhejein")
             except Exception as e:
+                all_ok = False
                 print(f"❌ {name} write crashed: {type(e).__name__}: {e}")
                 reset_caches()
                 lines.append(f"❌ {name} update fail: {e}")
     lines.extend(f"ℹ️ {n}" for n in dict.fromkeys(notes))
-    return "\n".join(lines) if lines else "⚠️ Kuch update nahi hua."
+    result = "\n".join(lines) if lines else "⚠️ Kuch update nahi hua."
+    if not all_ok and "❌" not in result:
+        result = "❌ Ek ya zyada sheet updates fail hue; message ID complete mark nahi hui.\n" + result
+    return result
 
 def process_incoming(text):
     return _write_extracted(_extract_text(text))
@@ -3090,7 +3113,7 @@ def _remember(text, summary, secs, reply_to=None):
     except Exception:
         pass
 
-def handle_message(text, reply_to=None, phone_id=None):
+def handle_message(text, reply_to=None, phone_id=None, msg_id=None):
     t0 = time.time()
     try:
         summary = process_incoming(text)
@@ -3099,11 +3122,7 @@ def handle_message(text, reply_to=None, phone_id=None):
         summary = f"❌ Processing me error aaya: {e}"
     _remember(text, summary, time.time() - t0, reply_to)
     print("📝 Summary:\n" + summary)
-    # successful process ke baad IDs disk pe save karo
-    try:
-        _save_processed()
-    except Exception:
-        pass
+    _finish_message_id(msg_id, _processing_succeeded(summary))
     if reply_to:
         send_whatsapp(reply_to, summary, phone_id)
     return summary
@@ -3132,14 +3151,22 @@ def _label_for(ex, text):
     first = next((ln.strip() for ln in str(text).splitlines() if ln.strip()), "")
     return first[:30]
 
-def handle_batch(texts, reply_to=None, phone_id=None):
+def handle_batch(texts, reply_to=None, phone_id=None, message_ids=None):
     """Ek saath aaye kai messages: pehle sabka Gemini/parsing saath-saath, phir sheet me ek-ek karke (order me), ek combined reply."""
     try:
-        uniq = list(dict.fromkeys(t.strip() for t in texts if t and t.strip()))
+        pairs = [(t.strip(), mid) for t, mid in zip(texts, message_ids or [None] * len(texts)) if t and t.strip()]
+        ids_by_text = {}
+        for t, mid in pairs:
+            ids_by_text.setdefault(t, []).append(mid)
+        uniq = list(ids_by_text)
         if not uniq:
             return ""
         if len(uniq) == 1:
-            return handle_message(uniq[0], reply_to, phone_id)
+            mids = ids_by_text[uniq[0]]
+            result = handle_message(uniq[0], reply_to, phone_id, mids[0] if mids else None)
+            for mid in mids[1:]:
+                _finish_message_id(mid, _processing_succeeded(result))
+            return result
         t0 = time.time()
         print(f"📨 Batch: {len(uniq)} messages ek saath")
         with ThreadPoolExecutor(max_workers=min(GEMINI_PARALLEL, len(uniq))) as pool:
@@ -3154,18 +3181,18 @@ def handle_batch(texts, reply_to=None, phone_id=None):
                 reset_caches()
                 summary = f"❌ Sheet update me error aaya: {e}"
             _remember(text, summary, time.time() - t1, reply_to)
+            for mid in ids_by_text.get(text, []):
+                _finish_message_id(mid, _processing_succeeded(summary))
             parts.append(f"━━ {i}) {_label_for(ex, text)}\n{summary}")
         reply = "\n\n".join(parts)
         print(f"📝 Batch summary ({time.time() - t0:.0f}s):\n" + reply)
-        try:
-            _save_processed()
-        except Exception:
-            pass
         if reply_to:
             send_whatsapp(reply_to, reply, phone_id)
         return reply
     except BaseException as e:
         print(f"❌ handle_batch error: {e}")
+        for mid in (message_ids or []):
+            _finish_message_id(mid, False)
         return ""
 
 def _batch_waiter(key):
@@ -3179,21 +3206,31 @@ def _batch_waiter(key):
             if now - b["last"] >= BATCH_WINDOW or now - b["first"] >= BATCH_MAX_WAIT or len(b["texts"]) >= 60:
                 _BATCH.pop(key, None)
                 break
-    MESSAGE_EXECUTOR.submit(handle_batch, b["texts"], key, b["pid"])
+    try:
+        MESSAGE_EXECUTOR.submit(handle_batch, b["texts"], key, b["pid"], b.get("ids", []))
+    except Exception as e:
+        print(f"❌ Batch queue submit fail: {e}")
+        for mid in b.get("ids", []):
+            _finish_message_id(mid, False)
 
-def enqueue_message(text, reply_to, phone_id):
+def enqueue_message(text, reply_to, phone_id, msg_id=None):
     """Webhook se aaya message: bounded workers + (same sender ke) messages ka group."""
     if BATCH_WINDOW <= 0 or not reply_to:
-        MESSAGE_EXECUTOR.submit(handle_message, text, reply_to, phone_id)
+        try:
+            MESSAGE_EXECUTOR.submit(handle_message, text, reply_to, phone_id, msg_id)
+        except Exception:
+            _finish_message_id(msg_id, False)
+            raise
         return
     now = time.time()
     with _BATCH_LOCK:
         b = _BATCH.get(reply_to)
         if b is None:
-            _BATCH[reply_to] = {"texts": [text], "first": now, "last": now, "pid": phone_id}
+            _BATCH[reply_to] = {"texts": [text], "ids": [msg_id], "first": now, "last": now, "pid": phone_id}
             start = True
         else:
             b["texts"].append(text)
+            b.setdefault("ids", []).append(msg_id)
             b["last"] = now
             start = False
     if start:
@@ -3331,7 +3368,12 @@ def webhook():
                         continue
                     if already_processed(m.get("id", "")):
                         continue
-                    enqueue_message(text, m.get("from"), incoming_pid or None)
+                    msg_id = m.get("id", "")
+                    try:
+                        enqueue_message(text, m.get("from"), incoming_pid or None, msg_id)
+                    except Exception:
+                        _finish_message_id(msg_id, False)
+                        raise
     except Exception as e:
         print(f"❌ Webhook Error: {e}")
     return jsonify({"status": "ok"}), 200
