@@ -283,7 +283,9 @@ CONTAINER_WAGON_CODES = {"BLC", "BFKN", "BLL", "BLH", "BLCN", "BLCA", "BLLA", "C
 FIELD_ALIASES = {
     "TICKET": "TKT", "TICKETS": "TKT", "TKTS": "TKT", "TCKT": "TKT",
     "PSG": "PASS", "PSGR": "PASS", "PASSENGER": "PASS", "PASSENGERS": "PASS",
+    "PSGN": "PASS", "PSGF": "PASS", "PSNGR": "PASS", "PSENGER": "PASS",
     "CTKT": "C/TKT", "C TKT": "C/TKT", "CPASS": "C/PASS", "C PASS": "C/PASS",
+    "C/PSGN": "C/PASS", "CPSGN": "C/PASS", "C PSGN": "C/PASS",
     "MRAMT": "MR AMT", "MR_AMT": "MR AMT",
     "REFUND": "REF", "RFD": "REF",
     "ECASH": "UPI", "E CASH": "UPI", "UPI QR": "UPI", "QR": "UPI",
@@ -1156,6 +1158,7 @@ Always output the CODE, never the full name. Fix spelling mistakes and short for
     UPI   : E CASH / E/CASH / Ecash / E-cash / E cas / Digi cash / Digital cash / UPI / UPI QR / QR / Digital / Paytm / PhonePe — if a section has both a "QR" line and a "UPI" line with values, the UPI field is their SUM
     REF   : REF / Ref / REFUND / RFD / Digi ref / Digital refund / Digi RFD / UPI REF / POS REF / QR REF — SUM OF ALL refund-type amounts of THAT station's PRS section. If multiple refund lines exist (e.g. REF 500 + UPI REF 200 + RFD 100), put the TOTAL (800) in REF. Never take only the first one, and never add refunds of another station or of the UTS section.
     C/TKT, C/PASS : cancelled tickets / cancelled passengers (PRS) — written C/TKT, C/T, CT, C/TK, Cancel tkt ... and C/PASS, C/P, CP, C/PS, Cancel pass ... Always capture them.
+    CRITICAL: When a line is written like "C/tkt=1, psgn=5 & Ref=530" or "Can tkt 2, pass 4", the second number after a cancel-ticket label is ALWAYS C/PASS (not normal PASS). The cancel context continues on the same line. Always sum every refund (Ref + UPI Ref + POS Ref + Digi Ref) into one REF total.
     VCH, POS : vouchers (Vou / VCH / Voucher) / POS-machine amount (PRS). POS REF is a refund → goes into REF.
     PF    : platform tickets COUNT (PF / P/TKT / PLT / PLATFORM / "M"). A platform AMOUNT next to it has no column → ignore it.
     MR / MR AMT : MR count / MR amount (both captured). "MR=13AMOUNT=37960" → MR 13, MR AMT 37960.
@@ -1209,6 +1212,12 @@ Output: {"prs":{},"uts":{"BBGN":{"TKT":84,"PASS":139,"NET":8235,"UPI":3130},"TTB
 
 Input: "UTS NSBG 22/11/26\nTiket 41\nPsngr 66\nD/cash 900\nCash 1500\nTtl 2400"
 Output: {"prs":{},"uts":{"NSBG":{"TKT":41,"PASS":66,"NET":1500,"UPI":900}},"osop":[],"goods":[],"unmapped":[]}
+
+Input: "PRS/TTB.\nDate:26/11/2026.\nTkt=14\nPsgn=22\nNet cash =9320\nC/tkt=1, psgn =5 & Ref =530\nUPI=9520\nUPI Ref =1550\nVch=Nil.\n\nUTS:\nTkt=160\nPsgf=258\nNet cash =13310\nE/cash =2275\nVch=Nil"
+Output: {"prs":{"TTB":{"TKT":14,"PASS":22,"NET":9320,"C/TKT":1,"C/PASS":5,"REF":2080,"UPI":9520}},"uts":{"TTB":{"TKT":160,"PASS":258,"NET":13310,"UPI":2275}},"osop":[],"goods":[],"unmapped":[]}
+
+IMPORTANT RULE for combined cancel lines:
+When a line starts with C/tkt / Can tkt / C/T and then later has "psgn" or "pass" without C/ (example: "C/tkt=1, psgn=5 & Ref=530"), the second number is ALWAYS C/PASS, not normal PASS. Also sum all refund lines (Ref + UPI Ref + POS Ref) into a single REF total.
 
 === OSOP ===
 OSOP lines give, for a station and a date, a rupee amount (and only sometimes a unit/count). Put them in "osop": station CODE, date as written (omit if not written), amount = the rupee amount. Put "unit" ONLY if the message explicitly writes a unit/count — never calculate it, the system does that.
@@ -1757,7 +1766,7 @@ def _label_to_field(label):
 
 _FUZZY_WORDS = {
     "TKT": ("TICKET", "TICKETS", "TIKIT", "TICKIT", "TICKT", "TIKET", "TIKAT", "TIKT", "TICK", "TCKT", "TKTS"),
-    "PASS": ("PASSENGER", "PASSENGERS", "PASENGER", "PASS", "PSNGR", "PSG", "PSGR", "PAX"),
+    "PASS": ("PASSENGER", "PASSENGERS", "PASENGER", "PASS", "PSNGR", "PSG", "PSGR", "PAX", "PSGN", "PSGF", "PSENGER"),
     "REF": ("REFUND", "REFND", "REFUNDS"),
     "VCH": ("VOUCHER", "VOUCHERS"),
     "UPI": ("DIGITAL", "ECASH", "DIGICASH"),
@@ -1816,24 +1825,68 @@ def _amount_role(label, prev):
     return "SKIP"
 
 def _line_fields(line, prev_in=None):
+    """
+    Ek line se saare (field, value) pairs nikaalo.
+    Special case: "C/tkt=1, psgn=5 & Ref=530" → C/TKT=1, C/PASS=5, REF=530
+    Cancel context (C/TKT) ke baad aane wala PASS/PSGN ko C/PASS banata hai.
+    """
     out = []
     prev = prev_in
+    in_cancel_context = False
+
+    # Pehle se cancel context le aaye ho to use rakho
+    if prev in ("C/TKT", "C/PASS"):
+        in_cancel_context = True
+
     for m in _KV_PAIR_RE.finditer(line):
         label, raw = m.group(1), m.group(2)
         num = _to_float(raw)
         if num is None:
             continue
+
+        lab_clean = _clean_label(label)
         fld = _label_to_field(label)
-        if fld:
+
+        # --- Cancel context logic ---
+        # Agar label khud cancel type ka hai
+        if fld in ("C/TKT", "C/PASS"):
+            in_cancel_context = True
             out.append((fld, num))
             prev = fld
             continue
+
+        # Agar pehle C/TKT aaya tha aur ab PASS/PSGN aa raha hai → C/PASS
+        if in_cancel_context and fld == "PASS":
+            out.append(("C/PASS", num))
+            prev = "C/PASS"
+            # cancel context continue rahe (multiple psgn possible)
+            continue
+
+        # Agar label mein "psgn" / "pass" hai lekin C/ nahi, aur cancel context active hai
+        if in_cancel_context and re.search(r'\b(PSGN|PSG|PASS|PASSENGER|P)\b', lab_clean):
+            out.append(("C/PASS", num))
+            prev = "C/PASS"
+            continue
+
+        # Normal field
+        if fld:
+            # Cancel context break only when we see a non-related field
+            if fld not in ("REF", "UPI", "NET", "VCH", "POS"):
+                in_cancel_context = False
+            out.append((fld, num))
+            prev = fld
+            continue
+
+        # Amount role (AMT etc.)
         role = _amount_role(label, prev)
         if role in ("MR AMT", "NET"):
             out.append((role, num))
             prev = role
+            in_cancel_context = False
         else:
             prev = None
+            in_cancel_context = False
+
     return out, prev
 
 _ORPHAN_RE = re.compile(r'^\W*(?:RS\.?\s*)?(\d[\d,]*(?:\.\d+)?)\s*(?:/-?|-)?\s*(?:\(\s*[A-Za-z ]{1,15}\s*\))?\W*$', re.I)
