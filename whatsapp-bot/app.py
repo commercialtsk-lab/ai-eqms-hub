@@ -2906,6 +2906,7 @@ def extract_block(body, sender="", ts="", use_gemini=True):
           json.dumps(best, ensure_ascii=False, default=str))
     return best, list(dict.fromkeys(notes))
 
+@contextlib.contextmanager
 def _process_lock(timeout=120, label=""):
     """Sheet likhne ki baari. Holder atak jaye to lease khatam hote hi lock chhoot jaata hai; kaun pakde hai ye log me aata hai."""
     holder = PROCESS_LOCK.info()
