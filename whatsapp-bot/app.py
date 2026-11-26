@@ -1129,11 +1129,15 @@ Think independently. The message may be fragmented, misspelled, abbreviated, mul
 Do not depend on a fixed vocabulary or examples. Treat all examples and station/field hints as helpful context, never as limits. You may make your own reasonable interpretation when the message is clear from context. Do not ask the user to explain data that can reasonably be understood. Do not invent facts or numbers. If something genuinely cannot be interpreted, preserve it in "unmapped" rather than silently losing it.
 
 Read the entire message, not just the first lines. One message can contain multiple stations, multiple PRS/UTS reports, OSOP entries, goods placements, corrections, follow-up fragments, and unrelated commentary. Connect fragments when context makes the relationship clear. Keep separate entries separate when they refer to different stations, dates, sections, commodities, or placements. If two fragments clearly describe the same entry, combine them sensibly and avoid double counting.
+For a compact daily earnings message such as a station name followed by "EARNINGS", a date, ticket/passenger counts, cash, UPI and a total, infer that it is a station earnings report even if the sender never writes "PRS" or "UTS". Map ticket count to TKT, passenger count to PASS, cash collection to NET and digital collection to UPI. The grand total is a validation value, not another revenue field. The station heading applies to the report unless another station is explicitly introduced.
 
 Use the official station list as a reference for spelling and codes. Recognize station codes, full names, local spellings, phonetic spellings, abbreviations, and typos. A station not in the supplied list can still be a valid station: preserve its written code/name in uppercase rather than discarding it. Use the supplied station hint only when the message itself gives no reliable station.
 
-Understand fields by their real-world meaning:
+Understand fields by their real-world meaning. Interpret the sender's wording first; only then map the meaning into the available destination fields:
 - PRS/UTS revenue: ticket counts, passenger counts, cancelled counts, platform tickets, cash collections, digital/UPI collections, refunds, vouchers, POS, MR counts and MR amounts.
+- Natural label interpretation: "T/Tkt", "Tkt", "Tickets" and similar expressions mean ticket count; "T/Pass", "Pass", "Passengers" and similar expressions mean passenger count. "NET CASH", "CASH", "CASH NET" and equivalent expressions refer to net cash collection; "UPI", "Digi", "Digital" and equivalent expressions refer to digital collection. These are meaning examples, not an exhaustive vocabulary. Interpret new abbreviations from the full message context.
+- A stated "TOTAL", "GRAND TOTAL" or "TOTAL AMOUNT" is normally a cross-check/subtotal, not a separate collection field. Do not add it to NET or UPI, and do not count it twice. Check whether it equals the sum of cash and digital collections; retain the component collections as the mapped values.
+- Do not require a message to contain the words PRS or UTS if its structure and context clearly identify the report type. If report type cannot be determined, use the strongest contextual evidence and preserve uncertainty in "unmapped".
 - Distinguish cash from digital collection, collection from refund, count from rupee amount, and a section subtotal from an actual field. A grand total that merely repeats the sum of collections is not an additional collection.
 - Interpret abbreviations, misspellings, shorthand, mixed labels and unlabeled continuation values using context. A number must not be copied into multiple fields unless the source clearly represents separate amounts.
 - Respect the actual section/station to which a value belongs. Do not move a value from one station or PRS/UTS section to another just to make the output look complete.
@@ -2872,8 +2876,21 @@ def extract_block(body, sender="", ts="", use_gemini=True):
                 raw2, err2 = call_gemini(source_body, sender, ts, hint, GEMINI_THINK_DEEP, review=review)
                 candidate2 = gemini_candidate(raw2)
                 if candidate2 is not None:
-                    best = candidate2
-                    source = "gemini-review"
+                    score1, cov1 = _score(best, body)
+                    score2, cov2 = _score(candidate2, body)
+                    issues1 = len(_quality_issues(best, body))
+                    issues2 = len(_quality_issues(candidate2, body))
+                    # Prefer fewer missing stations, better source-number coverage,
+                    # more mapped fields, then fewer validation issues. Keep the
+                    # original interpretation on a tie to avoid review-induced drift.
+                    rank1 = (score1[0], score1[1], score1[2], -issues1)
+                    rank2 = (score2[0], score2[1], score2[2], -issues2)
+                    if rank2 > rank1:
+                        best = candidate2
+                        source = "gemini-review"
+                        print(f"🧠 Gemini review selected: score {rank1} → {rank2}")
+                    else:
+                        print(f"🧠 Original Gemini reading retained: review score {rank2} did not beat {rank1}")
                 elif err2:
                     notes.append(f"Gemini review: {err2}")
             except Exception as e:
@@ -2916,6 +2933,7 @@ def extract_block(body, sender="", ts="", use_gemini=True):
             notes.extend(f"⚠️ {x}" for x in _unknown_label_notes(body, hint, best))
 
     best_cov = coverage(best, body) if _has_content(best) else 0.0
+    print(f"🧠 Extraction engine: {source or 'none'}")
     print(f"✅ Final ({source or 'none'}, coverage {best_cov:.2f}, fields {_field_count(best)}):",
           json.dumps(best, ensure_ascii=False, default=str))
     return best, list(dict.fromkeys(notes))
